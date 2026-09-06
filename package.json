@@ -1,0 +1,35 @@
+{
+  "name": "film-sort",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -b && vite build",
+    "preview": "vite preview",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "check": "tsc -b --pretty false",
+    "deploy": "npm run build && wrangler deploy",
+    "worker:dev": "npm run build && wrangler dev"
+  },
+  "dependencies": {
+    "fflate": "^0.8.2",
+    "lucide-react": "^0.468.0",
+    "qrcode": "^1.5.4",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^5.20260906.1",
+    "@types/node": "^22.10.2",
+    "@types/qrcode": "^1.5.5",
+    "@types/react": "^19.0.3",
+    "@types/react-dom": "^19.0.2",
+    "@vitejs/plugin-react": "^4.3.4",
+    "typescript": "~5.7.2",
+    "vite": "^6.0.5",
+    "vitest": "^2.1.8",
+    "wrangler": "^4.35.0"
+  }
+}

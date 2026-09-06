@@ -1,0 +1,382 @@
+{
+  "2046": {
+    "query": "2046",
+    "id": "tt0212712"
+  },
+  "银翼杀手": {
+    "query": "blade_runner",
+    "id": "tt0083658"
+  },
+  "盗火线": {
+    "query": "heat",
+    "id": "tt0113277"
+  },
+  "伴我同行": {
+    "query": "stand_by_me",
+    "id": "tt0092005"
+  },
+  "闪灵": {
+    "query": "the_shining",
+    "id": "tt0081505"
+  },
+  "洛奇": {
+    "query": "rocky",
+    "id": "tt0075148"
+  },
+  "追随": {
+    "query": "following",
+    "id": "tt0154506"
+  },
+  "记忆碎片": {
+    "query": "memento",
+    "id": "tt0209144"
+  },
+  "失眠症": {
+    "query": "insomnia",
+    "id": "tt0278504"
+  },
+  "蝙蝠侠：侠影之谜": {
+    "query": "batman_begins",
+    "id": "tt0372784"
+  },
+  "致命魔术": {
+    "query": "the_prestige",
+    "id": "tt0482571"
+  },
+  "蝙蝠侠：黑暗骑士": {
+    "query": "the_dark_knight",
+    "id": "tt0468569"
+  },
+  "盗梦空间": {
+    "query": "inception",
+    "id": "tt1375666"
+  },
+  "蝙蝠侠：黑暗骑士崛起": {
+    "query": "the_dark_knight_rises",
+    "id": "tt1345836"
+  },
+  "星际穿越": {
+    "query": "interstellar",
+    "id": "tt0816692"
+  },
+  "敦刻尔克": {
+    "query": "dunkirk",
+    "id": "tt5013056"
+  },
+  "信条": {
+    "query": "tenet",
+    "id": "tt6723592"
+  },
+  "奥本海默": {
+    "query": "oppenheimer",
+    "id": "tt15398776"
+  },
+  "风之谷": {
+    "query": "nausicaa_of_the_valley_of_the_wind",
+    "id": "tt0087544"
+  },
+  "天空之城": {
+    "query": "castle_in_the_sky",
+    "id": "tt0092067"
+  },
+  "龙猫": {
+    "query": "my_neighbor_totoro",
+    "id": "tt0096283"
+  },
+  "魔女宅急便": {
+    "query": "kikis_delivery_service",
+    "id": "tt0097814"
+  },
+  "红猪": {
+    "query": "porco_rosso",
+    "id": "tt0104652"
+  },
+  "幽灵公主": {
+    "query": "princess_mononoke",
+    "id": "tt0119698"
+  },
+  "千与千寻": {
+    "query": "spirited_away",
+    "id": "tt0245429"
+  },
+  "哈尔的移动城堡": {
+    "query": "howls_moving_castle",
+    "id": "tt0347149"
+  },
+  "悬崖上的金鱼姬": {
+    "query": "ponyo",
+    "id": "tt0876563"
+  },
+  "起风了": {
+    "query": "the_wind_rises",
+    "id": "tt2013293"
+  },
+  "你想活出怎样的人生": {
+    "query": "the_boy_and_the_heron",
+    "id": "tt6587046"
+  },
+  "星之声": {
+    "query": "voices_of_a_distant_star",
+    "id": "tt0370754"
+  },
+  "云之彼端，约定的地方": {
+    "query": "the_place_promised_in_our_early_days",
+    "id": "tt0381348"
+  },
+  "秒速5厘米": {
+    "query": "5_centimeters_per_second",
+    "id": "tt0983213"
+  },
+  "追逐繁星的孩子": {
+    "query": "children_who_chase_lost_voices",
+    "id": "tt1839494"
+  },
+  "言叶之庭": {
+    "query": "the_garden_of_words",
+    "id": "tt2591814"
+  },
+  "你的名字。": {
+    "query": "your_name",
+    "id": "tt5311514"
+  },
+  "天气之子": {
+    "query": "weathering_with_you",
+    "id": "tt9426210"
+  },
+  "铃芽之旅": {
+    "query": "suzume",
+    "id": "tt16428256"
+  },
+  "霸王别姬": {
+    "query": "farewell_my_concubine",
+    "id": "tt0106332"
+  },
+  "活着": {
+    "query": "to_live",
+    "id": "tt0110081"
+  },
+  "无间道": {
+    "query": "infernal_affairs",
+    "id": "tt0338564"
+  },
+  "大话西游之大圣娶亲": {
+    "query": "a_chinese_odyssey_part_two_cinderella",
+    "id": "tt0114996"
+  },
+  "让子弹飞": {
+    "query": "let_the_bullets_fly",
+    "id": "tt1533117"
+  },
+  "鬼子来了": {
+    "query": "devils_on_the_doorstep",
+    "id": "tt0245929"
+  },
+  "饮食男女": {
+    "query": "eat_drink_man_woman",
+    "id": "tt0111797"
+  },
+  "牯岭街少年杀人事件": {
+    "query": "a_brighter_summer_day",
+    "id": "tt0101985"
+  },
+  "阳光灿烂的日子": {
+    "query": "in_the_heat_of_the_sun",
+    "id": "tt0111786"
+  },
+  "花样年华": {
+    "query": "in_the_mood_for_love",
+    "id": "tt0118694"
+  },
+  "一一": {
+    "query": "yi_yi",
+    "id": "tt0244316"
+  },
+  "悲情城市": {
+    "query": "a_city_of_sadness",
+    "id": "tt0096908"
+  },
+  "喜宴": {
+    "query": "the_wedding_banquet",
+    "id": "tt0107156"
+  },
+  "甜蜜蜜": {
+    "query": "comrades_almost_a_love_story",
+    "id": "tt0117905"
+  },
+  "卧虎藏龙": {
+    "query": "crouching_tiger_hidden_dragon",
+    "id": "tt0190332"
+  },
+  "旺角卡门": {
+    "query": "as_tears_go_by",
+    "id": "tt0096461"
+  },
+  "阿飞正传": {
+    "query": "days_of_being_wild",
+    "id": "tt0101258"
+  },
+  "重庆森林": {
+    "query": "chungking_express",
+    "id": "tt0109424"
+  },
+  "东邪西毒": {
+    "query": "ashes_of_time",
+    "id": "tt0109688"
+  },
+  "堕落天使": {
+    "query": "fallen_angels",
+    "id": "tt0112913"
+  },
+  "春光乍泄": {
+    "query": "happy_together",
+    "id": "tt0118845"
+  },
+  "蓝莓之夜": {
+    "query": "my_blueberry_nights",
+    "id": "tt0765120"
+  },
+  "一代宗师": {
+    "query": "the_grandmaster",
+    "id": "tt1462900"
+  },
+  "芙蓉镇": {
+    "query": "hibiscus_town",
+    "id": "tt0093206"
+  },
+  "我不是药神": {
+    "query": "dying_to_survive",
+    "id": "tt7362036"
+  },
+  "哪吒之魔童降世": {
+    "query": "ne_zha",
+    "id": "tt10627720"
+  },
+  "白雪公主和七个小矮人": {
+    "query": "snow_white_and_the_seven_dwarfs",
+    "id": "tt0029583"
+  },
+  "灰姑娘": {
+    "query": "cinderella",
+    "id": "tt0042332"
+  },
+  "睡美人": {
+    "query": "sleeping_beauty",
+    "id": "tt0053285"
+  },
+  "小美人鱼": {
+    "query": "the_little_mermaid",
+    "id": "tt0097757"
+  },
+  "美女与野兽": {
+    "query": "beauty_and_the_beast",
+    "id": "tt0101414"
+  },
+  "阿拉丁": {
+    "query": "aladdin",
+    "id": "tt0103639"
+  },
+  "狮子王": {
+    "query": "the_lion_king",
+    "id": "tt0110357"
+  },
+  "花木兰": {
+    "query": "mulan",
+    "id": "tt0120762"
+  },
+  "星际宝贝": {
+    "query": "lilo_stitch",
+    "id": "tt0275847"
+  },
+  "公主与青蛙": {
+    "query": "the_princess_and_the_frog",
+    "id": "tt0780521"
+  },
+  "魔发奇缘": {
+    "query": "tangled",
+    "id": "tt0398286"
+  },
+  "无敌破坏王": {
+    "query": "wreck_it_ralph",
+    "id": "tt1772341"
+  },
+  "冰雪奇缘": {
+    "query": "frozen",
+    "id": "tt2294629"
+  },
+  "超能陆战队": {
+    "query": "big_hero_6",
+    "id": "tt2245084"
+  },
+  "疯狂动物城": {
+    "query": "zootopia",
+    "id": "tt2948356"
+  },
+  "海洋奇缘": {
+    "query": "moana",
+    "id": "tt3521164"
+  },
+  "寻龙传说": {
+    "query": "raya_and_the_last_dragon",
+    "id": "tt5109280"
+  },
+  "魔法满屋": {
+    "query": "encanto",
+    "id": "tt2953050"
+  },
+  "海洋奇缘2": {
+    "query": "moana_2",
+    "id": "tt13622970"
+  },
+  "疯狂动物城2": {
+    "query": "zootopia_2",
+    "id": "tt26443597"
+  },
+  "爱在黎明破晓前": {
+    "query": "before_sunrise",
+    "id": "tt0112471"
+  },
+  "爱在日落黄昏时": {
+    "query": "before_sunset",
+    "id": "tt0381681"
+  },
+  "怦然心动": {
+    "query": "flipped",
+    "id": "tt0817177"
+  },
+  "花束般的恋爱": {
+    "query": "we_made_a_beautiful_bouquet",
+    "id": "tt11219254"
+  },
+  "消失的爱人": {
+    "query": "gone_girl",
+    "id": "tt2267998"
+  },
+  "婚姻故事": {
+    "query": "marriage_story",
+    "id": "tt7653254"
+  },
+  "泰坦尼克号": {
+    "query": "titanic",
+    "id": "tt0120338"
+  },
+  "时空恋旅人": {
+    "query": "about_time",
+    "id": "tt2194499"
+  },
+  "恋恋笔记本": {
+    "query": "the_notebook",
+    "id": "tt0332280"
+  },
+  "一天": {
+    "query": "one_day",
+    "id": "tt1563738"
+  },
+  "她": {
+    "query": "her",
+    "id": "tt1798709"
+  },
+  "蓝色情人节": {
+    "query": "blue_valentine",
+    "id": "tt1120985"
+  }
+}
