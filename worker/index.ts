@@ -6,6 +6,7 @@ export interface Env {
   ASSETS: Fetcher;
   ACCESS_TEAM_DOMAIN?: string;
   ACCESS_AUD?: string;
+  ADMIN_PASSWORD?: string;
 }
 
 type JsonObject = Record<string, unknown>;
@@ -603,16 +604,23 @@ async function getDashboard(env: Env): Promise<Response> {
 
 // ===== Admin Login =====
 async function handleAdminLogin(request: Request, env: Env): Promise<Response> {
-  if (!env.DB) return json({ error: "database_unavailable" }, 503);
+  if (!env.ADMIN_PASSWORD && !env.DB) return json({ error: "auth_unavailable" }, 503);
   const body = await readJson(request);
   const password = cleanString(body.password, "password", 128);
-  const stored = await env.DB.prepare("SELECT value FROM admin_config WHERE key = 'password_hash'").first<{ value: string }>();
-  const hash = await hashPassword(password);
-  if (!stored?.value) {
-    await env.DB.prepare("UPDATE admin_config SET value = ? WHERE key = 'password_hash'").bind(hash).run();
-  } else if (stored.value !== hash) {
-    return json({ error: "invalid_password" }, 401);
+
+  // Prefer environment variable password
+  if (env.ADMIN_PASSWORD) {
+    if (password !== env.ADMIN_PASSWORD) return json({ error: "invalid_password" }, 401);
+  } else {
+    // Fallback to DB-stored password
+    if (!env.DB) return json({ error: "auth_unavailable" }, 503);
+    const stored = await env.DB.prepare("SELECT value FROM admin_config WHERE key = 'password_hash'").first<{ value: string }>();
+    if (!stored?.value) return json({ error: "no_password_configured" }, 503);
+    const hash = await hashPassword(password);
+    if (stored.value !== hash) return json({ error: "invalid_password" }, 401);
   }
+
+  if (!env.DB) return json({ error: "database_unavailable" }, 503);
   const token = generateToken();
   const expires = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
   await env.DB.prepare("INSERT INTO admin_sessions (token, expires_at) VALUES (?, ?)").bind(token, expires).run();
