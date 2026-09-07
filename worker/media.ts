@@ -1,9 +1,101 @@
 import curatedPosters from "./imdb-posters.json";
 
 export interface DoubanWork { id: string; title: string; year?: number; poster_url?: string; type?: "movie" | "book" | "music" }
-const headers = { "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/126.0 Safari/537.36", referer: "https://movie.douban.com/" };
-const bookHeaders = { "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/126.0 Safari/537.36", referer: "https://book.douban.com/" };
-const musicHeaders = { "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/126.0 Safari/537.36", referer: "https://music.douban.com/" };
+
+// Rotate User-Agent to avoid rate limiting - simulate Edge browser
+const USER_AGENTS = [
+  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36 Edg/126.0.0.0",
+  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36 Edg/125.0.0.0",
+  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36 Edg/124.0.0.0",
+  "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36 Edg/126.0.0.0",
+];
+let uaIndex = 0;
+function nextUA(): string { return USER_AGENTS[uaIndex++ % USER_AGENTS.length]; }
+
+// Rate limiting: track last request time per domain
+const lastRequestTime = new Map<string, number>();
+const MIN_DELAY_MS = 800; // Minimum delay between requests to same domain
+let cooldownUntil = 0; // Global cooldown when 403 detected
+
+function getDomain(url: string): string {
+  try { return new URL(url).hostname; } catch { return ""; }
+}
+
+async function throttle(domain: string): Promise<void> {
+  const now = Date.now();
+  // Global cooldown
+  if (now < cooldownUntil) {
+    const wait = cooldownUntil - now;
+    await new Promise(r => setTimeout(r, wait));
+  }
+  // Per-domain delay
+  const last = lastRequestTime.get(domain) ?? 0;
+  const elapsed = Date.now() - last;
+  if (elapsed < MIN_DELAY_MS) {
+    await new Promise(r => setTimeout(r, MIN_DELAY_MS - elapsed));
+  }
+  lastRequestTime.set(domain, Date.now());
+}
+
+// Request headers per domain type
+function buildHeaders(url: string, isImage: boolean): Record<string, string> {
+  const ua = nextUA();
+  const parsed = new URL(url);
+  const host = parsed.hostname;
+  const isBook = host.startsWith("book.douban") || url.includes("book.douban");
+  const isMusic = host.startsWith("music.douban") || url.includes("music.douban");
+  const referer = isBook ? "https://book.douban.com/" : isMusic ? "https://music.douban.com/" : "https://movie.douban.com/";
+  return {
+    "user-agent": ua,
+    "referer": referer,
+    "accept": isImage ? "image/webp,image/apng,image/*,*/*;q=0.8" : "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7",
+    "accept-language": "zh-CN,zh;q=0.9,en;q=0.8,en-GB;q=0.7,en-US;q=0.6",
+    "accept-encoding": "gzip, deflate, br, zstd",
+    "connection": "keep-alive",
+    "cache-control": "max-age=0",
+    "sec-ch-ua": `"Chromium";v="126", "Microsoft Edge";v="126", "Not-A.Brand";v="8"`,
+    "sec-ch-ua-mobile": "?0",
+    "sec-ch-ua-platform": `"Windows"`,
+    "sec-fetch-dest": isImage ? "image" : "document",
+    "sec-fetch-mode": "navigate",
+    "sec-fetch-site": "none",
+    "sec-fetch-user": "?1",
+    "upgrade-insecure-requests": "1",
+  };
+}
+
+async function upstream(url: string, retries = 2): Promise<Response> {
+  const domain = getDomain(url);
+  const isDouban = domain.endsWith("douban.com") || domain.endsWith("doubanio.com");
+  const isImage = /\.(jpg|jpeg|png|webp|avif)$/i.test(new URL(url).pathname);
+  const requestHeaders = isDouban ? buildHeaders(url, isImage) : { "user-agent": nextUA(), "accept": "*/*" };
+
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    if (isDouban) await throttle(domain);
+    try {
+      const response = await fetch(url, {
+        headers: requestHeaders,
+        signal: AbortSignal.timeout(15000),
+        redirect: "follow",
+      });
+      if (response.status === 403 || response.status === 418) {
+        // Rate limited - activate cooldown
+        cooldownUntil = Date.now() + (attempt + 1) * 5000;
+        console.warn(`Rate limited (${response.status}) on ${domain}, cooldown ${cooldownUntil - Date.now()}ms`);
+        if (attempt < retries) continue;
+        throw new Error(`Rate limited after ${retries + 1} attempts`);
+      }
+      if (!response.ok) throw new Error(`Upstream returned ${response.status}`);
+      return response;
+    } catch (error) {
+      if (attempt === retries) throw error;
+      // Exponential backoff
+      await new Promise(r => setTimeout(r, 1000 * (attempt + 1)));
+    }
+  }
+  throw new Error("Unreachable");
+}
+
 const posterIndex = new Map<string, string>();
 const bookPosterIndex = new Map<string, string>();
 const musicPosterIndex = new Map<string, string>();
@@ -14,25 +106,6 @@ let indexExpires = 0;
 let bookIndexExpires = 0;
 let musicIndexExpires = 0;
 const key = (value: string) => value.normalize("NFKC").trim().toLowerCase();
-
-async function upstream(url: string): Promise<Response> {
-  const parsed = new URL(url);
-  const host = parsed.hostname;
-  const isDouban = host.endsWith("douban.com") || host.endsWith("doubanio.com");
-  const isBook = host.startsWith("book.douban") || url.includes("book.douban");
-  const isMusic = host.startsWith("music.douban") || url.includes("music.douban");
-  const isImage = /\.(jpg|jpeg|png|webp|avif)$/i.test(parsed.pathname);
-  const requestHeaders: Record<string, string> = isDouban
-    ? { ...(isBook ? bookHeaders : isMusic ? musicHeaders : headers), "Accept": isImage ? "image/webp,image/apng,image/*,*/*;q=0.8" : "application/json, text/plain, */*" }
-    : { "user-agent": headers["user-agent"], "accept": "*/*" };
-  const response = await fetch(url, {
-    headers: requestHeaders,
-    signal: AbortSignal.timeout(10000),
-    redirect: "follow",
-  });
-  if (!response.ok) throw new Error(`Upstream returned ${response.status}`);
-  return response;
-}
 
 async function bookTopPage(start: number): Promise<DoubanWork[]> {
   try {
@@ -269,18 +342,30 @@ async function imdbPoster(title: string, english: string, year?: number): Promis
 async function searchCover(query: string, type: "movie" | "book" | "music"): Promise<string | undefined> {
   try {
     const cat = type === "movie" ? "1002" : type === "book" ? "1001" : "1003";
-    const referer = type === "movie" ? "https://movie.douban.com/" : type === "book" ? "https://book.douban.com/" : "https://music.douban.com/";
-    const response = await fetch(`https://search.douban.com/${type}/subject_search?search_text=${encodeURIComponent(query)}&cat=${cat}`, {
-      headers: { "user-agent": headers["user-agent"], referer, "accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8" },
-      signal: AbortSignal.timeout(10000),
+    const url = `https://search.douban.com/${type}/subject_search?search_text=${encodeURIComponent(query)}&cat=${cat}`;
+    await throttle("search.douban.com");
+    const response = await fetch(url, {
+      headers: buildHeaders(url, false),
+      signal: AbortSignal.timeout(15000),
       redirect: "follow",
     });
+    if (response.status === 403 || response.status === 418) {
+      cooldownUntil = Date.now() + 10000;
+      console.warn(`searchCover rate limited (${response.status})`);
+      return undefined;
+    }
     if (!response.ok) return undefined;
     const html = await response.text();
-    const match = html.match(/window\.__DATA__\s*=\s*(\{.+?\})\s*;/);
-    if (!match) return;
-    const data = JSON.parse(match[1]) as { items?: Array<{ title?: string; cover_url?: string }> };
-    const item = data.items?.find((entry) => entry.cover_url && entry.title && key(entry.title).includes(key(query)));
+    const startMarker = 'window.__DATA__ = ';
+    const startIdx = html.indexOf(startMarker);
+    if (startIdx === -1) return undefined;
+    const jsonStart = startIdx + startMarker.length;
+    const jsonMatch = html.substring(jsonStart).match(/^\{[\s\S]*?\}(?=\s*;\s*(?:window|<\/script))/);
+    if (!jsonMatch) return undefined;
+    const data = JSON.parse(jsonMatch[0]) as { items?: Array<{ title?: string; cover_url?: string }> };
+    if (!data.items?.length) return undefined;
+    const queryKey = key(query);
+    const item = data.items.find((entry) => entry.cover_url && entry.title && key(entry.title).includes(queryKey));
     return item?.cover_url;
   } catch (error) {
     console.error(`searchCover(${query}, ${type}) failed:`, error);
@@ -319,6 +404,353 @@ export async function resolvePosters(title: string, english: string, year?: numb
     ...(posterIndex.has(key(title)) ? doubanVariants(posterIndex.get(key(title))!) : []),
     ...(imdb.status === "fulfilled" && imdb.value ? [imdb.value] : []),
   ])];
+}
+
+// ===== Search List API =====
+
+export interface SearchResult {
+  cover_link: string;
+  cover: string;
+  rating: string;
+  title: string;
+  [key: string]: unknown;
+}
+
+interface SearchItem {
+  title?: string;
+  cover_url?: string;
+  url?: string;
+  rating?: string | number;
+  abstract?: string;
+  abstract_2?: string;
+  labels?: Array<{ text?: string }>;
+  [key: string]: unknown;
+}
+
+async function fetchSearchList(type: "movie" | "book" | "music", query: string, page: number): Promise<SearchResult[]> {
+  const cat = type === "movie" ? "1002" : type === "book" ? "1001" : "1003";
+  const start = (page - 1) * 15;
+  const url = `https://search.douban.com/${type}/subject_search?search_text=${encodeURIComponent(query)}&cat=${cat}&start=${start}`;
+  await throttle("search.douban.com");
+  const response = await fetch(url, {
+    headers: buildHeaders(url, false),
+    signal: AbortSignal.timeout(15000),
+    redirect: "follow",
+  });
+  if (response.status === 403 || response.status === 418) {
+    cooldownUntil = Date.now() + 10000;
+    throw new Error(`Rate limited: ${response.status}`);
+  }
+  if (!response.ok) throw new Error(`HTTP ${response.status}`);
+  const html = await response.text();
+  const startMarker = 'window.__DATA__ = ';
+  const startIdx = html.indexOf(startMarker);
+  if (startIdx === -1) return [];
+  const jsonStart = startIdx + startMarker.length;
+  // Match JSON object ending with }; before next window or </script>
+  const jsonMatch = html.substring(jsonStart).match(/^\{[\s\S]*?\}(?=\s*;\s*(?:window|<\/script))/);
+  if (!jsonMatch) return [];
+  const data = JSON.parse(jsonMatch[0]) as { items?: SearchItem[] };
+  if (!data.items?.length) return [];
+  return data.items.filter(item => item.title && item.cover_url).map(item => parseSearchItem(type, item));
+}
+
+function parseSearchItem(type: "movie" | "book" | "music", item: SearchItem): SearchResult {
+  const base: SearchResult = {
+    cover_link: item.url ?? "",
+    cover: item.cover_url ?? "",
+    rating: String(item.rating ?? ""),
+    title: (item.title ?? "").trim(),
+  };
+  if (type === "book") return parseBookSearchItem(item, base);
+  if (type === "movie") return parseMovieSearchItem(item, base);
+  return parseMusicSearchItem(item, base);
+}
+
+function parseBookSearchItem(item: SearchItem, base: SearchResult): SearchResult {
+  const abstract = item.abstract ?? "";
+  const parts = abstract.split("/").map(s => s.trim());
+  if (parts.length >= 4) {
+    base.price = parts.pop();
+    base.date = parts.pop();
+    base.press = parts.pop();
+    base.author = parts.join("/");
+  } else if (parts.length >= 1) {
+    base.author = parts[0];
+  }
+  return base;
+}
+
+function parseMovieSearchItem(item: SearchItem, base: SearchResult): SearchResult {
+  const titleMatch = base.title.match(/^(.*?)(?:\s*‎?\s*\((\d{4})\))?\s*$/);
+  if (titleMatch) {
+    base.title = (titleMatch[1] ?? base.title).trim();
+    if (titleMatch[2]) base.year = titleMatch[2];
+  }
+  const abstract = item.abstract ?? "";
+  const parts = abstract.split("/").map(s => s.trim());
+  if (parts.length >= 3) {
+    base.country = parts.shift();
+    base.duration = parts.pop();
+    base.type = parts;
+  }
+  const abstract2 = item.abstract_2 ?? "";
+  if (abstract2) {
+    base.actors = abstract2.split("/").map(s => s.trim()).filter(Boolean);
+  }
+  return base;
+}
+
+function parseMusicSearchItem(item: SearchItem, base: SearchResult): SearchResult {
+  const titleText = base.title;
+  const slashIdx = titleText.indexOf(" / ");
+  if (slashIdx !== -1) {
+    base.title = titleText.substring(0, slashIdx).trim();
+    base.subtitle = titleText.substring(slashIdx + 3).trim();
+  }
+  const abstract = item.abstract ?? "";
+  const parts = abstract.split("/").map(s => s.trim());
+  if (parts.length >= 2) {
+    base.artist = parts[0];
+    base.date = parts[1];
+    if (parts[2]) base.album = parts[2];
+    if (parts[3]) base.medium = parts[3];
+    if (parts[4]) base.schools = parts[4];
+  }
+  return base;
+}
+
+export async function doubanSearch(type: "movie" | "book" | "music", query: string, page = 1): Promise<{ status: boolean; msg: string; time: string; data: SearchResult[] }> {
+  const t0 = Date.now();
+  try {
+    // Check global cooldown
+    if (Date.now() < cooldownUntil) {
+      return { status: false, msg: `豆瓣限流中，请${Math.ceil((cooldownUntil - Date.now()) / 1000)}秒后重试`, time: "0s", data: [] };
+    }
+    const data = await fetchSearchList(type, query, page);
+    return { status: true, msg: "获取成功", time: `${((Date.now() - t0) / 1000).toFixed(3)}s`, data };
+  } catch (error) {
+    const errMsg = error instanceof Error ? error.message : String(error);
+    console.error(`doubanSearch(${type}, ${query}) failed:`, errMsg);
+    const msg = errMsg.includes("Rate limited") ? "豆瓣限流，请稍后重试" : "获取失败";
+    return { status: false, msg, time: `${((Date.now() - t0) / 1000).toFixed(3)}s`, data: [] };
+  }
+}
+
+// ===== Detail API =====
+
+export interface BookDetail {
+  title: string;
+  pic: string;
+  rating: string;
+  作者?: string;
+  出版社?: string;
+  出版年?: string;
+  页数?: string;
+  定价?: string;
+  装帧?: string;
+  丛书?: string;
+  ISBN?: string;
+  content_intro?: string;
+  author_intro?: string;
+  dirs?: string[];
+  tags?: string[];
+  [key: string]: unknown;
+}
+
+export interface MovieDetail {
+  title: string;
+  pic: string;
+  rating: string;
+  导演?: string;
+  编剧?: string;
+  主演?: string;
+  类型?: string;
+  "制片国家/地区"?: string;
+  语言?: string;
+  上映日期?: string;
+  片长?: string;
+  又名?: string;
+  IMDb链接?: string;
+  content_intro?: string;
+  acting_staff?: string[];
+  imgs?: string[];
+  [key: string]: unknown;
+}
+
+export interface MusicDetail {
+  title: string;
+  pic: string;
+  rating: string;
+  又名?: string;
+  表演者?: string;
+  流派?: string;
+  专辑类型?: string;
+  介质?: string;
+  发行时间?: string;
+  出版者?: string;
+  唱片数?: string;
+  条形码?: string;
+  content_intro?: string;
+  songs?: string[];
+  [key: string]: unknown;
+}
+
+async function fetchDetailPage(url: string): Promise<string> {
+  await throttle(new URL(url).hostname);
+  const response = await fetch(url, {
+    headers: buildHeaders(url, false),
+    signal: AbortSignal.timeout(15000),
+    redirect: "follow",
+  });
+  if (response.status === 403 || response.status === 418) {
+    cooldownUntil = Date.now() + 10000;
+    throw new Error(`Rate limited: ${response.status}`);
+  }
+  if (!response.ok) throw new Error(`HTTP ${response.status}`);
+  return response.text();
+}
+
+function extractText(html: string, startMarker: string, endMarker: string): string {
+  const idx = html.indexOf(startMarker);
+  if (idx === -1) return "";
+  const start = idx + startMarker.length;
+  const end = html.indexOf(endMarker, start);
+  if (end === -1) return html.substring(start, start + 500);
+  return html.substring(start, end);
+}
+
+function extractBetween(html: string, after: string, before: string, from = 0): string {
+  const a = html.indexOf(after, from);
+  if (a === -1) return "";
+  const s = a + after.length;
+  const b = html.indexOf(before, s);
+  if (b === -1) return html.substring(s, s + 200);
+  return html.substring(s, b);
+}
+
+function cleanHtml(text: string): string {
+  return text.replace(/<[^>]+>/g, "").replace(/&nbsp;/g, " ").replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&#\d+;/g, "").replace(/\s+/g, " ").trim();
+}
+
+export async function doubanBookDetail(url: string): Promise<{ status: boolean; msg: string; time: string; data: BookDetail | null }> {
+  const t0 = Date.now();
+  try {
+    if (!url.includes("book.douban.com/subject/")) throw new Error("Invalid book URL");
+    if (Date.now() < cooldownUntil) return { status: false, msg: `豆瓣限流中，请${Math.ceil((cooldownUntil - Date.now()) / 1000)}秒后重试`, time: "0s", data: null };
+    const html = await fetchDetailPage(url);
+    const detail: BookDetail = { title: "", pic: "", rating: "" };
+    // Title
+    const titleMatch = html.match(/<span\s+property="v:itemreviewed"[^>]*>([^<]+)<\/span>/);
+    detail.title = titleMatch ? cleanHtml(titleMatch[1]) : extractBetween(html, "<title>", "</title>").split("(")[0].trim();
+    // Pic
+    const picMatch = html.match(/<div\s+id="mainpic"[^>]*>[\s\S]*?<img[^>]+src="([^"]+)"/);
+    detail.pic = picMatch ? picMatch[1] : "";
+    // Rating
+    const ratingMatch = html.match(/<strong[^>]+property="v:average"[^>]*>([^<]+)<\/strong>/);
+    detail.rating = ratingMatch ? ratingMatch[1].trim() : "";
+    // Info block
+    const infoHtml = extractBetween(html, '<div id="info"', '</div>');
+    const infoLines = infoHtml.split(/<br\s*\/?>/).map(l => cleanHtml(l)).filter(Boolean);
+    for (const line of infoLines) {
+      const colonIdx = line.indexOf(":");
+      if (colonIdx === -1) continue;
+      const field = line.substring(0, colonIdx).trim();
+      const value = line.substring(colonIdx + 1).trim();
+      if (field && value) detail[field] = value;
+    }
+    // Content intro
+    const introMatch = html.match(/<div\s+class="intro"[^>]*>([\s\S]*?)<\/div>/);
+    if (introMatch) detail.content_intro = cleanHtml(introMatch[1]);
+    // Author intro
+    const authorIntroMatch = html.match(/<div\s+class="indent"[^>]*id="link-report"[\s\S]*?<div\s+class="intro"[^>]*>([\s\S]*?)<\/div>/);
+    if (authorIntroMatch) detail.author_intro = cleanHtml(authorIntroMatch[1]);
+    // Tags
+    const tagMatches = html.match(/<a\s+href="[^"]*tag[^"]*"[^>]*>([^<]+)<\/a>/g);
+    if (tagMatches) detail.tags = tagMatches.map(m => cleanHtml(m)).filter(Boolean);
+    // Directories
+    const dirMatch = html.match(/<div\s+class="indent"[^>]*id="dir_[^"]*"[^>]*>([\s\S]*?)<\/div>/);
+    if (dirMatch) {
+      const dirText = cleanHtml(dirMatch[1]);
+      detail.dirs = dirText.split(/\s{2,}/).map(s => s.trim()).filter(Boolean);
+    }
+    return { status: true, msg: "获取成功", time: `${((Date.now() - t0) / 1000).toFixed(3)}s`, data: detail };
+  } catch (error) {
+    console.error(`doubanBookDetail failed:`, error);
+    return { status: false, msg: "获取失败", time: `${((Date.now() - t0) / 1000).toFixed(3)}s`, data: null };
+  }
+}
+
+export async function doubanMovieDetail(url: string): Promise<{ status: boolean; msg: string; time: string; data: MovieDetail | null }> {
+  const t0 = Date.now();
+  try {
+    if (!url.includes("movie.douban.com/subject/")) throw new Error("Invalid movie URL");
+    if (Date.now() < cooldownUntil) return { status: false, msg: `豆瓣限流中，请${Math.ceil((cooldownUntil - Date.now()) / 1000)}秒后重试`, time: "0s", data: null };
+    const html = await fetchDetailPage(url);
+    const detail: MovieDetail = { title: "", pic: "", rating: "" };
+    const titleMatch = html.match(/<span\s+property="v:itemreviewed"[^>]*>([^<]+)<\/span>/);
+    detail.title = titleMatch ? cleanHtml(titleMatch[1]) : extractBetween(html, "<title>", "</title>").split("(")[0].trim();
+    const picMatch = html.match(/<div\s+id="mainpic"[^>]*>[\s\S]*?<img[^>]+src="([^"]+)"/);
+    detail.pic = picMatch ? picMatch[1] : "";
+    const ratingMatch = html.match(/<strong[^>]+property="v:average"[^>]*>([^<]+)<\/strong>/);
+    detail.rating = ratingMatch ? ratingMatch[1].trim() : "";
+    const infoHtml = extractBetween(html, '<div id="info"', '</div>');
+    const infoLines = infoHtml.split(/<br\s*\/?>/).map(l => cleanHtml(l)).filter(Boolean);
+    for (const line of infoLines) {
+      const colonIdx = line.indexOf(":");
+      if (colonIdx === -1) continue;
+      const field = line.substring(0, colonIdx).trim();
+      const value = line.substring(colonIdx + 1).trim();
+      if (field && value) detail[field] = value;
+    }
+    const introMatch = html.match(/<span\s+property="v:summary"[^>]*>([\s\S]*?)<\/span>/);
+    if (introMatch) detail.content_intro = cleanHtml(introMatch[1]);
+    const actorMatches = html.match(/<a\s+href="[^"]*celebrity[^"]*"[^>]*>([^<]+)<\/a>/g);
+    if (actorMatches) detail.acting_staff = actorMatches.slice(0, 10).map(m => cleanHtml(m)).filter(Boolean);
+    const imgMatches = html.match(/<img[^>]+src="(https:\/\/img\d+\.doubanio\.com\/view\/photo\/[^"]+)"/g);
+    if (imgMatches) detail.imgs = [...new Set(imgMatches.map(m => m.match(/src="([^"]+)"/)?.[1] ?? "").filter(Boolean))].slice(0, 6);
+    return { status: true, msg: "获取成功", time: `${((Date.now() - t0) / 1000).toFixed(3)}s`, data: detail };
+  } catch (error) {
+    console.error(`doubanMovieDetail failed:`, error);
+    return { status: false, msg: "获取失败", time: `${((Date.now() - t0) / 1000).toFixed(3)}s`, data: null };
+  }
+}
+
+export async function doubanMusicDetail(url: string): Promise<{ status: boolean; msg: string; time: string; data: MusicDetail | null }> {
+  const t0 = Date.now();
+  try {
+    if (!url.includes("music.douban.com/subject/")) throw new Error("Invalid music URL");
+    if (Date.now() < cooldownUntil) return { status: false, msg: `豆瓣限流中，请${Math.ceil((cooldownUntil - Date.now()) / 1000)}秒后重试`, time: "0s", data: null };
+    const html = await fetchDetailPage(url);
+    const detail: MusicDetail = { title: "", pic: "", rating: "" };
+    const titleMatch = html.match(/<span\s+property="v:itemreviewed"[^>]*>([^<]+)<\/span>/);
+    detail.title = titleMatch ? cleanHtml(titleMatch[1]) : extractBetween(html, "<title>", "</title>").split("(")[0].trim();
+    const picMatch = html.match(/<div\s+id="mainpic"[^>]*>[\s\S]*?<img[^>]+src="([^"]+)"/);
+    detail.pic = picMatch ? picMatch[1] : "";
+    const ratingMatch = html.match(/<strong[^>]+property="v:average"[^>]*>([^<]+)<\/strong>/);
+    detail.rating = ratingMatch ? ratingMatch[1].trim() : "";
+    const infoHtml = extractBetween(html, '<div id="info"', '</div>');
+    const infoLines = infoHtml.split(/<br\s*\/?>/).map(l => cleanHtml(l)).filter(Boolean);
+    for (const line of infoLines) {
+      const colonIdx = line.indexOf(":");
+      if (colonIdx === -1) continue;
+      const field = line.substring(0, colonIdx).trim();
+      const value = line.substring(colonIdx + 1).trim();
+      if (field && value) detail[field] = value;
+    }
+    const introMatch = html.match(/<span\s+class="all"[^>]*>([\s\S]*?)<\/span>/) ??
+      html.match(/<div\s+class="intro"[^>]*>([\s\S]*?)<\/div>/);
+    if (introMatch) detail.content_intro = cleanHtml(introMatch[1]);
+    const songMatches = html.match(/<div\s+class="song-items-wrapper"[\s\S]*?<\/div>/);
+    if (songMatches) {
+      const songNames = songMatches[0].match(/<span\s+class="song-name"[^>]*>([^<]+)<\/span>/g);
+      if (songNames) detail.songs = songNames.map(m => cleanHtml(m)).filter(Boolean);
+    }
+    return { status: true, msg: "获取成功", time: `${((Date.now() - t0) / 1000).toFixed(3)}s`, data: detail };
+  } catch (error) {
+    console.error(`doubanMusicDetail failed:`, error);
+    return { status: false, msg: "获取失败", time: `${((Date.now() - t0) / 1000).toFixed(3)}s`, data: null };
+  }
 }
 
 export function allowedImage(raw: string): URL | null {

@@ -1,4 +1,4 @@
-import { doubanTop250, doubanSuggest, doubanBookTop250, doubanBookSuggest, doubanMusicTop250, proxyImage, resolvePosters } from "./media";
+import { doubanTop250, doubanSuggest, doubanBookTop250, doubanBookSuggest, doubanMusicTop250, doubanSearch, doubanBookDetail, doubanMovieDetail, doubanMusicDetail, proxyImage, resolvePosters } from "./media";
 import { accountRoute } from "./account";
 
 export interface Env {
@@ -451,6 +451,47 @@ async function route(request: Request, env: Env): Promise<Response> {
     return json({ poster_urls }, 200, { "cache-control": `public, max-age=${poster_urls.length ? 86400 : 300}` });
   }
   if (url.pathname === "/api/image" && request.method === "GET") return withSecurityHeaders(await proxyImage(url.searchParams.get("url") ?? ""));
+
+  // Search list APIs
+  if (url.pathname === "/api/book/list" && request.method === "GET") {
+    const key = url.searchParams.get("key")?.trim();
+    const page = Number(url.searchParams.get("page") ?? "1");
+    if (!key || key.length > 80) return json({ status: false, msg: "缺少参数 key", data: null }, 400);
+    if (!Number.isInteger(page) || page < 1 || page > 100) return json({ status: false, msg: "page 参数无效", data: null }, 400);
+    return json(await doubanSearch("book", key, page), 200, { "cache-control": "public, max-age=3600" });
+  }
+  if (url.pathname === "/api/movie/list" && request.method === "GET") {
+    const key = url.searchParams.get("key")?.trim();
+    const page = Number(url.searchParams.get("page") ?? "1");
+    if (!key || key.length > 80) return json({ status: false, msg: "缺少参数 key", data: null }, 400);
+    if (!Number.isInteger(page) || page < 1 || page > 100) return json({ status: false, msg: "page 参数无效", data: null }, 400);
+    return json(await doubanSearch("movie", key, page), 200, { "cache-control": "public, max-age=3600" });
+  }
+  if (url.pathname === "/api/music/list" && request.method === "GET") {
+    const key = url.searchParams.get("key")?.trim();
+    const page = Number(url.searchParams.get("page") ?? "1");
+    if (!key || key.length > 80) return json({ status: false, msg: "缺少参数 key", data: null }, 400);
+    if (!Number.isInteger(page) || page < 1 || page > 100) return json({ status: false, msg: "page 参数无效", data: null }, 400);
+    return json(await doubanSearch("music", key, page), 200, { "cache-control": "public, max-age=3600" });
+  }
+
+  // Detail APIs
+  if (url.pathname === "/api/book/detail" && request.method === "GET") {
+    const detailUrl = url.searchParams.get("url")?.trim();
+    if (!detailUrl || !detailUrl.includes("book.douban.com/subject/")) return json({ status: false, msg: "缺少参数 url", data: null }, 400);
+    return json(await doubanBookDetail(detailUrl), 200, { "cache-control": "public, max-age=86400" });
+  }
+  if (url.pathname === "/api/movie/detail" && request.method === "GET") {
+    const detailUrl = url.searchParams.get("url")?.trim();
+    if (!detailUrl || !detailUrl.includes("movie.douban.com/subject/")) return json({ status: false, msg: "缺少参数 url", data: null }, 400);
+    return json(await doubanMovieDetail(detailUrl), 200, { "cache-control": "public, max-age=86400" });
+  }
+  if (url.pathname === "/api/music/detail" && request.method === "GET") {
+    const detailUrl = url.searchParams.get("url")?.trim();
+    if (!detailUrl || !detailUrl.includes("music.douban.com/subject/")) return json({ status: false, msg: "缺少参数 url", data: null }, 400);
+    return json(await doubanMusicDetail(detailUrl), 200, { "cache-control": "public, max-age=86400" });
+  }
+
   if (url.pathname === "/api/auth/config") return json({ enabled: Boolean(env.DB && env.ACCESS_TEAM_DOMAIN && env.ACCESS_AUD) });
   if (url.pathname === "/api/account/login" && request.method === "GET") {
     return Response.redirect(`${url.origin}/cdn-cgi/access/login?redirect_url=${encodeURIComponent(url.origin)}`, 302);
