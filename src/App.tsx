@@ -83,6 +83,11 @@ export default function App() {
   const [accountEnabled, setAccountEnabled] = useState(false);
   const [accountEmail, setAccountEmail] = useState("");
   const [cloudProfile, setCloudProfile] = useState<ArtisticProfile | null>(null);
+  const [accountToken, setAccountToken] = useState(() => { try { return localStorage.getItem("art-rank:account-token") ?? ""; } catch { return ""; } });
+  const [authMode, setAuthMode] = useState<"login" | "register">("login");
+  const [authEmail, setAuthEmail] = useState("");
+  const [authPassword, setAuthPassword] = useState("");
+  const [authError, setAuthError] = useState("");
 
   const comparison = ranking ? getCurrentComparison(ranking) : null;
   const progress = ranking ? getRankingProgress(ranking) : null;
@@ -104,6 +109,15 @@ export default function App() {
     const payload = new URLSearchParams(location.hash.slice(1)).get("profile") ?? new URLSearchParams(location.search).get("payload");
     if (payload) try { acceptPeer(decode(payload)); } catch { setNotice(t("比较链接无效或过大，请导入 JSON 文件。", "Invalid or oversized link. Import the JSON file instead.")); }
     void fetch("/api/auth/config").then((response) => response.json()).then((data: { enabled?: boolean }) => setAccountEnabled(Boolean(data.enabled))).catch(() => undefined);
+    // Restore session
+    if (accountToken) {
+      void fetch("/api/account/profile", { headers: { authorization: `Bearer ${accountToken}` } })
+        .then((r) => r.ok ? r.json() : null)
+        .then((data: { email?: string; profile?: unknown } | null) => {
+          if (data?.email) { setAccountEmail(data.email); if (data.profile) setCloudProfile(parseProfile(data.profile)); }
+          else { setAccountToken(""); try { localStorage.removeItem("art-rank:account-token"); } catch {} }
+        }).catch(() => {});
+    }
   }, []);
   useEffect(() => { document.documentElement.lang = locale === "zh" ? "zh-CN" : "en"; }, [locale]);
   useEffect(() => { window.scrollTo(0, 0); }, [view]);
@@ -223,24 +237,43 @@ export default function App() {
     catch { setNotice(t("链接已生成，可在下方选中复制。", "Link ready. Select and copy it below.")); }
   }
   async function accountLoad() {
+    if (!accountToken) { setNotice(t("请先登录。", "Please sign in first.")); return; }
     setBusy(true);
     try {
-      const response = await fetch("/api/account/profile", { redirect: "error" });
+      const response = await fetch("/api/account/profile", { headers: { authorization: `Bearer ${accountToken}` } });
       if (!response.ok) throw new Error();
       const data = await response.json() as { email: string; profile: unknown };
       setAccountEmail(data.email); setCloudProfile(data.profile ? parseProfile(data.profile) : null);
-    } catch { setNotice(t("请先登录，或检查账号同步配置。", "Sign in first, or check account configuration.")); }
+    } catch { setNotice(t("读取失败，请重新登录。", "Failed to load. Please sign in again.")); }
     finally { setBusy(false); }
   }
   async function accountSave() {
+    if (!accountToken) { setNotice(t("请先登录。", "Please sign in first.")); return; }
     const next = namedProfile(); if (!next) return;
     setBusy(true);
     try {
-      const response = await fetch("/api/account/profile", { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ profile: next }), redirect: "error" });
+      const response = await fetch("/api/account/profile", { method: "PUT", headers: { "content-type": "application/json", authorization: `Bearer ${accountToken}` }, body: JSON.stringify({ profile: next }) });
       if (!response.ok) throw new Error();
       persist(next); setCloudProfile(next); setNotice(t("画像已保存到账号。", "Profile saved to your account."));
     } catch { setNotice(t("同步失败，本地画像仍然保留。", "Sync failed. Your local profile is still available.")); }
     finally { setBusy(false); }
+  }
+  async function accountAuth(mode: "login" | "register") {
+    setAuthError(""); setBusy(true);
+    try {
+      const response = await fetch(`/api/account/${mode}`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ email: authEmail, password: authPassword }) });
+      const data = await response.json() as { token?: string; email?: string; error?: string; msg?: string };
+      if (!response.ok || !data.token) { setAuthError(data.msg ?? data.error ?? t("操作失败", "Failed")); return; }
+      setAccountToken(data.token); setAccountEmail(data.email ?? authEmail); setAuthEmail(""); setAuthPassword("");
+      try { localStorage.setItem("art-rank:account-token", data.token); } catch {}
+      setNotice(t("登录成功！", "Signed in!"));
+    } catch { setAuthError(t("网络错误", "Network error")); }
+    finally { setBusy(false); }
+  }
+  function accountLogout() {
+    if (accountToken) void fetch("/api/account/logout", { method: "POST", headers: { authorization: `Bearer ${accountToken}` } }).catch(() => {});
+    setAccountToken(""); setAccountEmail(""); setCloudProfile(null);
+    try { localStorage.removeItem("art-rank:account-token"); } catch {}
   }
   function createFromPeer(nextKind: MediaKind) {
     const entry = peer?.rankings.find((item) => item.kind === nextKind);
@@ -304,7 +337,25 @@ export default function App() {
   return <div className="app-shell"><header className="topbar"><button className="wordmark" onClick={() => setView("home")}>ART<span>/</span>RANK</button><nav aria-label={t("主导航", "Main navigation")}><button className={view === "home" || view === "source" || view === "setup" || view === "sorting" ? "active" : ""} onClick={() => setView("home")}>{t("排序", "Rank")}</button><button className={view === "compare" ? "active" : ""} onClick={() => setView("compare")}>{t("比较", "Compare")}</button>{profile && <button className={view === "profile" ? "active" : ""} onClick={() => setView("profile")}>{t("画像", "Profile")}</button>}</nav><div className="header-tools"><IconButton title={locale === "zh" ? "English" : "中文"} onClick={() => { const next = locale === "zh" ? "en" : "zh"; setLocale(next); const url = new URL(location.href); url.searchParams.set("lang", next); history.replaceState(null, "", url); }}><Languages size={18} /></IconButton><IconButton title={t("登录 / 同步", "Sign in / Sync")} onClick={() => setAccountOpen(true)}><UserRound size={18} /></IconButton></div></header>
     <main className={`main view-${view}`}>{view !== "home" && <button className="back-link" onClick={() => setView(view === "setup" ? "source" : "home")}><ArrowLeft size={15} />{t("返回", "Back")}</button>}{content}</main><footer><span>ART/RANK</span><span>{t("偏好没有标准答案", "Preference has no answer key")}</span></footer>
     {notice && <div className="toast" role="status"><span>{notice}</span><IconButton title={t("关闭提示", "Dismiss")} onClick={() => setNotice("")}><X size={16} /></IconButton></div>}
-    {accountOpen && <div className="modal-backdrop" onClick={() => setAccountOpen(false)}><section className="account-dialog" role="dialog" aria-modal="true" aria-labelledby="account-heading" onClick={(event) => event.stopPropagation()} onKeyDown={(event) => { if (event.key === "Escape") setAccountOpen(false); }}><div className="section-heading"><h2 id="account-heading">{t("账号与同步", "Account & sync")}</h2><IconButton title={t("关闭", "Close")} onClick={() => setAccountOpen(false)}><X size={18} /></IconButton></div>{accountEnabled ? <><a className="button primary" href="/api/account/login"><LogIn size={16} />{t("登录账号", "Sign in")}</a><button className="button secondary" disabled={busy} onClick={accountLoad}><CloudDownload size={16} />{t("读取账号画像", "Load account profile")}</button>{accountEmail && <p>{accountEmail}</p>}{cloudProfile && <button className="button secondary" onClick={() => { persist(cloudProfile); setAccountOpen(false); setView("profile"); }}>{t("使用账号中的画像", "Use account profile")}<Check size={16} /></button>}<button className="button secondary" disabled={busy || !profile} onClick={accountSave}><CloudUpload size={16} />{t("保存本地画像到账号", "Save local profile to account")}</button></> : <p>{t("本站尚未启用账号同步。当前画像保存在本机。", "Account sync is not enabled on this site. Your profile is stored on this device.")}</p>}<button className="button quiet" onClick={() => setAccountOpen(false)}><UserRound size={16} />{t("继续使用游客模式", "Continue as guest")}</button></section></div>}
+    {accountOpen && <div className="modal-backdrop" onClick={() => setAccountOpen(false)}><section className="account-dialog" role="dialog" aria-modal="true" aria-labelledby="account-heading" onClick={(event) => event.stopPropagation()} onKeyDown={(event) => { if (event.key === "Escape") setAccountOpen(false); }}><div className="section-heading"><h2 id="account-heading">{t("账号与同步", "Account & sync")}</h2><IconButton title={t("关闭", "Close")} onClick={() => setAccountOpen(false)}><X size={18} /></IconButton></div>
+      {accountEmail ? <>
+        <p style={{ marginBottom: 12 }}>{accountEmail}</p>
+        <button className="button secondary" disabled={busy} onClick={accountLoad}><CloudDownload size={16} />{t("从云端读取画像", "Load cloud profile")}</button>
+        {cloudProfile && <button className="button secondary" onClick={() => { persist(cloudProfile); setAccountOpen(false); setView("profile"); }}>{t("使用云端画像", "Use cloud profile")}<Check size={16} /></button>}
+        <button className="button secondary" disabled={busy || !profile} onClick={accountSave}><CloudUpload size={16} />{t("保存本地画像到云端", "Save to cloud")}</button>
+        <button className="button quiet" onClick={accountLogout}>{t("退出登录", "Sign out")}</button>
+      </> : <>
+        <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
+          <button className={`button ${authMode === "login" ? "primary" : "secondary"}`} onClick={() => { setAuthMode("login"); setAuthError(""); }}>{t("登录", "Sign in")}</button>
+          <button className={`button ${authMode === "register" ? "primary" : "secondary"}`} onClick={() => { setAuthMode("register"); setAuthError(""); }}>{t("注册", "Register")}</button>
+        </div>
+        {authError && <p style={{ color: "#f87171", fontSize: 13, marginBottom: 8 }}>{authError}</p>}
+        <input type="email" placeholder={t("邮箱", "Email")} value={authEmail} onChange={(e) => setAuthEmail(e.target.value)} style={{ marginBottom: 8 }} />
+        <input type="password" placeholder={t("密码（至少6位）", "Password (6+ chars)")} value={authPassword} onChange={(e) => setAuthPassword(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") void accountAuth(authMode); }} style={{ marginBottom: 12 }} />
+        <button className="button primary" disabled={busy} onClick={() => void accountAuth(authMode)}>{authMode === "login" ? t("登录", "Sign in") : t("注册", "Register")}</button>
+      </>}
+      <button className="button quiet" onClick={() => setAccountOpen(false)}><UserRound size={16} />{t("继续使用游客模式", "Continue as guest")}</button>
+    </section></div>}
   </div>;
 }
 

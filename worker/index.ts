@@ -869,10 +869,7 @@ async function route(request: Request, env: Env): Promise<Response> {
     return json(await doubanMusicDetail(detailUrl), 200, { "cache-control": "public, max-age=86400" });
   }
 
-  if (url.pathname === "/api/auth/config") return json({ enabled: Boolean(env.DB && env.ACCESS_TEAM_DOMAIN && env.ACCESS_AUD) });
-  if (url.pathname === "/api/account/login" && request.method === "GET") {
-    return Response.redirect(`${url.origin}/cdn-cgi/access/login?redirect_url=${encodeURIComponent(url.origin)}`, 302);
-  }
+  if (url.pathname === "/api/auth/config") return json({ enabled: Boolean(env.DB) });
   if (url.pathname.startsWith("/api/account/")) {
     if (request.method !== "GET") assertSameOrigin(request);
     return withSecurityHeaders(await accountRoute(request, env));
