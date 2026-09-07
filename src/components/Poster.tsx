@@ -30,7 +30,7 @@ export function Poster({ work, kind, large = false }: { work: Artwork; kind: Med
   useEffect(() => {
     let active = true;
     setResolved([]); setFailed(new Set());
-    if (kind === "film" && large) void resolve(work).then((urls) => { if (active) setResolved(urls); });
+    if (kind === "film") void resolve(work).then((urls) => { if (active) setResolved(urls); });
     return () => { active = false; };
   }, [work.id, work.title, kind, large]);
   const urls = [...new Set([...resolved, ...(work.posterUrls ?? [])])];

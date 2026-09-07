@@ -9,38 +9,48 @@ const key = (value: string) => value.normalize("NFKC").trim().toLowerCase();
 
 async function upstream(url: string): Promise<Response> {
   const host = new URL(url).hostname;
-  const requestHeaders = host.endsWith("douban.com") || host.endsWith("doubanio.com")
-    ? headers
-    : { "user-agent": headers["user-agent"], accept: "*/*" };
-  const response = await fetch(url, { headers: requestHeaders, signal: AbortSignal.timeout(5000), redirect: "error" });
+  const isDouban = host.endsWith("douban.com") || host.endsWith("doubanio.com");
+  const requestHeaders: Record<string, string> = isDouban
+    ? { ...headers, "Accept": "application/json, text/plain, */*" }
+    : { "user-agent": headers["user-agent"], "accept": "*/*" };
+  const response = await fetch(url, {
+    headers: requestHeaders,
+    signal: AbortSignal.timeout(10000),
+    redirect: "follow",
+  });
   if (!response.ok) throw new Error(`Upstream returned ${response.status}`);
   return response;
 }
 
 async function topPage(start: number): Promise<DoubanWork[]> {
-  const response = await upstream(`https://movie.douban.com/top250?start=${start}&filter=`);
-  const works: DoubanWork[] = [];
-  let current: { id: string; title: string; metadata: string; poster_url?: string };
-  let titleSeen = false;
-  // HTMLRewriter decodes entities and tolerates attribute order and whitespace changes.
-  const rewritten = new HTMLRewriter()
-    .on("div.item", { element() { current = { id: "", title: "", metadata: "" }; titleSeen = false; } })
-    .on("div.item .hd a", { element(element) { current.id = element.getAttribute("href")?.match(/subject\/(\d+)/)?.[1] ?? ""; } })
-    .on("div.item .title", { element() { if (current.title) titleSeen = true; }, text(chunk) { if (!titleSeen) current.title += chunk.text; } })
-    .on("div.item .pic img", { element(element) { current.poster_url = element.getAttribute("src") ?? element.getAttribute("data-src") ?? undefined; } })
-    .on("div.item .bd p", { text(chunk) { current.metadata += chunk.text; } })
-    .on("div.item", { element(element) { element.onEndTag(() => {
-      const title = current.title.trim();
-      const year = current.metadata.match(/\b(?:18|19|20)\d{2}\b/)?.[0];
-      if (title && current.id) {
-        const work = { id: `douban-${current.id}`, title, ...(year ? { year: Number(year) } : {}), ...(current.poster_url ? { poster_url: current.poster_url } : {}) };
-        works.push(work);
-        if (work.poster_url) posterIndex.set(key(title), work.poster_url);
-      }
-    }); } }).transform(response);
-  await rewritten.text();
-  if (works.length < 2) throw new Error("No entries: upstream may require verification");
-  return works;
+  try {
+    const response = await upstream(`https://movie.douban.com/top250?start=${start}&filter=`);
+    const works: DoubanWork[] = [];
+    let current: { id: string; title: string; metadata: string; poster_url?: string };
+    let titleSeen = false;
+    // HTMLRewriter decodes entities and tolerates attribute order and whitespace changes.
+    const rewritten = new HTMLRewriter()
+      .on("div.item", { element() { current = { id: "", title: "", metadata: "" }; titleSeen = false; } })
+      .on("div.item .hd a", { element(element) { current.id = element.getAttribute("href")?.match(/subject\/(\d+)/)?.[1] ?? ""; } })
+      .on("div.item .title", { element() { if (current.title) titleSeen = true; }, text(chunk) { if (!titleSeen) current.title += chunk.text; } })
+      .on("div.item .pic img", { element(element) { current.poster_url = element.getAttribute("src") ?? element.getAttribute("data-src") ?? undefined; } })
+      .on("div.item .bd p", { text(chunk) { current.metadata += chunk.text; } })
+      .on("div.item", { element(element) { element.onEndTag(() => {
+        const title = current.title.trim();
+        const year = current.metadata.match(/\b(?:18|19|20)\d{2}\b/)?.[0];
+        if (title && current.id) {
+          const work = { id: `douban-${current.id}`, title, ...(year ? { year: Number(year) } : {}), ...(current.poster_url ? { poster_url: current.poster_url } : {}) };
+          works.push(work);
+          if (work.poster_url) posterIndex.set(key(title), work.poster_url);
+        }
+      }); } }).transform(response);
+    await rewritten.text();
+    if (works.length < 2) throw new Error("No entries: upstream may require verification");
+    return works;
+  } catch (error) {
+    console.error(`topPage(${start}) failed:`, error);
+    return [];
+  }
 }
 
 export async function doubanTop250(limit: number): Promise<DoubanWork[]> {
@@ -52,11 +62,32 @@ export async function doubanTop250(limit: number): Promise<DoubanWork[]> {
 }
 
 export async function doubanSuggest(query: string): Promise<DoubanWork[]> {
-  const response = await upstream(`https://movie.douban.com/j/subject_suggest?q=${encodeURIComponent(query)}`);
-  const data: unknown = await response.json();
-  if (!Array.isArray(data)) throw new Error("Invalid upstream response");
-  return data.filter((item) => item && typeof item === "object" && (item.type === "movie" || item.type === undefined) && typeof item.title === "string")
-    .slice(0, 8).map((item) => ({ id: `douban-${item.id}`, title: item.title, ...(Number.isInteger(Number(item.year)) && Number(item.year) > 0 ? { year: Number(item.year) } : {}), ...(typeof item.img === "string" ? { poster_url: item.img } : {}) }));
+  try {
+    const response = await upstream(`https://movie.douban.com/j/subject_suggest?q=${encodeURIComponent(query)}`);
+    const text = await response.text();
+    let data: unknown;
+    try {
+      data = JSON.parse(text);
+    } catch {
+      throw new Error(`Invalid JSON response: ${text.slice(0, 100)}`);
+    }
+    if (!Array.isArray(data)) throw new Error("Invalid upstream response");
+    return data
+      .filter((item) => item && typeof item === "object" && 
+        (item.type === "movie" || item.type === undefined) && 
+        typeof item.title === "string")
+      .slice(0, 8)
+      .map((item) => ({
+        id: `douban-${item.id}`,
+        title: item.title,
+        ...(Number.isInteger(Number(item.year)) && Number(item.year) > 0 
+          ? { year: Number(item.year) } : {}),
+        ...(typeof item.img === "string" ? { poster_url: item.img } : {}),
+      }));
+  } catch (error) {
+    console.error("doubanSuggest failed:", error);
+    return [];
+  }
 }
 
 async function ensureIndex() {
@@ -78,13 +109,20 @@ function doubanVariants(url: string): string[] {
 }
 
 async function imdbPoster(title: string, english: string, year?: number): Promise<string | undefined> {
-  const known = (curatedPosters as Record<string, { query: string; id: string }>)[title];
-  const query = known?.query ?? english.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, "");
-  if (!query) return;
-  const response = await upstream(`https://v3.sg.media-imdb.com/suggestion/${query[0]}/${encodeURIComponent(query)}.json`);
-  const data = await response.json() as { d?: Array<{ id?: string; l?: string; y?: number; i?: { imageUrl?: string } }> };
-  const item = data.d?.find((entry) => known ? entry.id === known.id : entry.id?.startsWith("tt") && key(entry.l ?? "") === key(english) && (!year || entry.y === year));
-  return item?.i?.imageUrl;
+  try {
+    const known = (curatedPosters as Record<string, { query: string; id: string }>)[title];
+    const query = known?.query ?? english.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, "");
+    if (!query) return;
+    const response = await upstream(`https://v3.sg.media-imdb.com/suggestion/${query[0]}/${encodeURIComponent(query)}.json`);
+    const data = await response.json() as { d?: Array<{ id?: string; l?: string; y?: number; i?: { imageUrl?: string } }> };
+    const item = data.d?.find((entry) => known 
+      ? entry.id === known.id 
+      : entry.id?.startsWith("tt") && key(entry.l ?? "") === key(english) && (!year || entry.y === year));
+    return item?.i?.imageUrl;
+  } catch (error) {
+    console.error("imdbPoster failed:", error);
+    return undefined;
+  }
 }
 
 export async function resolvePosters(title: string, english: string, year?: number) {
