@@ -456,10 +456,12 @@ async function fetchSearchList(type: "movie" | "book" | "music", query: string, 
 }
 
 function parseSearchItem(type: "movie" | "book" | "music", item: SearchItem): SearchResult {
+  const ratingObj = item.rating;
+  const ratingValue = typeof ratingObj === "object" && ratingObj !== null ? String((ratingObj as Record<string, unknown>).value ?? "") : String(ratingObj ?? "");
   const base: SearchResult = {
     cover_link: item.url ?? "",
     cover: item.cover_url ?? "",
-    rating: String(item.rating ?? ""),
+    rating: ratingValue,
     title: (item.title ?? "").trim(),
   };
   if (type === "book") return parseBookSearchItem(item, base);
