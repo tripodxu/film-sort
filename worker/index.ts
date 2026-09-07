@@ -199,6 +199,21 @@ function doLogout(){
 function showLogin(){document.getElementById('login').style.display='block';document.getElementById('dashboard').style.display='none';}
 function showDashboard(){document.getElementById('login').style.display='none';document.getElementById('dashboard').style.display='block';load();}
 
+async function deleteAccount(id) {
+  if (!confirm('确定删除该账户？此操作不可撤销。')) return;
+  var r = await fetch('/api/admin/accounts/' + id, { method: 'DELETE', headers: { 'Authorization': 'Bearer ' + getToken() } });
+  if (r.ok) { load(); } else { alert('删除失败'); }
+}
+async function resetPassword(id) {
+  var pwd = prompt('输入新密码（至少6位）');
+  if (!pwd || pwd.length < 6) { if (pwd !== null) alert('密码至少6位'); return; }
+  var r = await fetch('/api/admin/accounts/' + id + '/reset-password', { method: 'POST', headers: { 'Authorization': 'Bearer ' + getToken(), 'Content-Type': 'application/json' }, body: JSON.stringify({ password: pwd }) });
+  if (r.ok) { alert('密码已重置，该用户所有会话已失效'); } else { alert('重置失败'); }
+}
+function exportPosterErrors() {
+  window.open('/api/admin/poster-errors/export?days=30&token=' + getToken(), '_blank');
+}
+
 async function load() {
   try {
     var r = await fetch('/api/admin/dashboard', {headers:{'Authorization':'Bearer '+getToken()}});
@@ -239,13 +254,22 @@ async function load() {
       '</div>',
       '<div class="grid grid-2" style="margin-bottom:16px">',
         '<div class="card"><h3 style="margin-bottom:12px">用户账户 (',(d.accounts||[]).length,')</h3>',
-          '<table><thead><tr><th>邮箱</th><th>昵称</th><th>会话</th><th>画像</th><th>注册</th></tr></thead>',
+          '<table><thead><tr><th>邮箱</th><th>昵称</th><th>注册</th><th>操作</th></tr></thead>',
           '<tbody>', (d.accounts||[]).map(function(a) {
             var time = new Date(a.created_at).toLocaleString('zh-CN', {year:'2-digit',month:'2-digit',day:'2-digit'});
-            var profileTime = a.profile_updated ? new Date(a.profile_updated).toLocaleString('zh-CN', {month:'2-digit',day:'2-digit'}) : '-';
-            return '<tr><td>'+a.email+'</td><td>'+(a.nickname||'-')+'</td><td>'+a.active_sessions+'</td><td>'+profileTime+'</td><td style="color:var(--muted)">'+time+'</td></tr>';
+            return '<tr><td>'+a.email+'</td><td>'+(a.nickname||'-')+'</td><td style="color:var(--muted)">'+time+'</td><td><button onclick="deleteAccount('+a.id+')" style="background:none;border:1px solid var(--red);color:var(--red);padding:2px 6px;border-radius:4px;font-size:10px;cursor:pointer">删除</button> <button onclick="resetPassword('+a.id+')" style="background:none;border:1px solid var(--yellow);color:var(--yellow);padding:2px 6px;border-radius:4px;font-size:10px;cursor:pointer">重置密码</button></td></tr>';
           }).join(''), '</tbody></table>',
         '</div>',
+        '<div class="card"><h3 style="margin-bottom:12px"><span class="status-dot err"></span>海报获取失败 ('+((d.poster_errors||[]).length)+')</h3>',
+          (d.poster_errors||[]).length > 0 ? '<table><thead><tr><th>标题</th><th>类型</th><th>时间</th></tr></thead><tbody>' + (d.poster_errors||[]).slice(0,20).map(function(e) {
+            var time = new Date(e.created_at).toLocaleString('zh-CN', {hour:'2-digit',minute:'2-digit',month:'2-digit',day:'2-digit'});
+            return '<tr><td>'+e.title+'</td><td><span class="badge badge-'+e.media_type+'">'+e.media_type+'</span></td><td style="color:var(--muted)">'+time+'</td></tr>';
+          }).join('') + '</tbody></table>' : '<p style="color:var(--muted);font-size:13px">暂无错误记录</p>',
+          '<div style="margin-top:10px;display:flex;gap:8px">',
+            '<button onclick="exportPosterErrors()" style="background:var(--card);border:1px solid var(--border);color:var(--text);padding:4px 10px;border-radius:6px;font-size:11px;cursor:pointer">导出CSV</button>',
+          '</div>',
+        '</div>',
+      '</div>',
         '<div class="card"><h3 style="margin-bottom:12px">D1 存储</h3>',
           '<table><tbody>',
             (d.storage||[]).map(function(s) {
@@ -556,7 +580,7 @@ async function getDashboard(env: Env): Promise<Response> {
     const safe = <T>(p: Promise<T>, fallback: T): Promise<T> => p.catch(() => fallback);
     const safeAll = (p: Promise<{results?: unknown[]}>) => p.catch(() => ({ results: [] }));
 
-    const [overview, daily, modes, recentEvents, apiLogs, apiErrors, accounts, storageInfo] = await Promise.all([
+    const [overview, daily, modes, recentEvents, apiLogs, apiErrors, accounts, storageInfo, posterErrors] = await Promise.all([
       safe(env.DB.prepare(`SELECT
         COUNT(CASE WHEN event_name = 'visit' THEN 1 END) AS total_visits,
         COUNT(CASE WHEN event_name = 'visit' AND created_at >= datetime('now', '-7 days') THEN 1 END) AS visits_7d,
@@ -595,6 +619,8 @@ async function getDashboard(env: Env): Promise<Response> {
         { tbl: "user_profiles_v2", cnt: up?.cnt ?? 0 },
         { tbl: "challenge_sets", cnt: cs?.cnt ?? 0 },
       ]), []),
+      // Poster errors - last 7 days
+      safeAll(env.DB.prepare("SELECT id, title, media_type, error, created_at FROM poster_errors WHERE created_at >= datetime('now', '-7 days') ORDER BY created_at DESC LIMIT 50").all()),
     ]);
 
     return json({
@@ -621,6 +647,7 @@ async function getDashboard(env: Env): Promise<Response> {
       api_errors: (apiErrors as { results?: unknown[] }).results ?? [],
       accounts: (accounts as { results?: unknown[] }).results ?? [],
       storage: Array.isArray(storageInfo) ? storageInfo : [],
+      poster_errors: (posterErrors as { results?: unknown[] }).results ?? [],
     }, 200, { "cache-control": "public, max-age=30" });
   } catch (error) {
     console.error("dashboard query failed", error instanceof Error ? error.message : error);
@@ -814,6 +841,25 @@ async function route(request: Request, env: Env): Promise<Response> {
   if (url.pathname === "/api/admin/check" && request.method === "GET") {
     return handleAdminCheck(request, env);
   }
+  if (url.pathname === "/api/admin/poster-errors" && request.method === "GET") {
+    if (!env.DB || !await adminAuth(request, env)) return json({ error: "auth_required" }, 401);
+    const days = Number(url.searchParams.get("days") ?? "7");
+    const limit = Math.min(Number(url.searchParams.get("limit") ?? "200"), 1000);
+    const errors = await env.DB.prepare(
+      "SELECT id, title, media_type, error, created_at FROM poster_errors WHERE created_at >= datetime('now', ?) ORDER BY created_at DESC LIMIT ?"
+    ).bind(`-${days} days`, limit).all();
+    return json({ errors: errors.results ?? [] }, 200, { "cache-control": "no-store" });
+  }
+  if (url.pathname === "/api/admin/poster-errors/export" && request.method === "GET") {
+    if (!env.DB || !await adminAuth(request, env)) return json({ error: "auth_required" }, 401);
+    const days = Number(url.searchParams.get("days") ?? "30");
+    const errors = await env.DB.prepare(
+      "SELECT title, media_type, error, created_at FROM poster_errors WHERE created_at >= datetime('now', ?) ORDER BY created_at DESC LIMIT 5000"
+    ).bind(`-${days} days`).all();
+    const rows = errors.results as Array<{ title: string; media_type: string; error: string; created_at: string }>;
+    const csv = "\uFEFF" + "title,media_type,error,created_at\n" + rows.map(r => `"${r.title.replace(/"/g, '""')}","${r.media_type}","${r.error}","${r.created_at}"`).join("\n");
+    return new Response(csv, { status: 200, headers: { "content-type": "text/csv; charset=utf-8", "content-disposition": `attachment; filename="poster-errors-${days}d.csv"`, "cache-control": "no-store" } });
+  }
   if (url.pathname === "/api/douban/top250" && request.method === "GET") {
     const limit = Number(url.searchParams.get("limit") ?? 50);
     if (!Number.isInteger(limit) || limit < 2 || limit > 250) return json({ error: "invalid_limit" }, 400);
@@ -848,9 +894,12 @@ async function route(request: Request, env: Env): Promise<Response> {
     const title = url.searchParams.get("q")?.trim();
     const english = url.searchParams.get("en")?.trim() ?? "";
     const year = Number(url.searchParams.get("year")) || undefined;
-    const type = url.searchParams.get("type") as "movie" | "book" | undefined;
+    const type = url.searchParams.get("type") as "movie" | "book" | "music" | undefined;
     if (!title || title.length > 160 || english.length > 160 || (year !== undefined && (!Number.isInteger(year) || year < 1800 || year > 2200))) return json({ error: "invalid_query" }, 400);
     const poster_urls = await resolvePosters(title, english, year, type);
+    if (poster_urls.length === 0 && env.DB) {
+      void env.DB.prepare("INSERT INTO poster_errors (title, media_type, error) VALUES (?, ?, ?)").bind(title, type ?? "movie", "no_poster_found").run().catch(() => {});
+    }
     return json({ poster_urls }, 200, { "cache-control": `public, max-age=${poster_urls.length ? 86400 : 300}` });
   }
   if (url.pathname === "/api/image" && request.method === "GET") return withSecurityHeaders(await proxyImage(url.searchParams.get("url") ?? ""));

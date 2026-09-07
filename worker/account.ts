@@ -4,6 +4,14 @@ const encoder = new TextEncoder();
 const json = (data: unknown, status = 200) => new Response(JSON.stringify(data), { status, headers: { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" } });
 const redirect = (url: string) => new Response(null, { status: 302, headers: { location: url } });
 
+async function adminAuthLocal(request: Request, db: D1Database): Promise<boolean> {
+  const auth = request.headers.get("authorization");
+  const token = auth?.startsWith("Bearer ") ? auth.slice(7) : new URL(request.url).searchParams.get("token");
+  if (!token || token.length < 32) return false;
+  const session = await db.prepare("SELECT token FROM admin_sessions WHERE token = ? AND expires_at > datetime('now')").bind(token).first();
+  return !!session;
+}
+
 async function hashPassword(password: string): Promise<string> {
   const hash = await crypto.subtle.digest("SHA-256", encoder.encode(password));
   return Array.from(new Uint8Array(hash), b => b.toString(16).padStart(2, "0")).join("");
@@ -282,6 +290,39 @@ export async function accountRoute(request: Request, env: Env): Promise<Response
     if (!nickname || nickname.length < 1) return json({ error: "invalid_nickname", msg: "昵称必填" }, 400);
     await env.DB.prepare("UPDATE user_accounts SET nickname = ? WHERE id = ?").bind(nickname, user.id).run();
     return json({ ok: true, nickname });
+  }
+
+  // GET /api/admin/accounts — list all accounts (admin only)
+  if (path === "/api/admin/accounts" && request.method === "GET") {
+    if (!env.DB || !await adminAuthLocal(request, env.DB)) return json({ error: "auth_required" }, 401);
+    const accounts = await env.DB.prepare("SELECT id, email, nickname, created_at FROM user_accounts ORDER BY created_at DESC LIMIT 100").all();
+    return json({ accounts: accounts.results ?? [] });
+  }
+
+  // DELETE /api/admin/accounts/:id — delete account (admin only)
+  const deleteMatch = path.match(/^\/api\/admin\/accounts\/(\d+)$/);
+  if (deleteMatch && request.method === "DELETE") {
+    if (!env.DB || !await adminAuthLocal(request, env.DB)) return json({ error: "auth_required" }, 401);
+    const userId = Number(deleteMatch[1]);
+    await env.DB.prepare("DELETE FROM user_sessions WHERE user_id = ?").bind(userId).run();
+    await env.DB.prepare("DELETE FROM user_oauth WHERE user_id = ?").bind(userId).run();
+    await env.DB.prepare("DELETE FROM user_profiles_v2 WHERE user_id = ?").bind(userId).run();
+    await env.DB.prepare("DELETE FROM user_accounts WHERE id = ?").bind(userId).run();
+    return json({ ok: true });
+  }
+
+  // POST /api/admin/accounts/:id/reset-password — reset password (admin only)
+  const resetMatch = path.match(/^\/api\/admin\/accounts\/(\d+)\/reset-password$/);
+  if (resetMatch && request.method === "POST") {
+    if (!env.DB || !await adminAuthLocal(request, env.DB)) return json({ error: "auth_required" }, 401);
+    const userId = Number(resetMatch[1]);
+    const body = await request.json().catch(() => null) as Record<string, unknown> | null;
+    const newPassword = cleanString(body?.password, 128);
+    if (!newPassword || newPassword.length < 6) return json({ error: "invalid_password", msg: "密码至少6位" }, 400);
+    const hash = await hashPassword(newPassword);
+    await env.DB.prepare("UPDATE user_accounts SET password_hash = ? WHERE id = ?").bind(hash, userId).run();
+    await env.DB.prepare("DELETE FROM user_sessions WHERE user_id = ?").bind(userId).run();
+    return json({ ok: true });
   }
 
   return json({ error: "not_found" }, 404);
