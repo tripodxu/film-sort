@@ -372,6 +372,77 @@ export function deferCurrent(state: RankingState): RankingState {
   return appendDecision(next, decision);
 }
 
+function skipOrDeferOpponent(
+  state: RankingState,
+  kind: "skip" | "defer",
+): RankingState {
+  const comparison = getCurrentComparison(state);
+  if (!comparison || !state.activeInsertion) {
+    throw new Error("There is no active comparison");
+  }
+
+  const active = state.activeInsertion;
+  const opponentIndex = state.rankedIds.indexOf(comparison.opponentId);
+  if (opponentIndex === -1) {
+    throw new Error("Opponent not found in ranked list");
+  }
+
+  const decision: RankingDecision = {
+    kind,
+    candidateId: comparison.candidateId,
+    opponentId: comparison.opponentId,
+    presentationIndex: comparison.presentationIndex,
+  };
+
+  // Remove opponent from ranked list
+  const newRankedIds = state.rankedIds.filter((_, i) => i !== opponentIndex);
+  const targetList = kind === "skip" ? "skippedIds" : "deferredIds";
+
+  // Adjust insertion range: opponent was in [low, high), removing it shrinks that span by 1
+  const newHigh = active.high - 1;
+
+  let next: RankingState = {
+    ...state,
+    rankedIds: newRankedIds,
+    [targetList]: [...state[targetList], comparison.opponentId],
+    comparisonCount: state.comparisonCount + 1,
+    activeInsertion: { ...active, high: newHigh },
+  };
+
+  if (active.low >= newHigh) {
+    // Position determined — insert candidate
+    next = finishInsertion(next, active.low);
+  } else {
+    // Continue insertion with updated range
+    next = {
+      ...next,
+      activeInsertion: {
+        ...next.activeInsertion!,
+        presentationIndex: next.nextPresentationIndex,
+      },
+      nextPresentationIndex: next.nextPresentationIndex + 1,
+    };
+  }
+
+  return appendDecision(next, decision);
+}
+
+export function skipWork(state: RankingState, workId: string): RankingState {
+  const comparison = getCurrentComparison(state);
+  if (!comparison) throw new Error("There is no active comparison");
+  if (workId === comparison.candidateId) return skipCurrent(state);
+  if (workId === comparison.opponentId) return skipOrDeferOpponent(state, "skip");
+  throw new RangeError("The work must be in the active comparison");
+}
+
+export function deferWork(state: RankingState, workId: string): RankingState {
+  const comparison = getCurrentComparison(state);
+  if (!comparison) throw new Error("There is no active comparison");
+  if (workId === comparison.candidateId) return deferCurrent(state);
+  if (workId === comparison.opponentId) return skipOrDeferOpponent(state, "defer");
+  throw new RangeError("The work must be in the active comparison");
+}
+
 function replayDecision(
   state: RankingState,
   decision: RankingDecision,

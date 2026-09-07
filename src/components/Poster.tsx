@@ -3,11 +3,12 @@ import { BookOpen, Film, Library, Music2 } from "lucide-react";
 import type { Artwork, MediaKind } from "../data/media";
 
 const requests = new Map<string, Promise<string[]>>();
-function resolve(work: Artwork): Promise<string[]> {
-  const key = `${work.title}|${work.subtitle ?? ""}|${work.year ?? ""}`;
+function resolve(work: Artwork, kind: MediaKind): Promise<string[]> {
+  const key = `${kind}|${work.title}|${work.subtitle ?? ""}|${work.year ?? ""}`;
   let request = requests.get(key);
   if (!request) {
-    const params = new URLSearchParams({ q: work.title, en: work.subtitle ?? work.title, ...(work.year ? { year: String(work.year) } : {}) });
+    const type = kind === "book" ? "book" : kind === "music" ? "music" : "movie";
+    const params = new URLSearchParams({ q: work.title, en: work.subtitle ?? work.title, type, ...(work.year ? { year: String(work.year) } : {}) });
     request = fetch(`/api/posters?${params}`, { signal: AbortSignal.timeout(20000) })
       .then(async (response) => response.ok ? await response.json() as { poster_urls?: string[] } : {})
       .then((data) => data.poster_urls ?? []).catch(() => []);
@@ -30,7 +31,7 @@ export function Poster({ work, kind, large = false }: { work: Artwork; kind: Med
   useEffect(() => {
     let active = true;
     setResolved([]); setFailed(new Set());
-    if (kind === "film") void resolve(work).then((urls) => { if (active) setResolved(urls); });
+    if (kind === "film" || kind === "book" || kind === "music") void resolve(work, kind).then((urls) => { if (active) setResolved(urls); });
     return () => { active = false; };
   }, [work.id, work.title, kind, large]);
   const urls = [...new Set([...resolved, ...(work.posterUrls ?? [])])];

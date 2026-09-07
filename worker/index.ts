@@ -1,4 +1,4 @@
-import { doubanTop250, doubanSuggest, proxyImage, resolvePosters } from "./media";
+import { doubanTop250, doubanSuggest, doubanBookTop250, doubanBookSuggest, doubanMusicTop250, proxyImage, resolvePosters } from "./media";
 import { accountRoute } from "./account";
 
 export interface Env {
@@ -417,18 +417,37 @@ async function route(request: Request, env: Env): Promise<Response> {
     try { const works = await doubanTop250(limit); return json({ source: "douban", total: works.length, works }, 200, { "cache-control": "public, max-age=900" }); }
     catch { return json({ error: "douban_unavailable" }, 502); }
   }
+  if (url.pathname === "/api/douban/books/top250" && request.method === "GET") {
+    const limit = Number(url.searchParams.get("limit") ?? 50);
+    if (!Number.isInteger(limit) || limit < 2 || limit > 250) return json({ error: "invalid_limit" }, 400);
+    try { const works = await doubanBookTop250(limit); return json({ source: "douban", total: works.length, works }, 200, { "cache-control": "public, max-age=900" }); }
+    catch { return json({ error: "douban_unavailable" }, 502); }
+  }
+  if (url.pathname === "/api/douban/music/top250" && request.method === "GET") {
+    const limit = Number(url.searchParams.get("limit") ?? 50);
+    if (!Number.isInteger(limit) || limit < 2 || limit > 250) return json({ error: "invalid_limit" }, 400);
+    try { const works = await doubanMusicTop250(limit); return json({ source: "douban", total: works.length, works }, 200, { "cache-control": "public, max-age=900" }); }
+    catch { return json({ error: "douban_unavailable" }, 502); }
+  }
   if (url.pathname === "/api/douban/suggest" && request.method === "GET") {
     const query = url.searchParams.get("q")?.trim();
     if (!query || query.length > 80) return json({ error: "invalid_query" }, 400);
     try { return json({ works: await doubanSuggest(query) }, 200, { "cache-control": "public, max-age=3600" }); }
     catch { return json({ error: "douban_unavailable", works: [] }, 502); }
   }
+  if (url.pathname === "/api/douban/books/suggest" && request.method === "GET") {
+    const query = url.searchParams.get("q")?.trim();
+    if (!query || query.length > 80) return json({ error: "invalid_query" }, 400);
+    try { return json({ works: await doubanBookSuggest(query) }, 200, { "cache-control": "public, max-age=3600" }); }
+    catch { return json({ error: "douban_unavailable", works: [] }, 502); }
+  }
   if (url.pathname === "/api/posters" && request.method === "GET") {
     const title = url.searchParams.get("q")?.trim();
     const english = url.searchParams.get("en")?.trim() ?? "";
     const year = Number(url.searchParams.get("year")) || undefined;
+    const type = url.searchParams.get("type") as "movie" | "book" | undefined;
     if (!title || title.length > 160 || english.length > 160 || (year !== undefined && (!Number.isInteger(year) || year < 1800 || year > 2200))) return json({ error: "invalid_query" }, 400);
-    const poster_urls = await resolvePosters(title, english, year);
+    const poster_urls = await resolvePosters(title, english, year, type);
     return json({ poster_urls }, 200, { "cache-control": `public, max-age=${poster_urls.length ? 86400 : 300}` });
   }
   if (url.pathname === "/api/image" && request.method === "GET") return withSecurityHeaders(await proxyImage(url.searchParams.get("url") ?? ""));

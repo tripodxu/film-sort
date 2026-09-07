@@ -2,7 +2,7 @@ import { lazy, Suspense, useEffect, useMemo, useState, type ReactNode } from "re
 import { ArrowLeft, ArrowRight, BookOpen, Check, ChevronRight, CloudDownload, CloudUpload, Download, Film, Languages, Library, LogIn, Music2, Pause, Play, Plus, Search, Share2, SkipForward, Undo2, Upload, UserRound, Users, X } from "lucide-react";
 import { compressSync, decompressSync, strFromU8, strToU8 } from "fflate";
 import QRCode from "qrcode";
-import { createRankingState, chooseSide, deferCurrent, deserializeRankingState, getCurrentComparison, getRankingProgress, getRankingResult, serializeRankingState, skipCurrent, undoLastAction, type RankingState } from "./lib/ranking";
+import { createRankingState, chooseSide, deferWork, deserializeRankingState, getCurrentComparison, getRankingProgress, getRankingResult, serializeRankingState, skipWork, undoLastAction, type RankingState } from "./lib/ranking";
 import { getCollectionsByKind, mediaLabels, type MediaCollection, type MediaKind } from "./data/media";
 import { compareRankings, LIBRARY_KEY, MAX_PROFILE_BYTES, mergeRanking, parseProfile, profileText, readProfile, type ArtisticProfile, type RankingExport } from "./lib/profile";
 import { importCollection } from "./lib/collections";
@@ -132,10 +132,14 @@ export default function App() {
   async function loadDouban() {
     setBusy(true); setNotice("");
     try {
-      const response = await fetch(`/api/douban/top250?limit=${doubanLimit}`, { signal: AbortSignal.timeout(60000) });
+      const isBook = kind === "book";
+      const isMusic = kind === "music";
+      const endpoint = isBook ? `/api/douban/books/top250?limit=${doubanLimit}` : isMusic ? `/api/douban/music/top250?limit=${doubanLimit}` : `/api/douban/top250?limit=${doubanLimit}`;
+      const response = await fetch(endpoint, { signal: AbortSignal.timeout(60000) });
       const data = await response.json() as { works?: Array<{ id: string; title: string; year?: number; poster_url?: string }> };
       if (!response.ok || !data.works || data.works.length < 2) throw new Error();
-      openCollection({ id: `douban-top${doubanLimit}`, kind: "film", source: "douban", title: `豆瓣 Top ${doubanLimit}`, description: "", topN: 10, works: data.works.map((work) => ({ ...work, posterUrls: work.poster_url ? [work.poster_url] : [] })) });
+      const title = isBook ? `豆瓣读书 Top ${doubanLimit}` : isMusic ? `豆瓣音乐 Top ${doubanLimit}` : `豆瓣 Top ${doubanLimit}`;
+      openCollection({ id: `douban-${isBook ? 'book-' : isMusic ? 'music-' : ''}top${doubanLimit}`, kind: kind, source: "douban", title, description: "", topN: 10, works: data.works.map((work) => ({ ...work, posterUrls: work.poster_url ? [work.poster_url] : [] })) });
     } catch { setNotice(t("豆瓣暂时无法访问，可以重试或选择内置榜单。", "Douban is unavailable. Retry or choose a built-in collection.")); }
     finally { setBusy(false); }
   }
@@ -146,9 +150,15 @@ export default function App() {
     setCollection({ ...collection, works }); setRanking(next); setView("sorting"); setNotice("");
     track("sorting_started", { mode: kind, item_count: works.length, top_k: next.topN });
   }
-  function act(action: "left" | "right" | "undo" | "skip" | "defer") {
+  function act(action: "left" | "right" | "undo" | "skip-left" | "skip-right" | "defer-left" | "defer-right") {
     if (!ranking || !collection || (ranking.completed && action !== "undo")) return;
-    const next = action === "undo" ? undoLastAction(ranking) : action === "skip" ? skipCurrent(ranking) : action === "defer" ? deferCurrent(ranking) : chooseSide(ranking, action);
+    let next: RankingState;
+    if (action === "undo") next = undoLastAction(ranking);
+    else if (action === "skip-left") next = skipWork(ranking, comparison!.leftId);
+    else if (action === "skip-right") next = skipWork(ranking, comparison!.rightId);
+    else if (action === "defer-left") next = deferWork(ranking, comparison!.leftId);
+    else if (action === "defer-right") next = deferWork(ranking, comparison!.rightId);
+    else next = chooseSide(ranking, action);
     setRanking(next);
     if (next.completed) {
       const result: RankingExport = {
@@ -257,10 +267,10 @@ export default function App() {
   </>;
   else if (view === "source") content = <>
     {heading(`COLLECTION / ${label(kind)}`, t("选择作品来源", "Choose a collection"))}
-    <div className="segmented" role="tablist" aria-label={t("作品来源", "Collection source")}>{(["builtin", "custom", ...(kind === "film" ? ["douban"] : [])] as Array<"builtin" | "custom" | "douban">).map((item) => <button key={item} role="tab" aria-selected={source === item} className={source === item ? "active" : ""} onClick={() => { setSource(item); setNotice(""); }}>{item === "builtin" ? t("内置榜单", "Built-in") : item === "custom" ? t("自行导入", "Import") : t("豆瓣榜单", "Douban")}</button>)}</div>
+    <div className="segmented" role="tablist" aria-label={t("作品来源", "Collection source")}>{(["builtin", "custom", ...(kind === "film" || kind === "book" || kind === "music" ? ["douban"] : [])] as Array<"builtin" | "custom" | "douban">).map((item) => <button key={item} role="tab" aria-selected={source === item} className={source === item ? "active" : ""} onClick={() => { setSource(item); setNotice(""); }}>{item === "builtin" ? t("内置榜单", "Built-in") : item === "custom" ? t("自行导入", "Import") : t("豆瓣榜单", "Douban")}</button>)}</div>
     {source === "builtin" && <><label className="search-field"><Search size={17} /><input aria-label={t("搜索榜单", "Search collections")} placeholder={t("搜索榜单或作品", "Search collections or works")} value={search} onChange={(event) => setSearch(event.target.value)} /></label><div className="collection-list">{collections.map((item, index) => <button key={item.id} className="collection-row" onClick={() => openCollection(item)}><span className="row-number">{String(index + 1).padStart(2, "0")}</span>{item.works[0] && <Poster work={item.works[0]} kind={item.kind} />}<div><h3>{item.title}</h3><small>{item.works.length} {t("件作品", "works")}</small></div><ChevronRight size={18} /></button>)}{!collections.length && <p className="empty-state">{t("没有匹配的榜单。", "No matching collections.")}</p>}</div></>}
     {source === "custom" && <section className="import-form"><label htmlFor="custom-list">{t("作品清单", "Your collection")}</label><textarea id="custom-list" value={customText} onChange={(event) => setCustomText(event.target.value)} placeholder={t("作品名称", "Artwork titles")} /><div className="action-row"><label className="button secondary file-button"><Upload size={16} />{t("打开 TXT / JSON", "Open TXT / JSON")}<input type="file" aria-label={t("导入作品清单", "Import collection")} accept=".txt,.json,text/plain,application/json" onChange={async (event) => { const file = event.target.files?.[0]; if (file && file.size <= MAX_PROFILE_BYTES) setCustomText(await file.text()); else if (file) setNotice(t("文件超过 512 KB。", "File exceeds 512 KB.")); event.target.value = ""; }} /></label><button className="button primary" onClick={() => { try { openCollection(importCollection(kind, customText)); } catch { setNotice(t("请输入 2–300 件有效作品，或检查 JSON 格式。", "Enter 2–300 valid works, or check the JSON format.")); } }}>{t("载入清单", "Load collection")}<ArrowRight size={16} /></button></div></section>}
-    {source === "douban" && <section className="douban-source"><span className="eyebrow">DOUBAN / TOP 250</span><h2>{t("豆瓣电影 Top250", "Douban Film Top250")}</h2><label htmlFor="douban-limit">{t("候选范围", "Candidate range")}</label><select id="douban-limit" value={doubanLimit} onChange={(event) => setDoubanLimit(Number(event.target.value))}>{[25, 50, 100, 250].map((n) => <option value={n} key={n}>Top {n}</option>)}</select><button className="button primary" disabled={busy} onClick={loadDouban}><Download size={16} />{busy ? t("正在读取…", "Loading…") : t("读取榜单", "Load collection")}</button></section>}
+    {source === "douban" && <section className="douban-source"><span className="eyebrow">{kind === "book" ? "DOUBAN / BOOKS" : kind === "music" ? "DOUBAN / MUSIC" : "DOUBAN / TOP 250"}</span><h2>{kind === "book" ? t("豆瓣读书 Top250", "Douban Book Top250") : kind === "music" ? t("豆瓣音乐 Top250", "Douban Music Top250") : t("豆瓣电影 Top250", "Douban Film Top250")}</h2><label htmlFor="douban-limit">{t("候选范围", "Candidate range")}</label><select id="douban-limit" value={doubanLimit} onChange={(event) => setDoubanLimit(Number(event.target.value))}>{[25, 50, 100, 250].map((n) => <option value={n} key={n}>Top {n}</option>)}</select><button className="button primary" disabled={busy} onClick={loadDouban}><Download size={16} />{busy ? t("正在读取…", "Loading…") : t("读取榜单", "Load collection")}</button></section>}
   </>;
   else if (view === "setup" && collection) content = <>
     {heading(label(collection.kind), collection.title)}
@@ -269,8 +279,8 @@ export default function App() {
   else if (view === "sorting" && collection && ranking && comparison && progress) content = <>
     <div className="duel-heading"><div><span className="eyebrow">{label(kind)} / TOP {ranking.topN}</span><h1>{collection.title}</h1></div><div className="comparison-count"><strong>{progress.comparisonCount}</strong><span>{t("次取舍", "choices")}</span></div></div>
     <div className="progress-track" role="progressbar" aria-label={t("排序进度", "Ranking progress")} aria-valuenow={Math.round(progress.fraction * 100)} aria-valuemin={0} aria-valuemax={100}><span style={{ width: `${progress.fraction * 100}%` }} /></div><div className="progress-meta"><span>{progress.processed} / {progress.total}</span><span>{t("预计剩余", "Estimated remaining")} {progress.estimatedRemaining}</span></div>
-    <div className="duel-grid">{(["left", "right"] as const).map((side, index) => { const work = worksById.get(side === "left" ? comparison.leftId : comparison.rightId)!; return <button key={side} className="artwork-card" onClick={() => act(side)} aria-label={`${t("选择", "Choose")} ${work.title}`}><div className="artwork-top"><span>0{index + 1}</span><span>{label(kind)}</span></div><Poster key={work.id} work={work} kind={kind} large /><div className="artwork-info"><h2>{work.title}</h2><p>{work.creator || work.subtitle || label(kind)} {work.year}</p></div><ArrowRight className="choose-arrow" size={19} /></button>; })}</div>
-    <div className="duel-tools"><IconButton title={t("撤销", "Undo")} disabled={!ranking.decisionLog.length} onClick={() => act("undo")}><Undo2 size={19} /></IconButton><IconButton title={`${t("略过", "Skip")} ${worksById.get(comparison.candidateId)?.title}`} onClick={() => act("skip")}><SkipForward size={19} /></IconButton><IconButton title={`${t("暂放", "Defer")} ${worksById.get(comparison.candidateId)?.title}`} disabled={ranking.pendingIds.length + ranking.deferredIds.length === 0} onClick={() => act("defer")}><Pause size={19} /></IconButton></div>
+    <div className="duel-grid">{(["left", "right"] as const).map((side, index) => { const workId = side === "left" ? comparison.leftId : comparison.rightId; const work = worksById.get(workId)!; return <div key={side} className="artwork-card"><button className="artwork-main" onClick={() => act(side)} aria-label={`${t("选择", "Choose")} ${work.title}`}><div className="artwork-top"><span>0{index + 1}</span><span>{label(kind)}</span></div><Poster key={work.id} work={work} kind={kind} large /><div className="artwork-info"><h2>{work.title}</h2><p>{work.creator || work.subtitle || label(kind)} {work.year}</p></div><ArrowRight className="choose-arrow" size={19} /></button><div className="artwork-card-tools"><IconButton title={`${t("略过", "Skip")} ${work.title}`} onClick={(event) => { event.stopPropagation(); act(side === "left" ? "skip-left" : "skip-right"); }}><SkipForward size={15} /></IconButton><IconButton title={`${t("暂放", "Defer")} ${work.title}`} disabled={ranking.pendingIds.length + ranking.deferredIds.length === 0} onClick={(event) => { event.stopPropagation(); act(side === "left" ? "defer-left" : "defer-right"); }}><Pause size={15} /></IconButton></div></div>; })}</div>
+    <div className="duel-tools"><IconButton title={t("撤销", "Undo")} disabled={!ranking.decisionLog.length} onClick={() => act("undo")}><Undo2 size={19} /></IconButton></div>
   </>;
   else if (view === "profile" && profile && activeRanking) content = <>
     {heading("ARTISTIC PROFILE", profile.profileName, `${profile.rankings.length} ${t("个维度", "media")} / ${profile.rankings.reduce((count, entry) => count + entry.items.length, 0)} ${t("件作品", "works")}`)}
@@ -298,6 +308,6 @@ export default function App() {
   </div>;
 }
 
-function IconButton({ title, children, onClick, disabled = false }: { title: string; children: ReactNode; onClick: () => void; disabled?: boolean }) {
+function IconButton({ title, children, onClick, disabled = false }: { title: string; children: ReactNode; onClick: (event: React.MouseEvent) => void; disabled?: boolean }) {
   return <button className="icon-button" aria-label={title} title={title} onClick={onClick} disabled={disabled}>{children}<span className="tooltip" role="tooltip">{title}</span></button>;
 }
