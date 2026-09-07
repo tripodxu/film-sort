@@ -12,24 +12,24 @@ body{background:#080a0a;color:#edf2e9}.app-shell{min-height:100svh;background:#0
 @keyframes jellyBounce{0%{transform:scale(1)}30%{transform:scale(1.04)}50%{transform:scale(0.97)}70%{transform:scale(1.01)}100%{transform:scale(1)}}
 @keyframes cardAppear{from{opacity:0;transform:translateY(12px) scale(0.95)}to{opacity:1;transform:translateY(0) scale(1)}}
 /* Collection grid */
-.collection-list{display:grid!important;grid-template-columns:repeat(auto-fill,minmax(240px,1fr))!important;gap:12px!important;margin-top:14px}
-.collection-row{display:flex!important;flex-direction:column!important;align-items:stretch!important;gap:0!important;padding:0!important;border:none!important;background:none!important;cursor:pointer;border-radius:14px!important;overflow:hidden;transition:transform .35s cubic-bezier(.34,1.56,.64,1),box-shadow .3s ease!important;animation:cardAppear .4s ease both}
+.collection-list{display:grid!important;gap:10px!important;margin-top:10px}
+.collection-row{display:flex!important;flex-direction:column!important;align-items:stretch!important;gap:0!important;padding:0!important;border:none!important;background:none!important;cursor:pointer;border-radius:12px!important;overflow:hidden;transition:transform .35s cubic-bezier(.34,1.56,.64,1),box-shadow .3s ease!important;animation:cardAppear .4s ease both}
 .collection-row:hover{transform:translateY(-4px) scale(1.01)!important;box-shadow:0 12px 30px rgba(0,0,0,.3)!important;background:none!important}
-.collection-row .poster-small{width:100%!important;height:auto!important;aspect-ratio:auto!important;border-radius:14px 14px 0 0!important;overflow:hidden}
+.collection-row .poster-small{width:100%!important;height:auto!important;aspect-ratio:auto!important;border-radius:12px 12px 0 0!important;overflow:hidden}
 .collection-row .poster-small img{width:100%!important;height:auto!important;object-fit:contain!important;border-radius:0!important;display:block}
-.collection-row .cover-fallback{border-radius:14px 14px 0 0!important;height:80px}
-.collection-row>div{padding:8px 10px!important;flex:1}
-.collection-row .row-number{position:absolute!important;top:6px;left:6px;z-index:2;background:rgba(0,0,0,.55);backdrop-filter:blur(8px);color:#fff;font-size:10px;font-weight:600;width:20px;height:20px;display:flex;align-items:center;justify-content:center;border-radius:50%}
+.collection-row .cover-fallback{border-radius:12px 12px 0 0!important;height:60px}
+.collection-row>div{padding:5px 8px!important;flex:1}
+.collection-row .row-number{position:absolute!important;top:5px;left:5px;z-index:2;background:rgba(0,0,0,.55);backdrop-filter:blur(8px);color:#fff;font-size:9px;font-weight:600;width:18px;height:18px;display:flex;align-items:center;justify-content:center;border-radius:50%}
 .collection-row svg:last-child{display:none!important}
 /* Candidate grid */
-.candidate-scroll{display:grid!important;grid-template-columns:repeat(auto-fill,minmax(160px,1fr))!important;gap:10px!important;max-height:none!important;overflow:visible!important;padding:4px}
-.candidate-row{display:flex!important;flex-direction:column!important;align-items:center!important;gap:4px!important;padding:8px!important;background:rgba(28,33,29,.7)!important;border:1px solid rgba(217,234,207,.1)!important;border-top:1px solid rgba(217,234,207,.1)!important;border-radius:12px!important;cursor:pointer;transition:all .3s cubic-bezier(.34,1.56,.64,1);animation:cardAppear .3s ease both}
-.candidate-row:hover{transform:translateY(-3px)!important;box-shadow:0 8px 20px rgba(0,0,0,.3)!important;border-color:rgba(217,234,207,.2)!important;background:rgba(38,48,38,.8)!important}
-.candidate-row input[type=checkbox]{position:absolute!important;top:5px;right:5px;z-index:2}
-.candidate-row .poster-small{width:56px!important;height:auto!important;border-radius:8px!important}
+.candidate-scroll{display:grid!important;gap:8px!important;max-height:none!important;overflow:visible!important;padding:2px}
+.candidate-row{display:flex!important;flex-direction:column!important;align-items:center!important;gap:3px!important;padding:6px!important;background:rgba(28,33,29,.7)!important;border:1px solid rgba(217,234,207,.1)!important;border-top:1px solid rgba(217,234,207,.1)!important;border-radius:10px!important;cursor:pointer;transition:all .3s cubic-bezier(.34,1.56,.64,1);animation:cardAppear .3s ease both}
+.candidate-row:hover{transform:translateY(-2px)!important;box-shadow:0 8px 20px rgba(0,0,0,.3)!important;border-color:rgba(217,234,207,.2)!important;background:rgba(38,48,38,.8)!important}
+.candidate-row input[type=checkbox]{position:absolute!important;top:4px;right:4px;z-index:2}
+.candidate-row .poster-small{width:52px!important;height:auto!important;border-radius:8px!important}
 .candidate-row .poster-small img{height:auto!important;object-fit:contain!important}
 .candidate-row>div{text-align:center!important;width:100%}
-.candidate-row>div strong{font-size:11px!important;display:block!important;margin-bottom:0}
+.candidate-row>div strong{font-size:11px!important;display:block!important;margin-bottom:0;line-height:1.2}
 .candidate-row>div small{font-size:9px!important}
 /* Profile dimension cards */
 .profile-dimensions{display:grid!important;grid-template-columns:repeat(auto-fill,minmax(140px,1fr))!important;gap:10px!important;border:none!important;margin-bottom:20px}
