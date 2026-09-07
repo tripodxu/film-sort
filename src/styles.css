@@ -21,56 +21,8 @@ body{background:#080a0a;color:#edf2e9}.app-shell{min-height:100svh;background:#0
 .collection-row>div{padding:5px 8px!important;flex:1}
 .collection-row .row-number{position:absolute!important;top:5px;left:5px;z-index:2;background:rgba(0,0,0,.55);backdrop-filter:blur(8px);color:#fff;font-size:9px;font-weight:600;width:18px;height:18px;display:flex;align-items:center;justify-content:center;border-radius:50%}
 .collection-row svg:last-child{display:none!important}
-/* Candidate grid */
-.candidate-scroll{display:grid!important;gap:8px!important;max-height:none!important;overflow:visible!important;padding:2px}
-.candidate-row{display:flex!important;flex-direction:column!important;align-items:center!important;gap:3px!important;padding:6px!important;background:rgba(28,33,29,.7)!important;border:1px solid rgba(217,234,207,.1)!important;border-top:1px solid rgba(217,234,207,.1)!important;border-radius:10px!important;cursor:pointer;transition:all .3s cubic-bezier(.34,1.56,.64,1);animation:cardAppear .3s ease both}
-.candidate-row:hover{transform:translateY(-2px)!important;box-shadow:0 8px 20px rgba(0,0,0,.3)!important;border-color:rgba(217,234,207,.2)!important;background:rgba(38,48,38,.8)!important}
-.candidate-row input[type=checkbox]{position:absolute!important;top:4px;right:4px;z-index:2}
-.candidate-row .poster-small{width:52px!important;height:auto!important;border-radius:8px!important}
-.candidate-row .poster-small img{height:auto!important;object-fit:contain!important}
-.candidate-row>div{text-align:center!important;width:100%}
-.candidate-row>div strong{font-size:11px!important;display:block!important;margin-bottom:0;line-height:1.2}
-.candidate-row>div small{font-size:9px!important}
-/* Profile dimension cards */
-.profile-dimensions{display:grid!important;grid-template-columns:repeat(auto-fill,minmax(140px,1fr))!important;gap:10px!important;border:none!important;margin-bottom:20px}
-.profile-dimension{display:flex!important;flex-direction:column!important;align-items:center!important;gap:5px!important;padding:10px!important;background:rgba(28,33,29,.7)!important;border:1px solid rgba(217,234,207,.1)!important;border-radius:12px!important;border-bottom:3px solid transparent!important;transition:all .3s cubic-bezier(.34,1.56,.64,1);animation:cardAppear .35s ease both}
-.profile-dimension:hover{transform:translateY(-3px)!important;box-shadow:0 8px 20px rgba(0,0,0,.3)!important}
-.profile-dimension.active{border-color:var(--medium-color)!important;background:rgba(38,54,35,.5)!important}
-.profile-dimension .poster-small{width:46px!important;height:auto!important;border-radius:8px!important}
-.profile-dimension .poster-small img{height:auto!important;object-fit:contain!important}
-.profile-dimension>span{font-size:10px!important;text-align:center}
-.profile-dimension>strong{font-size:12px!important;text-align:center!important;margin:0!important}
-.profile-dimension>small{font-size:10px!important}
-/* Coordinate cards */
-.coordinate{display:flex!important;gap:12px!important;align-items:center!important;padding:12px!important;background:rgba(28,33,29,.6)!important;border:1px solid rgba(217,234,207,.1)!important;border-top:1px solid rgba(217,234,207,.1)!important;border-radius:12px!important;transition:all .3s cubic-bezier(.34,1.56,.64,1);animation:cardAppear .4s ease both}
-.coordinate:hover{transform:translateY(-2px)!important;box-shadow:0 8px 20px rgba(0,0,0,.25)!important;border-color:rgba(217,234,207,.2)!important}
-.coordinate .poster-small{width:42px!important;height:auto!important;border-radius:8px!important}
-.coordinate .poster-small img{height:auto!important;object-fit:contain!important}
-/* Ranking list */
-.ranking-list{display:grid!important;grid-template-columns:repeat(auto-fill,minmax(160px,1fr))!important;gap:10px!important;list-style:none!important;padding:0!important;margin:0!important}
-.ranking-list li{display:flex!important;flex-direction:column!important;align-items:center!important;gap:4px!important;padding:8px!important;background:rgba(28,33,29,.7)!important;border:1px solid rgba(217,234,207,.1)!important;border-top:1px solid rgba(217,234,207,.1)!important;border-radius:12px!important;transition:all .3s ease;animation:cardAppear .3s ease both}
-.ranking-list li:hover{transform:translateY(-2px)!important;box-shadow:0 8px 20px rgba(0,0,0,.25)!important}
-.ranking-list li .row-number{font-size:14px!important;font-weight:700!important;color:var(--accent);margin-bottom:0}
-.ranking-list li .poster-small{width:52px!important;height:auto!important;border-radius:8px!important}
-.ranking-list li .poster-small img{height:auto!important;object-fit:contain!important}
-.ranking-list li>div{text-align:center!important}
-.ranking-list li>div strong{font-size:11px!important;display:block!important}
-.ranking-list li>div small{font-size:9px!important}
-/* Jelly poster */
-.poster{border-radius:12px;transition:transform .4s cubic-bezier(.34,1.56,.64,1),box-shadow .3s ease}
+/* Jelly poster effect (all posters) */
+.poster{transition:transform .4s cubic-bezier(.34,1.56,.64,1),box-shadow .3s ease}
 .poster:hover{animation:jellyBounce .5s ease}
-.poster-small{border-radius:10px;box-shadow:0 4px 16px rgba(0,0,0,.25),0 1px 3px rgba(0,0,0,.15)}
-.poster-large{border-radius:14px;box-shadow:0 8px 30px rgba(0,0,0,.3),0 2px 8px rgba(0,0,0,.2)}
-.poster img{border-radius:inherit;transition:transform .3s ease}
+.poster img{transition:transform .3s ease}
 .poster:hover img{transform:scale(1.03)}
-/* Duel grid jelly */
-.duel-grid{gap:16px}
-.artwork-card{border-radius:20px;overflow:hidden}
-.artwork-main{border-radius:20px 20px 0 0;padding:16px}
-.artwork-card-tools{border-radius:0 0 20px 20px}
-.artwork-main:hover{animation:jellyBounce .4s ease}
-/* Comparison table cards */
-.comparison-table>div{background:rgba(28,33,29,.5);border-radius:10px;padding:10px 14px;margin-bottom:6px;border:1px solid rgba(217,234,207,.08);transition:all .2s ease}
-.comparison-table>div:hover{background:rgba(38,48,38,.6);transform:translateX(4px)}
-.difference-row{background:rgba(28,33,29,.5);border-radius:10px;padding:10px 14px;margin-bottom:6px;border:1px solid rgba(217,234,207,.08);transition:all .2s ease}
-.difference-row:hover{background:rgba(38,48,38,.6);transform:translateX(4px)}
