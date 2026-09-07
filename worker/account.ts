@@ -122,12 +122,13 @@ export async function accountRoute(request: Request, env: Env): Promise<Response
     const nickname = cleanString(body?.nickname, 40);
     if (!email || !isValidEmail(email)) return json({ error: "invalid_email" }, 400);
     if (!password || password.length < 6) return json({ error: "invalid_password", msg: "密码至少6位" }, 400);
+    if (!nickname || nickname.length < 1) return json({ error: "invalid_nickname", msg: "昵称必填" }, 400);
     const existing = await env.DB.prepare("SELECT id FROM user_accounts WHERE email = ?").bind(email).first();
     if (existing) return json({ error: "email_exists" }, 409);
     const hash = await hashPassword(password);
-    const result = await env.DB.prepare("INSERT INTO user_accounts (email, password_hash, nickname) VALUES (?, ?, ?)").bind(email, hash, nickname ?? null).run();
+    const result = await env.DB.prepare("INSERT INTO user_accounts (email, password_hash, nickname) VALUES (?, ?, ?)").bind(email, hash, nickname).run();
     const session = await createSession(env.DB, result.meta.last_row_id as number);
-    return json({ ...session, email, nickname: nickname ?? email.split("@")[0] });
+    return json({ ...session, email, nickname });
   }
 
   // POST /api/account/login
@@ -209,7 +210,8 @@ export async function accountRoute(request: Request, env: Env): Promise<Response
 
       // Get nickname from provider data
       const raw = userData as Record<string, unknown>;
-      const nickname = (providerKey === "google" ? raw.name : raw.login) as string ?? parsed.email.split("@")[0];
+      const providerNickname = (providerKey === "google" ? raw.name : raw.login) as string | undefined;
+      const nickname = providerNickname && providerNickname.length > 0 ? providerNickname : parsed.email.split("@")[0];
 
       // Find or create user
       const userId = await findOrCreateOAuthUser(env.DB, providerKey, parsed.id, parsed.email, nickname);
@@ -269,6 +271,17 @@ export async function accountRoute(request: Request, env: Env): Promise<Response
     await env.DB.prepare("INSERT INTO user_profiles_v2 (user_id, profile) VALUES (?, ?) ON CONFLICT(user_id) DO UPDATE SET profile = excluded.profile, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')")
       .bind(user.id, JSON.stringify(profile)).run();
     return json({ stored: true });
+  }
+
+  // PUT /api/account/nickname
+  if (path === "/api/account/nickname" && request.method === "PUT") {
+    const user = await getUserFromToken(request, env.DB);
+    if (!user) return json({ error: "authentication_required" }, 401);
+    const body = await request.json().catch(() => null) as Record<string, unknown> | null;
+    const nickname = cleanString(body?.nickname, 40);
+    if (!nickname || nickname.length < 1) return json({ error: "invalid_nickname", msg: "昵称必填" }, 400);
+    await env.DB.prepare("UPDATE user_accounts SET nickname = ? WHERE id = ?").bind(nickname, user.id).run();
+    return json({ ok: true, nickname });
   }
 
   return json({ error: "not_found" }, 404);

@@ -90,6 +90,7 @@ export default function App() {
   const [authPassword, setAuthPassword] = useState("");
   const [authNickname, setAuthNickname] = useState("");
   const [authError, setAuthError] = useState("");
+  const [needNickname, setNeedNickname] = useState(false);
 
   const comparison = ranking ? getCurrentComparison(ranking) : null;
   const progress = ranking ? getRankingProgress(ranking) : null;
@@ -121,9 +122,14 @@ export default function App() {
     if (oauthToken && oauthEmail) {
       setAccountToken(oauthToken);
       setAccountEmail(decodeURIComponent(oauthEmail));
-      if (oauthName) setAccountNickname(decodeURIComponent(oauthName));
+      const name = oauthName ? decodeURIComponent(oauthName) : "";
+      setAccountNickname(name);
       try { localStorage.setItem("art-rank:account-token", oauthToken); } catch {}
       history.replaceState(null, "", location.pathname);
+      if (!name || name === decodeURIComponent(oauthEmail).split("@")[0]) {
+        setNeedNickname(true);
+        setAccountOpen(true);
+      }
       setNotice(t("登录成功！", "Signed in!"));
     } else if (oauthError === "error") {
       setNotice(t("登录失败：" + (params.get("msg") ?? "未知错误"), "Sign in failed: " + (params.get("msg") ?? "Unknown error")));
@@ -283,13 +289,23 @@ export default function App() {
   async function accountAuth(mode: "login" | "register") {
     setAuthError(""); setBusy(true);
     try {
+      if (mode === "register" && !authNickname.trim()) { setAuthError(t("请填写昵称", "Please enter a nickname")); setBusy(false); return; }
       const response = await fetch(`/api/account/${mode}`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ email: authEmail, password: authPassword, nickname: authNickname || undefined }) });
       const data = await response.json() as { token?: string; email?: string; nickname?: string; error?: string; msg?: string };
       if (!response.ok || !data.token) { setAuthError(data.msg ?? data.error ?? t("操作失败", "Failed")); return; }
-      setAccountToken(data.token); setAccountEmail(data.email ?? authEmail); setAccountNickname(data.nickname ?? (data.email ?? authEmail).split("@")[0]); setAuthEmail(""); setAuthPassword("");
+      setAccountToken(data.token); setAccountEmail(data.email ?? authEmail); setAccountNickname(data.nickname ?? ""); setAuthEmail(""); setAuthPassword(""); setAuthNickname("");
       try { localStorage.setItem("art-rank:account-token", data.token); } catch {}
       setNotice(t("登录成功！", "Signed in!"));
     } catch { setAuthError(t("网络错误", "Network error")); }
+    finally { setBusy(false); }
+  }
+  async function saveNickname() {
+    if (!authNickname.trim() || !accountToken) return;
+    setBusy(true);
+    try {
+      const response = await fetch("/api/account/nickname", { method: "PUT", headers: { "content-type": "application/json", authorization: `Bearer ${accountToken}` }, body: JSON.stringify({ nickname: authNickname.trim() }) });
+      if (response.ok) { setAccountNickname(authNickname.trim()); setNeedNickname(false); setAuthNickname(""); setNotice(t("昵称已设置！", "Nickname set!")); }
+    } catch {}
     finally { setBusy(false); }
   }
   function accountLogout() {
@@ -360,7 +376,11 @@ export default function App() {
     <main className={`main view-${view}`}>{view !== "home" && <button className="back-link" onClick={() => setView(view === "setup" ? "source" : "home")}><ArrowLeft size={15} />{t("返回", "Back")}</button>}{content}</main><footer><span>ART/RANK</span><span>{t("偏好没有标准答案", "Preference has no answer key")}</span></footer>
     {notice && <div className="toast" role="status"><span>{notice}</span><IconButton title={t("关闭提示", "Dismiss")} onClick={() => setNotice("")}><X size={16} /></IconButton></div>}
     {accountOpen && <div className="modal-backdrop" onClick={() => setAccountOpen(false)}><section className="account-dialog" role="dialog" aria-modal="true" aria-labelledby="account-heading" onClick={(event) => event.stopPropagation()} onKeyDown={(event) => { if (event.key === "Escape") setAccountOpen(false); }}><div className="section-heading"><h2 id="account-heading">{t("账号与同步", "Account & sync")}</h2><IconButton title={t("关闭", "Close")} onClick={() => setAccountOpen(false)}><X size={18} /></IconButton></div>
-      {accountEmail ? <>
+      {accountEmail && needNickname ? <>
+        <p style={{ marginBottom: 12 }}>{t("请设置你的昵称", "Please set your nickname")}</p>
+        <input type="text" placeholder={t("昵称", "Nickname")} value={authNickname} onChange={(e) => setAuthNickname(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") void saveNickname(); }} style={{ marginBottom: 12 }} autoFocus />
+        <button className="button primary" disabled={busy || !authNickname.trim()} onClick={() => void saveNickname()}>{t("确认昵称", "Set nickname")}</button>
+      </> : accountEmail ? <>
         <p style={{ marginBottom: 4, fontWeight: 600 }}>{accountNickname || accountEmail}</p>
         <p style={{ marginBottom: 12, fontSize: 12, color: "var(--muted)" }}>{accountEmail}</p>
         <button className="button secondary" disabled={busy} onClick={accountLoad}><CloudDownload size={16} />{t("从云端读取画像", "Load cloud profile")}</button>
@@ -388,7 +408,7 @@ export default function App() {
           <button className={`button ${authMode === "register" ? "primary" : "secondary"}`} onClick={() => { setAuthMode("register"); setAuthError(""); }} style={{ flex: 1 }}>{t("注册", "Register")}</button>
         </div>
         {authError && <p style={{ color: "#f87171", fontSize: 13, marginBottom: 8 }}>{authError}</p>}
-        <input type="text" placeholder={t("昵称", "Nickname")} value={authNickname} onChange={(e) => setAuthNickname(e.target.value)} style={{ marginBottom: 8 }} />
+        {authMode === "register" && <input type="text" placeholder={t("昵称（必填）", "Nickname (required)")} value={authNickname} onChange={(e) => setAuthNickname(e.target.value)} style={{ marginBottom: 8 }} />}
         <input type="email" placeholder={t("邮箱", "Email")} value={authEmail} onChange={(e) => setAuthEmail(e.target.value)} style={{ marginBottom: 8 }} />
         <input type="password" placeholder={t("密码（至少6位）", "Password (6+ chars)")} value={authPassword} onChange={(e) => setAuthPassword(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") void accountAuth(authMode); }} style={{ marginBottom: 12 }} />
         <button className="button primary" disabled={busy} onClick={() => void accountAuth(authMode)}>{authMode === "login" ? t("登录", "Sign in") : t("注册", "Register")}</button>
