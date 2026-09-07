@@ -10,16 +10,13 @@
   },
   "observability": {
     "enabled": true
-  }
-
-  // D1 is optional at runtime. After creating the database, uncomment this
-  // block and replace database_id before applying migrations and deploying.
-  // "d1_databases": [
-  //   {
-  //     "binding": "DB",
-  //     "database_name": "film-sort",
-  //     "database_id": "REPLACE_WITH_D1_DATABASE_ID",
-  //     "migrations_dir": "migrations"
-  //   }
-  // ]
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "film-sort",
+      "database_id": "9d1b3291-8cfc-4ed1-94c4-7539afcfc6b2",
+      "migrations_dir": "migrations"
+    }
+  ]
 }
