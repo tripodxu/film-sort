@@ -117,50 +117,106 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 .card h3{font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px}
 .card .value{font-size:32px;font-weight:700;color:var(--text)}
 .card .sub{font-size:12px;color:var(--muted);margin-top:4px}
-.card .value.green{color:var(--green)}
-.card .value.blue{color:var(--blue)}
-.card .value.yellow{color:var(--yellow)}
-.chart-card{padding:20px}
-.chart-card h3{font-size:14px;font-weight:600;margin-bottom:16px;color:var(--text)}
+.card .value.green{color:var(--green)}.card .value.blue{color:var(--blue)}.card .value.yellow{color:var(--yellow)}.card .value.red{color:var(--red)}
+.chart-card{padding:20px}.chart-card h3{font-size:14px;font-weight:600;margin-bottom:16px;color:var(--text)}
 canvas{width:100%!important;max-height:250px}
 table{width:100%;border-collapse:collapse;font-size:13px}
 th{text-align:left;padding:8px 12px;color:var(--muted);font-weight:500;border-bottom:1px solid var(--border);font-size:11px;text-transform:uppercase;letter-spacing:.5px}
-td{padding:8px 12px;border-bottom:1px solid var(--border)}
+td{padding:8px 12px;border-bottom:1px solid var(--border);max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 tr:last-child td{border-bottom:none}
 .badge{display:inline-block;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:500}
-.badge-visit{background:#1a2a1a;color:var(--green)}
-.badge-ranking_completed{background:#1a1a2a;color:var(--blue)}
-.badge-share{background:#2a2a1a;color:var(--yellow)}
-.badge-film{background:#1a2a1a;color:#4ade80}
-.badge-book{background:#1a1a2a;color:#818cf8}
-.badge-music{background:#2a1a2a;color:#f472b6}
-.badge-other{background:#2a2a1a;color:#facc15}
+.badge-visit{background:#1a2a1a;color:var(--green)}.badge-ranking_completed{background:#1a1a2a;color:var(--blue)}.badge-share{background:#2a2a1a;color:var(--yellow)}
+.badge-film{background:#1a2a1a;color:#4ade80}.badge-book{background:#1a1a2a;color:#818cf8}.badge-music{background:#2a1a2a;color:#f472b6}.badge-other{background:#2a2a1a;color:#facc15}
+.badge-ok{background:#1a2a1a;color:var(--green)}.badge-err{background:#2a1a1a;color:var(--red)}
 .status-dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:6px}
-.status-dot.ok{background:var(--green)}
-.status-dot.warn{background:var(--yellow)}
+.status-dot.ok{background:var(--green)}.status-dot.warn{background:var(--yellow)}.status-dot.err{background:var(--red)}
 .loading{text-align:center;padding:60px;color:var(--muted)}
 .error{color:var(--red);padding:20px;text-align:center}
 .refresh-btn{background:var(--card);border:1px solid var(--border);color:var(--text);padding:6px 14px;border-radius:6px;cursor:pointer;font-size:12px}
 .refresh-btn:hover{border-color:var(--accent);color:var(--accent)}
+.logout-btn{background:transparent;border:1px solid var(--border);color:var(--muted);padding:6px 14px;border-radius:6px;cursor:pointer;font-size:12px}
+.logout-btn:hover{border-color:var(--red);color:var(--red)}
+#login{max-width:360px;margin:120px auto;text-align:center}
+#login h2{color:var(--accent);margin-bottom:24px}
+#login input{width:100%;padding:12px;background:var(--card);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:14px;margin-bottom:12px}
+#login button{width:100%;padding:12px;background:var(--accent);color:#000;border:none;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer}
+#login button:hover{opacity:0.9}
+#login .err{color:var(--red);font-size:13px;margin-bottom:12px}
 </style>
 </head>
 <body>
+<div id="login" style="display:none">
+  <h2>ART/RANK 后台</h2>
+  <div class="err" id="loginErr"></div>
+  <input type="password" id="pwd" placeholder="管理密码" onkeydown="if(event.key==='Enter')doLogin()">
+  <button onclick="doLogin()">登录</button>
+</div>
+<div id="dashboard" style="display:none">
 <div class="header">
   <h1>ART<span>/</span>RANK <span>后台看板</span></h1>
   <div style="display:flex;align-items:center;gap:12px">
     <span class="meta" id="timestamp"></span>
     <button class="refresh-btn" onclick="load()">刷新</button>
+    <button class="logout-btn" onclick="doLogout()">退出</button>
   </div>
 </div>
 <div id="app" class="loading">加载中...</div>
+</div>
 <script>
+var TOKEN_KEY = 'art-rank-admin-token';
+function getToken(){return localStorage.getItem(TOKEN_KEY)||''}
+function setToken(t){localStorage.setItem(TOKEN_KEY,t)}
+function clearToken(){localStorage.removeItem(TOKEN_KEY)}
+
+async function checkAuth(){
+  var r=await fetch('/api/admin/check',{headers:{'Authorization':'Bearer '+getToken()}});
+  var d=await r.json();
+  return d.authenticated;
+}
+
+async function doLogin(){
+  var pwd=document.getElementById('pwd').value;
+  var errEl=document.getElementById('loginErr');
+  errEl.textContent='';
+  if(!pwd){errEl.textContent='请输入密码';return;}
+  try{
+    var r=await fetch('/api/admin/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({password:pwd})});
+    var d=await r.json();
+    if(d.token){setToken(d.token);showDashboard();}else{errEl.textContent='密码错误';}
+  }catch(e){errEl.textContent='登录失败: '+e.message;}
+}
+
+function doLogout(){
+  fetch('/api/admin/logout',{method:'POST',headers:{'Authorization':'Bearer '+getToken()}});
+  clearToken();showLogin();
+}
+
+function showLogin(){document.getElementById('login').style.display='block';document.getElementById('dashboard').style.display='none';}
+function showDashboard(){document.getElementById('login').style.display='none';document.getElementById('dashboard').style.display='block';load();}
+
 async function load() {
   try {
-    const r = await fetch('/api/admin/dashboard');
-    const d = await r.json();
+    var r = await fetch('/api/admin/dashboard', {headers:{'Authorization':'Bearer '+getToken()}});
+    var d = await r.json();
     if (!d.available) { document.getElementById('app').innerHTML = '<div class="error">数据库未连接</div>'; return; }
-    const o = d.overview;
+    var o = d.overview;
     document.getElementById('timestamp').textContent = '更新于 ' + new Date(d.timestamp).toLocaleString('zh-CN');
+
+    var apiLogsHtml = '<table><thead><tr><th>路径</th><th>状态</th><th>耗时</th><th>来源</th><th>错误</th><th>时间</th></tr></thead><tbody>';
+    (d.api_logs||[]).forEach(function(l){
+      var statusCls = l.status >= 400 ? 'badge-err' : 'badge-ok';
+      var time = new Date(l.created_at).toLocaleString('zh-CN',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
+      apiLogsHtml += '<tr><td>'+l.path+'</td><td><span class="badge '+statusCls+'">'+l.status+'</span></td><td>'+l.duration_ms+'ms</td><td>'+l.source+'</td><td style="color:var(--red)">'+(l.error||'')+'</td><td style="color:var(--muted)">'+time+'</td></tr>';
+    });
+    apiLogsHtml += '</tbody></table>';
+
+    var apiErrorsHtml = '<table><thead><tr><th>路径</th><th>状态</th><th>耗时</th><th>错误信息</th><th>时间</th></tr></thead><tbody>';
+    (d.api_errors||[]).forEach(function(l){
+      var time = new Date(l.created_at).toLocaleString('zh-CN',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
+      apiErrorsHtml += '<tr><td>'+l.path+'</td><td><span class="badge badge-err">'+l.status+'</span></td><td>'+l.duration_ms+'ms</td><td style="color:var(--red)">'+(l.error||'')+'</td><td style="color:var(--muted)">'+time+'</td></tr>';
+    });
+    apiErrorsHtml += '</tbody></table>';
+
     document.getElementById('app').innerHTML = [
       '<div class="grid grid-4" style="margin-bottom:16px">',
         '<div class="card"><h3>总访问</h3><div class="value">',o.total_visits,'</div><div class="sub">今日 ',o.visits_today,' / 7日 ',o.visits_7d,'</div></div>',
@@ -172,8 +228,12 @@ async function load() {
         '<div class="card chart-card"><h3>近14天趋势</h3><canvas id="dailyChart"></canvas></div>',
         '<div class="card chart-card"><h3>媒介分布</h3><canvas id="modeChart"></canvas></div>',
       '</div>',
+      '<div class="grid grid-2" style="margin-bottom:16px">',
+        '<div class="card"><h3 style="margin-bottom:12px">最近API调用</h3>',apiLogsHtml,'</div>',
+        '<div class="card"><h3 style="margin-bottom:12px"><span class="status-dot err"></span>API错误记录</h3>',apiErrorsHtml,'</div>',
+      '</div>',
       '<div class="grid grid-2">',
-        '<div class="card"><h3 style="margin-bottom:12px">最近事件</h3>',
+        '<div class="card"><h3 style="margin-bottom:12px">最近用户事件</h3>',
           '<table><thead><tr><th>事件</th><th>模式</th><th>详情</th><th>时间</th></tr></thead>',
           '<tbody>', d.recent_events.map(function(e) {
             var badge = 'badge-' + e.event_name;
@@ -186,8 +246,10 @@ async function load() {
         '<div class="card"><h3 style="margin-bottom:12px">系统状态</h3>',
           '<table><tbody>',
             '<tr><td><span class="status-dot ok"></span>数据库</td><td>D1 连接正常</td></tr>',
-            '<tr><td><span class="status-dot ok"></span>缓存</td><td>Edge Cache 运行中</td></tr>',
-            '<tr><td><span class="status-dot ok"></span>CDN</td><td>Cloudflare 边缘节点</td></tr>',
+            '<tr><td><span class="status-dot ok"></span>缓存</td><td>Edge Cache + 内存Map（Top250 15分钟）</td></tr>',
+            '<tr><td><span class="status-dot ok"></span>CDN</td><td>Cloudflare 边缘节点全球分发</td></tr>',
+            '<tr><td><span class="status-dot ok"></span>图片缓存</td><td>Edge Cache 24小时 + CDN代理</td></tr>',
+            '<tr><td><span class="status-dot ok"></span>搜索缓存</td><td>Edge Cache 1小时</td></tr>',
             '<tr><td><span class="status-dot ',(o.total_visits > 0 ? 'ok' : 'warn'),'"></span>分析</td><td>',(o.total_visits > 0 ? '数据收集中' : '暂无数据'),'</td></tr>',
           '</tbody></table>',
           '<div style="margin-top:16px;padding-top:12px;border-top:1px solid var(--border)">',
@@ -225,7 +287,11 @@ async function load() {
     document.getElementById('app').innerHTML = '<div class="error">加载失败: ' + e.message + '</div>';
   }
 }
-load();
+
+(async function(){
+  var authed = await checkAuth();
+  if(authed) showDashboard(); else showLogin();
+})();
 <\/script>
 </body>
 </html>`;
@@ -244,6 +310,47 @@ function withSecurityHeaders(response: Response): Response {
     result.headers.set(key, value);
   }
   return result;
+}
+
+// ===== API Logging =====
+async function logApiCall(env: Env | undefined, path: string, method: string, status: number, durationMs: number, source: string, error?: string, ip?: string) {
+  if (!env?.DB) return;
+  try {
+    await env.DB.prepare(
+      "INSERT INTO api_logs (path, method, status, duration_ms, source, error, ip) VALUES (?, ?, ?, ?, ?, ?, ?)"
+    ).bind(path, method, status, durationMs, source, error ?? null, ip ?? null).run();
+  } catch { /* logging should never break the request */ }
+}
+
+// ===== Admin Auth =====
+function generateToken(): string {
+  const bytes = crypto.getRandomValues(new Uint8Array(32));
+  return Array.from(bytes, b => b.toString(16).padStart(2, "0")).join("");
+}
+
+async function hashPassword(password: string): Promise<string> {
+  const data = new TextEncoder().encode(password);
+  const hash = await crypto.subtle.digest("SHA-256", data);
+  return Array.from(new Uint8Array(hash), b => b.toString(16).padStart(2, "0")).join("");
+}
+
+async function adminAuth(request: Request, env: Env): Promise<boolean> {
+  if (!env.DB) return false;
+  const token = request.headers.get("authorization")?.replace("Bearer ", "") ?? 
+                new URL(request.url).searchParams.get("token") ?? "";
+  if (!token || token.length < 32) return false;
+  try {
+    const session = await env.DB.prepare(
+      "SELECT token FROM admin_sessions WHERE token = ? AND expires_at > datetime('now')"
+    ).first(token);
+    return !!session;
+  } catch { return false; }
+}
+
+function getAdminToken(request: Request): string | null {
+  const auth = request.headers.get("authorization");
+  if (auth?.startsWith("Bearer ")) return auth.slice(7);
+  return new URL(request.url).searchParams.get("token");
 }
 
 function assertSameOrigin(request: Request): void {
@@ -415,7 +522,7 @@ async function getStats(env: Env): Promise<Response> {
 async function getDashboard(env: Env): Promise<Response> {
   if (!env.DB) return json({ available: false }, 200, { "cache-control": "public, max-age=60" });
   try {
-    const [overview, daily, modes, recentEvents] = await Promise.all([
+    const [overview, daily, modes, recentEvents, apiLogs, apiErrors] = await Promise.all([
       env.DB.prepare(`SELECT
         COUNT(CASE WHEN event_name = 'visit' THEN 1 END) AS total_visits,
         COUNT(CASE WHEN event_name = 'visit' AND created_at >= datetime('now', '-7 days') THEN 1 END) AS visits_7d,
@@ -453,6 +560,17 @@ async function getDashboard(env: Env): Promise<Response> {
       FROM analytics_events
       ORDER BY created_at DESC
       LIMIT 20`).all(),
+      env.DB.prepare(`SELECT
+        id, path, method, status, duration_ms, source, error, created_at
+      FROM api_logs
+      ORDER BY created_at DESC
+      LIMIT 30`).all(),
+      env.DB.prepare(`SELECT
+        id, path, method, status, duration_ms, source, error, created_at
+      FROM api_logs
+      WHERE status >= 400
+      ORDER BY created_at DESC
+      LIMIT 20`).all(),
     ]);
 
     return json({
@@ -475,11 +593,45 @@ async function getDashboard(env: Env): Promise<Response> {
       daily: (daily as { results?: unknown[] }).results ?? [],
       modes: (modes as { results?: unknown[] }).results ?? [],
       recent_events: (recentEvents as { results?: unknown[] }).results ?? [],
+      api_logs: (apiLogs as { results?: unknown[] }).results ?? [],
+      api_errors: (apiErrors as { results?: unknown[] }).results ?? [],
     }, 200, { "cache-control": "public, max-age=30" });
   } catch (error) {
     console.error("dashboard query failed", error instanceof Error ? error.message : error);
     return json({ available: false, error: "query failed" }, 200, { "cache-control": "public, max-age=10" });
   }
+}
+
+// ===== Admin Login =====
+async function handleAdminLogin(request: Request, env: Env): Promise<Response> {
+  if (!env.DB) return json({ error: "database_unavailable" }, 503);
+  const body = await readJson(request);
+  const password = cleanString(body.password, "password", 128);
+  const stored = await env.DB.prepare("SELECT value FROM admin_config WHERE key = 'password_hash'").first<{ value: string }>();
+  const hash = await hashPassword(password);
+  if (!stored?.value) {
+    await env.DB.prepare("UPDATE admin_config SET value = ? WHERE key = 'password_hash'").bind(hash).run();
+  } else if (stored.value !== hash) {
+    return json({ error: "invalid_password" }, 401);
+  }
+  const token = generateToken();
+  const expires = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
+  await env.DB.prepare("INSERT INTO admin_sessions (token, expires_at) VALUES (?, ?)").bind(token, expires).run();
+  await env.DB.prepare("DELETE FROM admin_sessions WHERE expires_at < datetime('now')").run();
+  return json({ token, expires });
+}
+
+async function handleAdminLogout(request: Request, env: Env): Promise<Response> {
+  const token = getAdminToken(request);
+  if (token && env.DB) {
+    await env.DB.prepare("DELETE FROM admin_sessions WHERE token = ?").bind(token).run();
+  }
+  return json({ ok: true });
+}
+
+async function handleAdminCheck(request: Request, env: Env): Promise<Response> {
+  const authed = await adminAuth(request, env);
+  return json({ authenticated: authed });
 }
 
 interface ChallengeRow {
@@ -620,6 +772,15 @@ async function route(request: Request, env: Env): Promise<Response> {
   if (url.pathname === "/api/admin/dashboard" && request.method === "GET") {
     return getDashboard(env);
   }
+  if (url.pathname === "/api/admin/login" && request.method === "POST") {
+    return handleAdminLogin(request, env);
+  }
+  if (url.pathname === "/api/admin/logout" && request.method === "POST") {
+    return handleAdminLogout(request, env);
+  }
+  if (url.pathname === "/api/admin/check" && request.method === "GET") {
+    return handleAdminCheck(request, env);
+  }
   if (url.pathname === "/api/douban/top250" && request.method === "GET") {
     const limit = Number(url.searchParams.get("limit") ?? 50);
     if (!Number.isInteger(limit) || limit < 2 || limit > 250) return json({ error: "invalid_limit" }, 400);
@@ -731,23 +892,42 @@ async function route(request: Request, env: Env): Promise<Response> {
 
 export default {
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
+    const url = new URL(request.url);
+    const path = url.pathname;
+    const isApi = path.startsWith("/api/") && !path.startsWith("/api/admin/");
+    const t0 = Date.now();
+    let response: Response;
+    let error: string | undefined;
+
     try {
-      const path = new URL(request.url).pathname;
       const cacheable = request.method === "GET" && ["/api/douban/top250", "/api/douban/suggest", "/api/posters", "/api/image"].includes(path);
       if (cacheable) {
         const edgeCache = (caches as unknown as { default: Cache }).default;
         const hit = await edgeCache.match(request);
-        if (hit) return hit;
+        if (hit) {
+          if (isApi) ctx.waitUntil(logApiCall(env, path, request.method, hit.status, Date.now() - t0, "cache"));
+          return hit;
+        }
       }
-      const response = await route(request, env);
+      response = await route(request, env);
       if (cacheable && response.ok) ctx.waitUntil((caches as unknown as { default: Cache }).default.put(request, response.clone()));
-      return response;
-    } catch (error) {
-      if (error instanceof HttpError) {
-        return json({ error: error.code, message: error.message }, error.status);
+    } catch (err) {
+      if (err instanceof HttpError) {
+        response = json({ error: err.code, message: err.message }, err.status);
+        error = err.message;
+      } else {
+        console.error("unhandled worker error", err instanceof Error ? err.stack : err);
+        response = json({ error: "internal_error" }, 500);
+        error = err instanceof Error ? err.message : "unknown";
       }
-      console.error("unhandled worker error", error instanceof Error ? error.stack : error);
-      return json({ error: "internal_error" }, 500);
     }
+
+    if (isApi) {
+      const duration = Date.now() - t0;
+      const ip = request.headers.get("cf-connecting-ip") ?? request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ?? "";
+      ctx.waitUntil(logApiCall(env, path, request.method, response.status, duration, response.status >= 400 ? "error" : "ok", error, ip));
+    }
+
+    return response;
   },
 } satisfies ExportedHandler<Env>;
