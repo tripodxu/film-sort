@@ -553,8 +553,11 @@ async function getStats(env: Env): Promise<Response> {
 async function getDashboard(env: Env): Promise<Response> {
   if (!env.DB) return json({ available: false }, 200, { "cache-control": "public, max-age=60" });
   try {
+    const safe = <T>(p: Promise<T>, fallback: T): Promise<T> => p.catch(() => fallback);
+    const safeAll = (p: Promise<{results?: unknown[]}>) => p.catch(() => ({ results: [] }));
+
     const [overview, daily, modes, recentEvents, apiLogs, apiErrors, accounts, storageInfo] = await Promise.all([
-      env.DB.prepare(`SELECT
+      safe(env.DB.prepare(`SELECT
         COUNT(CASE WHEN event_name = 'visit' THEN 1 END) AS total_visits,
         COUNT(CASE WHEN event_name = 'visit' AND created_at >= datetime('now', '-7 days') THEN 1 END) AS visits_7d,
         COUNT(CASE WHEN event_name = 'visit' AND created_at >= datetime('now', 'start of day') THEN 1 END) AS visits_today,
@@ -564,66 +567,34 @@ async function getDashboard(env: Env): Promise<Response> {
         ROUND(AVG(CASE WHEN event_name = 'ranking_completed' THEN CAST(json_extract(payload, '$.comparison_count') AS REAL) END), 1) AS avg_comparisons,
         ROUND(AVG(CASE WHEN event_name = 'ranking_completed' THEN CAST(json_extract(payload, '$.item_count') AS REAL) END), 1) AS avg_items,
         COUNT(DISTINCT CASE WHEN event_name = 'visit' THEN session_id END) AS unique_sessions
-      FROM analytics_events`).first(),
-      env.DB.prepare(`SELECT
+      FROM analytics_events`).first(), null),
+      safeAll(env.DB.prepare(`SELECT
         strftime('%Y-%m-%d', created_at) AS date,
         COUNT(CASE WHEN event_name = 'visit' THEN 1 END) AS visits,
         COUNT(CASE WHEN event_name = 'ranking_completed' THEN 1 END) AS completions
-      FROM analytics_events
-      WHERE created_at >= datetime('now', '-14 days')
-      GROUP BY date
-      ORDER BY date DESC
-      LIMIT 14`).all(),
-      env.DB.prepare(`SELECT
-        json_extract(payload, '$.mode') AS mode,
-        COUNT(*) AS count
-      FROM analytics_events
-      WHERE event_name = 'ranking_completed' AND json_extract(payload, '$.mode') IS NOT NULL
-      GROUP BY mode
-      ORDER BY count DESC`).all(),
-      env.DB.prepare(`SELECT
-        event_name,
-        json_extract(payload, '$.mode') AS mode,
-        json_extract(payload, '$.list_id') AS list_id,
-        json_extract(payload, '$.item_count') AS item_count,
-        json_extract(payload, '$.comparison_count') AS comparison_count,
-        created_at
-      FROM analytics_events
-      ORDER BY created_at DESC
-      LIMIT 20`).all(),
-      env.DB.prepare(`SELECT
-        id, path, method, status, duration_ms, source, error, created_at
-      FROM api_logs
-      ORDER BY created_at DESC
-      LIMIT 30`).all(),
-      env.DB.prepare(`SELECT
-        id, path, method, status, duration_ms, source, error, created_at
-      FROM api_logs
-      WHERE status >= 400
-      ORDER BY created_at DESC
-      LIMIT 20`).all(),
-      // Accounts list
-      env.DB.prepare(`SELECT
-        a.id, a.email, a.nickname, a.created_at
-      FROM user_accounts a
-      ORDER BY a.created_at DESC
-      LIMIT 50`).all(),
-      // Storage info - table row counts
-      Promise.all([
+      FROM analytics_events WHERE created_at >= datetime('now', '-14 days') GROUP BY date ORDER BY date DESC LIMIT 14`).all()),
+      safeAll(env.DB.prepare(`SELECT json_extract(payload, '$.mode') AS mode, COUNT(*) AS count
+      FROM analytics_events WHERE event_name = 'ranking_completed' AND json_extract(payload, '$.mode') IS NOT NULL GROUP BY mode ORDER BY count DESC`).all()),
+      safeAll(env.DB.prepare(`SELECT event_name, json_extract(payload, '$.mode') AS mode, json_extract(payload, '$.item_count') AS item_count, json_extract(payload, '$.comparison_count') AS comparison_count, created_at
+      FROM analytics_events ORDER BY created_at DESC LIMIT 20`).all()),
+      safeAll(env.DB.prepare(`SELECT id, path, method, status, duration_ms, source, error, created_at FROM api_logs ORDER BY created_at DESC LIMIT 30`).all()),
+      safeAll(env.DB.prepare(`SELECT id, path, method, status, duration_ms, source, error, created_at FROM api_logs WHERE status >= 400 ORDER BY created_at DESC LIMIT 20`).all()),
+      safeAll(env.DB.prepare(`SELECT id, email, nickname, created_at FROM user_accounts ORDER BY created_at DESC LIMIT 50`).all()),
+      safe(Promise.all([
         env.DB.prepare("SELECT COUNT(*) AS cnt FROM analytics_events").first<{cnt: number}>(),
         env.DB.prepare("SELECT COUNT(*) AS cnt FROM api_logs").first<{cnt: number}>(),
         env.DB.prepare("SELECT COUNT(*) AS cnt FROM user_accounts").first<{cnt: number}>(),
         env.DB.prepare("SELECT COUNT(*) AS cnt FROM user_sessions").first<{cnt: number}>(),
         env.DB.prepare("SELECT COUNT(*) AS cnt FROM user_profiles_v2").first<{cnt: number}>(),
         env.DB.prepare("SELECT COUNT(*) AS cnt FROM challenge_sets").first<{cnt: number}>(),
-      ]).then(([ae, al, ua, us, up, cs]) => ({ results: [
+      ]).then(([ae, al, ua, us, up, cs]) => [
         { tbl: "analytics_events", cnt: ae?.cnt ?? 0 },
         { tbl: "api_logs", cnt: al?.cnt ?? 0 },
         { tbl: "user_accounts", cnt: ua?.cnt ?? 0 },
         { tbl: "user_sessions", cnt: us?.cnt ?? 0 },
         { tbl: "user_profiles_v2", cnt: up?.cnt ?? 0 },
         { tbl: "challenge_sets", cnt: cs?.cnt ?? 0 },
-      ]})),
+      ]), []),
     ]);
 
     return json({
@@ -649,7 +620,7 @@ async function getDashboard(env: Env): Promise<Response> {
       api_logs: (apiLogs as { results?: unknown[] }).results ?? [],
       api_errors: (apiErrors as { results?: unknown[] }).results ?? [],
       accounts: (accounts as { results?: unknown[] }).results ?? [],
-      storage: (storageInfo as { results?: unknown[] }).results ?? [],
+      storage: Array.isArray(storageInfo) ? storageInfo : [],
     }, 200, { "cache-control": "public, max-age=30" });
   } catch (error) {
     console.error("dashboard query failed", error instanceof Error ? error.message : error);
