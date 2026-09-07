@@ -17,3 +17,10 @@ CREATE TABLE IF NOT EXISTS user_profiles_v2 (
   profile TEXT NOT NULL CHECK (json_valid(profile) AND length(profile) <= 524288),
   updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
 );
+
+CREATE TABLE IF NOT EXISTS user_oauth (
+  user_id INTEGER NOT NULL REFERENCES user_accounts(id),
+  provider TEXT NOT NULL,
+  provider_id TEXT NOT NULL,
+  PRIMARY KEY (provider, provider_id)
+);
