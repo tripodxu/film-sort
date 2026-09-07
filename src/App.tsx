@@ -82,11 +82,13 @@ export default function App() {
   const [accountOpen, setAccountOpen] = useState(new URLSearchParams(location.search).has("account"));
   const [accountEnabled, setAccountEnabled] = useState(false);
   const [accountEmail, setAccountEmail] = useState("");
+  const [accountNickname, setAccountNickname] = useState("");
   const [cloudProfile, setCloudProfile] = useState<ArtisticProfile | null>(null);
   const [accountToken, setAccountToken] = useState(() => { try { return localStorage.getItem("art-rank:account-token") ?? ""; } catch { return ""; } });
   const [authMode, setAuthMode] = useState<"login" | "register">("login");
   const [authEmail, setAuthEmail] = useState("");
   const [authPassword, setAuthPassword] = useState("");
+  const [authNickname, setAuthNickname] = useState("");
   const [authError, setAuthError] = useState("");
 
   const comparison = ranking ? getCurrentComparison(ranking) : null;
@@ -114,12 +116,13 @@ export default function App() {
     const params = new URLSearchParams(location.search);
     const oauthToken = params.get("oauth_token");
     const oauthEmail = params.get("oauth_email");
+    const oauthName = params.get("oauth_name");
     const oauthError = params.get("account");
     if (oauthToken && oauthEmail) {
       setAccountToken(oauthToken);
       setAccountEmail(decodeURIComponent(oauthEmail));
+      if (oauthName) setAccountNickname(decodeURIComponent(oauthName));
       try { localStorage.setItem("art-rank:account-token", oauthToken); } catch {}
-      // Clean URL
       history.replaceState(null, "", location.pathname);
       setNotice(t("登录成功！", "Signed in!"));
     } else if (oauthError === "error") {
@@ -132,8 +135,8 @@ export default function App() {
     if (savedToken) {
       void fetch("/api/account/profile", { headers: { authorization: `Bearer ${savedToken}` } })
         .then((r) => r.ok ? r.json() : null)
-        .then((data: { email?: string; profile?: unknown } | null) => {
-          if (data?.email) { setAccountEmail(data.email); if (data.profile) setCloudProfile(parseProfile(data.profile)); }
+        .then((data: { email?: string; nickname?: string; profile?: unknown } | null) => {
+          if (data?.email) { setAccountEmail(data.email); setAccountNickname(data.nickname ?? data.email.split("@")[0]); if (data.profile) setCloudProfile(parseProfile(data.profile)); }
           else if (!oauthToken) { setAccountToken(""); try { localStorage.removeItem("art-rank:account-token"); } catch {} }
         }).catch(() => {});
     }
@@ -280,10 +283,10 @@ export default function App() {
   async function accountAuth(mode: "login" | "register") {
     setAuthError(""); setBusy(true);
     try {
-      const response = await fetch(`/api/account/${mode}`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ email: authEmail, password: authPassword }) });
-      const data = await response.json() as { token?: string; email?: string; error?: string; msg?: string };
+      const response = await fetch(`/api/account/${mode}`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ email: authEmail, password: authPassword, nickname: authNickname || undefined }) });
+      const data = await response.json() as { token?: string; email?: string; nickname?: string; error?: string; msg?: string };
       if (!response.ok || !data.token) { setAuthError(data.msg ?? data.error ?? t("操作失败", "Failed")); return; }
-      setAccountToken(data.token); setAccountEmail(data.email ?? authEmail); setAuthEmail(""); setAuthPassword("");
+      setAccountToken(data.token); setAccountEmail(data.email ?? authEmail); setAccountNickname(data.nickname ?? (data.email ?? authEmail).split("@")[0]); setAuthEmail(""); setAuthPassword("");
       try { localStorage.setItem("art-rank:account-token", data.token); } catch {}
       setNotice(t("登录成功！", "Signed in!"));
     } catch { setAuthError(t("网络错误", "Network error")); }
@@ -291,7 +294,7 @@ export default function App() {
   }
   function accountLogout() {
     if (accountToken) void fetch("/api/account/logout", { method: "POST", headers: { authorization: `Bearer ${accountToken}` } }).catch(() => {});
-    setAccountToken(""); setAccountEmail(""); setCloudProfile(null);
+    setAccountToken(""); setAccountEmail(""); setAccountNickname(""); setCloudProfile(null);
     try { localStorage.removeItem("art-rank:account-token"); } catch {}
   }
   function createFromPeer(nextKind: MediaKind) {
@@ -358,7 +361,8 @@ export default function App() {
     {notice && <div className="toast" role="status"><span>{notice}</span><IconButton title={t("关闭提示", "Dismiss")} onClick={() => setNotice("")}><X size={16} /></IconButton></div>}
     {accountOpen && <div className="modal-backdrop" onClick={() => setAccountOpen(false)}><section className="account-dialog" role="dialog" aria-modal="true" aria-labelledby="account-heading" onClick={(event) => event.stopPropagation()} onKeyDown={(event) => { if (event.key === "Escape") setAccountOpen(false); }}><div className="section-heading"><h2 id="account-heading">{t("账号与同步", "Account & sync")}</h2><IconButton title={t("关闭", "Close")} onClick={() => setAccountOpen(false)}><X size={18} /></IconButton></div>
       {accountEmail ? <>
-        <p style={{ marginBottom: 12 }}>{accountEmail}</p>
+        <p style={{ marginBottom: 4, fontWeight: 600 }}>{accountNickname || accountEmail}</p>
+        <p style={{ marginBottom: 12, fontSize: 12, color: "var(--muted)" }}>{accountEmail}</p>
         <button className="button secondary" disabled={busy} onClick={accountLoad}><CloudDownload size={16} />{t("从云端读取画像", "Load cloud profile")}</button>
         {cloudProfile && <button className="button secondary" onClick={() => { persist(cloudProfile); setAccountOpen(false); setView("profile"); }}>{t("使用云端画像", "Use cloud profile")}<Check size={16} /></button>}
         <button className="button secondary" disabled={busy || !profile} onClick={accountSave}><CloudUpload size={16} />{t("保存本地画像到云端", "Save to cloud")}</button>
@@ -384,6 +388,7 @@ export default function App() {
           <button className={`button ${authMode === "register" ? "primary" : "secondary"}`} onClick={() => { setAuthMode("register"); setAuthError(""); }} style={{ flex: 1 }}>{t("注册", "Register")}</button>
         </div>
         {authError && <p style={{ color: "#f87171", fontSize: 13, marginBottom: 8 }}>{authError}</p>}
+        <input type="text" placeholder={t("昵称", "Nickname")} value={authNickname} onChange={(e) => setAuthNickname(e.target.value)} style={{ marginBottom: 8 }} />
         <input type="email" placeholder={t("邮箱", "Email")} value={authEmail} onChange={(e) => setAuthEmail(e.target.value)} style={{ marginBottom: 8 }} />
         <input type="password" placeholder={t("密码（至少6位）", "Password (6+ chars)")} value={authPassword} onChange={(e) => setAuthPassword(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") void accountAuth(authMode); }} style={{ marginBottom: 12 }} />
         <button className="button primary" disabled={busy} onClick={() => void accountAuth(authMode)}>{authMode === "login" ? t("登录", "Sign in") : t("注册", "Register")}</button>

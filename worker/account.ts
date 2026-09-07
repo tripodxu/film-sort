@@ -40,18 +40,23 @@ async function createSession(db: D1Database, userId: number): Promise<{ token: s
   return { token, expires };
 }
 
-async function findOrCreateOAuthUser(db: D1Database, provider: string, providerId: string, email: string): Promise<number> {
+async function findOrCreateOAuthUser(db: D1Database, provider: string, providerId: string, email: string, nickname?: string): Promise<number> {
   // Check if this OAuth account already exists
   const existing = await db.prepare("SELECT user_id FROM user_oauth WHERE provider = ? AND provider_id = ?").bind(provider, providerId).first<{ user_id: number }>();
-  if (existing) return existing.user_id;
+  if (existing) {
+    // Update nickname if provided
+    if (nickname) await db.prepare("UPDATE user_accounts SET nickname = ? WHERE id = ? AND (nickname IS NULL OR nickname = '')").bind(nickname, existing.user_id).run();
+    return existing.user_id;
+  }
 
   // Check if email already exists
   const user = await db.prepare("SELECT id FROM user_accounts WHERE email = ?").bind(email).first<{ id: number }>();
   let userId: number;
   if (user) {
     userId = user.id;
+    if (nickname) await db.prepare("UPDATE user_accounts SET nickname = ? WHERE id = ? AND (nickname IS NULL OR nickname = '')").bind(nickname, userId).run();
   } else {
-    const result = await db.prepare("INSERT INTO user_accounts (email, password_hash) VALUES (?, '')").bind(email).run();
+    const result = await db.prepare("INSERT INTO user_accounts (email, password_hash, nickname) VALUES (?, '', ?)").bind(email, nickname ?? null).run();
     userId = result.meta.last_row_id as number;
   }
 
@@ -114,14 +119,15 @@ export async function accountRoute(request: Request, env: Env): Promise<Response
     const body = await request.json().catch(() => null) as Record<string, unknown> | null;
     const email = cleanString(body?.email, 160);
     const password = cleanString(body?.password, 128);
+    const nickname = cleanString(body?.nickname, 40);
     if (!email || !isValidEmail(email)) return json({ error: "invalid_email" }, 400);
     if (!password || password.length < 6) return json({ error: "invalid_password", msg: "密码至少6位" }, 400);
     const existing = await env.DB.prepare("SELECT id FROM user_accounts WHERE email = ?").bind(email).first();
     if (existing) return json({ error: "email_exists" }, 409);
     const hash = await hashPassword(password);
-    const result = await env.DB.prepare("INSERT INTO user_accounts (email, password_hash) VALUES (?, ?)").bind(email, hash).run();
+    const result = await env.DB.prepare("INSERT INTO user_accounts (email, password_hash, nickname) VALUES (?, ?, ?)").bind(email, hash, nickname ?? null).run();
     const session = await createSession(env.DB, result.meta.last_row_id as number);
-    return json({ ...session, email });
+    return json({ ...session, email, nickname: nickname ?? email.split("@")[0] });
   }
 
   // POST /api/account/login
@@ -130,10 +136,10 @@ export async function accountRoute(request: Request, env: Env): Promise<Response
     const email = cleanString(body?.email, 160);
     const password = cleanString(body?.password, 128);
     if (!email || !password) return json({ error: "missing_fields" }, 400);
-    const user = await env.DB.prepare("SELECT id, password_hash FROM user_accounts WHERE email = ?").bind(email).first<{ id: number; password_hash: string }>();
+    const user = await env.DB.prepare("SELECT id, password_hash, nickname FROM user_accounts WHERE email = ?").bind(email).first<{ id: number; password_hash: string; nickname: string | null }>();
     if (!user || !user.password_hash || user.password_hash !== await hashPassword(password)) return json({ error: "invalid_credentials" }, 401);
     const session = await createSession(env.DB, user.id);
-    return json({ ...session, email });
+    return json({ ...session, email, nickname: user.nickname ?? email.split("@")[0] });
   }
 
   // POST /api/account/logout
@@ -152,41 +158,13 @@ export async function accountRoute(request: Request, env: Env): Promise<Response
     return json({ providers });
   }
 
-  // GET /api/account/oauth/:provider — initiate OAuth flow
-  const oauthMatch = path.match(/^\/api\/account\/oauth\/(\w+)$/);
-  if (oauthMatch && request.method === "GET") {
-    const providerKey = oauthMatch[1];
-    const provider = oauthProviders[providerKey];
-    if (!provider) return json({ error: "unknown_provider" }, 404);
-    const clientId = provider.clientId(env);
-    const clientSecret = provider.clientSecret(env);
-    if (!clientId || !clientSecret) return json({ error: "provider_not_configured" }, 503);
-
-    const redirectUri = `${url.origin}/api/account/oauth/callback`;
-    const state = generateToken().slice(0, 16);
-    // Store state in a short-lived cookie for CSRF protection
-    const authUrl = new URL(provider.authUrl);
-    authUrl.searchParams.set("client_id", clientId);
-    authUrl.searchParams.set("redirect_uri", redirectUri);
-    authUrl.searchParams.set("scope", provider.scope);
-    authUrl.searchParams.set("state", `${providerKey}:${state}`);
-    authUrl.searchParams.set("response_type", "code");
-    if (providerKey === "google") authUrl.searchParams.set("access_type", "offline");
-
-    const response = redirect(authUrl.toString());
-    response.headers.set("set-cookie", `oauth_state=${providerKey}:${state}; Path=/api/account; HttpOnly; Secure; SameSite=Lax; Max-Age=600`);
-    return response;
-  }
-
-  // GET /api/account/oauth/callback — OAuth callback
+  // GET /api/account/oauth/callback — OAuth callback (must be before provider route)
   if (path === "/api/account/oauth/callback" && request.method === "GET") {
     const code = url.searchParams.get("code");
     const state = url.searchParams.get("state");
-    const cookie = request.headers.get("cookie") ?? "";
-    const savedState = cookie.match(/oauth_state=([^;]+)/)?.[1];
 
-    if (!code || !state || state !== savedState) {
-      return redirect(`/?account=error&msg=${encodeURIComponent("Invalid OAuth state")}`);
+    if (!code || !state) {
+      return redirect(`/?account=error&msg=${encodeURIComponent("Missing OAuth parameters")}`);
     }
 
     const [providerKey] = state.split(":");
@@ -229,27 +207,54 @@ export async function accountRoute(request: Request, env: Env): Promise<Response
       const parsed = provider.parseUser(userData);
       if (!parsed) throw new Error("Failed to parse user info");
 
+      // Get nickname from provider data
+      const raw = userData as Record<string, unknown>;
+      const nickname = (providerKey === "google" ? raw.name : raw.login) as string ?? parsed.email.split("@")[0];
+
       // Find or create user
-      const userId = await findOrCreateOAuthUser(env.DB, providerKey, parsed.id, parsed.email);
+      const userId = await findOrCreateOAuthUser(env.DB, providerKey, parsed.id, parsed.email, nickname);
       const session = await createSession(env.DB, userId);
 
       // Redirect back to frontend with token
-      const response = redirect(`/?account=success`);
-      response.headers.set("set-cookie", `account_token=${session.token}; Path=/; Secure; SameSite=Lax; Max-Age=${30 * 24 * 3600}; account_email=${encodeURIComponent(parsed.email)}; Path=/; Secure; SameSite=Lax; Max-Age=${30 * 24 * 3600}`);
-      // Use a simpler approach: redirect with token in hash
-      return redirect(`/?oauth_token=${session.token}&oauth_email=${encodeURIComponent(parsed.email)}`);
+      return redirect(`/?oauth_token=${session.token}&oauth_email=${encodeURIComponent(parsed.email)}&oauth_name=${encodeURIComponent(nickname)}`);
     } catch (error) {
       console.error(`OAuth ${providerKey} failed:`, error);
       return redirect(`/?account=error&msg=${encodeURIComponent(error instanceof Error ? error.message : "OAuth failed")}`);
     }
   }
 
+  // GET /api/account/oauth/:provider — initiate OAuth flow
+  const oauthMatch = path.match(/^\/api\/account\/oauth\/(\w+)$/);
+  if (oauthMatch && request.method === "GET") {
+    const providerKey = oauthMatch[1];
+    const provider = oauthProviders[providerKey];
+    if (!provider) return json({ error: "unknown_provider" }, 404);
+    const clientId = provider.clientId(env);
+    const clientSecret = provider.clientSecret(env);
+    if (!clientId || !clientSecret) return json({ error: "provider_not_configured" }, 503);
+
+    const redirectUri = `${url.origin}/api/account/oauth/callback`;
+    const state = generateToken().slice(0, 16);
+    const authUrl = new URL(provider.authUrl);
+    authUrl.searchParams.set("client_id", clientId);
+    authUrl.searchParams.set("redirect_uri", redirectUri);
+    authUrl.searchParams.set("scope", provider.scope);
+    authUrl.searchParams.set("state", `${providerKey}:${state}`);
+    authUrl.searchParams.set("response_type", "code");
+    if (providerKey === "google") authUrl.searchParams.set("access_type", "offline");
+
+    const response = redirect(authUrl.toString());
+    response.headers.set("set-cookie", `oauth_state=${providerKey}:${state}; Path=/api/account; HttpOnly; Secure; SameSite=Lax; Max-Age=600`);
+    return response;
+  }
+
   // GET /api/account/profile
   if (path === "/api/account/profile" && request.method === "GET") {
     const user = await getUserFromToken(request, env.DB);
     if (!user) return json({ error: "authentication_required" }, 401);
+    const account = await env.DB.prepare("SELECT nickname FROM user_accounts WHERE id = ?").bind(user.id).first<{ nickname: string | null }>();
     const row = await env.DB.prepare("SELECT profile, updated_at FROM user_profiles_v2 WHERE user_id = ? LIMIT 1").bind(user.id).first<{ profile: string; updated_at: string }>();
-    return json({ email: user.email, profile: row ? JSON.parse(row.profile) : null, updatedAt: row?.updated_at ?? null });
+    return json({ email: user.email, nickname: account?.nickname ?? user.email.split("@")[0], profile: row ? JSON.parse(row.profile) : null, updatedAt: row?.updated_at ?? null });
   }
 
   // PUT /api/account/profile
