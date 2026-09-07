@@ -604,21 +604,26 @@ async function getDashboard(env: Env): Promise<Response> {
       LIMIT 20`).all(),
       // Accounts list
       env.DB.prepare(`SELECT
-        a.id, a.email, a.nickname, a.created_at,
-        (SELECT COUNT(*) FROM user_sessions s WHERE s.user_id = a.id AND s.expires_at > datetime('now')) AS active_sessions,
-        (SELECT COUNT(*) FROM user_oauth o WHERE o.user_id = a.id) AS oauth_links,
-        (SELECT updated_at FROM user_profiles_v2 p WHERE p.user_id = a.id) AS profile_updated
+        a.id, a.email, a.nickname, a.created_at
       FROM user_accounts a
       ORDER BY a.created_at DESC
       LIMIT 50`).all(),
       // Storage info - table row counts
-      env.DB.prepare(`SELECT 'analytics_events' AS tbl, COUNT(*) AS cnt FROM analytics_events
-        UNION ALL SELECT 'api_logs', COUNT(*) FROM api_logs
-        UNION ALL SELECT 'user_accounts', COUNT(*) FROM user_accounts
-        UNION ALL SELECT 'user_sessions', COUNT(*) FROM user_sessions
-        UNION ALL SELECT 'user_profiles_v2', COUNT(*) FROM user_profiles_v2
-        UNION ALL SELECT 'challenge_sets', COUNT(*) FROM challenge_sets
-        UNION ALL SELECT 'admin_sessions', COUNT(*) FROM admin_sessions`).all(),
+      Promise.all([
+        env.DB.prepare("SELECT COUNT(*) AS cnt FROM analytics_events").first<{cnt: number}>(),
+        env.DB.prepare("SELECT COUNT(*) AS cnt FROM api_logs").first<{cnt: number}>(),
+        env.DB.prepare("SELECT COUNT(*) AS cnt FROM user_accounts").first<{cnt: number}>(),
+        env.DB.prepare("SELECT COUNT(*) AS cnt FROM user_sessions").first<{cnt: number}>(),
+        env.DB.prepare("SELECT COUNT(*) AS cnt FROM user_profiles_v2").first<{cnt: number}>(),
+        env.DB.prepare("SELECT COUNT(*) AS cnt FROM challenge_sets").first<{cnt: number}>(),
+      ]).then(([ae, al, ua, us, up, cs]) => ({ results: [
+        { tbl: "analytics_events", cnt: ae?.cnt ?? 0 },
+        { tbl: "api_logs", cnt: al?.cnt ?? 0 },
+        { tbl: "user_accounts", cnt: ua?.cnt ?? 0 },
+        { tbl: "user_sessions", cnt: us?.cnt ?? 0 },
+        { tbl: "user_profiles_v2", cnt: up?.cnt ?? 0 },
+        { tbl: "challenge_sets", cnt: cs?.cnt ?? 0 },
+      ]})),
     ]);
 
     return json({
