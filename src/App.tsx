@@ -4,7 +4,7 @@ import { compressSync, decompressSync, strFromU8, strToU8 } from "fflate";
 import QRCode from "qrcode";
 import { createRankingState, chooseSide, deferWork, deserializeRankingState, getCurrentComparison, getRankingProgress, getRankingResult, serializeRankingState, skipWork, undoLastAction, type RankingState } from "./lib/ranking";
 import { getCollectionsByKind, mediaLabels, type MediaCollection, type MediaKind } from "./data/media";
-import { compareRankings, LIBRARY_KEY, MAX_PROFILE_BYTES, mergeRanking, parseProfile, profileText, readProfile, type ArtisticProfile, type RankingExport } from "./lib/profile";
+import { compareRankings, LIBRARY_KEY, MAX_PROFILE_BYTES, mergeRanking, parseProfile, profileText, readProfile, renameRanking, deleteRanking, type ArtisticProfile, type RankingExport } from "./lib/profile";
 import { importCollection } from "./lib/collections";
 import { Poster } from "./components/Poster";
 
@@ -68,7 +68,7 @@ export default function App() {
   const [profile, setProfile] = useState<ArtisticProfile | null>(() => { try { return readProfile(localStorage); } catch { return null; } });
   const [peer, setPeer] = useState<ArtisticProfile | null>(loadPeer);
   const [profileName, setProfileName] = useState(() => { try { return readProfile(localStorage)?.profileName ?? "我的艺术人格"; } catch { return "我的艺术人格"; } });
-  const [activeKind, setActiveKind] = useState<MediaKind>("film");
+  const [activeKind, setActiveKind] = useState<string>("film");
   const [topN, setTopN] = useState(10);
   const [seed, setSeed] = useState("");
   const [customText, setCustomText] = useState("");
@@ -92,12 +92,14 @@ export default function App() {
   const [authNickname, setAuthNickname] = useState("");
   const [authError, setAuthError] = useState("");
   const [needNickname, setNeedNickname] = useState(false);
+  const [editingRankIdx, setEditingRankIdx] = useState<number | null>(null);
+  const [editingRankTitle, setEditingRankTitle] = useState("");
 
   const comparison = ranking ? getCurrentComparison(ranking) : null;
   const progress = ranking ? getRankingProgress(ranking) : null;
   const worksById = useMemo(() => new Map(collection?.works.map((work) => [work.id, work]) ?? []), [collection]);
   const collections = getCollectionsByKind(kind).filter((item) => [item.title, item.description, ...item.works.map((work) => work.title)].join(" ").toLowerCase().includes(search.toLowerCase()));
-  const activeRanking = profile?.rankings.find((entry) => entry.kind === activeKind) ?? profile?.rankings[0];
+  const activeRanking = profile?.rankings.find((entry, idx) => `${entry.kind}-${idx}` === activeKind) ?? profile?.rankings[0];
 
   function persist(next: ArtisticProfile) {
     setProfile(next); setProfileName(next.profileName); setShareUrl(""); setQrUrl("");
@@ -170,6 +172,23 @@ export default function App() {
 
   function chooseKind(next: MediaKind) { setKind(next); setSource("builtin"); setSearch(""); setCustomText(""); setView("source"); }
   function changeCols(n: number) { setColCount(n); try { localStorage.setItem("art-rank:cols", String(n)); } catch {} }
+  function renameRank(idx: number) {
+    if (!profile || !editingRankTitle.trim()) return;
+    const next = renameRanking(profile, idx, editingRankTitle.trim());
+    persist(next); setEditingRankIdx(null); setEditingRankTitle("");
+  }
+  function deleteRank(idx: number) {
+    if (!profile) return;
+    const next = deleteRanking(profile, idx);
+    if (next) persist(next);
+    else { setProfile(null); try { localStorage.removeItem(LIBRARY_KEY); } catch {} }
+    setEditingRankIdx(null);
+  }
+  function clearAllData() {
+    setProfile(null); setDraft(null); setPeer(null);
+    try { localStorage.removeItem(LIBRARY_KEY); localStorage.removeItem(DRAFT_KEY); localStorage.removeItem(PEER_KEY); } catch {}
+    setNotice(t("本地数据已清除。", "Local data cleared."));
+  }
   function openCollection(next: MediaCollection) {
     setKind(next.kind); setCollection(next); setSelected(next.works.map((work) => work.id)); setTopN(Math.min(next.topN, next.works.length)); setRanking(null); setView("setup");
   }
@@ -336,7 +355,7 @@ export default function App() {
       </div>
     </section>
     <section className="medium-section"><div className="section-heading"><h2>{t("选择一个维度", "Choose a medium")}</h2><span>01 / 04</span></div><div className="medium-grid">{kinds.map((item) => { const Icon = icons[item]; const saved = profile?.rankings.find((entry) => entry.kind === item); return <button className={`medium-item medium-${item}`} key={item} onClick={() => chooseKind(item)}><span className="medium-number">{mediaLabels[item].symbol}</span>{saved ? <Poster work={saved.items[0]} kind={item} /> : <Icon size={20} />}<strong>{label(item)}</strong><small>{saved ? `${t("已完成", "Completed")} / Top ${saved.items.length}` : t(mediaLabels[item].description, "New ranking")}</small><ArrowRight size={16} /></button>; })}</div></section>
-    <section className="profile-overview"><div className="section-heading"><h2>{t("你的文化坐标", "Your cultural coordinates")}</h2>{profile && <button className="text-button" onClick={() => setView("profile")}>{t("查看画像", "View profile")}<ArrowRight size={15} /></button>}</div>{profile ? <div className="coordinate-grid">{profile.rankings.map((entry) => <button key={entry.kind} className="coordinate" onClick={() => { setActiveKind(entry.kind); setView("profile"); }}><Poster work={entry.items[0]} kind={entry.kind} /><div><span>{label(entry.kind)} / 01</span><h3>{entry.items[0].title}</h3><small>{entry.items.length} {t("件作品", "works")}</small></div></button>)}</div> : <div className="empty-profile"><div className="sample-covers" aria-hidden="true">{getCollectionsByKind("film")[1]?.works.filter((work) => work.posterUrls?.length).slice(0, 3).map((work) => <Poster key={work.id} work={work} kind="film" />)}</div><div><h3>{t("还没有完成的画像", "No completed profile yet")}</h3><span>{t("电影 · 书籍 · 音乐 · 其他", "Films · Books · Music · Other")}</span></div>{fileInput("own", t("导入我的画像", "Import my profile"))}</div>}</section>
+    <section className="profile-overview"><div className="section-heading"><h2>{t("品味年轮", "Taste Rings")}</h2><div style={{ display: "flex", gap: 8, alignItems: "center" }}>{profile && <button className="text-button" onClick={() => setView("profile")}>{t("查看画像", "View profile")}<ArrowRight size={15} /></button>}<button className="text-button" onClick={clearAllData} style={{ color: "var(--muted)" }}>{t("清除本地数据", "Clear local data")}</button></div></div>{profile ? <div className="coordinate-grid">{profile.rankings.map((entry, idx) => { const isActive = editingRankIdx === idx; return <div key={`${entry.kind}-${entry.collectionTitle}-${idx}`} className="coordinate" style={{ position: "relative" }}><button onClick={() => { setActiveKind(entry.kind); setView("profile"); }} style={{ display: "flex", gap: 14, alignItems: "center", flex: 1, background: "none", border: "none", color: "inherit", cursor: "pointer", padding: 0, textAlign: "left" }}><Poster work={entry.items[0]} kind={entry.kind} /><div><span>{label(entry.kind)}</span>{isActive ? <div style={{ display: "flex", gap: 4, marginTop: 4 }}><input type="text" value={editingRankTitle} onChange={(e) => setEditingRankTitle(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") renameRank(idx); if (e.key === "Escape") setEditingRankIdx(null); }} style={{ fontSize: 13, padding: "2px 6px", minHeight: "auto", width: "100%" }} autoFocus /><button className="text-button" onClick={(e) => { e.stopPropagation(); renameRank(idx); }} style={{ color: "var(--accent)", fontSize: 11 }}>{t("保存", "Save")}</button></div> : <h3>{entry.collectionTitle}</h3>}<small>{entry.items.length} {t("件作品", "works")}</small></div></button><div style={{ display: "flex", gap: 2, position: "absolute", top: 4, right: 4 }}><button className="text-button" onClick={() => { setEditingRankIdx(idx); setEditingRankTitle(entry.collectionTitle); }} style={{ fontSize: 10, padding: "2px 4px", color: "var(--muted)" }}>{t("重命名", "Rename")}</button><button className="text-button" onClick={() => deleteRank(idx)} style={{ fontSize: 10, padding: "2px 4px", color: "#f87171" }}>{t("删除", "Delete")}</button></div></div>; })}</div> : <div className="empty-profile"><div className="sample-covers" aria-hidden="true">{getCollectionsByKind("film")[1]?.works.filter((work) => work.posterUrls?.length).slice(0, 3).map((work) => <Poster key={work.id} work={work} kind="film" />)}</div><div><h3>{t("还没有完成的画像", "No completed profile yet")}</h3><span>{t("电影 · 书籍 · 音乐 · 其他", "Films · Books · Music · Other")}</span></div>{fileInput("own", t("导入我的画像", "Import my profile"))}</div>}</section>
   </>;
   else if (view === "source") content = <>
     {heading(`COLLECTION / ${label(kind)}`, t("选择作品来源", "Choose a collection"))}
@@ -357,12 +376,13 @@ export default function App() {
   </>;
   else if (view === "profile" && profile && activeRanking) content = <>
     {heading("ARTISTIC PROFILE", profile.profileName, `${profile.rankings.length} ${t("个维度", "media")} / ${profile.rankings.reduce((count, entry) => count + entry.items.length, 0)} ${t("件作品", "works")}`)}
-    <div className="profile-dimensions">{profile.rankings.map((entry) => <button className={`profile-dimension medium-${entry.kind} ${activeRanking.kind === entry.kind ? "active" : ""}`} key={entry.kind} onClick={() => setActiveKind(entry.kind)}><Poster work={entry.items[0]} kind={entry.kind} /><span>{label(entry.kind)}</span><strong>{entry.items[0].title}</strong><small>TOP {entry.items.length}</small></button>)}</div>
+    <div className="profile-dimensions">{profile.rankings.map((entry, idx) => { const key = `${entry.kind}-${idx}`; return <button className={`profile-dimension medium-${entry.kind} ${activeRanking === entry ? "active" : ""}`} key={key} onClick={() => setActiveKind(key)}><Poster work={entry.items[0]} kind={entry.kind} /><span>{label(entry.kind)}</span><strong>{entry.collectionTitle}</strong><small>TOP {entry.items.length}</small></button>; })}</div>
     <div className="profile-layout"><section><div className="section-heading"><h2>{activeRanking.collectionTitle}</h2><span>{new Date(activeRanking.createdAt).toLocaleDateString(locale === "zh" ? "zh-CN" : "en-US")}</span></div><ol className="ranking-list">{activeRanking.items.map((work) => <li key={work.id}><span className="row-number">{String(work.rank).padStart(2, "0")}</span><Poster work={work} kind={activeRanking.kind} /><div><strong>{work.title}</strong><small>{work.creator} {work.year}</small></div>{work.rank === 1 && <Check size={17} />}</li>)}</ol></section><aside className="export-tools"><label htmlFor="profile-name">{t("画像名称", "Profile name")}</label><input id="profile-name" value={profileName} maxLength={80} onChange={(event) => { setProfileName(event.target.value); setShareUrl(""); setQrUrl(""); }} onBlur={() => { const next = namedProfile(); if (next) persist(next); }} /><label htmlFor="export-format">{t("导出格式", "Export format")}</label><select id="export-format" value={format} onChange={(event) => setFormat(event.target.value as typeof format)}>{["json", "png", "txt", "csv", "md"].map((item) => <option key={item} value={item}>{item.toUpperCase()}</option>)}</select><button className="button primary" onClick={exportProfile}><Download size={16} />{t("导出全部维度", "Export all media")}</button><button className="button secondary" onClick={share}><Share2 size={16} />{t("复制比较链接", "Copy comparison link")}</button>{shareUrl && <div className="share-output"><input aria-label={t("比较链接", "Comparison link")} readOnly value={shareUrl} onFocus={(event) => event.target.select()} />{qrUrl && <img src={qrUrl} alt={t("比较二维码", "Comparison QR code")} />}</div>}<button className="button quiet" onClick={() => setView("home")}><Plus size={16} />{t("添加另一个维度", "Add another medium")}</button><button className="button quiet" onClick={() => setView("compare")}><Users size={16} />{peer ? t("继续与好友比较", "Continue comparison") : t("与他人比较", "Compare with someone")}</button>{ranking?.completed && collection?.kind === activeRanking.kind && <button className="button quiet" onClick={() => { setRanking(undoLastAction(ranking)); setView("sorting"); }}><Undo2 size={16} />{t("返回最后一次取舍", "Revisit last choice")}</button>}</aside></div>
   </>;
   else if (view === "compare") {
     const sharedKinds = kinds.filter((item) => profile?.rankings.some((entry) => entry.kind === item) && peer?.rankings.some((entry) => entry.kind === item));
-    const compareKind = sharedKinds.includes(activeKind) ? activeKind : sharedKinds[0];
+    const activeKindValue = activeRanking?.kind as MediaKind | undefined;
+    const compareKind = sharedKinds.includes(activeKindValue as MediaKind) ? activeKindValue! : sharedKinds[0];
     const ownRanking = profile?.rankings.find((entry) => entry.kind === compareKind);
     const peerRanking = peer?.rankings.find((entry) => entry.kind === compareKind);
     const result = ownRanking && peerRanking ? compareRankings(ownRanking, peerRanking) : null;

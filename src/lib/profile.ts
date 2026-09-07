@@ -62,9 +62,8 @@ export function parseProfile(value: unknown): ArtisticProfile {
     return { version: 2, profileId: ranking.profileId, profileName: ranking.profileName, updatedAt: ranking.createdAt, rankings: [ranking] };
   }
   if (value.version !== 2 || !text(value.profileId) || !text(value.profileName, 80) || !validDate(value.updatedAt) ||
-    !Array.isArray(value.rankings) || value.rankings.length < 1 || value.rankings.length > 4) throw new Error("Invalid profile");
+    !Array.isArray(value.rankings) || value.rankings.length < 1 || value.rankings.length > 20) throw new Error("Invalid profile");
   const rankings = value.rankings.map(parseRanking);
-  if (new Set(rankings.map((ranking) => ranking.kind)).size !== rankings.length) throw new Error("Duplicate medium");
   return { version: 2, profileId: value.profileId, profileName: value.profileName, updatedAt: value.updatedAt, rankings };
 }
 
@@ -84,12 +83,29 @@ export function readProfile(storage: Storage): ArtisticProfile | null {
 }
 
 export function mergeRanking(profile: ArtisticProfile | null, ranking: RankingExport): ArtisticProfile {
+  const existing = profile?.rankings ?? [];
+  // Replace if same collectionTitle+kind exists, otherwise append
+  const key = (r: RankingExport) => `${r.kind}|${r.collectionTitle}`;
+  const rankingKey = key(ranking);
+  const filtered = existing.filter((entry) => key(entry) !== rankingKey);
   return {
     version: 2, profileId: profile?.profileId ?? crypto.randomUUID(), profileName: ranking.profileName,
     updatedAt: ranking.createdAt,
-    rankings: [...(profile?.rankings ?? []).filter((entry) => entry.kind !== ranking.kind), ranking]
-      .sort((a, b) => Object.keys(mediaLabels).indexOf(a.kind) - Object.keys(mediaLabels).indexOf(b.kind)),
+    rankings: [...filtered, ranking].sort((a, b) => Object.keys(mediaLabels).indexOf(a.kind) - Object.keys(mediaLabels).indexOf(b.kind)),
   };
+}
+
+export function renameRanking(profile: ArtisticProfile, index: number, newTitle: string): ArtisticProfile {
+  const rankings = [...profile.rankings];
+  if (index < 0 || index >= rankings.length) return profile;
+  rankings[index] = { ...rankings[index], collectionTitle: newTitle };
+  return { ...profile, rankings, updatedAt: new Date().toISOString() };
+}
+
+export function deleteRanking(profile: ArtisticProfile, index: number): ArtisticProfile | null {
+  const rankings = profile.rankings.filter((_, i) => i !== index);
+  if (rankings.length === 0) return null;
+  return { ...profile, rankings, updatedAt: new Date().toISOString() };
 }
 
 function sameArtwork(a: RankedArtwork, b: RankedArtwork): boolean {
