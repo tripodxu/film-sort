@@ -94,6 +94,142 @@ class HttpError extends Error {
   }
 }
 
+const DASHBOARD_HTML = `<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>ART/RANK 后台看板</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4"><\/script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{--bg:#0a0c0a;--card:#141914;--border:#2a3a2a;--accent:#d8f86a;--muted:#8a9a8a;--text:#e0e8e0;--green:#4ade80;--red:#f87171;--blue:#60a5fa;--yellow:#facc15}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;padding:24px}
+.header{display:flex;align-items:center;justify-content:space-between;margin-bottom:24px}
+.header h1{font-size:20px;font-weight:600;color:var(--accent)}
+.header h1 span{color:var(--muted);font-weight:400}
+.header .meta{font-size:12px;color:var(--muted)}
+.grid{display:grid;gap:16px}
+.grid-4{grid-template-columns:repeat(4,1fr)}
+.grid-2{grid-template-columns:repeat(2,1fr)}
+@media(max-width:900px){.grid-4,.grid-2{grid-template-columns:1fr}}
+.card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:20px}
+.card h3{font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px}
+.card .value{font-size:32px;font-weight:700;color:var(--text)}
+.card .sub{font-size:12px;color:var(--muted);margin-top:4px}
+.card .value.green{color:var(--green)}
+.card .value.blue{color:var(--blue)}
+.card .value.yellow{color:var(--yellow)}
+.chart-card{padding:20px}
+.chart-card h3{font-size:14px;font-weight:600;margin-bottom:16px;color:var(--text)}
+canvas{width:100%!important;max-height:250px}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th{text-align:left;padding:8px 12px;color:var(--muted);font-weight:500;border-bottom:1px solid var(--border);font-size:11px;text-transform:uppercase;letter-spacing:.5px}
+td{padding:8px 12px;border-bottom:1px solid var(--border)}
+tr:last-child td{border-bottom:none}
+.badge{display:inline-block;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:500}
+.badge-visit{background:#1a2a1a;color:var(--green)}
+.badge-ranking_completed{background:#1a1a2a;color:var(--blue)}
+.badge-share{background:#2a2a1a;color:var(--yellow)}
+.badge-film{background:#1a2a1a;color:#4ade80}
+.badge-book{background:#1a1a2a;color:#818cf8}
+.badge-music{background:#2a1a2a;color:#f472b6}
+.badge-other{background:#2a2a1a;color:#facc15}
+.status-dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:6px}
+.status-dot.ok{background:var(--green)}
+.status-dot.warn{background:var(--yellow)}
+.loading{text-align:center;padding:60px;color:var(--muted)}
+.error{color:var(--red);padding:20px;text-align:center}
+.refresh-btn{background:var(--card);border:1px solid var(--border);color:var(--text);padding:6px 14px;border-radius:6px;cursor:pointer;font-size:12px}
+.refresh-btn:hover{border-color:var(--accent);color:var(--accent)}
+</style>
+</head>
+<body>
+<div class="header">
+  <h1>ART<span>/</span>RANK <span>后台看板</span></h1>
+  <div style="display:flex;align-items:center;gap:12px">
+    <span class="meta" id="timestamp"></span>
+    <button class="refresh-btn" onclick="load()">刷新</button>
+  </div>
+</div>
+<div id="app" class="loading">加载中...</div>
+<script>
+async function load() {
+  try {
+    const r = await fetch('/api/admin/dashboard');
+    const d = await r.json();
+    if (!d.available) { document.getElementById('app').innerHTML = '<div class="error">数据库未连接</div>'; return; }
+    const o = d.overview;
+    document.getElementById('timestamp').textContent = '更新于 ' + new Date(d.timestamp).toLocaleString('zh-CN');
+    document.getElementById('app').innerHTML = [
+      '<div class="grid grid-4" style="margin-bottom:16px">',
+        '<div class="card"><h3>总访问</h3><div class="value">',o.total_visits,'</div><div class="sub">今日 ',o.visits_today,' / 7日 ',o.visits_7d,'</div></div>',
+        '<div class="card"><h3>排序完成</h3><div class="value green">',o.total_completed,'</div><div class="sub">今日 ',o.completed_today,' / 7日 ',o.completed_7d,'</div></div>',
+        '<div class="card"><h3>平均取舍</h3><div class="value blue">',o.avg_comparisons||'--','</div><div class="sub">平均作品数 ',o.avg_items||'--','</div></div>',
+        '<div class="card"><h3>完成率</h3><div class="value yellow">',o.completion_rate,'%</div><div class="sub">独立会话 ',o.unique_sessions,'</div></div>',
+      '</div>',
+      '<div class="grid grid-2" style="margin-bottom:16px">',
+        '<div class="card chart-card"><h3>近14天趋势</h3><canvas id="dailyChart"></canvas></div>',
+        '<div class="card chart-card"><h3>媒介分布</h3><canvas id="modeChart"></canvas></div>',
+      '</div>',
+      '<div class="grid grid-2">',
+        '<div class="card"><h3 style="margin-bottom:12px">最近事件</h3>',
+          '<table><thead><tr><th>事件</th><th>模式</th><th>详情</th><th>时间</th></tr></thead>',
+          '<tbody>', d.recent_events.map(function(e) {
+            var badge = 'badge-' + e.event_name;
+            var mode = e.mode ? '<span class="badge badge-' + e.mode + '">' + e.mode + '</span>' : '';
+            var detail = e.item_count ? e.item_count + '件 / ' + (e.comparison_count || '?') + '次' : '';
+            var time = new Date(e.created_at).toLocaleString('zh-CN', {hour:'2-digit',minute:'2-digit',month:'2-digit',day:'2-digit'});
+            return '<tr><td><span class="badge ' + badge + '">' + e.event_name + '</span></td><td>' + mode + '</td><td>' + detail + '</td><td style="color:var(--muted)">' + time + '</td></tr>';
+          }).join(''), '</tbody></table>',
+        '</div>',
+        '<div class="card"><h3 style="margin-bottom:12px">系统状态</h3>',
+          '<table><tbody>',
+            '<tr><td><span class="status-dot ok"></span>数据库</td><td>D1 连接正常</td></tr>',
+            '<tr><td><span class="status-dot ok"></span>缓存</td><td>Edge Cache 运行中</td></tr>',
+            '<tr><td><span class="status-dot ok"></span>CDN</td><td>Cloudflare 边缘节点</td></tr>',
+            '<tr><td><span class="status-dot ',(o.total_visits > 0 ? 'ok' : 'warn'),'"></span>分析</td><td>',(o.total_visits > 0 ? '数据收集中' : '暂无数据'),'</td></tr>',
+          '</tbody></table>',
+          '<div style="margin-top:16px;padding-top:12px;border-top:1px solid var(--border)">',
+            '<h3 style="margin-bottom:8px">媒介使用排行</h3>',
+            d.modes.map(function(m) {
+              var pct = o.total_completed > 0 ? Math.round(m.count / o.total_completed * 100) : 0;
+              return '<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px"><span class="badge badge-' + m.mode + '" style="width:50px;text-align:center">' + m.mode + '</span><div style="flex:1;height:6px;background:var(--border);border-radius:3px;overflow:hidden"><div style="height:100%;width:' + pct + '%;background:var(--accent);border-radius:3px"></div></div><span style="font-size:12px;color:var(--muted);width:60px;text-align:right">' + m.count + ' (' + pct + '%)</span></div>';
+            }).join(''),
+          '</div>',
+        '</div>',
+      '</div>'
+    ].join('');
+    var dailyData = d.daily.reverse();
+    new Chart(document.getElementById('dailyChart'), {
+      type: 'bar',
+      data: {
+        labels: dailyData.map(function(r) { return r.date.slice(5); }),
+        datasets: [
+          { label: '访问', data: dailyData.map(function(r) { return r.visits; }), backgroundColor: '#4ade8044', borderColor: '#4ade80', borderWidth: 1, borderRadius: 4 },
+          { label: '完成', data: dailyData.map(function(r) { return r.completions; }), backgroundColor: '#60a5fa44', borderColor: '#60a5fa', borderWidth: 1, borderRadius: 4 }
+        ]
+      },
+      options: { responsive: true, plugins: { legend: { labels: { color: '#8a9a8a', font: { size: 11 } } } }, scales: { x: { ticks: { color: '#8a9a8a' }, grid: { color: '#1a2a1a' } }, y: { ticks: { color: '#8a9a8a' }, grid: { color: '#1a2a1a' }, beginAtZero: true } } }
+    });
+    var modeColors = { film: '#4ade80', book: '#818cf8', music: '#f472b6', other: '#facc15' };
+    new Chart(document.getElementById('modeChart'), {
+      type: 'doughnut',
+      data: {
+        labels: d.modes.map(function(m) { return m.mode; }),
+        datasets: [{ data: d.modes.map(function(m) { return m.count; }), backgroundColor: d.modes.map(function(m) { return modeColors[m.mode] || '#666'; }), borderWidth: 0 }]
+      },
+      options: { responsive: true, plugins: { legend: { labels: { color: '#8a9a8a', font: { size: 11 } } } } }
+    });
+  } catch (e) {
+    document.getElementById('app').innerHTML = '<div class="error">加载失败: ' + e.message + '</div>';
+  }
+}
+load();
+<\/script>
+</body>
+</html>`;
+
 function json(data: unknown, status = 200, extraHeaders?: HeadersInit): Response {
   const headers = new Headers(JSON_HEADERS);
   if (extraHeaders) {
@@ -276,6 +412,76 @@ async function getStats(env: Env): Promise<Response> {
   }
 }
 
+async function getDashboard(env: Env): Promise<Response> {
+  if (!env.DB) return json({ available: false }, 200, { "cache-control": "public, max-age=60" });
+  try {
+    const [overview, daily, modes, recentEvents] = await Promise.all([
+      env.DB.prepare(`SELECT
+        COUNT(CASE WHEN event_name = 'visit' THEN 1 END) AS total_visits,
+        COUNT(CASE WHEN event_name = 'visit' AND created_at >= datetime('now', '-7 days') THEN 1 END) AS visits_7d,
+        COUNT(CASE WHEN event_name = 'visit' AND created_at >= datetime('now', 'start of day') THEN 1 END) AS visits_today,
+        COUNT(CASE WHEN event_name = 'ranking_completed' THEN 1 END) AS total_completed,
+        COUNT(CASE WHEN event_name = 'ranking_completed' AND created_at >= datetime('now', '-7 days') THEN 1 END) AS completed_7d,
+        COUNT(CASE WHEN event_name = 'ranking_completed' AND created_at >= datetime('now', 'start of day') THEN 1 END) AS completed_today,
+        ROUND(AVG(CASE WHEN event_name = 'ranking_completed' THEN CAST(json_extract(payload, '$.comparison_count') AS REAL) END), 1) AS avg_comparisons,
+        ROUND(AVG(CASE WHEN event_name = 'ranking_completed' THEN CAST(json_extract(payload, '$.item_count') AS REAL) END), 1) AS avg_items,
+        COUNT(DISTINCT CASE WHEN event_name = 'visit' THEN session_id END) AS unique_sessions
+      FROM analytics_events`).first(),
+      env.DB.prepare(`SELECT
+        strftime('%Y-%m-%d', created_at) AS date,
+        COUNT(CASE WHEN event_name = 'visit' THEN 1 END) AS visits,
+        COUNT(CASE WHEN event_name = 'ranking_completed' THEN 1 END) AS completions
+      FROM analytics_events
+      WHERE created_at >= datetime('now', '-14 days')
+      GROUP BY date
+      ORDER BY date DESC
+      LIMIT 14`).all(),
+      env.DB.prepare(`SELECT
+        json_extract(payload, '$.mode') AS mode,
+        COUNT(*) AS count
+      FROM analytics_events
+      WHERE event_name = 'ranking_completed' AND json_extract(payload, '$.mode') IS NOT NULL
+      GROUP BY mode
+      ORDER BY count DESC`).all(),
+      env.DB.prepare(`SELECT
+        event_name,
+        json_extract(payload, '$.mode') AS mode,
+        json_extract(payload, '$.list_id') AS list_id,
+        json_extract(payload, '$.item_count') AS item_count,
+        json_extract(payload, '$.comparison_count') AS comparison_count,
+        created_at
+      FROM analytics_events
+      ORDER BY created_at DESC
+      LIMIT 20`).all(),
+    ]);
+
+    return json({
+      available: true,
+      timestamp: new Date().toISOString(),
+      overview: {
+        total_visits: Number((overview as Record<string, unknown>)?.total_visits ?? 0),
+        visits_7d: Number((overview as Record<string, unknown>)?.visits_7d ?? 0),
+        visits_today: Number((overview as Record<string, unknown>)?.visits_today ?? 0),
+        total_completed: Number((overview as Record<string, unknown>)?.total_completed ?? 0),
+        completed_7d: Number((overview as Record<string, unknown>)?.completed_7d ?? 0),
+        completed_today: Number((overview as Record<string, unknown>)?.completed_today ?? 0),
+        avg_comparisons: Number((overview as Record<string, unknown>)?.avg_comparisons ?? 0),
+        avg_items: Number((overview as Record<string, unknown>)?.avg_items ?? 0),
+        unique_sessions: Number((overview as Record<string, unknown>)?.unique_sessions ?? 0),
+        completion_rate: Number((overview as Record<string, unknown>)?.total_visits ?? 0) > 0
+          ? Math.round(Number((overview as Record<string, unknown>)?.total_completed ?? 0) / Number((overview as Record<string, unknown>)?.total_visits ?? 0) * 100)
+          : 0,
+      },
+      daily: (daily as { results?: unknown[] }).results ?? [],
+      modes: (modes as { results?: unknown[] }).results ?? [],
+      recent_events: (recentEvents as { results?: unknown[] }).results ?? [],
+    }, 200, { "cache-control": "public, max-age=30" });
+  } catch (error) {
+    console.error("dashboard query failed", error instanceof Error ? error.message : error);
+    return json({ available: false, error: "query failed" }, 200, { "cache-control": "public, max-age=10" });
+  }
+}
+
 interface ChallengeRow {
   id: string;
   theme: string;
@@ -411,6 +617,9 @@ async function route(request: Request, env: Env): Promise<Response> {
   if (url.pathname === "/api/stats" && request.method === "GET") {
     return getStats(env);
   }
+  if (url.pathname === "/api/admin/dashboard" && request.method === "GET") {
+    return getDashboard(env);
+  }
   if (url.pathname === "/api/douban/top250" && request.method === "GET") {
     const limit = Number(url.searchParams.get("limit") ?? 50);
     if (!Number.isInteger(limit) || limit < 2 || limit > 250) return json({ error: "invalid_limit" }, 400);
@@ -505,6 +714,11 @@ async function route(request: Request, env: Env): Promise<Response> {
   }
   if (url.pathname.startsWith("/api/challenges/") && request.method === "GET") {
     return getChallenge(decodeURIComponent(url.pathname.slice("/api/challenges/".length)), env);
+  }
+  if (url.pathname === "/admin" && request.method === "GET") {
+    return new Response(DASHBOARD_HTML, {
+      headers: { "content-type": "text/html; charset=utf-8", "cache-control": "public, max-age=300" },
+    });
   }
   if (url.pathname.startsWith("/api/")) {
     return json({ error: "not_found" }, 404);
