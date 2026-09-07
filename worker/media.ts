@@ -8,7 +8,11 @@ let indexExpires = 0;
 const key = (value: string) => value.normalize("NFKC").trim().toLowerCase();
 
 async function upstream(url: string): Promise<Response> {
-  const response = await fetch(url, { headers, signal: AbortSignal.timeout(5000), redirect: "error" });
+  const host = new URL(url).hostname;
+  const requestHeaders = host.endsWith("douban.com") || host.endsWith("doubanio.com")
+    ? headers
+    : { "user-agent": headers["user-agent"], accept: "*/*" };
+  const response = await fetch(url, { headers: requestHeaders, signal: AbortSignal.timeout(5000), redirect: "error" });
   if (!response.ok) throw new Error(`Upstream returned ${response.status}`);
   return response;
 }
@@ -40,8 +44,10 @@ async function topPage(start: number): Promise<DoubanWork[]> {
 }
 
 export async function doubanTop250(limit: number): Promise<DoubanWork[]> {
-  const works: DoubanWork[] = [];
-  for (let start = 0; start < limit; start += 25) works.push(...await topPage(start));
+  const starts = Array.from({ length: Math.ceil(limit / 25) }, (_, index) => index * 25);
+  const pages = await Promise.allSettled(starts.map(topPage));
+  const works = pages.flatMap((page) => page.status === "fulfilled" ? page.value : []);
+  if (works.length < 2) throw new Error("Douban returned no usable entries");
   return [...new Map(works.map((work) => [work.id, work])).values()].slice(0, limit);
 }
 
@@ -84,7 +90,7 @@ async function imdbPoster(title: string, english: string, year?: number): Promis
 export async function resolvePosters(title: string, english: string, year?: number) {
   const [suggestion, imdb] = await Promise.allSettled([doubanSuggest(title), imdbPoster(title, english, year)]);
   const suggested = suggestion.status === "fulfilled" ? suggestion.value.find((item) => key(item.title) === key(title) && (!year || !item.year || item.year === year))?.poster_url : undefined;
-  if (!suggested && !posterIndex.has(key(title))) await ensureIndex();
+  if (!suggested && !posterIndex.has(key(title)) && !(imdb.status === "fulfilled" && imdb.value)) await ensureIndex();
   return [...new Set([
     ...(suggested ? doubanVariants(suggested) : []),
     ...(posterIndex.has(key(title)) ? doubanVariants(posterIndex.get(key(title))!) : []),

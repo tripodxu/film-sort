@@ -4,7 +4,7 @@ ART/RANK 把“从看过、读过、听过的作品里排出自己的 Top N”�
 
 项目地址：[github.com/tripodxu/film-sort](https://github.com/tripodxu/film-sort)
 
-当前实现使用 React、Vite、TypeScript 和 Cloudflare Workers Static Assets：排序和游客画像在浏览器中完成，Worker 提供同源豆瓣接口、海报代理、匿名事件和可选的 D1 账号画像同步。
+当前实现使用 React、Vite、TypeScript、Three.js 和 Cloudflare Workers Static Assets：排序和游客画像在浏览器中完成，Three.js 渲染首页的实时艺术光球，Worker 提供同源豆瓣接口、海报代理、匿名事件和可选的 D1 账号画像同步。
 
 ## 功能
 
@@ -16,7 +16,7 @@ ART/RANK 把“从看过、读过、听过的作品里排出自己的 Top N”�
 - 状态栏显示比较次数、处理进度和预计剩余次数；排序草稿自动保存在浏览器。
 - 每种媒介保留一份画像，可合并导出全部维度为 JSON、TXT、Markdown、CSV 或 PNG。
 - 导入朋友的 JSON 或打开比较链接，查看作品重合度、Top 5 共同作品、顺序一致率和最大名次分歧。
-- 深色展陈台界面，响应式支持桌面和手机，遵循减少动态效果设置。
+- 极简玻璃态界面，以实时 3D 光球、粒子与低密度胶囊控件构成首页；响应式支持桌面和手机，并遵循减少动态效果设置。
 
 登录功能只负责把画像同步到自己的 D1 记录，不会改变本地排序逻辑。没有 Cloudflare Access 和 D1 时，画像仍会保存在浏览器 `localStorage`。
 

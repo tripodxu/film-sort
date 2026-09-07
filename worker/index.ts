@@ -69,12 +69,6 @@ const CHALLENGE_ID = /^mv-[a-z0-9]{12}$/;
 const MAX_REQUEST_BYTES = 48 * 1024;
 const MAX_EVENT_PAYLOAD_BYTES = 2 * 1024;
 const MAX_CHALLENGE_ITEMS = 300;
-const DOUBAN_HEADERS = {
-  "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/126.0 Safari/537.36",
-  referer: "https://movie.douban.com/",
-  accept: "text/html,application/json;q=0.9,*/*;q=0.8",
-};
-
 const JSON_HEADERS = {
   "content-type": "application/json; charset=utf-8",
   "cache-control": "no-store",
@@ -387,77 +381,6 @@ async function getChallenge(id: string, env: Env): Promise<Response> {
   } catch (error) {
     console.error("challenge query failed", error instanceof Error ? error.message : error);
     return json({ error: "challenge_storage_unavailable", fallback: "payload" }, 503);
-  }
-}
-
-function decodeHtml(value: string): string {
-  return value
-    .replace(/&#39;|&#x27;/gi, "'")
-    .replace(/&quot;/gi, '"')
-    .replace(/&amp;/gi, "&")
-    .replace(/&lt;/gi, "<")
-    .replace(/&gt;/gi, ">");
-}
-
-async function getDoubanTop250(request: Request): Promise<Response> {
-  const url = new URL(request.url);
-  const rawLimit = Number(url.searchParams.get("limit") ?? 50);
-  const limit = Number.isFinite(rawLimit) ? Math.max(2, Math.min(250, Math.floor(rawLimit))) : 50;
-  const works: Array<{ id: string; title: string; year?: number; poster_url?: string }> = [];
-  const seen = new Set<string>();
-
-  try {
-    for (let start = 0; start < 250 && works.length < limit; start += 25) {
-      const response = await fetch(`https://movie.douban.com/top250?start=${start}&filter=`, { headers: DOUBAN_HEADERS });
-      if (!response.ok) throw new Error(`Douban returned ${response.status}`);
-      const html = await response.text();
-      const blocks = html.match(/<div class="item">[\s\S]*?(?=<div class="item">|<\/ol>)/g) ?? [];
-      for (const block of blocks) {
-        const titleMatch = block.match(/<span class="title">\s*([^<]+?)\s*<\/span>/);
-        const imageMatch = block.match(/<img[^>]+(?:src|data-src)="([^"]+)"/);
-        const yearMatch = block.match(/(?:19|20)\d{2}/);
-        const title = decodeHtml(titleMatch?.[1] ?? "").trim();
-        if (!title || seen.has(title)) continue;
-        seen.add(title);
-        works.push({
-          id: `douban-${works.length}-${title}`,
-          title,
-          ...(yearMatch ? { year: Number(yearMatch[0]) } : {}),
-          ...(imageMatch?.[1] ? { poster_url: imageMatch[1] } : {}),
-        });
-        if (works.length >= limit) break;
-      }
-    }
-    if (works.length < 2) throw new Error("Douban returned no usable entries");
-    return json({ source: "douban", total: works.length, works }, 200, { "cache-control": "public, max-age=900" });
-  } catch (error) {
-    console.error("douban top250 fetch failed", error instanceof Error ? error.message : error);
-    return json({ error: "douban_unavailable", message: "Douban is temporarily unavailable." }, 502);
-  }
-}
-
-async function getDoubanSuggestions(request: Request): Promise<Response> {
-  const query = new URL(request.url).searchParams.get("q")?.trim();
-  if (!query || query.length > 80) return json({ error: "invalid_query" }, 400);
-  try {
-    const response = await fetch(`https://movie.douban.com/j/subject_suggest?q=${encodeURIComponent(query)}`, { headers: { ...DOUBAN_HEADERS, accept: "application/json" } });
-    if (!response.ok) throw new Error(`Douban returned ${response.status}`);
-    const data: unknown = await response.json();
-    const works = Array.isArray(data)
-      ? data.filter((item): item is Record<string, unknown> => typeof item === "object" && item !== null)
-          .filter((item) => item.type === "movie" || item.type === undefined)
-          .slice(0, 5)
-          .map((item, index) => ({
-            id: `douban-suggest-${index}-${String(item.id ?? index)}`,
-            title: String(item.title ?? item.name ?? query),
-            ...(item.year ? { year: Number(item.year) } : {}),
-            ...(item.img ? { poster_url: String(item.img) } : {}),
-          }))
-      : [];
-    return json({ works }, 200, { "cache-control": "public, max-age=3600" });
-  } catch (error) {
-    console.error("douban suggestion fetch failed", error instanceof Error ? error.message : error);
-    return json({ error: "douban_unavailable", works: [] }, 502);
   }
 }
 

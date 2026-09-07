@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { lazy, Suspense, useEffect, useMemo, useState, type ReactNode } from "react";
 import { ArrowLeft, ArrowRight, BookOpen, Check, ChevronRight, CloudDownload, CloudUpload, Download, Film, Languages, Library, LogIn, Music2, Pause, Play, Plus, Search, Share2, SkipForward, Undo2, Upload, UserRound, Users, X } from "lucide-react";
 import { compressSync, decompressSync, strFromU8, strToU8 } from "fflate";
 import QRCode from "qrcode";
@@ -7,6 +7,8 @@ import { getCollectionsByKind, mediaLabels, type MediaCollection, type MediaKind
 import { compareRankings, LIBRARY_KEY, MAX_PROFILE_BYTES, mergeRanking, parseProfile, profileText, readProfile, type ArtisticProfile, type RankingExport } from "./lib/profile";
 import { importCollection } from "./lib/collections";
 import { Poster } from "./components/Poster";
+
+const OrbScene = lazy(() => import("./components/OrbScene").then((module) => ({ default: module.OrbScene })));
 
 type View = "home" | "source" | "setup" | "sorting" | "profile" | "compare";
 type Locale = "zh" | "en";
@@ -42,7 +44,7 @@ function encode(profile: ArtisticProfile) {
 function decode(payload: string) {
   if (payload.length > 100000) throw new Error("Link too large");
   const binary = atob(payload.replace(/-/g, "+").replace(/_/g, "/") + "=".repeat((4 - payload.length % 4) % 4));
-  const data = decompressSync(Uint8Array.from(binary, (char) => char.charCodeAt(0)));
+  const data = decompressSync(Uint8Array.from(binary, (char) => char.charCodeAt(0)), { out: new Uint8Array(MAX_PROFILE_BYTES + 1) });
   if (data.length > MAX_PROFILE_BYTES) throw new Error("Profile too large");
   return parseProfile(JSON.parse(strFromU8(data)));
 }
@@ -125,7 +127,7 @@ export default function App() {
 
   function chooseKind(next: MediaKind) { setKind(next); setSource("builtin"); setSearch(""); setCustomText(""); setView("source"); }
   function openCollection(next: MediaCollection) {
-    setKind(next.kind); setCollection(next); setSelected(next.works.map((work) => work.id)); setTopN(Math.min(next.topN, next.works.length)); setView("setup");
+    setKind(next.kind); setCollection(next); setSelected(next.works.map((work) => work.id)); setTopN(Math.min(next.topN, next.works.length)); setRanking(null); setView("setup");
   }
   async function loadDouban() {
     setBusy(true); setNotice("");
@@ -241,9 +243,16 @@ export default function App() {
   let content: ReactNode;
 
   if (view === "home") content = <>
-    <div className="home-heading"><div><span className="eyebrow">YOUR PERSONAL CULTURE INDEX</span><h1>ART/RANK<span>{t("我的艺术人格", "My Artistic Profile")}</span></h1></div><div className="identity"><UserRound size={17} /><span>{accountEmail || t("本地游客", "Local guest")}</span><button className="text-button" onClick={() => setAccountOpen(true)}>{t("登录 / 同步", "Sign in / Sync")}<ArrowRight size={14} /></button></div></div>
-    <div className="home-actions"><button className="button primary" onClick={() => chooseKind(kind)}><Play size={16} />{t("开始排序", "Start ranking")}</button><button className="button secondary" onClick={() => setView("compare")}><Users size={16} />{t("比较画像", "Compare profiles")}</button>{draft && <button className="button quiet" onClick={resume}><Play size={16} />{t("继续上次进度", "Resume ranking")}</button>}</div>
-    <section className="medium-section"><div className="section-heading"><h2>{t("选择一个维度", "Choose a medium")}</h2><span>01 / 04</span></div><div className="medium-grid">{kinds.map((item) => { const Icon = icons[item]; const saved = profile?.rankings.find((entry) => entry.kind === item); return <button className={`medium-item medium-${item}`} key={item} onClick={() => chooseKind(item)}><span className="medium-number">{mediaLabels[item].symbol}</span><Icon size={28} /><strong>{label(item)}</strong><small>{saved ? `${t("已完成", "Completed")} / Top ${saved.items.length}` : t(mediaLabels[item].description, "New ranking")}</small><ArrowRight size={18} /></button>; })}</div></section>
+    <section className="orb-hero">
+      <Suspense fallback={<div className="orb-scene orb-scene-fallback" aria-hidden="true" />}><OrbScene /></Suspense>
+      <div className="orb-hero-inner">
+        <div className="home-heading"><div><span className="eyebrow">YOUR PERSONAL CULTURE INDEX</span><h1>ART<span>/</span>RANK<small>{t("我的艺术人格", "My Artistic Profile")}</small></h1><p>{t("在两件作品之间，找到你真正想留下的那一个。", "Choose between two works and reveal what stays with you.")}</p></div></div>
+        <div className="identity glass-capsule"><UserRound size={15} /><span>{accountEmail || t("本地游客", "Local guest")}</span><button className="text-button" onClick={() => setAccountOpen(true)}>{t("登录 / 同步", "Sign in / Sync")}<ArrowRight size={13} /></button></div>
+        <div className="home-actions glass-capsule"><button className="button primary" onClick={() => chooseKind(kind)}><Play size={16} />{t("开始排序", "Start ranking")}</button><button className="button secondary" onClick={() => setView("compare")}><Users size={16} />{t("比较画像", "Compare profiles")}</button>{draft && <button className="button quiet" onClick={resume}><Play size={16} />{t("继续上次进度", "Resume ranking")}</button>}</div>
+        <div className="orb-index" aria-hidden="true"><span>01</span><i /><span>∞</span></div>
+      </div>
+    </section>
+    <section className="medium-section"><div className="section-heading"><h2>{t("选择一个维度", "Choose a medium")}</h2><span>01 / 04</span></div><div className="medium-grid">{kinds.map((item) => { const Icon = icons[item]; const saved = profile?.rankings.find((entry) => entry.kind === item); return <button className={`medium-item medium-${item}`} key={item} onClick={() => chooseKind(item)}><span className="medium-number">{mediaLabels[item].symbol}</span><Icon size={20} /><strong>{label(item)}</strong><small>{saved ? `${t("已完成", "Completed")} / Top ${saved.items.length}` : t(mediaLabels[item].description, "New ranking")}</small><ArrowRight size={16} /></button>; })}</div></section>
     <section className="profile-overview"><div className="section-heading"><h2>{t("你的文化坐标", "Your cultural coordinates")}</h2>{profile && <button className="text-button" onClick={() => setView("profile")}>{t("查看画像", "View profile")}<ArrowRight size={15} /></button>}</div>{profile ? <div className="coordinate-grid">{profile.rankings.map((entry) => <button key={entry.kind} className="coordinate" onClick={() => { setActiveKind(entry.kind); setView("profile"); }}><Poster work={entry.items[0]} kind={entry.kind} /><div><span>{label(entry.kind)} / 01</span><h3>{entry.items[0].title}</h3><small>{entry.items.length} {t("件作品", "works")}</small></div></button>)}</div> : <div className="empty-profile"><div className="sample-covers" aria-hidden="true">{getCollectionsByKind("film")[1]?.works.filter((work) => work.posterUrls?.length).slice(0, 3).map((work) => <Poster key={work.id} work={work} kind="film" />)}</div><div><h3>{t("还没有完成的画像", "No completed profile yet")}</h3><span>{t("电影 · 书籍 · 音乐 · 其他", "Films · Books · Music · Other")}</span></div>{fileInput("own", t("导入我的画像", "Import my profile"))}</div>}</section>
   </>;
   else if (view === "source") content = <>
