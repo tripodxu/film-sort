@@ -336,13 +336,12 @@ async function hashPassword(password: string): Promise<string> {
 
 async function adminAuth(request: Request, env: Env): Promise<boolean> {
   if (!env.DB) return false;
-  const token = request.headers.get("authorization")?.replace("Bearer ", "") ?? 
-                new URL(request.url).searchParams.get("token") ?? "";
+  const token = getAdminToken(request);
   if (!token || token.length < 32) return false;
   try {
     const session = await env.DB.prepare(
       "SELECT token FROM admin_sessions WHERE token = ? AND expires_at > datetime('now')"
-    ).first(token);
+    ).bind(token).first();
     return !!session;
   } catch { return false; }
 }
