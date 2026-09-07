@@ -237,6 +237,33 @@ async function load() {
         '<div class="card"><h3 style="margin-bottom:12px">最近API调用</h3>',apiLogsHtml,'</div>',
         '<div class="card"><h3 style="margin-bottom:12px"><span class="status-dot err"></span>API错误记录</h3>',apiErrorsHtml,'</div>',
       '</div>',
+      '<div class="grid grid-2" style="margin-bottom:16px">',
+        '<div class="card"><h3 style="margin-bottom:12px">用户账户 (',(d.accounts||[]).length,')</h3>',
+          '<table><thead><tr><th>邮箱</th><th>昵称</th><th>会话</th><th>画像</th><th>注册</th></tr></thead>',
+          '<tbody>', (d.accounts||[]).map(function(a) {
+            var time = new Date(a.created_at).toLocaleString('zh-CN', {year:'2-digit',month:'2-digit',day:'2-digit'});
+            var profileTime = a.profile_updated ? new Date(a.profile_updated).toLocaleString('zh-CN', {month:'2-digit',day:'2-digit'}) : '-';
+            return '<tr><td>'+a.email+'</td><td>'+(a.nickname||'-')+'</td><td>'+a.active_sessions+'</td><td>'+profileTime+'</td><td style="color:var(--muted)">'+time+'</td></tr>';
+          }).join(''), '</tbody></table>',
+        '</div>',
+        '<div class="card"><h3 style="margin-bottom:12px">D1 存储</h3>',
+          '<table><tbody>',
+            (d.storage||[]).map(function(s) {
+              return '<tr><td>'+s.tbl+'</td><td style="text-align:right;font-variant-numeric:tabular-nums">'+Number(s.cnt).toLocaleString()+' 行</td></tr>';
+            }).join(''),
+          '</tbody></table>',
+          '<div style="margin-top:12px;padding-top:10px;border-top:1px solid var(--border)">',
+            '<h3 style="margin-bottom:6px">缓存策略</h3>',
+            '<table><tbody>',
+              '<tr><td>海报/图片</td><td style="color:var(--muted)">Edge Cache 24h</td></tr>',
+              '<tr><td>搜索结果</td><td style="color:var(--muted)">Edge Cache 1h</td></tr>',
+              '<tr><td>Top250索引</td><td style="color:var(--muted)">内存Map 15min</td></tr>',
+              '<tr><td>详情页</td><td style="color:var(--muted)">Edge Cache 24h</td></tr>',
+              '<tr><td>API日志</td><td style="color:var(--muted)">D1 持久化</td></tr>',
+            '</tbody></table>',
+          '</div>',
+        '</div>',
+      '</div>',
       '<div class="grid grid-2">',
         '<div class="card"><h3 style="margin-bottom:12px">最近用户事件</h3>',
           '<table><thead><tr><th>事件</th><th>模式</th><th>详情</th><th>时间</th></tr></thead>',
@@ -526,7 +553,7 @@ async function getStats(env: Env): Promise<Response> {
 async function getDashboard(env: Env): Promise<Response> {
   if (!env.DB) return json({ available: false }, 200, { "cache-control": "public, max-age=60" });
   try {
-    const [overview, daily, modes, recentEvents, apiLogs, apiErrors] = await Promise.all([
+    const [overview, daily, modes, recentEvents, apiLogs, apiErrors, accounts, storageInfo] = await Promise.all([
       env.DB.prepare(`SELECT
         COUNT(CASE WHEN event_name = 'visit' THEN 1 END) AS total_visits,
         COUNT(CASE WHEN event_name = 'visit' AND created_at >= datetime('now', '-7 days') THEN 1 END) AS visits_7d,
@@ -575,6 +602,23 @@ async function getDashboard(env: Env): Promise<Response> {
       WHERE status >= 400
       ORDER BY created_at DESC
       LIMIT 20`).all(),
+      // Accounts list
+      env.DB.prepare(`SELECT
+        a.id, a.email, a.nickname, a.created_at,
+        (SELECT COUNT(*) FROM user_sessions s WHERE s.user_id = a.id AND s.expires_at > datetime('now')) AS active_sessions,
+        (SELECT COUNT(*) FROM user_oauth o WHERE o.user_id = a.id) AS oauth_links,
+        (SELECT updated_at FROM user_profiles_v2 p WHERE p.user_id = a.id) AS profile_updated
+      FROM user_accounts a
+      ORDER BY a.created_at DESC
+      LIMIT 50`).all(),
+      // Storage info - table row counts
+      env.DB.prepare(`SELECT 'analytics_events' AS tbl, COUNT(*) AS cnt FROM analytics_events
+        UNION ALL SELECT 'api_logs', COUNT(*) FROM api_logs
+        UNION ALL SELECT 'user_accounts', COUNT(*) FROM user_accounts
+        UNION ALL SELECT 'user_sessions', COUNT(*) FROM user_sessions
+        UNION ALL SELECT 'user_profiles_v2', COUNT(*) FROM user_profiles_v2
+        UNION ALL SELECT 'challenge_sets', COUNT(*) FROM challenge_sets
+        UNION ALL SELECT 'admin_sessions', COUNT(*) FROM admin_sessions`).all(),
     ]);
 
     return json({
@@ -599,6 +643,8 @@ async function getDashboard(env: Env): Promise<Response> {
       recent_events: (recentEvents as { results?: unknown[] }).results ?? [],
       api_logs: (apiLogs as { results?: unknown[] }).results ?? [],
       api_errors: (apiErrors as { results?: unknown[] }).results ?? [],
+      accounts: (accounts as { results?: unknown[] }).results ?? [],
+      storage: (storageInfo as { results?: unknown[] }).results ?? [],
     }, 200, { "cache-control": "public, max-age=30" });
   } catch (error) {
     console.error("dashboard query failed", error instanceof Error ? error.message : error);
