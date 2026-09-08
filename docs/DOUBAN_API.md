@@ -161,7 +161,8 @@ GET /api/book/detail?name={书名}
     "定价": "28.00元",
     "装帧": "平装",
     "ISBN": "9787506365437",
-    "content_intro": "《活着》讲述了农村人福贵悲惨的人生遭遇...",
+    "content_intro": "To Live is a novel by Chinese author Yu Hua, first published in 1993...",
+    "content_source": "enwiki",
     "author_intro": "余华，1960年出生...",
     "tags": ["余华", "活着", "人生", "中国文学", "小说"]
   }
@@ -198,7 +199,9 @@ GET /api/movie/detail?name={电影名}
     "类型": "动画/奇幻/冒险",
     "制片国家/地区": "日本",
     "片长": "86分钟",
-    "主演": "宫崎骏/日高范子/坂本千夏"
+    "主演": "宫崎骏/日高范子/坂本千夏",
+    "content_intro": "My Neighbor Totoro is a 1988 Japanese animated fantasy film written and directed by Hayao Miyazaki...",
+    "content_source": "enwiki"
   }
 }
 ```
@@ -234,7 +237,8 @@ GET /api/music/detail?name={专辑名}
     "专辑类型": "专辑",
     "介质": "CD",
     "发行时间": "2001-09-14",
-    "content_intro": "從第一張JAY同名專輯...",
+    "content_intro": "Fantasia is the second studio album by Taiwanese singer Jay Chou...",
+    "content_source": "enwiki",
     "songs": ["1.爱在西元前", "2.爸我回来了", "3.简单爱"]
   }
 }
