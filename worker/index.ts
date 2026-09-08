@@ -245,6 +245,18 @@ async function clearAccountData(id, type) {
 function exportPosterErrors() {
   window.open('/api/admin/poster-errors/export?days=30&token=' + getToken(), '_blank');
 }
+async function cleanLogs(table, action) {
+  var labels = {delete_all:'清空全部',delete_7d:'删除7天前',delete_24h:'删除24小时前',keep_24h:'仅保留24小时',keep_1h:'仅保留1小时',delete_1h:'删除最近1小时'};
+  var tableLabel = table==='all'?'全部日志':table;
+  if(!confirm('确定对 '+tableLabel+' 执行「'+(labels[action]||action)+'」？')) return;
+  try {
+    var r = await fetch('/api/admin/logs/clean',{method:'POST',headers:{'Authorization':'Bearer '+getToken(),'Content-Type':'application/json'},body:JSON.stringify({table:table,action:action})});
+    var d = await r.json();
+    var el = document.getElementById('cleanResult');
+    if(r.ok) { el.textContent = '完成：删除了 '+d.deleted+' 条记录'; el.style.color='var(--green)'; load(); }
+    else { el.textContent = '失败：'+d.error; el.style.color='var(--red)'; }
+  } catch(e) { document.getElementById('cleanResult').textContent = '请求失败'; }
+}
 
 async function load() {
   try {
@@ -322,6 +334,23 @@ async function load() {
               '<tr><td>API日志</td><td style="color:var(--muted)">D1 持久化</td></tr>',
             '</tbody></table>',
           '</div>',
+        '</div>',
+        '<div class="card"><h3 style="margin-bottom:12px">日志清理</h3>',
+          '<div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px">',
+            '<button onclick="cleanLogs(\'all\',\'delete_all\')" class="table-action danger">清空全部日志</button>',
+            '<button onclick="cleanLogs(\'all\',\'delete_7d\')" class="table-action warn">删除7天前</button>',
+            '<button onclick="cleanLogs(\'all\',\'delete_24h\')" class="table-action warn">删除24小时前</button>',
+            '<button onclick="cleanLogs(\'all\',\'keep_24h\')" class="table-action">仅保留24小时</button>',
+            '<button onclick="cleanLogs(\'all\',\'keep_1h\')" class="table-action">仅保留1小时</button>',
+            '<button onclick="cleanLogs(\'all\',\'delete_1h\')" class="table-action warn">删除最近1小时</button>',
+          '</div>',
+          '<div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:6px">',
+            '<span style="color:var(--muted);font-size:11px;line-height:26px">单表：</span>',
+            '<button onclick="cleanLogs(\'api_logs\',\'delete_all\')" class="table-action">清空API日志</button>',
+            '<button onclick="cleanLogs(\'analytics_events\',\'delete_all\')" class="table-action">清空分析事件</button>',
+            '<button onclick="cleanLogs(\'poster_errors\',\'delete_all\')" class="table-action">清空海报错误</button>',
+          '</div>',
+          '<div id="cleanResult" style="font-size:12px;color:var(--muted);margin-top:6px"></div>',
         '</div>',
       '</div>',
       '<div class="card" style="margin-bottom:16px"><h3 style="margin-bottom:12px">海报错误聚合 / 近30天</h3>',
@@ -909,6 +938,31 @@ async function route(request: Request, env: Env): Promise<Response> {
       "SELECT id, title, media_type, error, source, created_at FROM poster_errors WHERE created_at >= datetime('now', ?) ORDER BY created_at DESC LIMIT ?"
     ).bind(`-${days} days`, limit).all();
     return json({ errors: errors.results ?? [] }, 200, { "cache-control": "no-store" });
+  }
+  if (url.pathname === "/api/admin/logs/clean" && request.method === "POST") {
+    if (!env.DB || !await adminAuth(request, env)) return json({ error: "auth_required" }, 401);
+    const body = await readJson(request);
+    const table = cleanString(body.table, "table", 20);
+    const action = cleanString(body.action, "action", 20);
+    const tables = table === "all" ? ["api_logs", "analytics_events", "poster_errors"] : [table];
+    if (!tables.every((t) => ["api_logs", "analytics_events", "poster_errors"].includes(t))) return json({ error: "invalid_table" }, 400);
+    const actions: Record<string, { time: string; op: string }> = {
+      delete_all: { time: "", op: "" },
+      delete_7d: { time: "datetime('now', '-7 days')", op: "<" },
+      delete_24h: { time: "datetime('now', '-1 day')", op: "<" },
+      keep_24h: { time: "datetime('now', '-1 day')", op: "<" },
+      keep_1h: { time: "datetime('now', '-1 hour')", op: "<" },
+      delete_1h: { time: "datetime('now', '-1 hour')", op: ">=" },
+    };
+    if (!actions[action]) return json({ error: "invalid_action" }, 400);
+    let total = 0;
+    for (const tbl of tables) {
+      const cfg = actions[action];
+      const sql = action === "delete_all" ? `DELETE FROM ${tbl}` : `DELETE FROM ${tbl} WHERE created_at ${cfg.op} ${cfg.time}`;
+      const result = await env.DB.prepare(sql).run();
+      total += result.meta?.changes ?? 0;
+    }
+    return json({ ok: true, deleted: total });
   }
   if (url.pathname === "/api/admin/poster-errors/export" && request.method === "GET") {
     if (!env.DB || !await adminAuth(request, env)) return json({ error: "auth_required" }, 401);
