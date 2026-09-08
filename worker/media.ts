@@ -284,12 +284,12 @@ interface WikiSummary {
   thumbnail?: { source?: string };
 }
 
-async function fetchWikipedia(query: string, lang: "zh" | "en" = "zh"): Promise<{ intro: string; source: string } | null> {
+async function fetchWikipedia(query: string, lang: "zh" | "en" = "zh", timeoutMs = 8000): Promise<{ intro: string; source: string } | null> {
   try {
     const url = `https://${lang}.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(query)}`;
     const response = await fetch(url, {
       headers: { "user-agent": USER_AGENTS[0], "accept": "application/json" },
-      signal: AbortSignal.timeout(8000),
+      signal: AbortSignal.timeout(timeoutMs),
     });
     if (!response.ok) return null;
     const data = await response.json() as WikiSummary;
@@ -320,20 +320,35 @@ async function fetchBaiduBaike(query: string): Promise<{ intro: string; source: 
   }
 }
 
-export async function fetchContentIntro(title: string): Promise<{ intro: string; source: string } | null> {
-  // Try Wikipedia first (zh then en)
-  try {
-    const zhWiki = await fetchWikipedia(title, "zh");
-    if (zhWiki) return zhWiki;
-  } catch (e) {
-    console.error(`zh.wikipedia failed for "${title}":`, e instanceof Error ? e.message : e);
+export async function fetchContentIntro(title: string, mediaType?: "movie" | "book" | "music"): Promise<{ intro: string; source: string } | null> {
+  // Build disambiguated query for non-movie types (避免维基百科歧义)
+  const queries: string[] = [title];
+  if (mediaType === "book") queries.push(`${title} (小说)`, `${title} (书籍)`);
+  if (mediaType === "music") queries.push(`${title} (专辑)`);
+
+  // Try all queries against zh and en Wikipedia concurrently, prefer Chinese
+  const attempts = queries.flatMap((q) => [
+    fetchWikipedia(q, "zh", 12000),
+    fetchWikipedia(q, "en", 8000),
+  ]);
+  const results = await Promise.allSettled(attempts);
+
+  // Collect successful results, preferring zh over en, and earlier queries first
+  const zhResults: string[] = [];
+  const enResults: string[] = [];
+  for (const r of results) {
+    if (r.status === "fulfilled" && r.value) {
+      if (r.value.source === "zhwiki") zhResults.push(r.value.intro);
+      else enResults.push(r.value.intro);
+    }
   }
-  try {
-    const enWiki = await fetchWikipedia(title, "en");
-    if (enWiki) return enWiki;
-  } catch (e) {
-    console.error(`en.wikipedia failed for "${title}":`, e instanceof Error ? e.message : e);
+
+  // Pick best: first zh result, or first en result
+  const bestIntro = zhResults[0] || enResults[0];
+  if (bestIntro) {
+    return { intro: bestIntro, source: zhResults[0] ? "zhwiki" : "enwiki" };
   }
+
   // Fallback to Baidu Baike
   try {
     const baike = await fetchBaiduBaike(title);
