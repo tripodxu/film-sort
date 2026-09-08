@@ -11,6 +11,3 @@ CREATE TABLE IF NOT EXISTS user_collections (
 );
 
 CREATE INDEX IF NOT EXISTS idx_user_collections_user_updated ON user_collections(user_id, updated_at DESC);
-
-ALTER TABLE user_accounts ADD COLUMN disabled_at TEXT;
-ALTER TABLE poster_errors ADD COLUMN source TEXT NOT NULL DEFAULT 'resolver';
