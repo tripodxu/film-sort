@@ -1,5 +1,5 @@
 import { lazy, Suspense, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { ArrowLeft, ArrowRight, BookOpen, Check, ChevronRight, CloudDownload, CloudUpload, Download, Film, Languages, Library, LogIn, Music2, Pause, Play, Plus, Search, Share2, SkipForward, Sparkles, Trash2, Undo2, Upload, UserRound, Users, X } from "lucide-react";
+import { ArrowLeft, ArrowRight, BookOpen, Check, ChevronRight, CloudDownload, CloudUpload, Download, Film, Languages, Library, Link, LogIn, Music2, Pause, Play, Plus, Search, Share2, SkipForward, Sparkles, Trash2, Undo2, Upload, UserRound, Users, X } from "lucide-react";
 import { compressSync, decompressSync, strFromU8, strToU8 } from "fflate";
 import QRCode from "qrcode";
 import { createRankingState, chooseSide, deferWork, deserializeRankingState, getCurrentComparison, getRankingProgress, getRankingResult, serializeRankingState, skipWork, undoLastAction, type RankingState } from "./lib/ranking";
@@ -111,6 +111,8 @@ export default function App() {
   const [editingRankTitle, setEditingRankTitle] = useState("");
   const [ringsLayout, setRingsLayout] = useState<"row" | "col">(() => { try { return (localStorage.getItem("art-rank:rings-layout") as "row" | "col") || "row"; } catch { return "row"; } });
   const [detailWork, setDetailWork] = useState<{ work: RankedArtwork; kind: MediaKind; data: Record<string, unknown> | null; loading: boolean } | null>(null);
+  const [peerUrl, setPeerUrl] = useState("");
+  const [peerUrlBusy, setPeerUrlBusy] = useState(false);
   const syncTimer = useRef<number | null>(null);
   const syncing = useRef(false);
 
@@ -295,7 +297,7 @@ export default function App() {
       };
       persist(mergeRanking(profile, result)); setActiveKind(result.kind); setDraft(null);
       try { localStorage.removeItem(DRAFT_KEY); } catch { /* Progress already exists in memory. */ }
-      setView("profile");
+      setView(peer && collection.id.startsWith("peer-") ? "compare" : "profile");
       track("ranking_completed", { mode: kind, item_count: next.sourceIds.length, top_k: next.topN, comparison_count: next.comparisonCount });
     }
   }
@@ -336,6 +338,24 @@ export default function App() {
       }
       setNotice("");
     } catch { setNotice(t("文件格式不正确，请使用有效的画像 JSON（最大 512 KB）。", "Invalid profile JSON (maximum 512 KB).")); }
+  }
+  async function importPeerFromUrl(urlStr: string) {
+    if (!urlStr.trim()) return;
+    setPeerUrlBusy(true);
+    try {
+      // If it's an ART/RANK comparison link with payload param
+      const parsed = new URL(urlStr.trim());
+      const payload = parsed.searchParams.get("payload") ?? new URLSearchParams(parsed.hash.slice(1)).get("profile");
+      if (payload) { acceptPeer(decode(payload)); setPeerUrl(""); setNotice(t("已导入对方索引。", "Peer index imported.")); return; }
+      // Otherwise fetch the URL as JSON
+      const resp = await fetch(urlStr.trim());
+      if (!resp.ok) throw new Error();
+      const data = await resp.json();
+      acceptPeer(parseProfile(data));
+      setPeerUrl("");
+      setNotice(t("已导入对方索引。", "Peer index imported."));
+    } catch { setNotice(t("链接无效或无法解析，请检查 URL。", "Invalid or unreachable URL.")); }
+    finally { setPeerUrlBusy(false); }
   }
   function namedProfile(): ArtisticProfile | null {
     if (!profile) return null;
@@ -483,6 +503,18 @@ export default function App() {
     if (!entry || entry.items.length < 2) { chooseKind(nextKind); return; }
     openCollection({ id: `peer-${entry.profileId}`, kind: nextKind, source: "custom", title: entry.collectionTitle, description: "", topN: entry.items.length, works: entry.items });
   }
+  async function importPeerFromUrl() {
+    const url = peerUrl.trim(); if (!url) return;
+    setPeerUrlBusy(true);
+    try {
+      const parsed = new URL(url, location.origin);
+      const payload = parsed.searchParams.get("payload") ?? new URLSearchParams(parsed.hash.slice(1)).get("profile");
+      if (payload) { acceptPeer(decode(payload)); setPeerUrl(""); setPeerUrlBusy(false); return; }
+      const r = await fetch(url); if (!r.ok) throw new Error();
+      acceptPeer(parseProfile(await r.json())); setPeerUrl("");
+    } catch { setNotice(t("链接无效或无法读取，请检查 URL。", "Invalid or unreachable URL.")); }
+    finally { setPeerUrlBusy(false); }
+  }
 
   const fileInput = (target: "own" | "peer", text: string) => <label className="button secondary file-button"><Upload size={16} />{text}<input aria-label={text} type="file" accept=".json,application/json" onChange={(event) => { const file = event.target.files?.[0]; if (file) void importProfile(file, target); event.target.value = ""; }} /></label>;
   const heading = (eyebrow: string, title: string, detail?: string) => <div className="page-heading"><span className="eyebrow">{eyebrow}</span><h1>{title}</h1>{detail && <p>{detail}</p>}</div>;
@@ -536,8 +568,8 @@ export default function App() {
     const peerRanking = peer?.rankings.find((entry) => entry.kind === compareKind);
     const result = ownRanking && peerRanking ? compareRankings(ownRanking, peerRanking) : null;
     const crossProfile = profile && peer ? compareProfiles(profile, peer) : null;
-    content = <>{heading(t("相遇", "ENCOUNTER"), t("看看你们的选择在哪里重合", "See where your choices meet"), t("导入两份索引，读出共同偏好与各自的分歧。", "Import two indexes to reveal common ground and divergence."))}<div className="comparison-inputs"><section><span className="eyebrow">01 / {t("我的索引", "MY INDEX")}</span><h2>{profile?.profileName ?? t("尚未创建", "Not created")}</h2>{fileInput("own", t("导入我的索引", "Import my index"))}</section><section><span className="eyebrow">02 / {t("对方索引", "THEIR INDEX")}</span><h2>{peer?.profileName ?? t("等待导入", "Awaiting import")}</h2>{fileInput("peer", t("导入对方索引", "Import their index"))}</section></div>
-      {!peer && <div className="empty-state">{t("尚未选择对方的结果。", "No comparison profile selected.")}</div>}
+    content = <>{heading(t("相遇", "ENCOUNTER"), t("看看你们的选择在哪里重合", "See where your choices meet"), peer ? t("两份索引的交集与分歧", "Overlap and divergence of two indexes") : t("分享你的索引，或导入对方的来比较。", "Share your index or import theirs to compare."))}<div className="comparison-inputs"><section><span className="eyebrow">01 / {t("我的索引", "MY INDEX")}</span><h2>{profile?.profileName ?? t("尚未创建", "Not created")}</h2>{profile ? <p style={{ fontSize: 12, color: "var(--muted)", marginTop: 6 }}>{profile.rankings.length}{t("个榜单 · ", " lists · ")}{profile.rankings.reduce((s, r) => s + r.items.length, 0)}{t("件作品", " works")}</p> : fileInput("own", t("导入我的索引", "Import my index"))}</section><section><span className="eyebrow">02 / {t("对方索引", "THEIR INDEX")}</span><h2>{peer?.profileName ?? t("等待导入", "Awaiting import")}</h2>{peer ? <p style={{ fontSize: 12, color: "var(--muted)", marginTop: 6 }}>{peer.rankings.length}{t("个榜单 · ", " lists · ")}{peer.rankings.reduce((s, r) => s + r.items.length, 0)}{t("件作品", " works")}</p> : <div style={{ marginTop: 8, display: "flex", flexDirection: "column", gap: 8 }}><div style={{ display: "flex", gap: 6 }}><input type="url" placeholder={t("粘贴比较链接或 JSON 地址…", "Paste compare link or JSON URL…")} value={peerUrl} onChange={(e) => setPeerUrl(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") void importPeerFromUrl(); }} style={{ flex: 1, minHeight: 38, fontSize: 13 }} /><button className="button secondary" disabled={!peerUrl.trim() || peerUrlBusy} onClick={() => void importPeerFromUrl()} style={{ minHeight: 38, padding: "0 12px" }}>{peerUrlBusy ? "…" : t("导入", "Import")}</button></div>{fileInput("peer", t("或上传 JSON 文件", "or upload JSON"))}</div>}</section></div>
+      {!peer && profile && <div className="empty-state"><p style={{ marginBottom: 12 }}>{t("分享你的索引链接，或导入对方的来比较。", "Share your index link, or import theirs to compare.")}</p><div style={{ display: "flex", gap: 8, flexWrap: "wrap", justifyContent: "center" }}><button className="button secondary" onClick={() => { setFormat("json"); void exportProfile(); }}>{t("导出索引文件", "Export index file")}</button><button className="button secondary" onClick={() => { const next = namedProfile(); if (!next) return; try { const encoded = btoa(unescape(encodeURIComponent(JSON.stringify(next)))); const url = `${location.origin}${location.pathname}#profile=${encoded}`; navigator.clipboard?.writeText(url); setNotice(t("比较链接已复制到剪贴板，发给对方即可比较。", "Compare link copied. Share it to compare.")); } catch { setNotice(t("索引数据过大，无法生成链接，请导出文件。", "Index too large for link. Export file instead.")); } }}><Link size={14} />{t("复制比较链接", "Copy compare link")}</button></div></div>}
       {peer && !profile && <div className="empty-state"><h2>{t("先建立你的艺术人格画像", "Create your own artistic profile")}</h2><div className="action-row">{peer.rankings.map((entry) => <button className="button primary" key={entry.kind} onClick={() => createFromPeer(entry.kind)}><Play size={16} />{label(entry.kind)}<ArrowRight size={16} /></button>)}</div></div>}
       {peer && profile && !sharedKinds.length && <div className="empty-state"><h2>{t("还没有共同的媒介维度", "No shared media yet")}</h2><div className="action-row">{peer.rankings.map((entry) => <button className="button primary" key={entry.kind} onClick={() => createFromPeer(entry.kind)}><Plus size={16} />{label(entry.kind)}</button>)}</div></div>}
       {result && <><div className="segmented" role="tablist" aria-label={t("比较维度", "Comparison medium")}>{sharedKinds.map((item) => <button role="tab" aria-selected={compareKind === item} className={compareKind === item ? "active" : ""} key={item} onClick={() => setActiveKind(item)}>{label(item)}</button>)}</div>{crossProfile && <div className="comparison-summary"><span>{t("跨媒介共识", "Across your profile")}</span><strong>{crossProfile.crossMediumAgreement === null ? "--" : `${crossProfile.crossMediumAgreement}%`}</strong><small>{t(`${crossProfile.sharedKinds.length} 个共同维度 / ${crossProfile.sharedWorks} 件共同作品`, `${crossProfile.sharedKinds.length} shared media / ${crossProfile.sharedWorks} shared works`)}</small></div>}<div className="comparison-ai"><div><span className="eyebrow"><Sparkles size={13} /> {t("AI 观察", "AI OBSERVATION")}</span><p>{aiInsight || t("让模型把共同偏好与分歧整理成一段可读的文化侧写。", "Ask the model to turn overlap and divergence into a readable cultural note.")}</p></div><button className="button secondary" disabled={aiBusy} onClick={() => void requestInsight()}><Sparkles size={15} />{aiBusy ? t("正在生成…", "Generating…") : t("生成解读", "Generate insight")}</button></div><div className="metrics metrics-wide"><div><span>{t("作品重合度", "Work overlap")}</span><strong>{result.overlap}<small>%</small></strong></div><div><span>{t("加权偏好一致", "Weighted agreement")}</span><strong>{result.weightedTopAgreement}<small>%</small></strong></div><div><span>{t("顺序一致率", "Order agreement")}</span><strong>{result.orderAgreement === null ? "--" : `${result.orderAgreement}%`}</strong></div><div><span>{t("Top 3 共识", "Top 3 consensus")}</span><strong>{result.top3Agreement}</strong></div><div><span>{t("名次距离", "Rank distance")}</span><strong>{result.rankDistance}<small>%</small></strong></div><div><span>{t("冠军一致", "Same champion")}</span><strong>{result.championAgreement === null ? "--" : result.championAgreement ? "YES" : "NO"}</strong></div></div><div className="comparison-signal"><span>{t("共同偏好", "Common ground")}</span><strong>{result.commonPreference}</strong><span>{t("分歧轴", "Main divergence")}</span><strong>{result.divergence}</strong></div><div className="comparison-lists"><section><h2>{t("共同作品", "Shared works")}</h2>{result.shared.length ? <div className="comparison-table"><div className="table-header"><span>{t("作品", "Work")}</span><span>{t("我", "Me")}</span><span>{t("对方", "Them")}</span></div>{result.shared.map((item) => <button className="comparison-row" key={`${item.title}-${item.ownRank}`} onClick={() => item.ownItem && openArtworkDetail(item.ownItem, compareKind)}><span className="comparison-poster"><Poster work={item.ownItem ?? { id: item.title, title: item.title }} kind={compareKind} /></span><strong>{item.title}</strong><span>#{item.ownRank}</span><span>#{item.peerRank}</span></button>)}</div> : <p className="empty-state">{t("本次榜单没有共同作品。", "These rankings have no common works.")}</p>}</section><section><h2>{t("最大分歧", "Largest rank differences")}</h2>{result.disagreements.map((item) => <button className="difference-row" key={`${item.title}-${item.ownRank}`} onClick={() => item.ownItem && openArtworkDetail(item.ownItem, compareKind)}><strong>{item.title}</strong><span>#{item.ownRank} / #{item.peerRank}</span><b>{item.difference}</b></button>)}{!result.disagreements.length && <p className="empty-state">{t("没有可展示的名次分歧。", "No rank differences to display.")}</p>}</section></div><div className="action-row"><button className="button secondary" onClick={() => createFromPeer(compareKind)}><Play size={16} />{t("用对方的作品重新排序", "Rank their selection")}</button><button className="button quiet" onClick={() => setView("profile")}><ArrowRight size={16} />{t("我的完整画像", "My complete profile")}</button></div></>}
