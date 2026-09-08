@@ -106,6 +106,7 @@ export default function App() {
   const [editingNickname, setEditingNickname] = useState(false);
   const [editNicknameValue, setEditNicknameValue] = useState("");
   const [syncStatus, setSyncStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
+  const [cloudConflict, setCloudConflict] = useState<ArtisticProfile | null>(null);
   const [editingRankIdx, setEditingRankIdx] = useState<number | null>(null);
   const [editingRankTitle, setEditingRankTitle] = useState("");
   const [ringsLayout, setRingsLayout] = useState<"row" | "col">(() => { try { return (localStorage.getItem("art-rank:rings-layout") as "row" | "col") || "row"; } catch { return "row"; } });
@@ -163,7 +164,7 @@ export default function App() {
       void fetch("/api/account/profile", { headers: { authorization: `Bearer ${savedToken}` } })
         .then((r) => r.ok ? r.json() : null)
         .then((data: { email?: string; nickname?: string; profile?: unknown } | null) => {
-          if (data?.email) { setAccountEmail(data.email); setAccountNickname(data.nickname ?? data.email.split("@")[0]); if (data.profile) setCloudProfile(parseProfile(data.profile)); }
+          if (data?.email) { setAccountEmail(data.email); setAccountNickname(data.nickname ?? data.email.split("@")[0]); }
           else if (!oauthToken) { setAccountToken(""); try { localStorage.removeItem("art-rank:account-token"); } catch {} }
         }).catch(() => {});
     }
@@ -445,7 +446,7 @@ export default function App() {
       setAccountToken(data.token); setAccountEmail(data.email ?? authEmail); setAccountNickname(data.nickname ?? ""); setAuthEmail(""); setAuthPassword(""); setAuthNickname("");
       try { localStorage.setItem("art-rank:account-token", data.token); } catch {}
       setNotice(t("登录成功！", "Signed in!"));
-      // Auto-load cloud profile after login (use token from closure via ref pattern below)
+      // Auto-load cloud profile after login, detect conflicts
       const freshToken = data.token;
       setTimeout(async () => {
         try {
@@ -453,7 +454,11 @@ export default function App() {
           if (!r.ok) return;
           const d = await r.json() as { nickname?: string; profile: unknown };
           if (d.nickname) setAccountNickname(d.nickname);
-          if (d.profile && !profile) { persist(parseProfile(d.profile)); setNotice(t("已从云端恢复画像。", "Profile restored from cloud.")); }
+          if (d.profile) {
+            const cloudParsed = parseProfile(d.profile);
+            if (profile) { setCloudConflict(cloudParsed); } // both local & cloud → show conflict dialog
+            else { persist(cloudParsed); setNotice(t("已从云端恢复画像。", "Profile restored from cloud.")); }
+          }
         } catch {}
       }, 100);
     } catch { setAuthError(t("网络错误", "Network error")); }
@@ -471,7 +476,7 @@ export default function App() {
   }
   function accountLogout() {
     if (accountToken) void fetch("/api/account/logout", { method: "POST", headers: { authorization: `Bearer ${accountToken}` } }).catch(() => {});
-    setAccountToken(""); setAccountEmail(""); setAccountNickname(""); setEditingNickname(false); setSyncStatus("idle");
+    setAccountToken(""); setAccountEmail(""); setAccountNickname(""); setEditingNickname(false); setSyncStatus("idle"); setCloudConflict(null);
     try { localStorage.removeItem("art-rank:account-token"); } catch {}
   }
   function createFromPeer(nextKind: MediaKind) {
@@ -553,7 +558,7 @@ export default function App() {
         <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 4 }}>
           {editingNickname ? <div style={{ display: "flex", gap: 4, alignItems: "center", flex: 1 }}><input type="text" value={editNicknameValue} onChange={(e) => setEditNicknameValue(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") void saveNickname(); if (e.key === "Escape") setEditingNickname(false); }} style={{ fontSize: 14, padding: "4px 8px", minHeight: "auto", flex: 1 }} autoFocus /><button className="text-button" onClick={() => void saveNickname()} style={{ color: "var(--accent)", fontSize: 13, padding: "4px 8px" }}>✓</button></div> : <><p style={{ fontWeight: 600, margin: 0 }}>{accountNickname || accountEmail}</p><button onClick={() => { setEditingNickname(true); setEditNicknameValue(accountNickname); }} style={{ fontSize: 10, color: "var(--muted)", background: "none", border: "1px solid var(--line)", borderRadius: 4, padding: "1px 6px", cursor: "pointer" }}>{t("改名", "Edit")}</button></>}
         </div>
-        <p style={{ marginBottom: 16, fontSize: 12, color: "var(--muted)" }}>{accountEmail}{syncStatus === "saving" ? ` · ${t("同步中…", "Syncing…")}` : syncStatus === "saved" ? ` · ${t("已同步", "Synced")}` : syncStatus === "error" ? ` · ${t("同步失败", "Sync failed")}` : ""}</p>
+        <p style={{ marginBottom: 16, fontSize: 12, color: "var(--muted)", display: "flex", alignItems: "center", gap: 6 }}>{accountEmail}<span title={syncStatus === "saving" ? t("同步中", "Syncing") : syncStatus === "saved" ? t("已同步", "Synced") : syncStatus === "error" ? t("同步失败", "Sync failed") : t("待机", "Idle")} style={{ display: "inline-block", width: 8, height: 8, borderRadius: "50%", background: syncStatus === "saving" ? "var(--yellow)" : syncStatus === "saved" ? "var(--green)" : syncStatus === "error" ? "var(--red)" : "var(--muted)", flexShrink: 0 }} /></p>
         <button className="button primary" disabled={busy || !profile} onClick={accountSave} style={{ marginBottom: 8 }}><CloudUpload size={16} />{t("同步到云端", "Sync to cloud")}</button>
         <button className="button secondary" disabled={busy} onClick={() => void accountLoad(false)} style={{ marginBottom: 8 }}><CloudDownload size={16} />{t("从云端恢复画像", "Restore from cloud")}</button>
         <button className="button quiet" onClick={accountLogout}>{t("退出登录", "Sign out")}</button>
