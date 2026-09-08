@@ -298,10 +298,10 @@ async function fetchWikipedia(titles: string[], lang: "zh" | "en" = "zh", timeou
       }
     }
 
-    // Phase 2: generator=search 搜索（跳过消歧义页，取有摘要的结果）
+    // Phase 2: generator=search 搜索标题（跳过消歧义页，只匹配标题避免误命中）
     const params2 = new URLSearchParams({
       action: "query", generator: "search", gsrsearch: titles.join("|"),
-      gsrnamespace: "0", gsrlimit: "5",
+      gsrwhat: "title", gsrnamespace: "0", gsrlimit: "5",
       prop: "extracts", exintro: "true", explaintext: "true", exlimit: "5", redirects: "1", format: "json",
     });
     const r2 = await fetch(`https://${lang}.wikipedia.org/w/api.php?${params2}`, {
