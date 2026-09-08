@@ -1049,33 +1049,32 @@ async function route(request: Request, env: Env): Promise<Response> {
   }
   if (url.pathname === "/api/movie/detail" && request.method === "GET") {
     const detailUrl = url.searchParams.get("url")?.trim();
-    if (!detailUrl || !detailUrl.includes("movie.douban.com/subject/")) return json({ status: false, msg: "缺少参数 url", data: null }, 400);
-    const result = await doubanMovieDetail(detailUrl);
-    // If direct scrape failed (anti-bot), try search.douban.com for basic info
-    if (!result.status) {
+    const title = url.searchParams.get("title")?.trim();
+    if (!detailUrl && !title) return json({ status: false, msg: "缺少参数 url 或 title", data: null }, 400);
+    
+    // Try direct scrape if URL provided
+    if (detailUrl?.includes("movie.douban.com/subject/")) {
+      const result = await doubanMovieDetail(detailUrl);
+      if (result.status) return json(result, 200, { "cache-control": "public, max-age=86400" });
+    }
+    
+    // Fallback: use suggest API with title
+    if (title) {
       try {
-        const movieId = detailUrl.match(/subject\/(\d+)/)?.[1];
-        if (movieId) {
-          const search = await doubanSearch("movie", movieId, 1);
-          const found = search.data.find(i => i.cover_link?.includes(`/subject/${movieId}/`));
-          if (found) {
-            return json({
-              status: true,
-              msg: "获取成功(搜索降级)",
-              time: search.time,
-              data: {
-                title: found.title, pic: found.cover, rating: String(found.rating ?? ""),
-                year: found.year ?? "", 类型: Array.isArray(found.type) ? found.type.join("/") : "",
-                "制片国家/地区": found.country ?? "", 片长: found.duration ?? "",
-                主演: Array.isArray(found.actors) ? found.actors.join("/") : "",
-              },
-              debug: { fallback: "search.douban.com", note: "direct scrape blocked by anti-bot" }
-            }, 200, { "cache-control": "public, max-age=3600" });
-          }
+        const suggest = await doubanSuggest(title);
+        const found = detailUrl 
+          ? suggest.find(w => w.poster_url && w.id?.includes(detailUrl.match(/subject\/(\d+)/)?.[1] ?? "")) ?? suggest[0]
+          : suggest[0];
+        if (found?.poster_url) {
+          return json({
+            status: true, msg: "获取成功(搜索)", time: "0s",
+            data: { title: found.title, pic: found.poster_url, rating: "", year: found.year ?? "" }
+          }, 200, { "cache-control": "public, max-age=86400" });
         }
       } catch {}
     }
-    return json(result, result.status ? 200 : 502, { "cache-control": result.status ? "public, max-age=86400" : "public, max-age=60" });
+    
+    return json({ status: false, msg: "豆瓣反爬限制，详情暂不可用", data: null }, 502, { "cache-control": "public, max-age=60" });
   }
   if (url.pathname === "/api/music/detail" && request.method === "GET") {
     const detailUrl = url.searchParams.get("url")?.trim();
