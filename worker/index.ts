@@ -1,4 +1,4 @@
-import { doubanTop250, doubanSuggest, doubanBookTop250, doubanBookSuggest, doubanMusicTop250, doubanSearch, doubanBookDetail, doubanMovieDetail, doubanMusicDetail, proxyImage, resolvePosters } from "./media";
+import { doubanTop250, doubanSuggest, doubanBookTop250, doubanBookSuggest, doubanMusicTop250, doubanSearch, doubanBookDetail, doubanMovieDetail, doubanMusicDetail, fetchContentIntro, proxyImage, resolvePosters } from "./media";
 import { accountRoute } from "./account";
 
 export interface Env {
@@ -1044,42 +1044,175 @@ async function route(request: Request, env: Env): Promise<Response> {
   // Detail APIs
   if (url.pathname === "/api/book/detail" && request.method === "GET") {
     const detailUrl = url.searchParams.get("url")?.trim();
-    if (!detailUrl || !detailUrl.includes("book.douban.com/subject/")) return json({ status: false, msg: "缺少参数 url", data: null }, 400);
-    return json(await doubanBookDetail(detailUrl), 200, { "cache-control": "public, max-age=86400" });
-  }
-  if (url.pathname === "/api/movie/detail" && request.method === "GET") {
-    const detailUrl = url.searchParams.get("url")?.trim();
     const title = url.searchParams.get("title")?.trim();
     if (!detailUrl && !title) return json({ status: false, msg: "缺少参数 url 或 title", data: null }, 400);
-    
-    // Try direct scrape if URL provided
-    if (detailUrl?.includes("movie.douban.com/subject/")) {
-      const result = await doubanMovieDetail(detailUrl);
-      if (result.status) return json(result, 200, { "cache-control": "public, max-age=86400" });
-    }
-    
-    // Fallback: use suggest API with title
-    if (title) {
+
+    let bookTitle = title ?? "";
+    const data: Record<string, unknown> = {};
+
+    // Step 1: Get basic info from search.douban.com
+    if (bookTitle || detailUrl) {
+      const bookId = detailUrl?.match(/subject\/(\d+)/)?.[1];
       try {
-        const suggest = await doubanSuggest(title);
-        const found = detailUrl 
-          ? suggest.find(w => w.poster_url && w.id?.includes(detailUrl.match(/subject\/(\d+)/)?.[1] ?? "")) ?? suggest[0]
-          : suggest[0];
-        if (found?.poster_url) {
-          return json({
-            status: true, msg: "获取成功(搜索)", time: "0s",
-            data: { title: found.title, pic: found.poster_url, rating: "", year: found.year ?? "" }
-          }, 200, { "cache-control": "public, max-age=86400" });
+        const search = await doubanSearch("book", bookTitle || bookId!, 1);
+        const found = bookId
+          ? search.data.find(i => i.cover_link?.includes(`/subject/${bookId}/`)) ?? search.data[0]
+          : search.data[0];
+        if (found) {
+          bookTitle = found.title || bookTitle;
+          data.title = found.title;
+          data.pic = found.cover;
+          data.rating = String(found.rating ?? "");
+          data.author = found.author ?? "";
+          data.press = found.press ?? "";
+          data.date = found.date ?? "";
         }
       } catch {}
     }
-    
-    return json({ status: false, msg: "豆瓣反爬限制，详情暂不可用", data: null }, 502, { "cache-control": "public, max-age=60" });
+
+    // Step 2: Try douban detail page
+    if (detailUrl?.includes("book.douban.com/subject/")) {
+      try {
+        const detail = await doubanBookDetail(detailUrl);
+        if (detail.status && detail.data) {
+          if (detail.data.content_intro) data.content_intro = detail.data.content_intro;
+          if (detail.data.author_intro) data.author_intro = detail.data.author_intro;
+          if (detail.data.tags) data.tags = detail.data.tags;
+          for (const [k, v] of Object.entries(detail.data)) {
+            if (v && !data[k]) data[k] = v;
+          }
+        }
+      } catch {}
+    }
+
+    // Step 3: If no content_intro, try Wikipedia / Baidu Baike
+    if (!data.content_intro && bookTitle) {
+      const intro = await fetchContentIntro(bookTitle);
+      if (intro) {
+        data.content_intro = intro.intro;
+        data.content_source = intro.source;
+      }
+    }
+
+    if (data.title) {
+      return json({ status: true, msg: "ok", time: "0s", data }, 200, { "cache-control": "public, max-age=86400" });
+    }
+    return json({ status: false, msg: "未找到书籍信息", data: null }, 404, { "cache-control": "public, max-age=60" });
+  }
+    if (url.pathname === "/api/movie/detail" && request.method === "GET") {
+    const detailUrl = url.searchParams.get("url")?.trim();
+    const title = url.searchParams.get("title")?.trim();
+    if (!detailUrl && !title) return json({ status: false, msg: "Missing url or title", data: null }, 400);
+
+    const movieId = detailUrl?.match(/subject\/(\d+)/)?.[1];
+    let movieTitle = title ?? "";
+    const data: Record<string, unknown> = {};
+
+    // Step 1: Get basic info from search.douban.com
+    if (movieTitle || movieId) {
+      try {
+        const search = await doubanSearch("movie", movieTitle || movieId!, 1);
+        const found = movieId
+          ? search.data.find(i => i.cover_link?.includes(`/subject/${movieId}/`)) ?? search.data[0]
+          : search.data[0];
+        if (found) {
+          movieTitle = found.title || movieTitle;
+          data.title = found.title;
+          data.pic = found.cover;
+          data.rating = String(found.rating ?? "");
+          data.year = found.year ?? "";
+          data.type = Array.isArray(found.type) ? found.type.join("/") : "";
+          data.country = found.country ?? "";
+          data.duration = found.duration ?? "";
+          data.actors = Array.isArray(found.actors) ? found.actors.join("/") : "";
+        }
+      } catch {}
+    }
+
+    // Step 2: Try douban detail page for content_intro
+    if (detailUrl?.includes("movie.douban.com/subject/")) {
+      try {
+        const detail = await doubanMovieDetail(detailUrl);
+        if (detail.status && detail.data) {
+          if (detail.data.content_intro) data.content_intro = detail.data.content_intro;
+          for (const [k, v] of Object.entries(detail.data)) {
+            if (v && !data[k]) data[k] = v;
+          }
+        }
+      } catch {}
+    }
+
+    // Step 3: If no content_intro, try Wikipedia / Baidu Baike
+    if (!data.content_intro && movieTitle) {
+      const intro = await fetchContentIntro(movieTitle);
+      if (intro) {
+        data.content_intro = intro.intro;
+        data.content_source = intro.source;
+      }
+    }
+
+    if (data.title) {
+      return json({ status: true, msg: "ok", time: "0s", data }, 200, { "cache-control": "public, max-age=86400" });
+    }
+    return json({ status: false, msg: "not found", data: null }, 404, { "cache-control": "public, max-age=60" });
   }
   if (url.pathname === "/api/music/detail" && request.method === "GET") {
     const detailUrl = url.searchParams.get("url")?.trim();
-    if (!detailUrl || !detailUrl.includes("music.douban.com/subject/")) return json({ status: false, msg: "缺少参数 url", data: null }, 400);
-    return json(await doubanMusicDetail(detailUrl), 200, { "cache-control": "public, max-age=86400" });
+    const title = url.searchParams.get("title")?.trim();
+    if (!detailUrl && !title) return json({ status: false, msg: "缺少参数 url 或 title", data: null }, 400);
+
+    let musicTitle = title ?? "";
+    const data: Record<string, unknown> = {};
+
+    // Step 1: Get basic info from search.douban.com
+    if (musicTitle || detailUrl) {
+      const musicId = detailUrl?.match(/subject\/(\d+)/)?.[1];
+      try {
+        const search = await doubanSearch("music", musicTitle || musicId!, 1);
+        const found = musicId
+          ? search.data.find(i => i.cover_link?.includes(`/subject/${musicId}/`)) ?? search.data[0]
+          : search.data[0];
+        if (found) {
+          musicTitle = found.title || musicTitle;
+          data.title = found.title;
+          data.pic = found.cover;
+          data.rating = String(found.rating ?? "");
+          data.artist = found.artist ?? "";
+          data.date = found.date ?? "";
+          data.album = found.album ?? "";
+          data.medium = found.medium ?? "";
+          data.schools = found.schools ?? "";
+        }
+      } catch {}
+    }
+
+    // Step 2: Try douban detail page
+    if (detailUrl?.includes("music.douban.com/subject/")) {
+      try {
+        const detail = await doubanMusicDetail(detailUrl);
+        if (detail.status && detail.data) {
+          if (detail.data.content_intro) data.content_intro = detail.data.content_intro;
+          if (detail.data.songs) data.songs = detail.data.songs;
+          for (const [k, v] of Object.entries(detail.data)) {
+            if (v && !data[k]) data[k] = v;
+          }
+        }
+      } catch {}
+    }
+
+    // Step 3: If no content_intro, try Wikipedia / Baidu Baike
+    if (!data.content_intro && musicTitle) {
+      const intro = await fetchContentIntro(musicTitle);
+      if (intro) {
+        data.content_intro = intro.intro;
+        data.content_source = intro.source;
+      }
+    }
+
+    if (data.title) {
+      return json({ status: true, msg: "ok", time: "0s", data }, 200, { "cache-control": "public, max-age=86400" });
+    }
+    return json({ status: false, msg: "未找到音乐信息", data: null }, 404, { "cache-control": "public, max-age=60" });
   }
   if (url.pathname === "/api/artwork/detail" && request.method === "GET") {
     const kind = url.searchParams.get("kind");

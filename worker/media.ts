@@ -48,7 +48,7 @@ function buildHeaders(url: string, isImage: boolean): Record<string, string> {
   return {
     "user-agent": ua,
     "referer": referer,
-    "accept": isImage ? "image/webp,image/apng,image/*,*/*;q=0.8" : "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7",
+    "accept": isImage ? "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8" : "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,image/svg+xml,*/*;q=0.8",
     "accept-language": "zh-CN,zh;q=0.9,en;q=0.8,en-GB;q=0.7,en-US;q=0.6",
     "accept-encoding": "gzip, deflate, br, zstd",
     "connection": "keep-alive",
@@ -58,9 +58,10 @@ function buildHeaders(url: string, isImage: boolean): Record<string, string> {
     "sec-ch-ua-platform": `"Windows"`,
     "sec-fetch-dest": isImage ? "image" : "document",
     "sec-fetch-mode": "navigate",
-    "sec-fetch-site": "none",
+    "sec-fetch-site": "same-origin",
     "sec-fetch-user": "?1",
     "upgrade-insecure-requests": "1",
+    "cookie": `bid=${Math.random().toString(36).slice(2, 13)}`,
   };
 }
 
@@ -273,6 +274,58 @@ export async function doubanTop250(limit: number): Promise<DoubanWork[]> {
   const works = pages.flatMap((page) => page.status === "fulfilled" ? page.value : []);
   if (works.length < 2) throw new Error("Douban returned no usable entries");
   return [...new Map(works.map((work) => [work.id, work])).values()].slice(0, limit);
+}
+
+// ===== Wikipedia & Baidu Baike for content_intro =====
+
+interface WikiSummary {
+  title?: string;
+  extract?: string;
+  thumbnail?: { source?: string };
+}
+
+async function fetchWikipedia(query: string, lang: "zh" | "en" = "zh"): Promise<{ intro: string; source: string } | null> {
+  try {
+    const url = `https://${lang}.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(query)}`;
+    const response = await fetch(url, {
+      headers: { "user-agent": USER_AGENTS[0], "accept": "application/json" },
+      signal: AbortSignal.timeout(8000),
+    });
+    if (!response.ok) return null;
+    const data = await response.json() as WikiSummary;
+    if (data.extract && data.extract.length > 30) {
+      return { intro: data.extract, source: `${lang}wiki` };
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+async function fetchBaiduBaike(query: string): Promise<{ intro: string; source: string } | null> {
+  try {
+    const url = `https://baike.baidu.com/api/openapi/BaikeLemmaCardApi?scope=103&format=json&appid=379029&bk_key=${encodeURIComponent(query)}&bk_length=600`;
+    const response = await fetch(url, {
+      headers: { "user-agent": USER_AGENTS[0], "accept": "application/json" },
+      signal: AbortSignal.timeout(8000),
+    });
+    if (!response.ok) return null;
+    const data = await response.json() as { abstract?: string };
+    if (data.abstract && data.abstract.length > 30) {
+      return { intro: data.abstract, source: "baike" };
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+export async function fetchContentIntro(title: string): Promise<{ intro: string; source: string } | null> {
+  const wiki = await fetchWikipedia(title, "zh") ?? await fetchWikipedia(title, "en");
+  if (wiki) return wiki;
+  const baike = await fetchBaiduBaike(title);
+  if (baike) return baike;
+  return null;
 }
 
 export async function doubanSuggest(query: string): Promise<DoubanWork[]> {
