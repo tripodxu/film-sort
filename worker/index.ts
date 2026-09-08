@@ -985,7 +985,7 @@ async function route(request: Request, env: Env): Promise<Response> {
     return json(await doubanSearch("music", key, page), 200, { "cache-control": "public, max-age=3600" });
   }
 
-  // Detail APIs — try direct page scrape, fallback to search API data
+  // Detail APIs
   if (url.pathname === "/api/book/detail" && request.method === "GET") {
     const detailUrl = url.searchParams.get("url")?.trim();
     if (!detailUrl || !detailUrl.includes("book.douban.com/subject/")) return json({ status: false, msg: "缺少参数 url", data: null }, 400);
@@ -996,32 +996,13 @@ async function route(request: Request, env: Env): Promise<Response> {
     if (!detailUrl || !detailUrl.includes("movie.douban.com/subject/")) return json({ status: false, msg: "缺少参数 url", data: null }, 400);
     const result = await doubanMovieDetail(detailUrl);
     if (result.status) return json(result, 200, { "cache-control": "public, max-age=86400" });
-    // Fallback: use search API — pass the URL as query, search.douban.com may resolve it
-    const movieId = detailUrl.match(/subject\/(\d+)/)?.[1];
-    if (movieId) {
-      try {
-        // Try to find by searching the URL pattern in search results
-        const search = await doubanSearch("movie", `site:movie.douban.com/subject/${movieId}`, 1);
-        const found = search.data.find(i => i.cover_link?.includes(`/subject/${movieId}/`));
-        if (found) return json({ status: true, msg: "获取成功(搜索)", time: search.time, data: { title: found.title, pic: found.cover, rating: String(found.rating ?? ""), 类型: Array.isArray(found.type) ? found.type.join("/") : "", "制片国家/地区": found.country, 片长: found.duration, year: found.year } }, 200, { "cache-control": "public, max-age=3600" });
-      } catch {}
-    }
-    return json(result, 502, { "cache-control": "public, max-age=300" });
+    // Direct scrape blocked by douban anti-bot — return what we have
+    return json({ status: false, msg: "豆瓣反爬限制，详情暂不可用", time: result.time, data: null }, 502, { "cache-control": "public, max-age=60" });
   }
   if (url.pathname === "/api/music/detail" && request.method === "GET") {
     const detailUrl = url.searchParams.get("url")?.trim();
     if (!detailUrl || !detailUrl.includes("music.douban.com/subject/")) return json({ status: false, msg: "缺少参数 url", data: null }, 400);
-    const result = await doubanMusicDetail(detailUrl);
-    if (result.status) return json(result, 200, { "cache-control": "public, max-age=86400" });
-    const musicId = detailUrl.match(/subject\/(\d+)/)?.[1];
-    if (musicId) {
-      try {
-        const search = await doubanSearch("music", `site:music.douban.com/subject/${musicId}`, 1);
-        const found = search.data.find(i => i.cover_link?.includes(`/subject/${musicId}/`));
-        if (found) return json({ status: true, msg: "获取成功(搜索)", time: search.time, data: { title: found.title, pic: found.cover, rating: String(found.rating ?? ""), 表演者: found.artist, 流派: found.schools, 专辑类型: found.album, 发行时间: found.date } }, 200, { "cache-control": "public, max-age=3600" });
-      } catch {}
-    }
-    return json(result, 502, { "cache-control": "public, max-age=300" });
+    return json(await doubanMusicDetail(detailUrl), 200, { "cache-control": "public, max-age=86400" });
   }
   if (url.pathname === "/api/artwork/detail" && request.method === "GET") {
     const kind = url.searchParams.get("kind");
