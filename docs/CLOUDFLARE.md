@@ -34,7 +34,9 @@ npx wrangler deploy --dry-run
 | `/api/posters?q=...&en=...&year=...` | 查询豆瓣、Top250、IMDb 后备海报 URL |
 | `/api/image?url=...` | 代理已允许 host 的 HTTPS 图片 |
 | `/api/auth/config` | 返回账号同步是否启用 |
-| `/api/artwork/detail?kind=film|book|music&q=...` | 按需获取作品详情，供比较页详情弹层使用 |
+| `/api/movie/detail?name=...` | 影视详情（Wikipedia 优先） |
+| `/api/book/detail?name=...` | 书籍详情（Wikipedia 优先） |
+| `/api/music/detail?name=...` | 音乐详情（Wikipedia 优先） |
 | `/api/account/collections` | 已登录用户的私有榜单读取与保存 |
 | `/api/insights` | 可选 AI 偏好解读，仅在用户主动点击后调用 |
 | `/api/music/play?q=...` | 音乐试听搜索与链接解析代理，仅在详情弹层主动点击后调用 |

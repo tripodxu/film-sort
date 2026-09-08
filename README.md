@@ -117,7 +117,7 @@ docs/
 | GET | `/api/book/detail?name=` | 书籍详情（Wikipedia 优先） |
 | GET | `/api/movie/detail?name=` | 影视详情（Wikipedia 优先） |
 | GET | `/api/music/detail?name=` | 音乐详情（Wikipedia 优先） |
-| GET | `/api/artwork/detail?kind=&q=` | 比较页作品详情 |
+| GET | `/api/artwork/detail?kind=&q=` | 比较页作品详情（已弃用，前端改用上方三个独立接口） |
 | POST | `/api/insights` | 生成画像比较解读（需配置 AI Secret） |
 | GET | `/api/music/play?q=` | 音乐试听地址代理 |
 | POST | `/api/poster-errors/client` | 记录浏览器端海报加载失败 |

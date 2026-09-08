@@ -246,7 +246,10 @@ GET /api/music/detail?name={专辑名}
 
 ---
 
-## 作品详情（统一入口）
+## 作品详情（统一入口，已弃用）
+
+> 前端已改用上方三个独立详情接口（`/api/{movie|book|music}/detail?name=`）。
+> 此接口仍可用，但不再由前端调用。
 
 ```
 GET /api/artwork/detail?kind={类型}&q={标题}
