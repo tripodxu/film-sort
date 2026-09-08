@@ -598,19 +598,49 @@ export interface MusicDetail {
   [key: string]: unknown;
 }
 
-async function fetchDetailPage(url: string): Promise<string> {
-  await throttle(new URL(url).hostname);
+async function fetchDetailPage(url: string): Promise<{ html: string; debug: Record<string, unknown> }> {
+  const debug: Record<string, unknown> = { url, steps: [] as string[] };
+  const steps = debug.steps as string[];
+  const domain = new URL(url).hostname;
+  await throttle(domain);
+  steps.push(`throttle_done for ${domain}`);
+  
+  const headers = buildHeaders(url, false);
+  steps.push(`headers built: UA=${headers["user-agent"]?.slice(0,40)}...`);
+  
   const response = await fetch(url, {
-    headers: buildHeaders(url, false),
+    headers,
     signal: AbortSignal.timeout(15000),
     redirect: "follow",
   });
+  
+  debug.http_status = response.status;
+  debug.response_url = response.url;
+  debug.content_type = response.headers.get("content-type");
+  steps.push(`fetch done: status=${response.status}, url=${response.url?.slice(0,80)}`);
+  
   if (response.status === 403 || response.status === 418) {
     cooldownUntil = Date.now() + 10000;
+    steps.push(`rate limited, cooldown set`);
     throw new Error(`Rate limited: ${response.status}`);
   }
-  if (!response.ok) throw new Error(`HTTP ${response.status}`);
-  return response.text();
+  if (!response.ok) {
+    steps.push(`HTTP error: ${response.status}`);
+    throw new Error(`HTTP ${response.status}`);
+  }
+  
+  const html = await response.text();
+  debug.html_length = html.length;
+  debug.html_preview = html.slice(0, 300);
+  steps.push(`html received: ${html.length} chars`);
+  
+  // Check if we got redirected to anti-bot page
+  if (response.url?.includes("sec.douban.com")) {
+    steps.push("redirected to sec.douban.com (anti-bot)");
+    debug.blocked = true;
+  }
+  
+  return { html, debug };
 }
 
 function extractText(html: string, startMarker: string, endMarker: string): string {
@@ -640,7 +670,7 @@ export async function doubanBookDetail(url: string): Promise<{ status: boolean; 
   try {
     if (!url.includes("book.douban.com/subject/")) throw new Error("Invalid book URL");
     if (Date.now() < cooldownUntil) return { status: false, msg: `豆瓣限流中，请${Math.ceil((cooldownUntil - Date.now()) / 1000)}秒后重试`, time: "0s", data: null };
-    const html = await fetchDetailPage(url);
+    const { html } = await fetchDetailPage(url);
     const detail: BookDetail = { title: "", pic: "", rating: "" };
     // Title
     const titleMatch = html.match(/<span\s+property="v:itemreviewed"[^>]*>([^<]+)<\/span>/);
@@ -683,19 +713,22 @@ export async function doubanBookDetail(url: string): Promise<{ status: boolean; 
   }
 }
 
-export async function doubanMovieDetail(url: string): Promise<{ status: boolean; msg: string; time: string; data: MovieDetail | null }> {
+export async function doubanMovieDetail(url: string): Promise<{ status: boolean; msg: string; time: string; data: MovieDetail | null; debug?: Record<string, unknown> }> {
   const t0 = Date.now();
   try {
     if (!url.includes("movie.douban.com/subject/")) throw new Error("Invalid movie URL");
     if (Date.now() < cooldownUntil) return { status: false, msg: `豆瓣限流中，请${Math.ceil((cooldownUntil - Date.now()) / 1000)}秒后重试`, time: "0s", data: null };
-    const html = await fetchDetailPage(url);
+    const { html, debug } = await fetchDetailPage(url);
     const detail: MovieDetail = { title: "", pic: "", rating: "" };
     const titleMatch = html.match(/<span\s+property="v:itemreviewed"[^>]*>([^<]+)<\/span>/);
     detail.title = titleMatch ? cleanHtml(titleMatch[1]) : extractBetween(html, "<title>", "</title>").split("(")[0].trim();
+    debug.found_title = !!titleMatch;
     const picMatch = html.match(/<div\s+id="mainpic"[^>]*>[\s\S]*?<img[^>]+src="([^"]+)"/);
     detail.pic = picMatch ? picMatch[1] : "";
+    debug.found_pic = !!picMatch;
     const ratingMatch = html.match(/<strong[^>]+property="v:average"[^>]*>([^<]+)<\/strong>/);
     detail.rating = ratingMatch ? ratingMatch[1].trim() : "";
+    debug.found_rating = !!ratingMatch;
     const infoHtml = extractBetween(html, '<div id="info"', '</div>');
     const infoLines = infoHtml.split(/<br\s*\/?>/).map(l => cleanHtml(l)).filter(Boolean);
     for (const line of infoLines) {
@@ -705,16 +738,17 @@ export async function doubanMovieDetail(url: string): Promise<{ status: boolean;
       const value = line.substring(colonIdx + 1).trim();
       if (field && value) detail[field] = value;
     }
+    debug.found_info = infoLines.length > 0;
     const introMatch = html.match(/<span\s+property="v:summary"[^>]*>([\s\S]*?)<\/span>/);
     if (introMatch) detail.content_intro = cleanHtml(introMatch[1]);
+    debug.found_intro = !!introMatch;
     const actorMatches = html.match(/<a\s+href="[^"]*celebrity[^"]*"[^>]*>([^<]+)<\/a>/g);
     if (actorMatches) detail.acting_staff = actorMatches.slice(0, 10).map(m => cleanHtml(m)).filter(Boolean);
     const imgMatches = html.match(/<img[^>]+src="(https:\/\/img\d+\.doubanio\.com\/view\/photo\/[^"]+)"/g);
     if (imgMatches) detail.imgs = [...new Set(imgMatches.map(m => m.match(/src="([^"]+)"/)?.[1] ?? "").filter(Boolean))].slice(0, 6);
-    return { status: true, msg: "获取成功", time: `${((Date.now() - t0) / 1000).toFixed(3)}s`, data: detail };
+    return { status: true, msg: "获取成功", time: `${((Date.now() - t0) / 1000).toFixed(3)}s`, data: detail, debug };
   } catch (error) {
-    console.error(`doubanMovieDetail failed:`, error);
-    return { status: false, msg: "获取失败", time: `${((Date.now() - t0) / 1000).toFixed(3)}s`, data: null };
+    return { status: false, msg: error instanceof Error ? error.message : "获取失败", time: `${((Date.now() - t0) / 1000).toFixed(3)}s`, data: null };
   }
 }
 
@@ -723,7 +757,7 @@ export async function doubanMusicDetail(url: string): Promise<{ status: boolean;
   try {
     if (!url.includes("music.douban.com/subject/")) throw new Error("Invalid music URL");
     if (Date.now() < cooldownUntil) return { status: false, msg: `豆瓣限流中，请${Math.ceil((cooldownUntil - Date.now()) / 1000)}秒后重试`, time: "0s", data: null };
-    const html = await fetchDetailPage(url);
+    const { html } = await fetchDetailPage(url);
     const detail: MusicDetail = { title: "", pic: "", rating: "" };
     const titleMatch = html.match(/<span\s+property="v:itemreviewed"[^>]*>([^<]+)<\/span>/);
     detail.title = titleMatch ? cleanHtml(titleMatch[1]) : extractBetween(html, "<title>", "</title>").split("(")[0].trim();
