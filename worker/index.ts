@@ -1072,7 +1072,7 @@ async function route(request: Request, env: Env): Promise<Response> {
 
     // Step 2: Try Wikipedia first for content_intro
     if (!data.content_intro && bookTitle) {
-      const intro = await fetchContentIntro(bookTitle, "book");
+      const intro = await fetchContentIntro(bookTitle, "book", typeof data.author === "string" ? data.author.split("/")[0] : undefined);
       if (intro) {
         data.content_intro = intro.intro;
         data.content_source = intro.source;
@@ -1131,7 +1131,7 @@ async function route(request: Request, env: Env): Promise<Response> {
 
     // Step 2: Try Wikipedia first for content_intro
     if (!data.content_intro && movieTitle) {
-      const intro = await fetchContentIntro(movieTitle, "movie");
+      const intro = await fetchContentIntro(movieTitle, "movie", typeof data.actors === "string" ? data.actors.split("/")[0] : undefined);
       if (intro) {
         data.content_intro = intro.intro;
         data.content_source = intro.source;
@@ -1188,7 +1188,7 @@ async function route(request: Request, env: Env): Promise<Response> {
 
     // Step 2: Try Wikipedia first for content_intro
     if (!data.content_intro && musicTitle) {
-      const intro = await fetchContentIntro(musicTitle, "music");
+      const intro = await fetchContentIntro(musicTitle, "music", typeof data.artist === "string" ? data.artist.split("/")[0] : undefined);
       if (intro) {
         data.content_intro = intro.intro;
         data.content_source = intro.source;

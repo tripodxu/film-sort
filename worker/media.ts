@@ -376,7 +376,7 @@ async function fetchBaiduBaike(query: string): Promise<{ intro: string; source: 
   }
 }
 
-export async function fetchContentIntro(title: string, mediaType?: "movie" | "book" | "music"): Promise<{ intro: string; source: string } | null> {
+export async function fetchContentIntro(title: string, mediaType?: "movie" | "book" | "music", creator?: string): Promise<{ intro: string; source: string } | null> {
   // 构建候选标题列表（含消歧义提示）
   const candidates = [title];
   if (mediaType === "book") candidates.push(`${title} (小说)`, `${title} (书籍)`);
@@ -394,6 +394,19 @@ export async function fetchContentIntro(title: string, mediaType?: "movie" | "bo
   // 优先中文
   if (zh) return zh;
   if (en) return en;
+
+  // 创作者 + 标题组合搜索（如 "三体 刘慈欣"、"范特西 周杰伦"）
+  if (creator) {
+    const creatorCandidates = [`${title} ${creator}`];
+    const [zh2, en2] = await Promise.allSettled([
+      fetchWikipedia(creatorCandidates, "zh", 10000, mediaType),
+      fetchWikipedia(creatorCandidates, "en", 8000, mediaType),
+    ]);
+    const zhR = zh2.status === "fulfilled" ? zh2.value : null;
+    const enR = en2.status === "fulfilled" ? en2.value : null;
+    if (zhR) return zhR;
+    if (enR) return enR;
+  }
 
   // 百度百科兜底
   try {
