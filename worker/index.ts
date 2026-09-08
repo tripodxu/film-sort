@@ -123,7 +123,7 @@ const DASHBOARD_HTML = `<!DOCTYPE html>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>ART/RANK 后台看板</title>
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4"><\/script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4" onerror="window.__chartFailed=true"><\/script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 :root{--bg:#0a0c0a;--card:#141914;--border:#2a3a2a;--accent:#d8f86a;--muted:#8a9a8a;--text:#e0e8e0;--green:#4ade80;--red:#f87171;--blue:#60a5fa;--yellow:#facc15}
@@ -358,6 +358,7 @@ async function load() {
       '</div>'
     ].join('');
     var dailyData = d.daily.reverse();
+    if(typeof Chart!=='undefined'){
     new Chart(document.getElementById('dailyChart'), {
       type: 'bar',
       data: {
@@ -378,6 +379,7 @@ async function load() {
       },
       options: { responsive: true, plugins: { legend: { labels: { color: '#8a9a8a', font: { size: 11 } } } } }
     });
+    }
   } catch (e) {
     document.getElementById('app').innerHTML = '<div class="error">加载失败: ' + e.message + '</div>';
   }
