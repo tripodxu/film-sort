@@ -293,7 +293,7 @@ async function load() {
           '<tbody>', filteredAccounts.map(function(a) {
             var time = new Date(a.created_at).toLocaleString('zh-CN', {year:'2-digit',month:'2-digit',day:'2-digit'});
             var disabled = !!a.disabled_at;
-            return '<tr><td>'+a.email+'</td><td>'+(a.nickname||'-')+'</td><td><span class="badge '+(disabled?'badge-err':'badge-ok')+'">'+(disabled?'已禁用':'正常')+'</span></td><td style="color:var(--muted)">'+time+'</td><td><button onclick="toggleAccount('+a.id+','+disabled+')" class="table-action '+(disabled?'restore':'warn')+'">'+(disabled?'恢复':'禁用')+'</button> <button onclick="clearAccountData('+a.id+',\'profile\')" class="table-action">画像</button> <button onclick="clearAccountData('+a.id+',\'collections\')" class="table-action">清单</button> <button onclick="deleteAccount('+a.id+')" class="table-action danger">删除</button> <button onclick="resetPassword('+a.id+')" class="table-action warn">重置密码</button></td></tr>';
+            return '<tr><td>'+a.email+'</td><td>'+(a.nickname||'-')+'</td><td><span class="badge '+(disabled?'badge-err':'badge-ok')+'">'+(disabled?'已禁用':'正常')+'</span></td><td style="color:var(--muted)">'+time+'</td><td><button onclick="toggleAccount('+a.id+','+disabled+')" class="table-action '+(disabled?'restore':'warn')+'">'+(disabled?'恢复':'禁用')+'</button> <button onclick="clearAccountData('+a.id+',&apos;profile&apos;)" class="table-action">画像</button> <button onclick="clearAccountData('+a.id+',&apos;collections&apos;)" class="table-action">清单</button> <button onclick="deleteAccount('+a.id+')" class="table-action danger">删除</button> <button onclick="resetPassword('+a.id+')" class="table-action warn">重置密码</button></td></tr>';
           }).join(''), '</tbody></table>',
         '</div>',
         '<div class="card section-anchor" id="posters"><h3 style="margin-bottom:12px"><span class="status-dot err"></span>海报获取失败 ('+filteredPosterErrors.length+' / '+((d.poster_errors||[]).length)+')</h3>',
@@ -995,34 +995,38 @@ async function route(request: Request, env: Env): Promise<Response> {
   }
   if (url.pathname === "/api/movie/detail" && request.method === "GET") {
     const detailUrl = url.searchParams.get("url")?.trim();
-    if (!detailUrl || !detailUrl.includes("movie.douban.com/subject/")) return json({ status: false, msg: "缺少参数 url", data: null }, 400);
-    const movieId = detailUrl.match(/subject\/(\d+)/)?.[1];
-    if (!movieId) return json({ status: false, msg: "invalid_url", data: null }, 400);
-    // Use search.douban.com to get movie info (avoids anti-bot on movie.douban.com)
-    try {
-      const search = await doubanSearch("movie", movieId, 1);
-      const found = search.data.find(i => i.cover_link?.includes(`/subject/${movieId}/`));
-      if (found) {
-        return json({
-          status: true, msg: "获取成功", time: search.time,
-          data: {
-            title: found.title,
-            pic: found.cover,
-            rating: String(found.rating ?? ""),
-            year: found.year ?? "",
-            类型: Array.isArray(found.type) ? found.type.join("/") : "",
-            "制片国家/地区": found.country ?? "",
-            片长: found.duration ?? "",
-            主演: Array.isArray(found.actors) ? found.actors.join("/") : "",
-          }
-        }, 200, { "cache-control": "public, max-age=86400" });
-      }
-      // If ID search didn't match, try direct scrape as last resort
-      const result = await doubanMovieDetail(detailUrl);
-      return json(result, result.status ? 200 : 502, { "cache-control": "public, max-age=300" });
-    } catch {
-      return json({ status: false, msg: "豆瓣暂不可用", data: null }, 502, { "cache-control": "public, max-age=60" });
+    const title = url.searchParams.get("title")?.trim();
+    if (!detailUrl && !title) return json({ status: false, msg: "缺少参数 url 或 title", data: null }, 400);
+    
+    // Strategy 1: If title provided, search by title (works with anti-bot)
+    if (title) {
+      try {
+        const search = await doubanSearch("movie", title, 1);
+        const found = detailUrl 
+          ? search.data.find(i => i.cover_link?.includes(`/subject/${detailUrl.match(/subject\/(\d+)/)?.[1]}/`)) ?? search.data[0]
+          : search.data[0];
+        if (found) {
+          return json({
+            status: true, msg: "获取成功", time: search.time,
+            data: {
+              title: found.title, pic: found.cover, rating: String(found.rating ?? ""),
+              year: found.year ?? "", 类型: Array.isArray(found.type) ? found.type.join("/") : "",
+              "制片国家/地区": found.country ?? "", 片长: found.duration ?? "",
+              主演: Array.isArray(found.actors) ? found.actors.join("/") : "",
+            }
+          }, 200, { "cache-control": "public, max-age=86400" });
+        }
+      } catch {}
     }
+    
+    // Strategy 2: Try direct scrape (works for some movies)
+    if (detailUrl) {
+      if (!detailUrl.includes("movie.douban.com/subject/")) return json({ status: false, msg: "无效URL", data: null }, 400);
+      const result = await doubanMovieDetail(detailUrl);
+      if (result.status) return json(result, 200, { "cache-control": "public, max-age=86400" });
+    }
+    
+    return json({ status: false, msg: "豆瓣反爬限制，详情暂不可用", data: null }, 502, { "cache-control": "public, max-age=60" });
   }
   if (url.pathname === "/api/music/detail" && request.method === "GET") {
     const detailUrl = url.searchParams.get("url")?.trim();
