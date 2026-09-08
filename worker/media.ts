@@ -752,12 +752,12 @@ export async function doubanMovieDetail(url: string): Promise<{ status: boolean;
   }
 }
 
-export async function doubanMusicDetail(url: string): Promise<{ status: boolean; msg: string; time: string; data: MusicDetail | null; debug?: Record<string, unknown> }> {
+export async function doubanMusicDetail(url: string): Promise<{ status: boolean; msg: string; time: string; data: MusicDetail | null }> {
   const t0 = Date.now();
   try {
     if (!url.includes("music.douban.com/subject/")) throw new Error("Invalid music URL");
     if (Date.now() < cooldownUntil) return { status: false, msg: `豆瓣限流中，请${Math.ceil((cooldownUntil - Date.now()) / 1000)}秒后重试`, time: "0s", data: null };
-    const { html, debug } = await fetchDetailPage(url);
+    const { html } = await fetchDetailPage(url);
     const detail: MusicDetail = { title: "", pic: "", rating: "" };
     const titleMatch = html.match(/<span\s+property="v:itemreviewed"[^>]*>([^<]+)<\/span>/);
     detail.title = titleMatch ? cleanHtml(titleMatch[1]) : extractBetween(html, "<title>", "</title>").split("(")[0].trim();
@@ -775,32 +775,17 @@ export async function doubanMusicDetail(url: string): Promise<{ status: boolean;
       const value = line.substring(colonIdx + 1).trim();
       if (field && value && !field.includes("class=")) detail[field] = value;
     }
-    // Content intro - try multiple patterns
-    const introPatterns = [
-      { name: "span.all", regex: /<span\s+class="all"[^>]*>([\s\S]*?)<\/span>/ },
-      { name: "div.intro", regex: /<div\s+class="intro"[^>]*>([\s\S]*?)<\/div>/ },
-      { name: "link-report intro", regex: /id="link-report"[\s\S]*?<div\s+class="intro"[^>]*>([\s\S]*?)<\/div>/ },
-      { name: "span[property=v:summary]", regex: /<span\s+property="v:summary"[^>]*>([\s\S]*?)<\/span>/ },
-      { name: "div.abstract", regex: /<div\s+class="abstract"[^>]*>([\s\S]*?)<\/div>/ },
-    ];
-    for (const pattern of introPatterns) {
-      const match = html.match(pattern.regex);
-      if (match && match[1]?.trim()) {
-        detail.content_intro = cleanHtml(match[1]);
-        debug.intro_pattern = pattern.name;
-        break;
-      }
-    }
-    if (!detail.content_intro) {
-      debug.intro_patterns_tried = introPatterns.map(p => p.name);
-      debug.html_around_intro = html.substring(html.indexOf("intro"), html.indexOf("intro") + 200);
-    }
+    // Content intro
+    const introMatch = html.match(/<span\s+property="v:summary"[^>]*>([\s\S]*?)<\/span>/) ??
+      html.match(/<span\s+class="all"[^>]*>([\s\S]*?)<\/span>/) ??
+      html.match(/<div\s+class="intro"[^>]*>([\s\S]*?)<\/div>/);
+    if (introMatch) detail.content_intro = cleanHtml(introMatch[1]);
     const songMatches = html.match(/<div\s+class="song-items-wrapper"[\s\S]*?<\/div>/);
     if (songMatches) {
       const songNames = songMatches[0].match(/<span\s+class="song-name"[^>]*>([^<]+)<\/span>/g);
       if (songNames) detail.songs = songNames.map(m => cleanHtml(m)).filter(Boolean);
     }
-    return { status: true, msg: "获取成功", time: `${((Date.now() - t0) / 1000).toFixed(3)}s`, data: detail, debug };
+    return { status: true, msg: "获取成功", time: `${((Date.now() - t0) / 1000).toFixed(3)}s`, data: detail };
   } catch (error) {
     return { status: false, msg: error instanceof Error ? error.message : "获取失败", time: `${((Date.now() - t0) / 1000).toFixed(3)}s`, data: null };
   }
