@@ -298,21 +298,34 @@ async function fetchWikipedia(titles: string[], lang: "zh" | "en" = "zh", timeou
       }
     }
 
-    // Phase 2: generator=search 搜索标题（跳过消歧义页，只匹配标题避免误命中）
+    // Phase 2: list=search 搜标题 → titles 取摘要（两步，避免 generator 误匹配内容）
     const params2 = new URLSearchParams({
-      action: "query", generator: "search", gsrsearch: titles.join("|"),
-      gsrwhat: "title", gsrnamespace: "0", gsrlimit: "5",
-      prop: "extracts", exintro: "true", explaintext: "true", exlimit: "5", redirects: "1", format: "json",
+      action: "query", list: "search", srsearch: titles.join("|"),
+      srwhat: "title", srnamespace: "0", srlimit: "5", redirects: "1", format: "json",
     });
     const r2 = await fetch(`https://${lang}.wikipedia.org/w/api.php?${params2}`, {
       headers: { "user-agent": USER_AGENTS[0], "accept": "application/json" },
       signal: AbortSignal.timeout(timeoutMs),
     });
     if (r2.ok) {
-      const d2 = await r2.json() as { query?: { pages?: Record<string, { extract?: string; missing?: boolean }> } };
-      if (d2.query?.pages) {
-        const valid = Object.values(d2.query.pages).filter((p) => !p.missing && p.extract && p.extract.length > 30);
-        if (valid.length > 0) return { intro: valid[0].extract!, source: `${lang}wiki` };
+      const d2 = await r2.json() as { query?: { search?: { title: string }[] } };
+      const searchTitles = d2.query?.search?.map((s) => s.title).filter(Boolean) ?? [];
+      if (searchTitles.length > 0) {
+        const params3 = new URLSearchParams({
+          action: "query", titles: searchTitles.join("|"),
+          prop: "extracts", exintro: "true", explaintext: "true", exlimit: "5", redirects: "1", format: "json",
+        });
+        const r3 = await fetch(`https://${lang}.wikipedia.org/w/api.php?${params3}`, {
+          headers: { "user-agent": USER_AGENTS[0], "accept": "application/json" },
+          signal: AbortSignal.timeout(timeoutMs),
+        });
+        if (r3.ok) {
+          const d3 = await r3.json() as { query?: { pages?: Record<string, { extract?: string; missing?: boolean }> } };
+          if (d3.query?.pages) {
+            const valid = Object.values(d3.query.pages).filter((p) => !p.missing && p.extract && p.extract.length > 30);
+            if (valid.length > 0) return { intro: valid[0].extract!, source: `${lang}wiki` };
+          }
+        }
       }
     }
     return null;
