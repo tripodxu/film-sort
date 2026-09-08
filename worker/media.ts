@@ -12,10 +12,10 @@ const USER_AGENTS = [
 let uaIndex = 0;
 function nextUA(): string { return USER_AGENTS[uaIndex++ % USER_AGENTS.length]; }
 
-// Rate limiting: track last request time per domain
+// Rate limiting: track cooldown per domain
 const lastRequestTime = new Map<string, number>();
-const MIN_DELAY_MS = 800; // Minimum delay between requests to same domain
-let cooldownUntil = 0; // Global cooldown when 403 detected
+const MIN_DELAY_MS = 800;
+const cooldownMap = new Map<string, number>();
 
 function getDomain(url: string): string {
   try { return new URL(url).hostname; } catch { return ""; }
@@ -23,10 +23,10 @@ function getDomain(url: string): string {
 
 async function throttle(domain: string): Promise<void> {
   const now = Date.now();
-  // Global cooldown
-  if (now < cooldownUntil) {
-    const wait = cooldownUntil - now;
-    await new Promise(r => setTimeout(r, wait));
+  // Per-domain cooldown
+  const cooldown = cooldownMap.get(domain) ?? 0;
+  if (now < cooldown) {
+    await new Promise(r => setTimeout(r, cooldown - now));
   }
   // Per-domain delay
   const last = lastRequestTime.get(domain) ?? 0;
@@ -79,9 +79,9 @@ async function upstream(url: string, retries = 2): Promise<Response> {
         redirect: "follow",
       });
       if (response.status === 403 || response.status === 418) {
-        // Rate limited - activate cooldown
-        cooldownUntil = Date.now() + (attempt + 1) * 5000;
-        console.warn(`Rate limited (${response.status}) on ${domain}, cooldown ${cooldownUntil - Date.now()}ms`);
+        // Rate limited - activate per-domain cooldown
+        cooldownMap.set(domain, Date.now() + (attempt + 1) * 5000);
+        console.warn(`Rate limited (${response.status}) on ${domain}`);
         if (attempt < retries) continue;
         throw new Error(`Rate limited after ${retries + 1} attempts`);
       }
@@ -350,7 +350,7 @@ async function searchCover(query: string, type: "movie" | "book" | "music"): Pro
       redirect: "follow",
     });
     if (response.status === 403 || response.status === 418) {
-      cooldownUntil = Date.now() + 10000;
+      cooldownMap.set("search.douban.com", Date.now() + 10000);
       console.warn(`searchCover rate limited (${response.status})`);
       return undefined;
     }
@@ -438,7 +438,7 @@ async function fetchSearchList(type: "movie" | "book" | "music", query: string, 
     redirect: "follow",
   });
   if (response.status === 403 || response.status === 418) {
-    cooldownUntil = Date.now() + 10000;
+    cooldownMap.set("search.douban.com", Date.now() + 10000);
     throw new Error(`Rate limited: ${response.status}`);
   }
   if (!response.ok) throw new Error(`HTTP ${response.status}`);
@@ -525,9 +525,10 @@ function parseMusicSearchItem(item: SearchItem, base: SearchResult): SearchResul
 export async function doubanSearch(type: "movie" | "book" | "music", query: string, page = 1): Promise<{ status: boolean; msg: string; time: string; data: SearchResult[] }> {
   const t0 = Date.now();
   try {
-    // Check global cooldown
-    if (Date.now() < cooldownUntil) {
-      return { status: false, msg: `豆瓣限流中，请${Math.ceil((cooldownUntil - Date.now()) / 1000)}秒后重试`, time: "0s", data: [] };
+    // Check per-domain cooldown for search.douban.com
+    const searchCooldown = cooldownMap.get("search.douban.com") ?? 0;
+    if (Date.now() < searchCooldown) {
+      return { status: false, msg: `豆瓣限流中，请${Math.ceil((searchCooldown - Date.now()) / 1000)}秒后重试`, time: "0s", data: [] };
     }
     const data = await fetchSearchList(type, query, page);
     return { status: true, msg: "获取成功", time: `${((Date.now() - t0) / 1000).toFixed(3)}s`, data };
@@ -620,8 +621,8 @@ async function fetchDetailPage(url: string): Promise<{ html: string; debug: Reco
   steps.push(`fetch done: status=${response.status}, url=${response.url?.slice(0,80)}`);
   
   if (response.status === 403 || response.status === 418) {
-    cooldownUntil = Date.now() + 10000;
-    steps.push(`rate limited, cooldown set`);
+    cooldownMap.set(domain, Date.now() + 10000);
+    steps.push(`rate limited on ${domain}, cooldown set`);
     throw new Error(`Rate limited: ${response.status}`);
   }
   if (!response.ok) {
@@ -669,7 +670,8 @@ export async function doubanBookDetail(url: string): Promise<{ status: boolean; 
   const t0 = Date.now();
   try {
     if (!url.includes("book.douban.com/subject/")) throw new Error("Invalid book URL");
-    if (Date.now() < cooldownUntil) return { status: false, msg: `豆瓣限流中，请${Math.ceil((cooldownUntil - Date.now()) / 1000)}秒后重试`, time: "0s", data: null };
+    const bookCooldown = cooldownMap.get("book.douban.com") ?? 0;
+    if (Date.now() < bookCooldown) return { status: false, msg: `豆瓣限流中，请${Math.ceil((bookCooldown - Date.now()) / 1000)}秒后重试`, time: "0s", data: null };
     const { html } = await fetchDetailPage(url);
     const detail: BookDetail = { title: "", pic: "", rating: "" };
     // Title
@@ -717,7 +719,8 @@ export async function doubanMovieDetail(url: string): Promise<{ status: boolean;
   const t0 = Date.now();
   try {
     if (!url.includes("movie.douban.com/subject/")) throw new Error("Invalid movie URL");
-    if (Date.now() < cooldownUntil) return { status: false, msg: `豆瓣限流中，请${Math.ceil((cooldownUntil - Date.now()) / 1000)}秒后重试`, time: "0s", data: null };
+    const movieCooldown = cooldownMap.get("movie.douban.com") ?? 0;
+    if (Date.now() < movieCooldown) return { status: false, msg: `豆瓣限流中，请${Math.ceil((movieCooldown - Date.now()) / 1000)}秒后重试`, time: "0s", data: null };
     const { html, debug } = await fetchDetailPage(url);
     const detail: MovieDetail = { title: "", pic: "", rating: "" };
     const titleMatch = html.match(/<span\s+property="v:itemreviewed"[^>]*>([^<]+)<\/span>/);
@@ -756,7 +759,8 @@ export async function doubanMusicDetail(url: string): Promise<{ status: boolean;
   const t0 = Date.now();
   try {
     if (!url.includes("music.douban.com/subject/")) throw new Error("Invalid music URL");
-    if (Date.now() < cooldownUntil) return { status: false, msg: `豆瓣限流中，请${Math.ceil((cooldownUntil - Date.now()) / 1000)}秒后重试`, time: "0s", data: null };
+    const musicCooldown = cooldownMap.get("music.douban.com") ?? 0;
+    if (Date.now() < musicCooldown) return { status: false, msg: `豆瓣限流中，请${Math.ceil((musicCooldown - Date.now()) / 1000)}秒后重试`, time: "0s", data: null };
     const { html } = await fetchDetailPage(url);
     const detail: MusicDetail = { title: "", pic: "", rating: "" };
     const titleMatch = html.match(/<span\s+property="v:itemreviewed"[^>]*>([^<]+)<\/span>/);
