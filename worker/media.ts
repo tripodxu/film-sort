@@ -279,15 +279,21 @@ export async function doubanTop250(limit: number): Promise<DoubanWork[]> {
 // ===== Wikipedia & Baidu Baike for content_intro =====
 
 async function fetchWikipedia(titles: string[], lang: "zh" | "en" = "zh", timeoutMs = 10000): Promise<{ intro: string; source: string } | null> {
+  // 构建搜索词：原始标题 + 消歧义后缀（如有）
+  const searchTerms = titles.join("|");
+
   try {
-    // MediaWiki action=query API — 更可靠，支持多标题、自动跟随重定向
+    // 用 generator=search 搜索页面并直接获取摘要，自动跳过消歧义页
     const params = new URLSearchParams({
       action: "query",
-      titles: titles.join("|"),
+      generator: "search",
+      gsrsearch: searchTerms,
+      gsrnamespace: "0",
+      gsrlimit: "5",
       prop: "extracts",
       exintro: "true",
       explaintext: "true",
-      exlimit: "1",
+      exlimit: "5",
       redirects: "1",
       format: "json",
     });
@@ -301,11 +307,11 @@ async function fetchWikipedia(titles: string[], lang: "zh" | "en" = "zh", timeou
       query?: { pages?: Record<string, { title?: string; extract?: string; missing?: boolean }> };
     };
     if (!data.query?.pages) return null;
-    // 取第一个有 extract 的页面
-    for (const page of Object.values(data.query.pages)) {
-      if (page.extract && !page.missing && page.extract.length > 30) {
-        return { intro: page.extract, source: `${lang}wiki` };
-      }
+    // 取第一个有效摘要（跳过消歧义页面和缺失页面）
+    const pages = Object.values(data.query.pages)
+      .filter((p) => !p.missing && p.extract && p.extract.length > 30);
+    if (pages.length > 0) {
+      return { intro: pages[0].extract!, source: `${lang}wiki` };
     }
     return null;
   } catch {
