@@ -254,7 +254,7 @@ export function deserializeRankingState(serialized: string): RankingState {
   if (isRankingState(parsed)) {
     const state = parsed as RankingState;
     if (!state.preferenceTension) return { ...state, preferenceTension: updateCycleTension(state.cycleEvents) };
-    const patchedEvents = state.cycleEvents.map((event) => "tensionRounds" in event ? event : { ...event, tensionRounds: 0 }) as readonly CycleEvent[];
+    const patchedEvents = state.cycleEvents.map((e) => { const event = e as CycleEvent & { tensionRounds?: number }; return event.tensionRounds !== undefined ? event as CycleEvent : { ...event, tensionRounds: 0 } as CycleEvent; }) as readonly CycleEvent[];
     return patchedEvents === state.cycleEvents ? state : { ...state, cycleEvents: patchedEvents, preferenceTension: updateCycleTension(patchedEvents) };
   }
   if (isLegacyState(parsed)) return migrateLegacyState(parsed);
