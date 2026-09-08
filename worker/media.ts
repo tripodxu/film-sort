@@ -335,17 +335,28 @@ async function fetchWikipedia(titles: string[], lang: "zh" | "en" = "zh", timeou
     }
 
     // Phase 3: 全文搜索 → 取第一个有效摘要
+    // 多词搜索时，验证结果 snippet 包含所有词（避免只匹配一个词的误命中）
+    const searchQuery = titles[0];
+    const searchWords = searchQuery.split(/\s+/).filter(Boolean);
     const params3 = new URLSearchParams({
-      action: "query", list: "search", srsearch: titles[0],
-      srnamespace: "0", srlimit: "5", redirects: "1", format: "json",
+      action: "query", list: "search", srsearch: searchQuery,
+      srnamespace: "0", srlimit: "10", redirects: "1", format: "json",
     });
     const r3 = await fetch(`https://${lang}.wikipedia.org/w/api.php?${params3}`, {
       headers: { "user-agent": USER_AGENTS[0], "accept": "application/json" },
       signal: AbortSignal.timeout(timeoutMs),
     });
     if (r3.ok) {
-      const d3 = await r3.json() as { query?: { search?: { title: string }[] } };
-      const st = d3.query?.search?.map((s) => s.title) ?? [];
+      const d3 = await r3.json() as { query?: { search?: { title: string; snippet?: string }[] } };
+      const results = d3.query?.search ?? [];
+      // 多词搜索时，过滤 snippet 包含所有搜索词的结果
+      const validResults = searchWords.length > 1
+        ? results.filter((s) => {
+            const text = (s.title + " " + (s.snippet ?? "")).toLowerCase();
+            return searchWords.every((w) => text.includes(w.toLowerCase()));
+          })
+        : results;
+      const st = validResults.map((s) => s.title);
       if (st.length > 0) {
         const result = await fetchExtracts(st, lang, timeoutMs);
         if (result) return result;
