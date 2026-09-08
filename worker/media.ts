@@ -334,32 +334,30 @@ async function fetchWikipedia(titles: string[], lang: "zh" | "en" = "zh", timeou
       }
     }
 
-    // Phase 3: 全文搜索 → 取第一个有效摘要
-    // 多词搜索时，验证结果 snippet 包含所有词（避免只匹配一个词的误命中）
+    // Phase 3: generator=search + prop=extracts 一步到位
     const searchQuery = titles[0];
     const searchWords = searchQuery.split(/\s+/).filter(Boolean);
     const params3 = new URLSearchParams({
-      action: "query", list: "search", srsearch: searchQuery,
-      srnamespace: "0", srlimit: "10", redirects: "1", format: "json",
+      action: "query", generator: "search", gsrsearch: searchQuery,
+      gsrnamespace: "0", gsrlimit: "5", redirects: "1",
+      prop: "extracts", exintro: "true", explaintext: "true", exlimit: "5", format: "json",
     });
     const r3 = await fetch(`https://${lang}.wikipedia.org/w/api.php?${params3}`, {
       headers: { "user-agent": USER_AGENTS[0], "accept": "application/json" },
       signal: AbortSignal.timeout(timeoutMs),
     });
     if (r3.ok) {
-      const d3 = await r3.json() as { query?: { search?: { title: string; snippet?: string }[] } };
-      const results = d3.query?.search ?? [];
-      // 多词搜索时，过滤 snippet 包含所有搜索词的结果
-      const validResults = searchWords.length > 1
-        ? results.filter((s) => {
-            const text = (s.title + " " + (s.snippet ?? "")).toLowerCase();
-            return searchWords.every((w) => text.includes(w.toLowerCase()));
-          })
-        : results;
-      const st = validResults.map((s) => s.title);
-      if (st.length > 0) {
-        const result = await fetchExtracts(st, lang, timeoutMs);
-        if (result) return result;
+      const d3 = await r3.json() as { query?: { pages?: Record<string, { title?: string; extract?: string; missing?: boolean }> } };
+      if (d3.query?.pages) {
+        const pages = Object.values(d3.query.pages).filter((p) => !p.missing && p.extract && p.extract.length > 30);
+        // 多词搜索时，验证摘要包含所有搜索词
+        const valid = searchWords.length > 1
+          ? pages.filter((p) => {
+              const text = ((p.title ?? "") + " " + p.extract!).toLowerCase();
+              return searchWords.every((w) => text.includes(w.toLowerCase()));
+            })
+          : pages;
+        if (valid.length > 0) return { intro: valid[0].extract!, source: `${lang}wiki` };
       }
     }
     return null;
