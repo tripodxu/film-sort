@@ -432,7 +432,7 @@ export default function App() {
     try {
       const ok = (await fetch("/api/account/profile", { method: "PUT", headers: { "content-type": "application/json", authorization: `Bearer ${accountToken}` }, body: JSON.stringify({ profile: next }), keepalive })).ok;
       setSyncStatus(ok ? "saved" : "error");
-      if (ok) setTimeout(() => setSyncStatus("idle"), 3000);
+      setTimeout(() => setSyncStatus("idle"), ok ? 3000 : 8000);
     } catch { setSyncStatus("error"); }
     finally { syncing.current = false; }
   }
