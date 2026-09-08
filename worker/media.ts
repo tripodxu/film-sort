@@ -279,39 +279,41 @@ export async function doubanTop250(limit: number): Promise<DoubanWork[]> {
 // ===== Wikipedia & Baidu Baike for content_intro =====
 
 async function fetchWikipedia(titles: string[], lang: "zh" | "en" = "zh", timeoutMs = 10000): Promise<{ intro: string; source: string } | null> {
-  // 构建搜索词：原始标题 + 消歧义后缀（如有）
-  const searchTerms = titles.join("|");
-
   try {
-    // 用 generator=search 搜索页面并直接获取摘要，自动跳过消歧义页
-    const params = new URLSearchParams({
-      action: "query",
-      generator: "search",
-      gsrsearch: searchTerms,
-      gsrnamespace: "0",
-      gsrlimit: "5",
-      prop: "extracts",
-      exintro: "true",
-      explaintext: "true",
-      exlimit: "5",
-      redirects: "1",
-      format: "json",
+    // Phase 1: titles 直查（快速，但消歧义页无摘要）
+    const params1 = new URLSearchParams({
+      action: "query", titles: titles.join("|"),
+      prop: "extracts", exintro: "true", explaintext: "true", exlimit: "1", redirects: "1", format: "json",
     });
-    const url = `https://${lang}.wikipedia.org/w/api.php?${params}`;
-    const response = await fetch(url, {
+    const r1 = await fetch(`https://${lang}.wikipedia.org/w/api.php?${params1}`, {
       headers: { "user-agent": USER_AGENTS[0], "accept": "application/json" },
       signal: AbortSignal.timeout(timeoutMs),
     });
-    if (!response.ok) return null;
-    const data = await response.json() as {
-      query?: { pages?: Record<string, { title?: string; extract?: string; missing?: boolean }> };
-    };
-    if (!data.query?.pages) return null;
-    // 取第一个有效摘要（跳过消歧义页面和缺失页面）
-    const pages = Object.values(data.query.pages)
-      .filter((p) => !p.missing && p.extract && p.extract.length > 30);
-    if (pages.length > 0) {
-      return { intro: pages[0].extract!, source: `${lang}wiki` };
+    if (r1.ok) {
+      const d1 = await r1.json() as { query?: { pages?: Record<string, { extract?: string; missing?: boolean }> } };
+      if (d1.query?.pages) {
+        for (const p of Object.values(d1.query.pages)) {
+          if (p.extract && !p.missing && p.extract.length > 30) return { intro: p.extract, source: `${lang}wiki` };
+        }
+      }
+    }
+
+    // Phase 2: generator=search 搜索（跳过消歧义页，取有摘要的结果）
+    const params2 = new URLSearchParams({
+      action: "query", generator: "search", gsrsearch: titles.join("|"),
+      gsrnamespace: "0", gsrlimit: "5",
+      prop: "extracts", exintro: "true", explaintext: "true", exlimit: "5", redirects: "1", format: "json",
+    });
+    const r2 = await fetch(`https://${lang}.wikipedia.org/w/api.php?${params2}`, {
+      headers: { "user-agent": USER_AGENTS[0], "accept": "application/json" },
+      signal: AbortSignal.timeout(timeoutMs),
+    });
+    if (r2.ok) {
+      const d2 = await r2.json() as { query?: { pages?: Record<string, { extract?: string; missing?: boolean }> } };
+      if (d2.query?.pages) {
+        const valid = Object.values(d2.query.pages).filter((p) => !p.missing && p.extract && p.extract.length > 30);
+        if (valid.length > 0) return { intro: valid[0].extract!, source: `${lang}wiki` };
+      }
     }
     return null;
   } catch {
