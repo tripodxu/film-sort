@@ -347,24 +347,6 @@ export default function App() {
       setNotice("");
     } catch { setNotice(t("文件格式不正确，请使用有效的画像 JSON（最大 512 KB）。", "Invalid profile JSON (maximum 512 KB).")); }
   }
-  async function importPeerFromUrl(urlStr: string) {
-    if (!urlStr.trim()) return;
-    setPeerUrlBusy(true);
-    try {
-      // If it's an ART/RANK comparison link with payload param
-      const parsed = new URL(urlStr.trim());
-      const payload = parsed.searchParams.get("payload") ?? new URLSearchParams(parsed.hash.slice(1)).get("profile");
-      if (payload) { acceptPeer(decode(payload)); setPeerUrl(""); setNotice(t("已导入对方索引。", "Peer index imported.")); return; }
-      // Otherwise fetch the URL as JSON
-      const resp = await fetch(urlStr.trim());
-      if (!resp.ok) throw new Error();
-      const data = await resp.json();
-      acceptPeer(parseProfile(data));
-      setPeerUrl("");
-      setNotice(t("已导入对方索引。", "Peer index imported."));
-    } catch { setNotice(t("链接无效或无法解析，请检查 URL。", "Invalid or unreachable URL.")); }
-    finally { setPeerUrlBusy(false); }
-  }
   function namedProfile(): ArtisticProfile | null {
     if (!profile) return null;
     const name = profileName.trim() || t("我的艺术人格", "My artistic profile");
