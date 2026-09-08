@@ -21,5 +21,8 @@ describe("artistic profile data", () => {
     expect(result.overlap).toBe(100);
     expect(result.orderAgreement).toBe(67);
     expect(result.disagreements[0]).toMatchObject({ title: "A", difference: 1 });
+    expect(result.weightedTopAgreement).toBeGreaterThan(0);
+    expect(result.top3Agreement).toBe(3);
+    expect(result.rankDistance).toBeGreaterThan(0);
   });
 });

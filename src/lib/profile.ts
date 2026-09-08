@@ -108,20 +108,46 @@ export function deleteRanking(profile: ArtisticProfile, index: number): Artistic
   return { ...profile, rankings, updatedAt: new Date().toISOString() };
 }
 
+export interface RankingComparisonItem {
+  title: string;
+  ownRank: number;
+  peerRank: number;
+  difference: number;
+  ownItem?: RankedArtwork;
+  peerItem?: RankedArtwork;
+}
+
+export interface RankingComparison {
+  shared: RankingComparisonItem[];
+  overlap: number;
+  orderAgreement: number | null;
+  top5Overlap: number;
+  disagreements: RankingComparisonItem[];
+  sharedCount: number;
+  coverage: number;
+  weightedTopAgreement: number;
+  rankDistance: number;
+  spearmanLikeAgreement: number | null;
+  championAgreement: boolean | null;
+  top3Agreement: number;
+  commonPreference: string;
+  divergence: string;
+}
+
 function sameArtwork(a: RankedArtwork, b: RankedArtwork): boolean {
   return normalizeTitle(a.title) === normalizeTitle(b.title) &&
     (!a.year || !b.year || a.year === b.year) &&
     (!a.creator || !b.creator || normalizeTitle(a.creator) === normalizeTitle(b.creator));
 }
 
-export function compareRankings(own: RankingExport, peer: RankingExport) {
+export function compareRankings(own: RankingExport, peer: RankingExport): RankingComparison {
   if (own.kind !== peer.kind) throw new Error("Different media cannot be compared");
   const matched = new Set<string>();
   const shared = own.items.flatMap((item) => {
     const other = peer.items.find((candidate) => !matched.has(candidate.id) && sameArtwork(item, candidate));
     if (!other) return [];
     matched.add(other.id);
-    return [{ title: item.title, ownRank: item.rank, peerRank: other.rank, difference: Math.abs(item.rank - other.rank) }];
+    return [{ title: item.title, ownRank: item.rank, peerRank: other.rank, difference: Math.abs(item.rank - other.rank), ownItem: item, peerItem: other }];
   });
   let agreements = 0;
   let pairs = 0;
@@ -129,12 +155,51 @@ export function compareRankings(own: RankingExport, peer: RankingExport) {
     pairs++;
     if ((shared[i].ownRank - shared[j].ownRank) * (shared[i].peerRank - shared[j].peerRank) > 0) agreements++;
   }
+  const unionCount = own.items.length + peer.items.length - shared.length;
+  const maxRank = Math.max(own.items.length, peer.items.length, 1);
+  const rankDistance = shared.length ? Math.round(100 * shared.reduce((sum, item) => sum + item.difference, 0) / (shared.length * maxRank)) : 0;
+  const weightedTotal = shared.reduce((sum, item) => sum + 1 / item.ownRank + 1 / item.peerRank, 0);
+  const weightedAgreement = shared.length ? shared.reduce((sum, item) => sum + Math.min(1 / item.ownRank, 1 / item.peerRank), 0) / (weightedTotal / 2 || 1) : 0;
+  const n = shared.length;
+  const squaredDistance = shared.reduce((sum, item) => sum + (item.ownRank - item.peerRank) ** 2, 0);
+  const spearmanLikeAgreement = n < 2 ? null : Math.max(0, Math.round(100 * (1 - (6 * squaredDistance) / (n * (n * n - 1)))));
+  const top3Overlap = shared.filter((item) => item.ownRank <= 3 && item.peerRank <= 3).length;
+  const closest = [...shared].sort((a, b) => a.difference - b.difference).slice(0, 3).map((item) => item.title).join("、");
+  const biggest = [...shared].sort((a, b) => b.difference - a.difference)[0]?.title ?? "暂无共同作品";
   return {
     shared,
-    overlap: Math.round(100 * shared.length / (own.items.length + peer.items.length - shared.length)),
+    overlap: unionCount ? Math.round(100 * shared.length / unionCount) : 0,
     orderAgreement: pairs ? Math.round(100 * agreements / pairs) : null,
     top5Overlap: shared.filter((item) => item.ownRank <= 5 && item.peerRank <= 5).length,
     disagreements: [...shared].filter((item) => item.difference > 0).sort((a, b) => b.difference - a.difference).slice(0, 5),
+    sharedCount: shared.length,
+    coverage: Math.min(100, Math.round(100 * shared.length / Math.max(1, Math.min(own.items.length, peer.items.length)))),
+    weightedTopAgreement: Math.round(weightedAgreement * 100),
+    rankDistance,
+    spearmanLikeAgreement,
+    championAgreement: shared.length ? shared.some((item) => item.ownRank === 1 && item.peerRank === 1) : null,
+    top3Agreement: top3Overlap,
+    commonPreference: closest || "暂无共同作品",
+    divergence: biggest,
+  };
+}
+
+export function compareProfiles(own: ArtisticProfile, peer: ArtisticProfile) {
+  const sharedKinds = (Object.keys(mediaLabels) as MediaKind[]).filter((kind) => own.rankings.some((entry) => entry.kind === kind) && peer.rankings.some((entry) => entry.kind === kind));
+  const comparisons = sharedKinds.map((kind) => {
+    const ownRanking = own.rankings.find((entry) => entry.kind === kind)!;
+    const peerRanking = peer.rankings.find((entry) => entry.kind === kind)!;
+    return { kind, result: compareRankings(ownRanking, peerRanking) };
+  });
+  const sharedWorks = comparisons.reduce((sum, entry) => sum + entry.result.sharedCount, 0);
+  const totalWorks = Math.max(1, own.rankings.reduce((sum, entry) => sum + entry.items.length, 0) + peer.rankings.reduce((sum, entry) => sum + entry.items.length, 0));
+  return {
+    sharedKinds,
+    comparisons,
+    mediumCoverage: Math.round(100 * sharedKinds.length / Math.max(1, Math.max(own.rankings.length, peer.rankings.length))),
+    sharedWorks,
+    crossMediumAgreement: comparisons.length ? Math.round(comparisons.reduce((sum, entry) => sum + entry.result.weightedTopAgreement, 0) / comparisons.length) : null,
+    overlap: Math.round(100 * sharedWorks / totalWorks),
   };
 }
 

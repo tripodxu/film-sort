@@ -1,10 +1,10 @@
-import { lazy, Suspense, useEffect, useMemo, useState, type ReactNode } from "react";
-import { ArrowLeft, ArrowRight, BookOpen, Check, ChevronRight, CloudDownload, CloudUpload, Download, Film, Languages, Library, LogIn, Music2, Pause, Play, Plus, Search, Share2, SkipForward, Undo2, Upload, UserRound, Users, X } from "lucide-react";
+import { lazy, Suspense, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { ArrowLeft, ArrowRight, BookOpen, Check, ChevronRight, CloudDownload, CloudUpload, Download, Film, Languages, Library, LogIn, Music2, Pause, Play, Plus, Search, Share2, SkipForward, Sparkles, Trash2, Undo2, Upload, UserRound, Users, X } from "lucide-react";
 import { compressSync, decompressSync, strFromU8, strToU8 } from "fflate";
 import QRCode from "qrcode";
 import { createRankingState, chooseSide, deferWork, deserializeRankingState, getCurrentComparison, getRankingProgress, getRankingResult, serializeRankingState, skipWork, undoLastAction, type RankingState } from "./lib/ranking";
 import { getCollectionsByKind, mediaLabels, type MediaCollection, type MediaKind } from "./data/media";
-import { compareRankings, LIBRARY_KEY, MAX_PROFILE_BYTES, mergeRanking, parseProfile, profileText, readProfile, renameRanking, deleteRanking, type ArtisticProfile, type RankingExport } from "./lib/profile";
+import { compareProfiles, compareRankings, LIBRARY_KEY, MAX_PROFILE_BYTES, mergeRanking, parseProfile, profileText, readProfile, renameRanking, deleteRanking, type ArtisticProfile, type RankingExport, type RankedArtwork } from "./lib/profile";
 import { importCollection } from "./lib/collections";
 import { Poster } from "./components/Poster";
 
@@ -53,6 +53,13 @@ function saveFile(content: BlobPart, name: string, type: string) {
   const link = document.createElement("a"); link.href = url; link.download = name; link.click();
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
+function crossProfileSummary(own: ArtisticProfile, peer: ArtisticProfile): string {
+  return own.rankings.map((ranking) => {
+    const other = peer.rankings.find((entry) => entry.kind === ranking.kind);
+    if (!other) return `${ranking.kind}: only one side has a list`;
+    return `${ranking.kind}: mine=${ranking.items.slice(0, 5).map((item) => item.title).join(", ")}; theirs=${other.items.slice(0, 5).map((item) => item.title).join(", ")}`;
+  }).join("\n").slice(0, 2200);
+}
 
 export default function App() {
   const [locale, setLocale] = useState<Locale>(() => new URLSearchParams(location.search).get("lang") === "en" ? "en" : "zh");
@@ -72,12 +79,17 @@ export default function App() {
   const [topN, setTopN] = useState(10);
   const [seed, setSeed] = useState("");
   const [customText, setCustomText] = useState("");
+  const [customItem, setCustomItem] = useState("");
+  const [cloudCollections, setCloudCollections] = useState<Array<MediaCollection & { remoteId: number }>>([]);
+  const [aiInsight, setAiInsight] = useState("");
+  const [aiBusy, setAiBusy] = useState(false);
   const [search, setSearch] = useState("");
   const [notice, setNotice] = useState("");
   const [colCount, setColCount] = useState<number>(() => { try { return Number(localStorage.getItem("art-rank:cols")) || 3; } catch { return 3; } });
   const [busy, setBusy] = useState(false);
   const [doubanLimit, setDoubanLimit] = useState(50);
   const [format, setFormat] = useState<"json" | "txt" | "md" | "csv" | "png">("json");
+  const [exportLayout, setExportLayout] = useState<"editorial" | "collage" | "minimal">("editorial");
   const [shareUrl, setShareUrl] = useState("");
   const [qrUrl, setQrUrl] = useState("");
   const [accountOpen, setAccountOpen] = useState(new URLSearchParams(location.search).has("account"));
@@ -95,6 +107,9 @@ export default function App() {
   const [editingRankIdx, setEditingRankIdx] = useState<number | null>(null);
   const [editingRankTitle, setEditingRankTitle] = useState("");
   const [ringsLayout, setRingsLayout] = useState<"row" | "col">(() => { try { return (localStorage.getItem("art-rank:rings-layout") as "row" | "col") || "row"; } catch { return "row"; } });
+  const [detailWork, setDetailWork] = useState<{ work: RankedArtwork; kind: MediaKind; data: Record<string, unknown> | null; loading: boolean } | null>(null);
+  const syncTimer = useRef<number | null>(null);
+  const syncing = useRef(false);
 
   const comparison = ranking ? getCurrentComparison(ranking) : null;
   const progress = ranking ? getRankingProgress(ranking) : null;
@@ -161,6 +176,22 @@ export default function App() {
     try { localStorage.setItem(DRAFT_KEY, JSON.stringify(next)); } catch { setNotice(t("进度无法写入浏览器存储。", "Progress could not be saved in this browser.")); }
   }, [ranking, collection, view, profileName]);
   useEffect(() => {
+    if (!accountToken || !profile) return;
+    if (syncTimer.current !== null) window.clearTimeout(syncTimer.current);
+    syncTimer.current = window.setTimeout(() => { void syncProfile(false); }, 900);
+    return () => { if (syncTimer.current !== null) window.clearTimeout(syncTimer.current); };
+  }, [profile, accountToken]);
+  useEffect(() => {
+    const flush = () => { if (accountToken && profile) void syncProfile(true); };
+    const online = () => { if (accountToken && profile) void syncProfile(false); };
+    const visibility = () => { if (document.visibilityState === "hidden") flush(); };
+    window.addEventListener("pagehide", flush);
+    document.addEventListener("visibilitychange", visibility);
+    window.addEventListener("online", online);
+    return () => { window.removeEventListener("pagehide", flush); document.removeEventListener("visibilitychange", visibility); window.removeEventListener("online", online); };
+  }, [accountToken, profile]);
+  useEffect(() => { void loadCloudCollections(); }, [accountToken]);
+  useEffect(() => {
     const handler = (event: KeyboardEvent) => {
       if (view !== "sorting" || !comparison || event.repeat || accountOpen || (event.target instanceof HTMLElement && event.target.closest("input,textarea,select,[contenteditable=true]"))) return;
       const key = event.key.toLowerCase();
@@ -173,6 +204,34 @@ export default function App() {
   });
 
   function chooseKind(next: MediaKind) { setKind(next); setSource("builtin"); setSearch(""); setCustomText(""); setView("source"); }
+  function addCustomItem() {
+    const value = customItem.trim(); if (!value) return;
+    setCustomText((current) => current.trim() ? `${current.trim()}\n${value}` : value); setCustomItem("");
+  }
+  async function saveCollectionCloud(collectionToSave: MediaCollection) {
+    if (!accountToken) return;
+    try {
+      const response = await fetch("/api/account/collections", { method: "POST", headers: { "content-type": "application/json", authorization: `Bearer ${accountToken}` }, body: JSON.stringify({ kind: collectionToSave.kind, title: collectionToSave.title, description: collectionToSave.description, items: collectionToSave.works }) });
+      if (response.ok) void loadCloudCollections();
+    } catch { /* Local collection remains usable. */ }
+  }
+  async function loadCloudCollections() {
+    if (!accountToken) { setCloudCollections([]); return; }
+    try {
+      const response = await fetch("/api/account/collections", { headers: { authorization: `Bearer ${accountToken}` } });
+      const data = response.ok ? await response.json() as { collections?: Array<{ id: number; kind: MediaKind; title: string; description: string; items: MediaCollection["works"] }> } : null;
+      setCloudCollections((data?.collections ?? []).map((item) => ({ remoteId: item.id, id: `cloud-${item.id}`, kind: item.kind, source: "custom", title: item.title, description: item.description, topN: Math.min(10, item.items.length), works: item.items })));
+    } catch { setCloudCollections([]); }
+  }
+  async function deleteCloudCollection(item: MediaCollection & { remoteId: number }) {
+    if (!accountToken) return;
+    try {
+      const response = await fetch(`/api/account/collections/${item.remoteId}`, { method: "DELETE", headers: { authorization: `Bearer ${accountToken}` } });
+      if (!response.ok) throw new Error();
+      setCloudCollections((current) => current.filter((entry) => entry.remoteId !== item.remoteId));
+      setNotice(t("云端清单已移除。", "Cloud list removed."));
+    } catch { setNotice(t("无法移除云端清单，请稍后重试。", "Could not remove the cloud list. Please retry.")); }
+  }
   function changeCols(n: number) { setColCount(n); try { localStorage.setItem("art-rank:cols", String(n)); } catch {} }
   function renameRank(idx: number) {
     if (!profile || !editingRankTitle.trim()) return;
@@ -242,6 +301,25 @@ export default function App() {
     try { setCollection(draft.collection); setKind(draft.collection.kind); setRanking(deserializeRankingState(draft.ranking)); setProfileName(draft.profileName); setView("sorting"); }
     catch { setNotice(t("草稿无法读取。", "The draft could not be restored.")); }
   }
+  async function openArtworkDetail(work: RankedArtwork, detailKind: MediaKind) {
+    setDetailWork({ work, kind: detailKind, data: null, loading: true });
+    if (detailKind === "other") { setDetailWork({ work, kind: detailKind, data: null, loading: false }); return; }
+    try {
+      const response = await fetch(`/api/artwork/detail?kind=${encodeURIComponent(detailKind)}&q=${encodeURIComponent(work.title)}`, { signal: AbortSignal.timeout(20000) });
+      const payload = await response.json() as { data?: Record<string, unknown> | null };
+      setDetailWork({ work, kind: detailKind, data: payload.data ?? null, loading: false });
+    } catch { setDetailWork({ work, kind: detailKind, data: null, loading: false }); }
+  }
+  async function requestInsight() {
+    if (!profile || !peer || !crossProfileSummary(profile, peer)) return;
+    setAiBusy(true);
+    try {
+      const response = await fetch("/api/insights", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ summary: crossProfileSummary(profile, peer) }) });
+      const data = await response.json() as { insight?: string };
+      if (response.ok && data.insight) setAiInsight(data.insight); else setNotice(t("AI 解读暂不可用。", "AI insights are not available."));
+    } catch { setNotice(t("AI 解读暂不可用。", "AI insights are not available.")); }
+    finally { setAiBusy(false); }
+  }
   async function importProfile(file: File, target: "own" | "peer") {
     try {
       if (file.size > MAX_PROFILE_BYTES) throw new Error();
@@ -265,17 +343,45 @@ export default function App() {
     const next = namedProfile(); if (!next) return;
     persist(next);
     if (format === "png") {
-      await document.fonts.ready;
-      const canvas = document.createElement("canvas"); canvas.width = 1200;
-      const lines = next.rankings.flatMap((entry) => [label(entry.kind), ...entry.items.slice(0, 10).map((item) => `${String(item.rank).padStart(2, "0")}  ${item.title}`), ""]);
-      canvas.height = 290 + lines.length * 58;
-      const ctx = canvas.getContext("2d"); if (!ctx) return;
-      ctx.fillStyle = "#111313"; ctx.fillRect(0, 0, canvas.width, canvas.height);
-      ctx.fillStyle = "#d8f86a"; ctx.font = "bold 38px sans-serif"; ctx.fillText("ART/RANK", 70, 84);
-      ctx.fillStyle = "#f2f3ee"; ctx.font = "bold 46px sans-serif"; ctx.fillText(next.profileName, 70, 167, 1060);
-      lines.forEach((line, index) => { ctx.fillStyle = /^\d/.test(line) ? "#e0e4dc" : "#d8f86a"; ctx.font = "30px sans-serif"; ctx.fillText(line, 70, 260 + index * 58, 1060); });
-      canvas.toBlob((blob) => { if (blob) saveFile(blob, "art-profile.png", "image/png"); });
+      await exportProfilePng(next);
     } else saveFile(format === "json" ? JSON.stringify(next, null, 2) : profileText(next, format), `art-profile.${format}`, format === "json" ? "application/json" : "text/plain;charset=utf-8");
+  }
+  async function exportProfilePng(next: ArtisticProfile) {
+    await document.fonts.ready;
+    const canvas = document.createElement("canvas"); const width = 1200; const margin = 72;
+    const imageCache = new Map<string, HTMLImageElement>();
+    const imageUrl = (url: string) => { try { const parsed = new URL(url, location.origin); return parsed.hostname.endsWith("doubanio.com") ? `/api/image?url=${encodeURIComponent(parsed.toString())}` : parsed.toString(); } catch { return url; } };
+    const loadImage = async (work: { posterUrls?: readonly string[] }) => {
+      const source = work.posterUrls?.[0]; if (!source) return null; const cached = imageCache.get(source); if (cached) return cached;
+      return await new Promise<HTMLImageElement | null>((resolve) => { const image = new Image(); image.crossOrigin = "anonymous"; image.onload = () => { imageCache.set(source, image); resolve(image); }; image.onerror = () => resolve(null); image.src = imageUrl(source); });
+    };
+    const allItems = next.rankings.flatMap((entry) => entry.items);
+    await Promise.all(allItems.map((item) => loadImage(item)));
+    const rowHeight = exportLayout === "collage" ? 300 : 84;
+    const contentHeight = exportLayout === "minimal" ? next.rankings.reduce((sum, entry) => sum + 80 + entry.items.length * 44, 0) : next.rankings.reduce((sum, entry) => sum + 100 + Math.ceil(entry.items.length / (exportLayout === "collage" ? 5 : 1)) * rowHeight, 0);
+    canvas.width = width; canvas.height = Math.max(720, 280 + contentHeight);
+    const ctx = canvas.getContext("2d"); if (!ctx) return;
+    ctx.fillStyle = "#050806"; ctx.fillRect(0, 0, width, canvas.height);
+    ctx.fillStyle = "#79d9ae"; ctx.font = "600 24px Arial"; ctx.fillText("ART/RANK", margin, 76);
+    ctx.fillStyle = "#eef4ed"; ctx.font = "600 52px Arial"; ctx.fillText(next.profileName, margin, 150, width - margin * 2);
+    ctx.fillStyle = "#8ca296"; ctx.font = "16px Arial"; ctx.fillText(`${t("个人文化索引", "PERSONAL CULTURE INDEX")}  /  ${new Date().toLocaleDateString(locale === "zh" ? "zh-CN" : "en-US")}`, margin, 192);
+    const drawImage = (image: HTMLImageElement | null, x: number, y: number, w: number, h: number) => { ctx.save(); ctx.beginPath(); ctx.rect(x, y, w, h); ctx.clip(); if (image) { const scale = Math.max(w / image.width, h / image.height); const dw = image.width * scale; const dh = image.height * scale; ctx.drawImage(image, x + (w - dw) / 2, y + (h - dh) / 2, dw, dh); } else { ctx.fillStyle = "#1f3029"; ctx.fillRect(x, y, w, h); ctx.fillStyle = "#79d9ae"; ctx.font = "14px Arial"; ctx.fillText("NO COVER", x + 12, y + h / 2); } ctx.restore(); };
+    let cursor = 250;
+    for (const entry of next.rankings) {
+      ctx.fillStyle = "#79d9ae"; ctx.font = "600 14px Arial"; ctx.fillText(label(entry.kind).toUpperCase(), margin, cursor); ctx.fillStyle = "#d8e2d9"; ctx.font = "22px Arial"; ctx.fillText(entry.collectionTitle, margin + 100, cursor);
+      cursor += 28;
+      if (exportLayout === "minimal") {
+        entry.items.forEach((item) => { ctx.fillStyle = item.rank === 1 ? "#d8f86a" : "#dce7df"; ctx.font = `${item.rank === 1 ? "600" : "400"} 20px Arial`; ctx.fillText(`${String(item.rank).padStart(2, "0")}  ${item.title}`, margin, cursor); cursor += 44; });
+      } else if (exportLayout === "collage") {
+        const tileW = 188; const tileH = 248; const gap = 18;
+        entry.items.forEach((item, index) => { const col = index % 5; const row = Math.floor(index / 5); const x = margin + col * (tileW + gap); const y = cursor + row * (tileH + 50); const image = imageCache.get(item.posterUrls?.[0] ?? "") ?? null; drawImage(image, x, y, tileW, tileH); ctx.fillStyle = "#dce7df"; ctx.font = "14px Arial"; ctx.fillText(`${String(item.rank).padStart(2, "0")}  ${item.title}`.slice(0, 24), x, y + tileH + 24); }); cursor += Math.ceil(entry.items.length / 5) * (tileH + 50) + 28;
+      } else {
+        entry.items.forEach((item) => { const y = cursor; drawImage(imageCache.get(item.posterUrls?.[0] ?? "") ?? null, margin, y - 17, 44, 64); ctx.fillStyle = item.rank === 1 ? "#d8f86a" : "#dce7df"; ctx.font = `${item.rank === 1 ? "600" : "400"} 20px Arial`; ctx.fillText(`${String(item.rank).padStart(2, "0")}  ${item.title}`, margin + 62, y + 18, width - margin * 2 - 62); cursor += 84; }); cursor += 22;
+      }
+    }
+    ctx.fillStyle = "#43584b"; ctx.font = "13px Arial"; ctx.fillText(t("偏好没有标准答案", "PREFERENCE HAS NO ANSWER KEY"), margin, canvas.height - 34);
+    await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+    canvas.toBlob((blob) => { if (blob) saveFile(blob, `art-profile-${exportLayout}.png`, "image/png"); });
   }
   async function share() {
     const next = namedProfile(); if (!next) return;
@@ -308,6 +414,15 @@ export default function App() {
       persist(next); setCloudProfile(next); setNotice(t("画像已保存到账号。", "Profile saved to your account."));
     } catch { setNotice(t("同步失败，本地画像仍然保留。", "Sync failed. Your local profile is still available.")); }
     finally { setBusy(false); }
+  }
+  async function syncProfile(keepalive: boolean) {
+    if (!accountToken || !profile || syncing.current) return;
+    const next = namedProfile(); if (!next) return;
+    syncing.current = true;
+    try {
+      await fetch("/api/account/profile", { method: "PUT", headers: { "content-type": "application/json", authorization: `Bearer ${accountToken}` }, body: JSON.stringify({ profile: next }), keepalive });
+    } catch { /* Local profile remains the source of truth when offline. */ }
+    finally { syncing.current = false; }
   }
   async function accountAuth(mode: "login" | "register") {
     setAuthError(""); setBusy(true);
@@ -360,27 +475,29 @@ export default function App() {
     <section className="profile-overview"><div className="section-heading"><h2>{t("品味年轮", "Taste Rings")}</h2><div style={{ display: "flex", gap: 12, alignItems: "center" }}>{profile && <button className="text-button" onClick={() => setView("profile")}>{t("查看画像", "View profile")}<ArrowRight size={15} /></button>}{profile && <div style={{ display: "flex", gap: 4 }}>{["row","col"].map(m => <button key={m} onClick={() => { setRingsLayout(m as "row"|"col"); try { localStorage.setItem("art-rank:rings-layout", m); } catch {} }} style={{ width: 24, height: 24, borderRadius: 6, border: ringsLayout === m ? "1px solid var(--accent)" : "1px solid var(--line)", background: ringsLayout === m ? "rgba(216,248,106,.1)" : "transparent", color: ringsLayout === m ? "var(--accent)" : "var(--muted)", fontSize: 10, fontWeight: 600, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>{m === "row" ? "≡" : "≡"}</button>)}</div>}{profile && <button className="button quiet" onClick={clearAllData} style={{ fontSize: 11, padding: "4px 10px", borderRadius: 8, border: "1px solid var(--line)", color: "var(--muted)" }}>🗑 {t("清除数据", "Clear")}</button>}</div></div>{profile ? <div style={{ display: "flex", flexDirection: ringsLayout === "row" ? "column" : "row", gap: 20, flexWrap: "wrap" }}>{kinds.map(kind => { const entries = profile.rankings.map((r, i) => ({ ...r, _idx: i })).filter(r => r.kind === kind); if (entries.length === 0) return null; return <div key={kind} style={{ flex: ringsLayout === "row" ? "none" : "1 1 250px", minWidth: ringsLayout === "row" ? "auto" : 200 }}><div style={{ fontSize: 11, color: "var(--accent)", fontWeight: 600, marginBottom: 8, textTransform: "uppercase", letterSpacing: ".5px" }}>{label(kind as MediaKind)}</div><div style={{ display: "flex", flexDirection: ringsLayout === "row" ? "row" : "column", gap: 10, flexWrap: "wrap" }}>{entries.map(entry => { const idx = entry._idx; const isActive = editingRankIdx === idx; return <div key={`${entry.kind}-${entry.collectionTitle}-${idx}`} className="coordinate" style={{ position: "relative", flex: ringsLayout === "row" ? "0 0 auto" : "none" }}><div style={{ display: "flex", gap: 5, position: "absolute", top: 5, right: 5, zIndex: 2 }}><button onClick={(e) => { e.stopPropagation(); setEditingRankIdx(idx); setEditingRankTitle(entry.collectionTitle); }} title={t("重命名", "Rename")} style={{ width: 10, height: 10, borderRadius: "50%", background: "#f5c542", border: "1px solid #d4a830", cursor: "pointer", padding: 0 }} /><button onClick={(e) => { e.stopPropagation(); deleteRank(idx); }} title={t("删除", "Delete")} style={{ width: 10, height: 10, borderRadius: "50%", background: "#ff5f57", border: "1px solid #e04842", cursor: "pointer", padding: 0 }} /></div><button onClick={() => { setActiveKind(`${entry.kind}-${idx}`); setView("profile"); }} style={{ display: "flex", gap: 12, alignItems: "center", flex: 1, background: "none", border: "none", color: "inherit", cursor: "pointer", padding: 0, textAlign: "left" }}><Poster work={entry.items[0]} kind={entry.kind} /><div>{isActive ? <div style={{ display: "flex", gap: 4, alignItems: "center" }}><input type="text" value={editingRankTitle} onChange={(e) => setEditingRankTitle(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") renameRank(idx); if (e.key === "Escape") setEditingRankIdx(null); }} style={{ fontSize: 12, padding: "2px 6px", minHeight: "auto", width: "100%" }} autoFocus /><button className="text-button" onClick={(e) => { e.stopPropagation(); renameRank(idx); }} style={{ color: "var(--accent)", fontSize: 11, padding: "0 4px" }}>✓</button></div> : <h3>{entry.collectionTitle}</h3>}<small>{entry.items.length} {t("件作品", "works")}</small></div></button></div>; })}</div></div>; }).filter(Boolean)}</div> : <div className="empty-profile"><div className="sample-covers" aria-hidden="true">{getCollectionsByKind("film")[1]?.works.filter((work) => work.posterUrls?.length).slice(0, 3).map((work) => <Poster key={work.id} work={work} kind="film" />)}</div><div><h3>{t("还没有完成的画像", "No completed profile yet")}</h3><span>{t("电影 · 书籍 · 音乐 · 其他", "Films · Books · Music · Other")}</span></div>{fileInput("own", t("导入我的画像", "Import my profile"))}</div>}</section>
   </>;
   else if (view === "source") content = <>
-    {heading(`COLLECTION / ${label(kind)}`, t("选择作品来源", "Choose a collection"))}
-    <div className="segmented" role="tablist" aria-label={t("作品来源", "Collection source")}>{(["builtin", "custom", ...(kind === "film" || kind === "book" || kind === "music" ? ["douban"] : [])] as Array<"builtin" | "custom" | "douban">).map((item) => <button key={item} role="tab" aria-selected={source === item} className={source === item ? "active" : ""} onClick={() => { setSource(item); setNotice(""); }}>{item === "builtin" ? t("内置榜单", "Built-in") : item === "custom" ? t("自行导入", "Import") : t("豆瓣榜单", "Douban")}</button>)}</div>
+    {heading(`${label(kind)} / ${t("清单", "LIST")}`, t("先选一份清单", "Choose a list"), t("从熟悉的作品开始，或者把自己的收藏带进来。", "Start with a familiar list, or bring your own collection."))}
+    <div className="segmented" role="tablist" aria-label={t("清单来源", "List source")}>{(["builtin", "custom", ...(kind === "film" || kind === "book" || kind === "music" ? ["douban"] : [])] as Array<"builtin" | "custom" | "douban">).map((item) => <button key={item} role="tab" aria-selected={source === item} className={source === item ? "active" : ""} onClick={() => { setSource(item); setNotice(""); }}>{item === "builtin" ? t("精选清单", "Curated") : item === "custom" ? t("我的清单", "My list") : t("豆瓣精选", "Douban")}</button>)}</div>
     {source === "builtin" && <><div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}><label className="search-field" style={{ flex: 1, marginBottom: 0 }}><Search size={17} /><input aria-label={t("搜索榜单", "Search collections")} placeholder={t("搜索榜单或作品", "Search collections or works")} value={search} onChange={(event) => setSearch(event.target.value)} /></label><div style={{ display: "flex", gap: 4 }}>{[2,3,4].map(n => <button key={n} onClick={() => changeCols(n)} style={{ width: 32, height: 32, borderRadius: 8, border: colCount === n ? "1px solid var(--accent)" : "1px solid var(--line)", background: colCount === n ? "rgba(216,248,106,.1)" : "transparent", color: colCount === n ? "var(--accent)" : "var(--muted)", fontSize: 12, fontWeight: 600, cursor: "pointer" }}>{n}</button>)}</div></div><div className="collection-list" style={{ gridTemplateColumns: `repeat(${colCount}, minmax(0, 1fr))` }}>{collections.map((item, index) => <button key={item.id} className="collection-row" onClick={() => openCollection(item)}><span className="row-number">{String(index + 1).padStart(2, "0")}</span>{item.works[0] && <Poster work={item.works[0]} kind={item.kind} />}<div><h3>{item.title}</h3><small>{item.works.length} {t("件作品", "works")}</small></div><ChevronRight size={18} /></button>)}{!collections.length && <p className="empty-state">{t("没有匹配的榜单。", "No matching collections.")}</p>}</div></>}
-    {source === "custom" && <section className="import-form"><label htmlFor="custom-list">{t("作品清单", "Your collection")}</label><textarea id="custom-list" value={customText} onChange={(event) => setCustomText(event.target.value)} placeholder={t("作品名称", "Artwork titles")} /><div className="action-row"><label className="button secondary file-button"><Upload size={16} />{t("打开 TXT / JSON", "Open TXT / JSON")}<input type="file" aria-label={t("导入作品清单", "Import collection")} accept=".txt,.json,text/plain,application/json" onChange={async (event) => { const file = event.target.files?.[0]; if (file && file.size <= MAX_PROFILE_BYTES) setCustomText(await file.text()); else if (file) setNotice(t("文件超过 512 KB。", "File exceeds 512 KB.")); event.target.value = ""; }} /></label><button className="button primary" onClick={() => { try { openCollection(importCollection(kind, customText)); } catch { setNotice(t("请输入 2–300 件有效作品，或检查 JSON 格式。", "Enter 2–300 valid works, or check the JSON format.")); } }}>{t("载入清单", "Load collection")}<ArrowRight size={16} /></button></div></section>}
+    {source === "custom" && <section className="import-form"><label htmlFor="custom-item">{t("快速添加一件作品", "Add one work")}</label><div className="inline-input"><input id="custom-item" value={customItem} onChange={(event) => setCustomItem(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") addCustomItem(); }} placeholder={t("输入标题后回车", "Type a title and press Enter")} /><button className="button secondary" onClick={addCustomItem}><Plus size={16} />{t("加入清单", "Add")}</button></div><label htmlFor="custom-list">{t("批量清单", "Batch list")}</label><textarea id="custom-list" value={customText} onChange={(event) => setCustomText(event.target.value)} placeholder={t("每行一件，也支持逗号、TXT 或 JSON", "One work per line, commas, TXT, or JSON")} /><div className="action-row"><label className="button secondary file-button"><Upload size={16} />{t("打开 TXT / JSON", "Open TXT / JSON")}<input type="file" aria-label={t("导入作品清单", "Import collection")} accept=".txt,.json,text/plain,application/json" onChange={async (event) => { const file = event.target.files?.[0]; if (file && file.size <= MAX_PROFILE_BYTES) setCustomText(await file.text()); else if (file) setNotice(t("文件超过 512 KB。", "File exceeds 512 KB.")); event.target.value = ""; }} /></label><button className="button primary" onClick={() => { try { const next = importCollection(kind, customText); openCollection(next); void saveCollectionCloud(next); } catch { setNotice(t("请输入 2–300 件有效作品，或检查 JSON 格式。", "Enter 2–300 valid works, or check the JSON format.")); } }}>{t("载入并开始", "Load collection")}<ArrowRight size={16} /></button></div>{cloudCollections.filter((item) => item.kind === kind).length > 0 && <div className="cloud-collections"><div className="cloud-collections-heading"><span className="eyebrow">{t("我的云端清单", "MY CLOUD LISTS")}</span><button className="text-button" onClick={() => void loadCloudCollections()}>{t("刷新", "Refresh")}</button></div>{cloudCollections.filter((item) => item.kind === kind).map((item) => <div className="cloud-collection-row" key={item.id}><button className="collection-row" onClick={() => openCollection(item)}><span className="row-number">☁</span><div><strong>{item.title}</strong><small>{item.works.length} {t("件作品", "works")}</small></div><ChevronRight size={16} /></button><IconButton title={`${t("删除云端清单", "Delete cloud list")} ${item.title}`} onClick={() => void deleteCloudCollection(item)}><Trash2 size={15} /></IconButton></div>)}</div>}</section>}
     {source === "douban" && <section className="douban-source"><span className="eyebrow">{kind === "book" ? "DOUBAN / BOOKS" : kind === "music" ? "DOUBAN / MUSIC" : "DOUBAN / TOP 250"}</span><h2>{kind === "book" ? t("豆瓣读书 Top250", "Douban Book Top250") : kind === "music" ? t("豆瓣音乐 Top250", "Douban Music Top250") : t("豆瓣电影 Top250", "Douban Film Top250")}</h2><label htmlFor="douban-limit">{t("候选范围", "Candidate range")}</label><select id="douban-limit" value={doubanLimit} onChange={(event) => setDoubanLimit(Number(event.target.value))}>{[25, 50, 100, 250].map((n) => <option value={n} key={n}>Top {n}</option>)}</select><button className="button primary" disabled={busy} onClick={loadDouban}><Download size={16} />{busy ? t("正在读取…", "Loading…") : t("读取榜单", "Load collection")}</button></section>}
   </>;
   else if (view === "setup" && collection) content = <>
-    {heading(label(collection.kind), collection.title)}
+    {heading(`${label(collection.kind)} / ${t("准备", "READY")}`, collection.title, t("选择参与比较的作品，设定你想留下的 Top N。", "Choose the works and set the Top N you want to keep."))}
     <div className="setup-layout"><section className="settings"><label htmlFor="top-n">Top N <strong>{Math.min(topN, selected.length)}</strong></label><input id="top-n" type="range" min={1} max={Math.max(1, selected.length)} value={Math.min(topN, selected.length) || 1} onChange={(event) => setTopN(Number(event.target.value))} /><label htmlFor="seed">{t("顺序口令（可选）", "Order seed (optional)")}</label><input id="seed" maxLength={80} value={seed} onChange={(event) => setSeed(event.target.value)} /><label htmlFor="collection-name">{t("榜单名称", "Collection name")}</label><input id="collection-name" maxLength={160} value={collection.title} onChange={(event) => setCollection({ ...collection, title: event.target.value })} /><button className="button primary" disabled={selected.length < 2 || !collection.title.trim()} onClick={startRanking}><Play size={16} />{t("开始 1v1 取舍", "Start 1v1 ranking")}</button></section><section className="candidate-list"><div className="section-heading"><h2>{t("已看 / 已读 / 已听", "Experienced works")}</h2><label className="check-all"><input type="checkbox" checked={selected.length === collection.works.length} onChange={(event) => setSelected(event.target.checked ? collection.works.map((work) => work.id) : [])} />{selected.length} / {collection.works.length}</label></div><div className="candidate-scroll">{collection.works.map((work) => <label className="candidate-row" key={work.id}><input type="checkbox" checked={selected.includes(work.id)} onChange={(event) => setSelected(event.target.checked ? [...selected, work.id] : selected.filter((id) => id !== work.id))} /><Poster work={work} kind={kind} /><div><strong>{work.title}</strong><small>{work.creator} {work.year}</small></div></label>)}</div></section></div>
   </>;
   else if (view === "sorting" && collection && ranking && comparison && progress) content = <>
     <div className="duel-heading"><div><span className="eyebrow">{label(kind)} / TOP {ranking.topN}</span><h1>{collection.title}</h1></div><div className="comparison-count"><strong>{progress.comparisonCount}</strong><span>{t("次取舍", "choices")}</span></div></div>
-    <div className="progress-track" role="progressbar" aria-label={t("排序进度", "Ranking progress")} aria-valuenow={Math.round(progress.fraction * 100)} aria-valuemin={0} aria-valuemax={100}><span style={{ width: `${progress.fraction * 100}%` }} /></div><div className="progress-meta"><span>{progress.processed} / {progress.total}</span><span>{t("预计剩余", "Estimated remaining")} {progress.estimatedRemaining}</span></div>
-    <div className="duel-grid">{(["left", "right"] as const).map((side, index) => { const workId = side === "left" ? comparison.leftId : comparison.rightId; const work = worksById.get(workId)!; return <div key={side} className="artwork-card"><button className="artwork-main" onClick={() => act(side)} aria-label={`${t("选择", "Choose")} ${work.title}`}><div className="artwork-top"><span>0{index + 1}</span><span>{label(kind)}</span></div><Poster key={work.id} work={work} kind={kind} large /><div className="artwork-info"><h2>{work.title}</h2><p>{work.creator || work.subtitle || label(kind)} {work.year}</p></div><ArrowRight className="choose-arrow" size={19} /></button><div className="artwork-card-tools"><IconButton title={`${t("略过", "Skip")} ${work.title}`} onClick={(event) => { event.stopPropagation(); act(side === "left" ? "skip-left" : "skip-right"); }}><SkipForward size={15} /></IconButton><IconButton title={`${t("暂放", "Defer")} ${work.title}`} disabled={ranking.pendingIds.length + ranking.deferredIds.length === 0} onClick={(event) => { event.stopPropagation(); act(side === "left" ? "defer-left" : "defer-right"); }}><Pause size={15} /></IconButton></div></div>; })}</div>
-    <div className="duel-tools"><IconButton title={t("撤销", "Undo")} disabled={!ranking.decisionLog.length} onClick={() => act("undo")}><Undo2 size={19} /></IconButton></div>
+    <div className={`evidence-status ${ranking.cycleStatus !== "none" ? `cycle-${ranking.cycleStatus}` : ""}`}><span>{progress.phase === "verification" ? t("校准中", "Calibrating") : t("偏好采样中", "Preference sampling")}</span><small>{progress.phase === "verification" ? t(`正在复测 ${progress.verificationRemaining} 组相近取舍，让结果更贴近你的直觉。`, `Rechecking ${progress.verificationRemaining} close calls for a truer result.`) : t("相同组合会留出间隔；完成前会进行少量复测。", "Pairs are spaced apart, then a few close calls are rechecked.")}</small>{ranking.cycleStatus === "observed" && <em>{t("发现一个偏好回环，已安排复测。", "A preference loop was found and queued for review.")}</em>}{ranking.cycleStatus === "persistent" && <em>{t("这个偏好回环多次一致出现，保留它作为你的真实张力。", "This preference loop repeated consistently. It is part of your taste, not an error.")}</em>}</div>
+    <div className="progress-track" role="progressbar" aria-label={t("排序进度", "Ranking progress")} aria-valuenow={Math.round(progress.fraction * 100)} aria-valuemin={0} aria-valuemax={100}><span style={{ width: `${progress.fraction * 100}%` }} /></div><div className="progress-meta"><span>{progress.phase === "verification" ? t("复测阶段", "Verification") : `${progress.processed} / ${progress.total}`}</span><span>{t("预计剩余", "Estimated remaining")} {progress.estimatedRemaining}</span></div>
+    <div className="duel-grid">{(["left", "right"] as const).map((side, index) => { const workId = side === "left" ? comparison.leftId : comparison.rightId; const work = worksById.get(workId)!; return <div key={side} className="artwork-card"><button className="artwork-main" onClick={() => act(side)} aria-label={`${t("选择", "Choose")} ${work.title}`}><div className="artwork-top"><span>0{index + 1}</span><span>{comparison.phase === "verification" ? t("复测", "RECHECK") : label(kind)}</span></div><Poster key={work.id} work={work} kind={kind} large /><div className="artwork-info"><h2>{work.title}</h2><p>{work.creator || work.subtitle || label(kind)} {work.year}</p></div><ArrowRight className="choose-arrow" size={19} /></button><div className="artwork-card-tools"><IconButton title={`${t("略过", "Skip")} ${work.title}`} onClick={(event) => { event.stopPropagation(); act(side === "left" ? "skip-left" : "skip-right"); }}><SkipForward size={15} /></IconButton><IconButton title={`${t("暂放", "Defer")} ${work.title}`} disabled={comparison.phase === "verification" ? ranking.verificationQueue.length === 0 : ranking.pendingIds.length + ranking.deferredIds.length === 0} onClick={(event) => { event.stopPropagation(); act(side === "left" ? "defer-left" : "defer-right"); }}><Pause size={15} /></IconButton></div></div>; })}</div>
+    <div className="duel-tools"><IconButton title={t("撤销", "Undo")} disabled={!ranking.decisionLog.length} onClick={() => act("undo")}><Undo2 size={19} /></IconButton><span className="keyboard-hint">{t("点击卡片，或使用 A / D、← / →、1 / 2", "Click a card, or use A / D, ← / →, 1 / 2")}</span></div>
   </>;
   else if (view === "profile" && profile && activeRanking) {
     const profileRankIdx = profile.rankings.indexOf(activeRanking);
     const isRenamingProfile = editingRankIdx === profileRankIdx;
     content = <>
-    {heading("ARTISTIC PROFILE", profile.profileName, `${profile.rankings.length} ${t("个维度", "media")} / ${profile.rankings.reduce((count, entry) => count + entry.items.length, 0)} ${t("件作品", "works")}`)}
+    {heading(t("我的文化索引", "MY CULTURE INDEX"), profile.profileName, `${profile.rankings.length} ${t("个领域", "media")} / ${profile.rankings.reduce((count, entry) => count + entry.items.length, 0)} ${t("件作品", "works")}`)}
+    {format === "png" && <div className="export-layout-switch"><span>{t("PNG 版式", "PNG layout")}</span><div className="segmented"><button className={exportLayout === "editorial" ? "active" : ""} onClick={() => setExportLayout("editorial")}>{t("编辑", "Editorial")}</button><button className={exportLayout === "collage" ? "active" : ""} onClick={() => setExportLayout("collage")}>{t("拼贴", "Collage")}</button><button className={exportLayout === "minimal" ? "active" : ""} onClick={() => setExportLayout("minimal")}>{t("极简", "Minimal")}</button></div></div>}
     <div className="profile-dimensions">{profile.rankings.map((entry, idx) => { const key = `${entry.kind}-${idx}`; return <button className={`profile-dimension medium-${entry.kind} ${activeRanking === entry ? "active" : ""}`} key={key} onClick={() => setActiveKind(key)}><Poster work={entry.items[0]} kind={entry.kind} /><span>{label(entry.kind)}</span><strong>{entry.collectionTitle}</strong><small>TOP {entry.items.length}</small></button>; })}</div>
 <div className="profile-layout"><section><div className="section-heading">{isRenamingProfile ? <div style={{ display: "flex", gap: 6, alignItems: "center" }}><input type="text" value={editingRankTitle} onChange={(e) => setEditingRankTitle(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") renameRank(profileRankIdx); if (e.key === "Escape") setEditingRankIdx(null); }} style={{ fontSize: 18, fontWeight: 600, padding: "4px 8px", minHeight: "auto", flex: 1 }} autoFocus /><button className="text-button" onClick={() => renameRank(profileRankIdx)} style={{ color: "var(--accent)", fontSize: 14 }}>✓</button></div> : <h2>{activeRanking.collectionTitle}</h2>}<div style={{ display: "flex", gap: 8, alignItems: "center" }}><span>{new Date(activeRanking.createdAt).toLocaleDateString(locale === "zh" ? "zh-CN" : "en-US")}</span><button className="text-button" onClick={() => { setEditingRankIdx(profileRankIdx); setEditingRankTitle(activeRanking.collectionTitle); }} style={{ fontSize: 12, color: "var(--muted)" }}>{t("改名", "Rename")}</button><button className="text-button" onClick={() => { const works = activeRanking.items.map(item => ({ id: item.id, title: item.title, subtitle: item.subtitle, creator: item.creator, year: item.year, posterUrls: item.posterUrls })); openCollection({ id: `rerank-${activeRanking.profileId}`, kind: activeRanking.kind, source: "custom", title: activeRanking.collectionTitle, description: "", topN: activeRanking.items.length, works }); }} style={{ fontSize: 12, color: "var(--accent)" }}>{t("重新排序", "Re-rank")}</button></div></div><ol className="ranking-list">{activeRanking.items.map((work) => <li key={work.id}><span className="row-number">{String(work.rank).padStart(2, "0")}</span><Poster work={work} kind={activeRanking.kind} /><div><strong>{work.title}</strong><small>{work.creator} {work.year}</small></div>{work.rank <= 3 && <span style={{ fontSize: work.rank === 1 ? 20 : 16 }}>{work.rank === 1 ? "🥇" : work.rank === 2 ? "🥈" : "🥉"}</span>}</li>)}</ol></section><aside className="export-tools"><label htmlFor="profile-name">{t("画像名称", "Profile name")}</label><input id="profile-name" value={profileName} maxLength={80} onChange={(event) => { setProfileName(event.target.value); setShareUrl(""); setQrUrl(""); }} onBlur={() => { const next = namedProfile(); if (next) persist(next); }} /><label htmlFor="export-format">{t("导出格式", "Export format")}</label><select id="export-format" value={format} onChange={(event) => setFormat(event.target.value as typeof format)}>{["json", "png", "txt", "csv", "md"].map((item) => <option key={item} value={item}>{item.toUpperCase()}</option>)}</select><button className="button primary" onClick={exportProfile}><Download size={16} />{t("导出全部维度", "Export all media")}</button><button className="button secondary" onClick={share}><Share2 size={16} />{t("复制比较链接", "Copy comparison link")}</button>{shareUrl && <div className="share-output"><input aria-label={t("比较链接", "Comparison link")} readOnly value={shareUrl} onFocus={(event) => event.target.select()} />{qrUrl && <img src={qrUrl} alt={t("比较二维码", "Comparison QR code")} />}</div>}<button className="button quiet" onClick={() => setView("home")}><Plus size={16} />{t("添加另一个维度", "Add another medium")}</button><button className="button quiet" onClick={() => setView("compare")}><Users size={16} />{peer ? t("继续与好友比较", "Continue comparison") : t("与他人比较", "Compare with someone")}</button>{ranking?.completed && collection?.kind === activeRanking.kind && <button className="button quiet" onClick={() => { setRanking(undoLastAction(ranking)); setView("sorting"); }}><Undo2 size={16} />{t("返回最后一次取舍", "Revisit last choice")}</button>}</aside></div>
   </>;
@@ -391,17 +508,19 @@ export default function App() {
     const ownRanking = profile?.rankings.find((entry) => entry.kind === compareKind);
     const peerRanking = peer?.rankings.find((entry) => entry.kind === compareKind);
     const result = ownRanking && peerRanking ? compareRankings(ownRanking, peerRanking) : null;
-    content = <>{heading("PROFILE COMPARE", t("共同偏好，各自的顺序", "Shared works. Different rankings."))}<div className="comparison-inputs"><section><span className="eyebrow">01 / {t("我的画像", "MY PROFILE")}</span><h2>{profile?.profileName ?? t("尚未创建", "Not created")}</h2>{fileInput("own", t("导入我的画像", "Import my profile"))}</section><section><span className="eyebrow">02 / {t("对方画像", "THEIR PROFILE")}</span><h2>{peer?.profileName ?? t("等待导入", "Awaiting import")}</h2>{fileInput("peer", t("导入对方画像", "Import their profile"))}</section></div>
+    const crossProfile = profile && peer ? compareProfiles(profile, peer) : null;
+    content = <>{heading(t("相遇", "COMPARE"), t("看看你们的选择在哪里重合", "See where your choices meet"), t("导入两份索引，读出共同偏好与各自的分歧。", "Import two indexes to reveal common ground and divergence."))}<div className="comparison-inputs"><section><span className="eyebrow">01 / {t("我的索引", "MY INDEX")}</span><h2>{profile?.profileName ?? t("尚未创建", "Not created")}</h2>{fileInput("own", t("导入我的索引", "Import my index"))}</section><section><span className="eyebrow">02 / {t("对方索引", "THEIR INDEX")}</span><h2>{peer?.profileName ?? t("等待导入", "Awaiting import")}</h2>{fileInput("peer", t("导入对方索引", "Import their index"))}</section></div>
       {!peer && <div className="empty-state">{t("尚未选择对方的结果。", "No comparison profile selected.")}</div>}
       {peer && !profile && <div className="empty-state"><h2>{t("先建立你的艺术人格画像", "Create your own artistic profile")}</h2><div className="action-row">{peer.rankings.map((entry) => <button className="button primary" key={entry.kind} onClick={() => createFromPeer(entry.kind)}><Play size={16} />{label(entry.kind)}<ArrowRight size={16} /></button>)}</div></div>}
       {peer && profile && !sharedKinds.length && <div className="empty-state"><h2>{t("还没有共同的媒介维度", "No shared media yet")}</h2><div className="action-row">{peer.rankings.map((entry) => <button className="button primary" key={entry.kind} onClick={() => createFromPeer(entry.kind)}><Plus size={16} />{label(entry.kind)}</button>)}</div></div>}
-      {result && <><div className="segmented" role="tablist" aria-label={t("比较维度", "Comparison medium")}>{sharedKinds.map((item) => <button role="tab" aria-selected={compareKind === item} className={compareKind === item ? "active" : ""} key={item} onClick={() => setActiveKind(item)}>{label(item)}</button>)}</div><div className="metrics"><div><span>{t("作品重合度", "Work overlap")}</span><strong>{result.overlap}<small>%</small></strong></div><div><span>{t("顺序一致率", "Order agreement")}</span><strong>{result.orderAgreement === null ? "--" : `${result.orderAgreement}%`}</strong></div><div><span>{t("Top 5 共同作品", "Shared in Top 5")}</span><strong>{result.top5Overlap}</strong></div></div><div className="comparison-lists"><section><h2>{t("共同作品", "Shared works")}</h2>{result.shared.length ? <div className="comparison-table"><div className="table-header"><span>{t("作品", "Work")}</span><span>{t("我", "Me")}</span><span>{t("对方", "Them")}</span></div>{result.shared.map((item) => <div key={`${item.title}-${item.ownRank}`}><strong>{item.title}</strong><span>#{item.ownRank}</span><span>#{item.peerRank}</span></div>)}</div> : <p className="empty-state">{t("本次榜单没有共同作品。", "These rankings have no shared works.")}</p>}</section><section><h2>{t("最大分歧", "Largest rank differences")}</h2>{result.disagreements.map((item) => <div className="difference-row" key={`${item.title}-${item.ownRank}`}><strong>{item.title}</strong><span>#{item.ownRank} / #{item.peerRank}</span><b>{item.difference}</b></div>)}{!result.disagreements.length && <p className="empty-state">{t("没有可展示的名次分歧。", "No rank differences to display.")}</p>}</section></div><div className="action-row"><button className="button secondary" onClick={() => createFromPeer(compareKind)}><Play size={16} />{t("用对方的作品重新排序", "Rank their selection")}</button><button className="button quiet" onClick={() => setView("profile")}><ArrowRight size={16} />{t("我的完整画像", "My complete profile")}</button></div></>}
+      {result && <><div className="segmented" role="tablist" aria-label={t("比较维度", "Comparison medium")}>{sharedKinds.map((item) => <button role="tab" aria-selected={compareKind === item} className={compareKind === item ? "active" : ""} key={item} onClick={() => setActiveKind(item)}>{label(item)}</button>)}</div>{crossProfile && <div className="comparison-summary"><span>{t("跨媒介共识", "Across your profile")}</span><strong>{crossProfile.crossMediumAgreement === null ? "--" : `${crossProfile.crossMediumAgreement}%`}</strong><small>{t(`${crossProfile.sharedKinds.length} 个共同维度 / ${crossProfile.sharedWorks} 件共同作品`, `${crossProfile.sharedKinds.length} shared media / ${crossProfile.sharedWorks} shared works`)}</small></div>}<div className="comparison-ai"><div><span className="eyebrow"><Sparkles size={13} /> {t("AI 观察", "AI OBSERVATION")}</span><p>{aiInsight || t("让模型把共同偏好与分歧整理成一段可读的文化侧写。", "Ask the model to turn overlap and divergence into a readable cultural note.")}</p></div><button className="button secondary" disabled={aiBusy} onClick={() => void requestInsight()}><Sparkles size={15} />{aiBusy ? t("正在生成…", "Generating…") : t("生成解读", "Generate insight")}</button></div><div className="metrics metrics-wide"><div><span>{t("作品重合度", "Work overlap")}</span><strong>{result.overlap}<small>%</small></strong></div><div><span>{t("加权偏好一致", "Weighted agreement")}</span><strong>{result.weightedTopAgreement}<small>%</small></strong></div><div><span>{t("顺序一致率", "Order agreement")}</span><strong>{result.orderAgreement === null ? "--" : `${result.orderAgreement}%`}</strong></div><div><span>{t("Top 3 共识", "Top 3 consensus")}</span><strong>{result.top3Agreement}</strong></div><div><span>{t("名次距离", "Rank distance")}</span><strong>{result.rankDistance}<small>%</small></strong></div><div><span>{t("冠军一致", "Same champion")}</span><strong>{result.championAgreement === null ? "--" : result.championAgreement ? "YES" : "NO"}</strong></div></div><div className="comparison-signal"><span>{t("共同偏好", "Common ground")}</span><strong>{result.commonPreference}</strong><span>{t("分歧轴", "Main divergence")}</span><strong>{result.divergence}</strong></div><div className="comparison-lists"><section><h2>{t("共同作品", "Shared works")}</h2>{result.shared.length ? <div className="comparison-table"><div className="table-header"><span>{t("作品", "Work")}</span><span>{t("我", "Me")}</span><span>{t("对方", "Them")}</span></div>{result.shared.map((item) => <button className="comparison-row" key={`${item.title}-${item.ownRank}`} onClick={() => item.ownItem && openArtworkDetail(item.ownItem, compareKind)}><span className="comparison-poster"><Poster work={item.ownItem ?? { id: item.title, title: item.title }} kind={compareKind} /></span><strong>{item.title}</strong><span>#{item.ownRank}</span><span>#{item.peerRank}</span></button>)}</div> : <p className="empty-state">{t("本次榜单没有共同作品。", "These rankings have no common works.")}</p>}</section><section><h2>{t("最大分歧", "Largest rank differences")}</h2>{result.disagreements.map((item) => <button className="difference-row" key={`${item.title}-${item.ownRank}`} onClick={() => item.ownItem && openArtworkDetail(item.ownItem, compareKind)}><strong>{item.title}</strong><span>#{item.ownRank} / #{item.peerRank}</span><b>{item.difference}</b></button>)}{!result.disagreements.length && <p className="empty-state">{t("没有可展示的名次分歧。", "No rank differences to display.")}</p>}</section></div><div className="action-row"><button className="button secondary" onClick={() => createFromPeer(compareKind)}><Play size={16} />{t("用对方的作品重新排序", "Rank their selection")}</button><button className="button quiet" onClick={() => setView("profile")}><ArrowRight size={16} />{t("我的完整画像", "My complete profile")}</button></div></>}
     </>;
   } else content = <div className="empty-state"><button className="button primary" onClick={() => setView("home")}>{t("返回首页", "Back home")}</button></div>;
 
   return <div className="app-shell"><header className="topbar"><button className="wordmark" onClick={() => setView("home")}>ART<span>/</span>RANK</button><nav aria-label={t("主导航", "Main navigation")}><button className={view === "home" || view === "source" || view === "setup" || view === "sorting" ? "active" : ""} onClick={() => setView("home")}>{t("排序", "Rank")}</button><button className={view === "compare" ? "active" : ""} onClick={() => setView("compare")}>{t("比较", "Compare")}</button>{profile && <button className={view === "profile" ? "active" : ""} onClick={() => setView("profile")}>{t("画像", "Profile")}</button>}</nav><div className="header-tools"><IconButton title={locale === "zh" ? "English" : "中文"} onClick={() => { const next = locale === "zh" ? "en" : "zh"; setLocale(next); const url = new URL(location.href); url.searchParams.set("lang", next); history.replaceState(null, "", url); }}><Languages size={18} /></IconButton><IconButton title={t("登录 / 同步", "Sign in / Sync")} onClick={() => setAccountOpen(true)}><UserRound size={18} /></IconButton></div></header>
-    <main className={`main view-${view}`}>{view !== "home" && <button className="back-link" onClick={() => setView(view === "setup" ? "source" : "home")}><ArrowLeft size={15} />{t("返回", "Back")}</button>}{content}</main><footer><span>ART/RANK</span><span>{t("偏好没有标准答案", "Preference has no answer key")}</span></footer>
+    <main className={`main view-${view}`}>{view !== "home" && <button className="back-link" onClick={() => setView(view === "setup" ? "source" : "home")}><ArrowLeft size={15} />{t("回到上一层", "Back")}</button>}{content}</main><footer><span>ART/RANK</span><span>{t("偏好没有标准答案", "Preference has no answer key")}</span></footer>
     {notice && <div className="toast" role="status"><span>{notice}</span><IconButton title={t("关闭提示", "Dismiss")} onClick={() => setNotice("")}><X size={16} /></IconButton></div>}
+     {detailWork && <ArtworkDetailModal detail={detailWork} label={label} t={t} onClose={() => setDetailWork(null)} />}
     {accountOpen && <div className="modal-backdrop" onClick={() => setAccountOpen(false)}><section className="account-dialog" role="dialog" aria-modal="true" aria-labelledby="account-heading" onClick={(event) => event.stopPropagation()} onKeyDown={(event) => { if (event.key === "Escape") setAccountOpen(false); }}><div className="section-heading"><h2 id="account-heading">{t("账号与同步", "Account & sync")}</h2><IconButton title={t("关闭", "Close")} onClick={() => setAccountOpen(false)}><X size={18} /></IconButton></div>
       {accountEmail && needNickname ? <>
         <p style={{ marginBottom: 12 }}>{t("请设置你的昵称", "Please set your nickname")}</p>
@@ -443,6 +562,17 @@ export default function App() {
       <button className="button quiet" onClick={() => setAccountOpen(false)}><UserRound size={16} />{t("继续使用游客模式", "Continue as guest")}</button>
     </section></div>}
   </div>;
+}
+
+function ArtworkDetailModal({ detail, label, t, onClose }: { detail: { work: RankedArtwork; kind: MediaKind; data: Record<string, unknown> | null; loading: boolean }; label: (kind: MediaKind) => string; t: (zh: string, en: string) => string; onClose: () => void }) {
+  const [playUrl, setPlayUrl] = useState("");
+  const [playBusy, setPlayBusy] = useState(false);
+  async function playMusic() {
+    setPlayBusy(true);
+    try { const response = await fetch(`/api/music/play?q=${encodeURIComponent(detail.work.title)}`); const payload = await response.json() as { playUrl?: string }; if (response.ok && payload.playUrl) setPlayUrl(payload.playUrl); }
+    finally { setPlayBusy(false); }
+  }
+  return <div className="modal-backdrop" onClick={onClose}><section className="detail-dialog" role="dialog" aria-modal="true" aria-labelledby="detail-heading" onClick={(event) => event.stopPropagation()}><div className="section-heading"><div><span className="eyebrow">{label(detail.kind)} / {t("作品详情", "WORK DETAIL")}</span><h2 id="detail-heading">{detail.work.title}</h2></div><IconButton title={t("关闭", "Close")} onClick={onClose}><X size={18} /></IconButton></div><div className="detail-body"><Poster work={detail.work} kind={detail.kind} large /><div className="detail-copy">{detail.loading ? <p className="empty-state">{t("正在读取作品信息…", "Loading work details…")}</p> : detail.data ? <><div className="detail-meta"><span>{detail.work.creator ?? ""}</span><span>{detail.work.year ?? ""}</span><span>{String(detail.data.rating ?? "")}</span></div>{detail.kind === "music" && <div className="music-preview"><button className="button secondary" disabled={playBusy} onClick={() => void playMusic()}><Play size={15} />{playBusy ? t("准备试听…", "Preparing…") : t("试听片段", "Preview")}</button>{playUrl && <audio controls autoPlay src={playUrl} />}</div>}<dl>{Object.entries(detail.data).filter(([key, value]) => value && !["title", "pic", "rating", "imgs"].includes(key)).slice(0, 8).map(([key, value]) => <div key={key}><dt>{key}</dt><dd>{Array.isArray(value) ? value.join("、") : String(value)}</dd></div>)}</dl></> : <p className="empty-state">{t("暂时没有更多资料，仍可保留这件作品。", "No additional details were found.")}</p>}</div></div></section></div>;
 }
 
 function IconButton({ title, children, onClick, disabled = false }: { title: string; children: ReactNode; onClick: (event: React.MouseEvent) => void; disabled?: boolean }) {

@@ -11,6 +11,8 @@ export interface Env {
   GOOGLE_CLIENT_SECRET?: string;
   GITHUB_CLIENT_ID?: string;
   GITHUB_CLIENT_SECRET?: string;
+  AI_API_KEY?: string;
+  AI_API_URL?: string;
 }
 
 type JsonObject = Record<string, unknown>;
@@ -74,6 +76,22 @@ const CHALLENGE_ID = /^mv-[a-z0-9]{12}$/;
 const MAX_REQUEST_BYTES = 48 * 1024;
 const MAX_EVENT_PAYLOAD_BYTES = 2 * 1024;
 const MAX_CHALLENGE_ITEMS = 300;
+const MUSIC_API_ORIGIN = "https://music-api.gdstudio.xyz";
+const upstreamWindows = new Map<string, { startedAt: number; count: number }>();
+
+function allowUpstreamRequest(request: Request, bucket: "ai" | "music", limit: number): boolean {
+  const client = request.headers.get("cf-connecting-ip") ?? "anonymous";
+  const key = `${bucket}:${client}`;
+  const now = Date.now();
+  const previous = upstreamWindows.get(key);
+  if (!previous || now - previous.startedAt > 10 * 60 * 1000) {
+    upstreamWindows.set(key, { startedAt: now, count: 1 });
+    return true;
+  }
+  if (previous.count >= limit) return false;
+  previous.count += 1;
+  return true;
+}
 const JSON_HEADERS = {
   "content-type": "application/json; charset=utf-8",
   "cache-control": "no-store",
@@ -111,6 +129,7 @@ const DASHBOARD_HTML = `<!DOCTYPE html>
 :root{--bg:#0a0c0a;--card:#141914;--border:#2a3a2a;--accent:#d8f86a;--muted:#8a9a8a;--text:#e0e8e0;--green:#4ade80;--red:#f87171;--blue:#60a5fa;--yellow:#facc15}
 body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;padding:24px}
 .header{display:flex;align-items:center;justify-content:space-between;margin-bottom:24px}
+.dash-controls{display:flex;align-items:center;gap:8px;margin-left:auto}.dash-controls input,.dash-controls select{width:150px;padding:7px 9px;background:var(--card);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:11px}.dash-controls input:focus,.dash-controls select:focus{border-color:var(--accent);outline:none}.section-anchor{scroll-margin-top:20px}
 .header h1{font-size:20px;font-weight:600;color:var(--accent)}
 .header h1 span{color:var(--muted);font-weight:400}
 .header .meta{font-size:12px;color:var(--muted)}
@@ -126,6 +145,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 .chart-card{padding:20px}.chart-card h3{font-size:14px;font-weight:600;margin-bottom:16px;color:var(--text)}
 canvas{width:100%!important;max-height:250px}
 table{width:100%;border-collapse:collapse;font-size:13px}
+.table-action{background:transparent;border:1px solid var(--border);color:var(--muted);padding:3px 7px;border-radius:5px;font-size:10px;cursor:pointer;margin:1px}.table-action:hover{border-color:var(--accent);color:var(--accent)}.table-action.warn{border-color:#7b661a;color:var(--yellow)}.table-action.restore{border-color:#20623b;color:var(--green)}.table-action.danger{border-color:#703234;color:var(--red)}
 th{text-align:left;padding:8px 12px;color:var(--muted);font-weight:500;border-bottom:1px solid var(--border);font-size:11px;text-transform:uppercase;letter-spacing:.5px}
 td{padding:8px 12px;border-bottom:1px solid var(--border);max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 tr:last-child td{border-bottom:none}
@@ -161,6 +181,7 @@ tr:last-child td{border-bottom:none}
   <h1>ART<span>/</span>RANK <span>后台看板</span></h1>
   <div style="display:flex;align-items:center;gap:12px">
     <span class="meta" id="timestamp"></span>
+    <div class="dash-controls"><input id="tableFilter" placeholder="筛选账户 / 海报" aria-label="筛选账户和海报"><button class="refresh-btn" onclick="load()">应用</button></div>
     <button class="refresh-btn" onclick="load()">刷新</button>
     <button class="logout-btn" onclick="doLogout()">退出</button>
   </div>
@@ -210,6 +231,17 @@ async function resetPassword(id) {
   var r = await fetch('/api/admin/accounts/' + id + '/reset-password', { method: 'POST', headers: { 'Authorization': 'Bearer ' + getToken(), 'Content-Type': 'application/json' }, body: JSON.stringify({ password: pwd }) });
   if (r.ok) { alert('密码已重置，该用户所有会话已失效'); } else { alert('重置失败'); }
 }
+async function toggleAccount(id, disabled) {
+  var action = disabled ? 'restore' : 'disable';
+  if (!confirm(disabled ? '恢复该账户？' : '禁用该账户并结束其会话？')) return;
+  var r = await fetch('/api/admin/accounts/' + id + '/' + action, { method: 'POST', headers: { 'Authorization': 'Bearer ' + getToken() } });
+  if (r.ok) load(); else alert('操作失败');
+}
+async function clearAccountData(id, type) {
+  if (!confirm(type === 'profile' ? '删除该用户画像？' : '删除该用户所有云端清单？')) return;
+  var r = await fetch('/api/admin/accounts/' + id + '/' + type, { method: 'DELETE', headers: { 'Authorization': 'Bearer ' + getToken() } });
+  if (r.ok) load(); else alert('操作失败');
+}
 function exportPosterErrors() {
   window.open('/api/admin/poster-errors/export?days=30&token=' + getToken(), '_blank');
 }
@@ -237,6 +269,9 @@ async function load() {
     });
     apiErrorsHtml += '</tbody></table>';
 
+    var filter = (document.getElementById('tableFilter').value || '').trim().toLowerCase();
+    var filteredAccounts = (d.accounts||[]).filter(function(a){ return !filter || String(a.email||'').toLowerCase().includes(filter) || String(a.nickname||'').toLowerCase().includes(filter); });
+    var filteredPosterErrors = (d.poster_errors||[]).filter(function(e){ return !filter || String(e.title||'').toLowerCase().includes(filter) || String(e.media_type||'').toLowerCase().includes(filter) || String(e.source||'').toLowerCase().includes(filter); });
     document.getElementById('app').innerHTML = [
       '<div class="grid grid-4" style="margin-bottom:16px">',
         '<div class="card"><h3>总访问</h3><div class="value">',o.total_visits,'</div><div class="sub">今日 ',o.visits_today,' / 7日 ',o.visits_7d,'</div></div>',
@@ -253,17 +288,18 @@ async function load() {
         '<div class="card"><h3 style="margin-bottom:12px"><span class="status-dot err"></span>API错误记录</h3>',apiErrorsHtml,'</div>',
       '</div>',
       '<div class="grid grid-2" style="margin-bottom:16px">',
-        '<div class="card"><h3 style="margin-bottom:12px">用户账户 (',(d.accounts||[]).length,')</h3>',
-          '<table><thead><tr><th>邮箱</th><th>昵称</th><th>注册</th><th>操作</th></tr></thead>',
-          '<tbody>', (d.accounts||[]).map(function(a) {
+        '<div class="card section-anchor" id="accounts"><h3 style="margin-bottom:12px">用户账户 (',filteredAccounts.length,' / ',(d.accounts||[]).length,')</h3>',
+          '<table><thead><tr><th>邮箱</th><th>昵称</th><th>状态</th><th>注册</th><th>操作</th></tr></thead>',
+          '<tbody>', filteredAccounts.map(function(a) {
             var time = new Date(a.created_at).toLocaleString('zh-CN', {year:'2-digit',month:'2-digit',day:'2-digit'});
-            return '<tr><td>'+a.email+'</td><td>'+(a.nickname||'-')+'</td><td style="color:var(--muted)">'+time+'</td><td><button onclick="deleteAccount('+a.id+')" style="background:none;border:1px solid var(--red);color:var(--red);padding:2px 6px;border-radius:4px;font-size:10px;cursor:pointer">删除</button> <button onclick="resetPassword('+a.id+')" style="background:none;border:1px solid var(--yellow);color:var(--yellow);padding:2px 6px;border-radius:4px;font-size:10px;cursor:pointer">重置密码</button></td></tr>';
+            var disabled = !!a.disabled_at;
+            return '<tr><td>'+a.email+'</td><td>'+(a.nickname||'-')+'</td><td><span class="badge '+(disabled?'badge-err':'badge-ok')+'">'+(disabled?'已禁用':'正常')+'</span></td><td style="color:var(--muted)">'+time+'</td><td><button onclick="toggleAccount('+a.id+','+disabled+')" class="table-action '+(disabled?'restore':'warn')+'">'+(disabled?'恢复':'禁用')+'</button> <button onclick="clearAccountData('+a.id+',\'profile\')" class="table-action">画像</button> <button onclick="clearAccountData('+a.id+',\'collections\')" class="table-action">清单</button> <button onclick="deleteAccount('+a.id+')" class="table-action danger">删除</button> <button onclick="resetPassword('+a.id+')" class="table-action warn">重置密码</button></td></tr>';
           }).join(''), '</tbody></table>',
         '</div>',
-        '<div class="card"><h3 style="margin-bottom:12px"><span class="status-dot err"></span>海报获取失败 ('+((d.poster_errors||[]).length)+')</h3>',
-          (d.poster_errors||[]).length > 0 ? '<table><thead><tr><th>标题</th><th>类型</th><th>时间</th></tr></thead><tbody>' + (d.poster_errors||[]).slice(0,20).map(function(e) {
+        '<div class="card section-anchor" id="posters"><h3 style="margin-bottom:12px"><span class="status-dot err"></span>海报获取失败 ('+filteredPosterErrors.length+' / '+((d.poster_errors||[]).length)+')</h3>',
+          filteredPosterErrors.length > 0 ? '<table><thead><tr><th>标题</th><th>类型</th><th>来源</th><th>时间</th></tr></thead><tbody>' + filteredPosterErrors.slice(0,20).map(function(e) {
             var time = new Date(e.created_at).toLocaleString('zh-CN', {hour:'2-digit',minute:'2-digit',month:'2-digit',day:'2-digit'});
-            return '<tr><td>'+e.title+'</td><td><span class="badge badge-'+e.media_type+'">'+e.media_type+'</span></td><td style="color:var(--muted)">'+time+'</td></tr>';
+            return '<tr><td>'+e.title+'</td><td><span class="badge badge-'+e.media_type+'">'+e.media_type+'</span></td><td style="color:var(--muted)">'+(e.source||'resolver')+'</td><td style="color:var(--muted)">'+time+'</td></tr>';
           }).join('') + '</tbody></table>' : '<p style="color:var(--muted);font-size:13px">暂无错误记录</p>',
           '<div style="margin-top:10px;display:flex;gap:8px">',
             '<button onclick="exportPosterErrors()" style="background:var(--card);border:1px solid var(--border);color:var(--text);padding:4px 10px;border-radius:6px;font-size:11px;cursor:pointer">导出CSV</button>',
@@ -287,6 +323,9 @@ async function load() {
             '</tbody></table>',
           '</div>',
         '</div>',
+      '</div>',
+      '<div class="card" style="margin-bottom:16px"><h3 style="margin-bottom:12px">海报错误聚合 / 近30天</h3>',
+        (d.poster_error_summary||[]).length ? '<table><thead><tr><th>媒介</th><th>错误类型</th><th>次数</th></tr></thead><tbody>' + (d.poster_error_summary||[]).map(function(e) { return '<tr><td><span class="badge badge-'+e.media_type+'">'+e.media_type+'</span></td><td>'+ (e.error||'unknown') +'</td><td>'+e.count+'</td></tr>'; }).join('') + '</tbody></table>' : '<p style="color:var(--muted);font-size:13px">暂无聚合数据</p>',
       '</div>',
       '<div class="grid grid-2">',
         '<div class="card"><h3 style="margin-bottom:12px">最近用户事件</h3>',
@@ -580,7 +619,7 @@ async function getDashboard(env: Env): Promise<Response> {
     const safe = <T>(p: Promise<T>, fallback: T): Promise<T> => p.catch(() => fallback);
     const safeAll = (p: Promise<{results?: unknown[]}>) => p.catch(() => ({ results: [] }));
 
-    const [overview, daily, modes, recentEvents, apiLogs, apiErrors, accounts, storageInfo, posterErrors] = await Promise.all([
+    const [overview, daily, modes, recentEvents, apiLogs, apiErrors, accounts, storageInfo, posterErrors, posterErrorSummary] = await Promise.all([
       safe(env.DB.prepare(`SELECT
         COUNT(CASE WHEN event_name = 'visit' THEN 1 END) AS total_visits,
         COUNT(CASE WHEN event_name = 'visit' AND created_at >= datetime('now', '-7 days') THEN 1 END) AS visits_7d,
@@ -603,7 +642,7 @@ async function getDashboard(env: Env): Promise<Response> {
       FROM analytics_events ORDER BY created_at DESC LIMIT 20`).all()),
       safeAll(env.DB.prepare(`SELECT id, path, method, status, duration_ms, source, error, created_at FROM api_logs ORDER BY created_at DESC LIMIT 30`).all()),
       safeAll(env.DB.prepare(`SELECT id, path, method, status, duration_ms, source, error, created_at FROM api_logs WHERE status >= 400 ORDER BY created_at DESC LIMIT 20`).all()),
-      safeAll(env.DB.prepare(`SELECT id, email, nickname, created_at FROM user_accounts ORDER BY created_at DESC LIMIT 50`).all()),
+      safeAll(env.DB.prepare(`SELECT id, email, nickname, disabled_at, created_at FROM user_accounts ORDER BY created_at DESC LIMIT 50`).all()),
       safe(Promise.all([
         env.DB.prepare("SELECT COUNT(*) AS cnt FROM analytics_events").first<{cnt: number}>(),
         env.DB.prepare("SELECT COUNT(*) AS cnt FROM api_logs").first<{cnt: number}>(),
@@ -611,16 +650,19 @@ async function getDashboard(env: Env): Promise<Response> {
         env.DB.prepare("SELECT COUNT(*) AS cnt FROM user_sessions").first<{cnt: number}>(),
         env.DB.prepare("SELECT COUNT(*) AS cnt FROM user_profiles_v2").first<{cnt: number}>(),
         env.DB.prepare("SELECT COUNT(*) AS cnt FROM challenge_sets").first<{cnt: number}>(),
-      ]).then(([ae, al, ua, us, up, cs]) => [
+        env.DB.prepare("SELECT COUNT(*) AS cnt FROM user_collections").first<{cnt: number}>(),
+      ]).then(([ae, al, ua, us, up, cs, uc]) => [
         { tbl: "analytics_events", cnt: ae?.cnt ?? 0 },
         { tbl: "api_logs", cnt: al?.cnt ?? 0 },
         { tbl: "user_accounts", cnt: ua?.cnt ?? 0 },
         { tbl: "user_sessions", cnt: us?.cnt ?? 0 },
         { tbl: "user_profiles_v2", cnt: up?.cnt ?? 0 },
         { tbl: "challenge_sets", cnt: cs?.cnt ?? 0 },
+        { tbl: "user_collections", cnt: uc?.cnt ?? 0 },
       ]), []),
       // Poster errors - last 7 days
-      safeAll(env.DB.prepare("SELECT id, title, media_type, error, created_at FROM poster_errors WHERE created_at >= datetime('now', '-7 days') ORDER BY created_at DESC LIMIT 50").all()),
+      safeAll(env.DB.prepare("SELECT id, title, media_type, error, source, created_at FROM poster_errors WHERE created_at >= datetime('now', '-7 days') ORDER BY created_at DESC LIMIT 50").all()),
+      safeAll(env.DB.prepare("SELECT media_type, source, error, COUNT(*) AS count FROM poster_errors WHERE created_at >= datetime('now', '-30 days') GROUP BY media_type, source, error ORDER BY count DESC LIMIT 30").all()),
     ]);
 
     return json({
@@ -648,6 +690,7 @@ async function getDashboard(env: Env): Promise<Response> {
       accounts: (accounts as { results?: unknown[] }).results ?? [],
       storage: Array.isArray(storageInfo) ? storageInfo : [],
       poster_errors: (posterErrors as { results?: unknown[] }).results ?? [],
+      poster_error_summary: (posterErrorSummary as { results?: unknown[] }).results ?? [],
     }, 200, { "cache-control": "public, max-age=30" });
   } catch (error) {
     console.error("dashboard query failed", error instanceof Error ? error.message : error);
@@ -829,6 +872,18 @@ async function route(request: Request, env: Env): Promise<Response> {
   if (url.pathname === "/api/stats" && request.method === "GET") {
     return getStats(env);
   }
+  if (url.pathname === "/api/poster-errors/client" && request.method === "POST") {
+    assertSameOrigin(request);
+    if (!env.DB) return json({ stored: false }, 202);
+    const body = await readJson(request);
+    const title = cleanString(body.title, "title", 160);
+    const type = cleanString(body.type, "type", 16);
+    const error = cleanString(body.error, "error", 80);
+    if (!["film", "book", "music", "other"].includes(type)) return json({ error: "invalid_type" }, 400);
+    await env.DB.prepare("INSERT INTO poster_errors (title, media_type, error, source) VALUES (?, ?, ?, ?)")
+      .bind(title, type === "film" ? "movie" : type, error, "client").run();
+    return json({ stored: true }, 202);
+  }
   if (url.pathname === "/api/admin/dashboard" && request.method === "GET") {
     return getDashboard(env);
   }
@@ -841,12 +896,15 @@ async function route(request: Request, env: Env): Promise<Response> {
   if (url.pathname === "/api/admin/check" && request.method === "GET") {
     return handleAdminCheck(request, env);
   }
+  if (url.pathname === "/api/admin/accounts" || url.pathname.startsWith("/api/admin/accounts/")) {
+    return withSecurityHeaders(await accountRoute(request, env));
+  }
   if (url.pathname === "/api/admin/poster-errors" && request.method === "GET") {
     if (!env.DB || !await adminAuth(request, env)) return json({ error: "auth_required" }, 401);
     const days = Number(url.searchParams.get("days") ?? "7");
     const limit = Math.min(Number(url.searchParams.get("limit") ?? "200"), 1000);
     const errors = await env.DB.prepare(
-      "SELECT id, title, media_type, error, created_at FROM poster_errors WHERE created_at >= datetime('now', ?) ORDER BY created_at DESC LIMIT ?"
+      "SELECT id, title, media_type, error, source, created_at FROM poster_errors WHERE created_at >= datetime('now', ?) ORDER BY created_at DESC LIMIT ?"
     ).bind(`-${days} days`, limit).all();
     return json({ errors: errors.results ?? [] }, 200, { "cache-control": "no-store" });
   }
@@ -854,7 +912,7 @@ async function route(request: Request, env: Env): Promise<Response> {
     if (!env.DB || !await adminAuth(request, env)) return json({ error: "auth_required" }, 401);
     const days = Number(url.searchParams.get("days") ?? "30");
     const errors = await env.DB.prepare(
-      "SELECT title, media_type, error, created_at FROM poster_errors WHERE created_at >= datetime('now', ?) ORDER BY created_at DESC LIMIT 5000"
+      "SELECT title, media_type, error, source, created_at FROM poster_errors WHERE created_at >= datetime('now', ?) ORDER BY created_at DESC LIMIT 5000"
     ).bind(`-${days} days`).all();
     const rows = errors.results as Array<{ title: string; media_type: string; error: string; created_at: string }>;
     const csv = "\uFEFF" + "title,media_type,error,created_at\n" + rows.map(r => `"${r.title.replace(/"/g, '""')}","${r.media_type}","${r.error}","${r.created_at}"`).join("\n");
@@ -943,6 +1001,57 @@ async function route(request: Request, env: Env): Promise<Response> {
     if (!detailUrl || !detailUrl.includes("music.douban.com/subject/")) return json({ status: false, msg: "缺少参数 url", data: null }, 400);
     return json(await doubanMusicDetail(detailUrl), 200, { "cache-control": "public, max-age=86400" });
   }
+  if (url.pathname === "/api/artwork/detail" && request.method === "GET") {
+    const kind = url.searchParams.get("kind");
+    const title = url.searchParams.get("q")?.trim();
+    if (!title || title.length > 120 || (kind !== "film" && kind !== "book" && kind !== "music")) {
+      return json({ status: false, msg: "invalid_query", data: null }, 400);
+    }
+    const type = kind === "film" ? "movie" : kind;
+    try {
+      const search = await doubanSearch(type, title, 1);
+      const subject = search.data.find((item) => typeof item.cover_link === "string" && item.cover_link.includes("douban.com/subject/"));
+      if (!subject?.cover_link) return json({ status: false, msg: "not_found", data: null }, 404, { "cache-control": "public, max-age=300" });
+      const detail = kind === "film" ? await doubanMovieDetail(subject.cover_link) : kind === "book" ? await doubanBookDetail(subject.cover_link) : await doubanMusicDetail(subject.cover_link);
+      return json({ ...detail, source_url: subject.cover_link }, detail.status ? 200 : 502, { "cache-control": detail.status ? "public, max-age=86400" : "public, max-age=300" });
+    } catch {
+      return json({ status: false, msg: "douban_unavailable", data: null }, 502, { "cache-control": "public, max-age=300" });
+    }
+  }
+  if (url.pathname === "/api/insights" && request.method === "POST") {
+    if (!env.AI_API_KEY) return json({ enabled: false, error: "ai_not_configured" }, 503);
+    if (!allowUpstreamRequest(request, "ai", 8)) return json({ error: "rate_limited" }, 429, { "retry-after": "600" });
+    const body = await readJson(request);
+    const summary = cleanOptionalString(body.summary, "summary", 2400);
+    if (!summary) return json({ error: "invalid_summary" }, 400);
+    const endpoint = env.AI_API_URL || "https://token-plan-cn.xiaomimimo.com/anthropic";
+    try {
+      const response = await fetch(endpoint, { method: "POST", headers: { "content-type": "application/json", "x-api-key": env.AI_API_KEY, "anthropic-version": "2023-06-01" }, body: JSON.stringify({ model: "claude-3-5-haiku-latest", max_tokens: 280, system: "你是艺术偏好分析助手。只输出三段简短、温和、可解释的中文洞察，不要声称心理诊断，不要复述完整榜单。", messages: [{ role: "user", content: summary }] }), signal: AbortSignal.timeout(15000) });
+      if (!response.ok) return json({ error: "ai_upstream_failed" }, 502);
+      const raw = await response.json() as { content?: Array<{ text?: string }> };
+      const text = raw.content?.map((item) => item.text ?? "").join(" ").trim().slice(0, 1200);
+      return json({ enabled: true, insight: text || "暂时无法生成解读。" }, 200, { "cache-control": "no-store" });
+    } catch { return json({ error: "ai_unavailable" }, 502); }
+  }
+  if (url.pathname === "/api/music/play" && request.method === "GET") {
+    const query = url.searchParams.get("q")?.trim();
+    if (!query || query.length > 80) return json({ error: "invalid_query" }, 400);
+    if (!allowUpstreamRequest(request, "music", 12)) return json({ error: "rate_limited" }, 429, { "retry-after": "600" });
+    try {
+      const upstreamUrl = new URL("/api.php", MUSIC_API_ORIGIN);
+      upstreamUrl.searchParams.set("types", "search"); upstreamUrl.searchParams.set("source", "netease"); upstreamUrl.searchParams.set("name", query); upstreamUrl.searchParams.set("count", "1"); upstreamUrl.searchParams.set("pages", "1");
+      const response = await fetch(upstreamUrl, { signal: AbortSignal.timeout(10000) });
+      if (!response.ok) return json({ error: "music_upstream_failed" }, 502);
+      const data = await response.json() as Array<{ id?: string; name?: string; artist?: string }>;
+      const track = Array.isArray(data) ? data[0] : undefined;
+      if (!track?.id) return json({ error: "music_not_found" }, 404, { "cache-control": "public, max-age=300" });
+      const urlRequest = new URL("/api.php", MUSIC_API_ORIGIN);
+      urlRequest.searchParams.set("types", "url"); urlRequest.searchParams.set("source", "netease"); urlRequest.searchParams.set("id", String(track.id));
+      const urlResponse = await fetch(urlRequest, { signal: AbortSignal.timeout(10000) });
+      const playData = await urlResponse.json() as { url?: string; br?: number };
+      return json({ track, playUrl: typeof playData.url === "string" ? playData.url : "", bitrate: playData.br ?? null }, 200, { "cache-control": "public, max-age=300" });
+    } catch { return json({ error: "music_unavailable" }, 502); }
+  }
 
   if (url.pathname === "/api/auth/config") return json({ enabled: Boolean(env.DB) });
   if (url.pathname.startsWith("/api/account/")) {
@@ -979,7 +1088,7 @@ export default {
     let error: string | undefined;
 
     try {
-      const cacheable = request.method === "GET" && ["/api/douban/top250", "/api/douban/suggest", "/api/posters", "/api/image"].includes(path);
+      const cacheable = request.method === "GET" && ["/api/douban/top250", "/api/douban/suggest", "/api/posters", "/api/image", "/api/music/play"].includes(path);
       if (cacheable) {
         const edgeCache = (caches as unknown as { default: Cache }).default;
         const hit = await edgeCache.match(request);

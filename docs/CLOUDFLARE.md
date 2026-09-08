@@ -34,6 +34,10 @@ npx wrangler deploy --dry-run
 | `/api/posters?q=...&en=...&year=...` | 查询豆瓣、Top250、IMDb 后备海报 URL |
 | `/api/image?url=...` | 代理已允许 host 的 HTTPS 图片 |
 | `/api/auth/config` | 返回账号同步是否启用 |
+| `/api/artwork/detail?kind=film|book|music&q=...` | 按需获取作品详情，供比较页详情弹层使用 |
+| `/api/account/collections` | 已登录用户的私有榜单读取与保存 |
+| `/api/insights` | 可选 AI 偏好解读，仅在用户主动点击后调用 |
+| `/api/music/play?q=...` | 音乐试听搜索与链接解析代理，仅在详情弹层主动点击后调用 |
 | `/api/challenges/:id` | 读取 D1 中的旧版挑战片单 |
 
 海报允许 host：`img1/2/3/9.doubanio.com`、`m.media-amazon.com`、`ia.media-imdb.com`、`image.tmdb.org`。Worker 会拒绝非 HTTPS、带凭据或其他 host，避免把 `/api/image` 变成开放代理。
@@ -54,7 +58,7 @@ npx wrangler d1 migrations apply film-sort --local
 npx wrangler d1 migrations apply film-sort --remote
 ```
 
-在 `wrangler.jsonc` 中取消注释 `d1_databases`，把 `database_id` 替换为真实值，binding 保持 `DB`。迁移包含匿名事件、旧版挑战片单和 `user_profiles`。
+在 `wrangler.jsonc` 中取消注释 `d1_databases`，把 `database_id` 替换为真实值，binding 保持 `DB`。迁移包含匿名事件、账号画像、私有榜单、账户禁用状态和海报错误日志。
 
 建议预览环境使用独立数据库。D1 没有自动清理策略，生产环境应按运营要求定期清理匿名事件，例如：
 
@@ -72,7 +76,26 @@ WHERE created_at < datetime('now', '-180 days');
 
 `GET /api/account/login` 会跳转到 Cloudflare Access 登录页。读取和写入画像时，Worker 从 `cf-access-jwt-assertion` 验证 RS256 签名、`iss`、`aud`、`sub`、邮箱和过期时间；证书从 team domain 的 Access certs endpoint 缓存读取。
 
-账号画像限制为 512 KB，D1 以 Access `sub` 为主键。未登录、没有 D1 或变量缺失时返回可识别的 401 / 503，前端继续保留本地游客画像。
+账号画像与单个私有榜单均限制为 512 KB；榜单包含 2–300 件作品。登录状态下，画像变更会在浏览器空闲时自动同步，并在切到后台、网络恢复或关闭页面时使用 `keepalive` 尝试发送最后一次保存。同步失败不会覆盖浏览器本地画像。
+
+## 管理后台
+
+`/admin` 由 `ADMIN_PASSWORD` 或 D1 中的管理员配置保护。管理员可以查看账户状态、禁用或恢复账户、重置密码、清理用户画像/私有榜单，以及导出并按媒介与错误类型查看海报失败日志。
+
+```bash
+npx wrangler secret put ADMIN_PASSWORD
+```
+
+不要把管理员密码、OAuth client secret 或 AI 服务密钥写入 `wrangler.jsonc`、前端代码或仓库。后续 AI 功能使用 `AI_API_KEY` 形式的 Cloudflare Secret。
+
+可选 AI 配置：
+
+```bash
+npx wrangler secret put AI_API_KEY
+npx wrangler secret put AI_API_URL
+```
+
+未配置 `AI_API_KEY` 时，前端隐藏 AI 结果并继续使用本地比较指标。AI 与音乐代理均有按 IP 的时间窗口限制，音乐上游使用 `music-api.gdstudio.xyz`，避免把第三方 API 直接暴露给浏览器。
 
 ## 安全与缓存
 

@@ -23,7 +23,7 @@ ART/RANK 把"从看过、读过、听过的作品里排出自己的 Top N"拆成
 - **书籍**：suggest API（`pic` 字段）+ Top250 索引 + search.douban.com 搜索。
 - **音乐**：Top250 索引 + search.douban.com 搜索（无 suggest API）。
 - 防限流机制：Edge UA 轮换、请求节流、自动重试、全局冷却期。
-- 海报获取失败自动记录到 `poster_errors` 表，后台可导出 CSV。
+- 海报解析不到或浏览器加载失败都会记录到 `poster_errors` 表，后台可按来源聚合并导出 CSV。
 
 ### 用户系统
 - 邮箱 + 密码注册/登录，昵称必填。
@@ -34,7 +34,7 @@ ART/RANK 把"从看过、读过、听过的作品里排出自己的 Top N"拆成
 ### 管理后台 (`/admin`)
 - 密码通过 `ADMIN_PASSWORD` 环境变量设定。
 - 仪表盘：访问统计、14天趋势图、媒介分布饼图。
-- 用户账户管理：查看、删除、重置密码。
+- 用户账户管理：查看、筛选、禁用/恢复、删除画像或云端清单、删除账户、重置密码。
 - D1 存储统计：各表行数。
 - 海报错误记录：查看和导出 CSV。
 - API 调用日志：最近调用和错误记录。
@@ -42,7 +42,7 @@ ART/RANK 把"从看过、读过、听过的作品里排出自己的 Top N"拆成
 
 ### 比较与导出
 - 导入对方 JSON 或生成压缩链接和二维码。
-- 计算作品重合度、Top 5 共同作品、顺序一致率和最大名次分歧。
+- 计算作品重合度、加权偏好、Top 3 共识、顺序一致率和最大名次分歧；可请求 AI 生成跨媒介解读。
 - 导出格式：JSON、TXT、Markdown、CSV、PNG。
 
 ### UI/UX
@@ -83,7 +83,8 @@ migrations/
 ├── 0004_user_accounts.sql     # user_accounts, user_sessions, user_profiles_v2, user_oauth
 ├── 0005_oauth_table.sql       # user_oauth
 ├── 0006_nickname.sql          # user_accounts.nickname
-└── 0007_poster_errors.sql     # poster_errors
+├── 0007_poster_errors.sql     # poster_errors
+└── 0008_user_collections.sql  # 云端清单、账户状态、海报错误来源
 
 docs/
 ├── USAGE.md                   # 用户操作说明
@@ -111,6 +112,10 @@ docs/
 | GET | `/api/book/detail?url=` | 书籍详情 |
 | GET | `/api/movie/detail?url=` | 影视详情 |
 | GET | `/api/music/detail?url=` | 音乐详情 |
+| GET | `/api/artwork/detail?kind=&q=` | 比较页作品详情 |
+| POST | `/api/insights` | 生成画像比较解读（需配置 AI Secret） |
+| GET | `/api/music/play?q=` | 音乐试听地址代理 |
+| POST | `/api/poster-errors/client` | 记录浏览器端海报加载失败 |
 
 ### 用户接口
 | 方法 | 路径 | 说明 |
@@ -124,6 +129,9 @@ docs/
 | GET | `/api/account/providers` | 可用 OAuth 提供商 |
 | GET | `/api/account/oauth/:provider` | 发起 OAuth |
 | GET | `/api/account/oauth/callback` | OAuth 回调 |
+| GET | `/api/account/collections` | 读取当前用户云端清单 |
+| POST | `/api/account/collections` | 保存当前用户清单 |
+| DELETE | `/api/account/collections/:id` | 删除当前用户清单 |
 
 ### 管理接口（需 ADMIN_PASSWORD）
 | 方法 | 路径 | 说明 |
@@ -133,6 +141,10 @@ docs/
 | GET | `/api/admin/accounts` | 用户列表 |
 | DELETE | `/api/admin/accounts/:id` | 删除用户 |
 | POST | `/api/admin/accounts/:id/reset-password` | 重置密码 |
+| POST | `/api/admin/accounts/:id/disable` | 禁用账户并结束会话 |
+| POST | `/api/admin/accounts/:id/restore` | 恢复账户 |
+| DELETE | `/api/admin/accounts/:id/profile` | 删除用户画像 |
+| DELETE | `/api/admin/accounts/:id/collections` | 删除用户云端清单 |
 | GET | `/api/admin/poster-errors?days=7` | 海报错误查询 |
 | GET | `/api/admin/poster-errors/export?days=30` | 海报错误 CSV 导出 |
 
@@ -175,6 +187,8 @@ npm run deploy
 - `ADMIN_PASSWORD`：管理员后台密码
 - `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET`：Google OAuth
 - `GITHUB_CLIENT_ID` / `GITHUB_CLIENT_SECRET`：GitHub OAuth
+- `AI_API_KEY`：AI 解读服务 Secret（仅 Worker 读取，不写入前端）
+- `AI_API_URL`：可选，自定义 Anthropic 兼容接口地址
 
 ## 隐私
 

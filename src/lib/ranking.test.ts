@@ -10,6 +10,7 @@ import {
   getRankingResult,
   serializeRankingState,
   skipCurrent,
+  skipWork,
   undoLastAction,
   type RankingState,
 } from "./ranking";
@@ -215,6 +216,109 @@ describe("ranking engine", () => {
     expect(getCurrentComparison(restored)).toEqual(
       getCurrentComparison(state),
     );
+  });
+
+  it("adds a compact verification pass without immediately repeating a pair", () => {
+    const ids = ["a", "b", "c", "d", "e", "f", "g"];
+    const score = Object.fromEntries(ids.map((id, index) => [id, index]));
+    const completed = finishByScore(createRankingState(ids, { seed: "verify" }), score);
+
+    expect(completed.decisionLog.some((decision) => decision.phase === "verification")).toBe(true);
+    expect(completed.pairEvidence.some((entry) => entry.phase === "verification")).toBe(true);
+
+    for (let index = 1; index < completed.pairEvidence.length; index += 1) {
+      expect(completed.pairEvidence[index].key).not.toBe(completed.pairEvidence[index - 1].key);
+    }
+  });
+
+  it("spaces a recently shown pair before starting the next candidate", () => {
+    const initial = createRankingState(["a", "x", "b", "c"], { seed: "cooldown" });
+    const state: RankingState = {
+      ...initial,
+      rankedIds: ["a"],
+      pendingIds: ["b", "c"],
+      deferredIds: [],
+      activeInsertion: { candidateId: "x", low: 0, high: 1, presentationIndex: initial.nextPresentationIndex },
+      nextPresentationIndex: initial.nextPresentationIndex + 1,
+      recentPairKeys: ["a\u0000b"],
+      processedCount: 1,
+    };
+
+    const next = skipCurrent(state);
+
+    expect(getCurrentComparison(next)?.candidateId).toBe("c");
+  });
+
+  it("keeps the target of a skipped opponent so undo can replay it", () => {
+    const initial = createRankingState(["a", "b", "c", "d", "e"], { seed: "opponent-undo" });
+    const comparison = getCurrentComparison(initial)!;
+    const advanced = skipWork(initial, comparison.opponentId);
+
+    expect(advanced.skippedIds).toContain(comparison.opponentId);
+    expect(undoLastAction(advanced)).toEqual(initial);
+  });
+
+  it("queues and confirms a preference loop without trapping the ranking", () => {
+    const seed = createRankingState(["a", "b", "c"], { seed: "cycle" });
+    const state: RankingState = {
+      ...seed,
+      rankedIds: ["a", "b"],
+      pendingIds: [],
+      deferredIds: [],
+      activeInsertion: { candidateId: "c", low: 0, high: 1, presentationIndex: seed.nextPresentationIndex },
+      nextPresentationIndex: seed.nextPresentationIndex + 1,
+      comparisonCount: 2,
+      processedCount: 2,
+      preferenceEdges: [
+        { winnerId: "a", loserId: "b", count: 1 },
+        { winnerId: "b", loserId: "c", count: 1 },
+      ],
+      pairEvidence: [
+        { key: "a\u0000b", leftId: "a", rightId: "b", preferredId: "a", comparisonIndex: 1, phase: "ranking" },
+        { key: "b\u0000c", leftId: "b", rightId: "c", preferredId: "b", comparisonIndex: 2, phase: "ranking" },
+      ],
+      recentPairKeys: ["a\u0000b", "b\u0000c"],
+    };
+    const comparison = getCurrentComparison(state)!;
+    expect(comparison.opponentId).toBe("a");
+
+    let verified = choosePreferred(state, "c");
+    expect(verified.cycleStatus).toBe("observed");
+    expect(verified.cycleEvents).toHaveLength(1);
+
+    let guard = 0;
+    while (!verified.completed) {
+      const active = verified.activeVerification;
+      expect(active).not.toBeNull();
+      verified = choosePreferred(verified, active!.task.expectedWinnerId ?? active!.task.leftId);
+      guard += 1;
+      expect(guard).toBeLessThan(20);
+    }
+
+    expect(verified.cycleStatus).toBe("persistent");
+    expect(verified.cycleEvents[0].consistentConfirmations).toBeGreaterThanOrEqual(3);
+  });
+
+  it("migrates a v1 draft into the verified ranking state", () => {
+    const initial = createRankingState(["a", "b", "c", "d"], { seed: "legacy" });
+    const comparison = getCurrentComparison(initial)!;
+    const advanced = choosePreferred(initial, comparison.leftId);
+    const raw = JSON.parse(serializeRankingState(advanced)) as Record<string, unknown>;
+    raw.version = 1;
+    delete raw.phase;
+    delete raw.verificationQueue;
+    delete raw.activeVerification;
+    delete raw.pairEvidence;
+    delete raw.recentPairKeys;
+    delete raw.preferenceEdges;
+    delete raw.cycleEvents;
+    delete raw.cycleStatus;
+    raw.decisionLog = (raw.decisionLog as Array<Record<string, unknown>>).map(({ phase: _phase, ...decision }) => decision);
+
+    const restored = deserializeRankingState(JSON.stringify(raw));
+    expect(restored.version).toBe(2);
+    expect(restored.phase).toBe("ranking");
+    expect(getCurrentComparison(restored)).not.toBeNull();
   });
 
   it("deduplicates input and completes empty or singleton rankings", () => {

@@ -3,6 +3,7 @@ import { BookOpen, Film, Library, Music2 } from "lucide-react";
 import type { Artwork, MediaKind } from "../data/media";
 
 const requests = new Map<string, Promise<string[]>>();
+const reportedFailures = new Set<string>();
 function resolve(work: Artwork, kind: MediaKind): Promise<string[]> {
   const key = `${kind}|${work.title}|${work.subtitle ?? ""}|${work.year ?? ""}`;
   let request = requests.get(key);
@@ -25,6 +26,18 @@ function imageUrl(url: string): string {
   } catch { return url; }
 }
 
+function reportImageFailure(work: Artwork, kind: MediaKind, url: string) {
+  const key = `${kind}|${work.title}|${url}`;
+  if (reportedFailures.has(key)) return;
+  reportedFailures.add(key);
+  void fetch("/api/poster-errors/client", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ title: work.title, type: kind, error: "image_load_failed" }),
+    keepalive: true,
+  }).catch(() => undefined);
+}
+
 export function Poster({ work, kind, large = false }: { work: Artwork; kind: MediaKind; large?: boolean }) {
   const [resolved, setResolved] = useState<string[]>([]);
   const [failed, setFailed] = useState<Set<string>>(() => new Set());
@@ -38,7 +51,7 @@ export function Poster({ work, kind, large = false }: { work: Artwork; kind: Med
   const url = urls.find((candidate) => !failed.has(candidate));
   const Icon = { film: Film, book: BookOpen, music: Music2, other: Library }[kind];
   return <div className={`poster ${large ? "poster-large" : "poster-small"} poster-${kind}`}>
-    {url ? <img src={imageUrl(url)} alt={`${work.title} ${kind === "film" ? "海报" : "封面"}`} referrerPolicy="no-referrer" loading={large ? "eager" : "lazy"} onError={() => setFailed((previous) => new Set([...previous, url]))} /> :
+    {url ? <img src={imageUrl(url)} alt={`${work.title} ${kind === "film" ? "海报" : "封面"}`} referrerPolicy="no-referrer" loading={large ? "eager" : "lazy"} onError={() => { reportImageFailure(work, kind, url); setFailed((previous) => new Set([...previous, url])); }} /> :
       <div className="cover-fallback"><Icon size={large ? 36 : 16} />{large && <span>{work.title}</span>}</div>}
   </div>;
 }
