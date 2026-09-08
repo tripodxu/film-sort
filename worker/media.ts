@@ -326,8 +326,9 @@ async function fetchWikipedia(titles: string[], lang: "zh" | "en" = "zh", timeou
   }
 }
 
-// 搜索页面并获取摘要（一步到位）
+// 搜索页面并获取摘要（一步到位），多词搜索时过滤标题相关性
 async function searchAndExtract(query: string, lang: "zh" | "en", timeoutMs: number): Promise<{ intro: string; source: string } | null> {
+  const words = query.split(/\s+/).filter(Boolean);
   const params = new URLSearchParams({
     action: "query", generator: "search", gsrsearch: query,
     gsrnamespace: "0", gsrlimit: "5", redirects: "1",
@@ -338,9 +339,17 @@ async function searchAndExtract(query: string, lang: "zh" | "en", timeoutMs: num
     signal: AbortSignal.timeout(timeoutMs),
   });
   if (!r.ok) return null;
-  const d = await r.json() as { query?: { pages?: Record<string, { extract?: string; missing?: boolean }> } };
+  const d = await r.json() as { query?: { pages?: Record<string, { title?: string; extract?: string; missing?: boolean }> } };
   if (!d.query?.pages) return null;
-  const valid = Object.values(d.query.pages).filter((p) => !p.missing && p.extract && p.extract.length > 30);
+  const valid = Object.values(d.query.pages).filter((p) => {
+    if (!p.extract || p.missing || p.extract.length <= 30) return false;
+    // 多词搜索时，标题必须包含至少一个搜索词
+    if (words.length > 1) {
+      const t = (p.title ?? "").toLowerCase();
+      if (!words.some((w) => t.includes(w.toLowerCase()))) return false;
+    }
+    return true;
+  });
   return valid.length > 0 ? { intro: valid[0].extract!, source: `${lang}wiki` } : null;
 }
 
