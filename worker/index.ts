@@ -246,7 +246,7 @@ function exportPosterErrors() {
   window.open('/api/admin/poster-errors/export?days=30&token=' + getToken(), '_blank');
 }
 async function cleanLogs(table, action) {
-  var labels = {delete_all:'清空全部',delete_7d:'删除7天前',delete_24h:'删除24小时前',keep_24h:'仅保留24小时',keep_1h:'仅保留1小时',delete_1h:'删除最近1小时'};
+  var labels = {delete_all:'清空全部',delete_7d:'删除7天前',keep_24h:'仅保留24小时',delete_24h:'删除最近24小时',keep_1h:'仅保留1小时',delete_1h:'删除最近1小时'};
   var tableLabel = table==='all'?'全部日志':table;
   if(!confirm('确定对 '+tableLabel+' 执行「'+(labels[action]||action)+'」？')) return;
   try {
@@ -339,8 +339,8 @@ async function load() {
           '<div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px">',
             '<button onclick="cleanLogs(&apos;all&apos;,&apos;delete_all&apos;)" class="table-action danger">清空全部日志</button>',
             '<button onclick="cleanLogs(&apos;all&apos;,&apos;delete_7d&apos;)" class="table-action warn">删除7天前</button>',
-            '<button onclick="cleanLogs(&apos;all&apos;,&apos;delete_24h&apos;)" class="table-action warn">删除24小时前</button>',
             '<button onclick="cleanLogs(&apos;all&apos;,&apos;keep_24h&apos;)" class="table-action">仅保留24小时</button>',
+            '<button onclick="cleanLogs(&apos;all&apos;,&apos;delete_24h&apos;)" class="table-action warn">删除最近24小时</button>',
             '<button onclick="cleanLogs(&apos;all&apos;,&apos;keep_1h&apos;)" class="table-action">仅保留1小时</button>',
             '<button onclick="cleanLogs(&apos;all&apos;,&apos;delete_1h&apos;)" class="table-action warn">删除最近1小时</button>',
           '</div>',
@@ -949,10 +949,10 @@ async function route(request: Request, env: Env): Promise<Response> {
     const actions: Record<string, { time: string; op: string }> = {
       delete_all: { time: "", op: "" },
       delete_7d: { time: "datetime('now', '-7 days')", op: "<" },
-      delete_24h: { time: "datetime('now', '-1 day')", op: "<" },
+      delete_24h: { time: "datetime('now', '-1 day')", op: ">=" },
       keep_24h: { time: "datetime('now', '-1 day')", op: "<" },
-      keep_1h: { time: "datetime('now', '-1 hour')", op: "<" },
       delete_1h: { time: "datetime('now', '-1 hour')", op: ">=" },
+      keep_1h: { time: "datetime('now', '-1 hour')", op: "<" },
     };
     if (!actions[action]) return json({ error: "invalid_action" }, 400);
     let total = 0;
