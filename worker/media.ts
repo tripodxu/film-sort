@@ -687,9 +687,9 @@ export async function doubanBookDetail(url: string): Promise<{ status: boolean; 
     for (const line of infoLines) {
       const colonIdx = line.indexOf(":");
       if (colonIdx === -1) continue;
-      const field = line.substring(0, colonIdx).trim();
+      const field = line.substring(0, colonIdx).trim().replace(/^.*>\s*/, "");
       const value = line.substring(colonIdx + 1).trim();
-      if (field && value) detail[field] = value;
+      if (field && value && !field.includes("class=")) detail[field] = value;
     }
     // Content intro
     const introMatch = html.match(/<div\s+class="intro"[^>]*>([\s\S]*?)<\/div>/);
@@ -734,9 +734,9 @@ export async function doubanMovieDetail(url: string): Promise<{ status: boolean;
     for (const line of infoLines) {
       const colonIdx = line.indexOf(":");
       if (colonIdx === -1) continue;
-      const field = line.substring(0, colonIdx).trim();
+      const field = line.substring(0, colonIdx).trim().replace(/^.*>\s*/, "");
       const value = line.substring(colonIdx + 1).trim();
-      if (field && value) detail[field] = value;
+      if (field && value && !field.includes("class=")) detail[field] = value;
     }
     debug.found_info = infoLines.length > 0;
     const introMatch = html.match(/<span\s+property="v:summary"[^>]*>([\s\S]*?)<\/span>/);
@@ -765,18 +765,26 @@ export async function doubanMusicDetail(url: string): Promise<{ status: boolean;
     detail.pic = picMatch ? picMatch[1] : "";
     const ratingMatch = html.match(/<strong[^>]+property="v:average"[^>]*>([^<]+)<\/strong>/);
     detail.rating = ratingMatch ? ratingMatch[1].trim() : "";
+    // Info block - extract key/value pairs, stripping HTML
     const infoHtml = extractBetween(html, '<div id="info"', '</div>');
     const infoLines = infoHtml.split(/<br\s*\/?>/).map(l => cleanHtml(l)).filter(Boolean);
     for (const line of infoLines) {
       const colonIdx = line.indexOf(":");
       if (colonIdx === -1) continue;
-      const field = line.substring(0, colonIdx).trim();
+      const field = line.substring(0, colonIdx).trim().replace(/^.*>\s*/, "");
       const value = line.substring(colonIdx + 1).trim();
-      if (field && value) detail[field] = value;
+      if (field && value && !field.includes("class=")) detail[field] = value;
     }
+    // Content intro - try multiple patterns for music pages
     const introMatch = html.match(/<span\s+class="all"[^>]*>([\s\S]*?)<\/span>/) ??
+      html.match(/<div\s+class="indent"[^>]*id="link-report"[\s\S]*?<div\s+class="intro"[^>]*>([\s\S]*?)<\/div>/) ??
       html.match(/<div\s+class="intro"[^>]*>([\s\S]*?)<\/div>/);
     if (introMatch) detail.content_intro = cleanHtml(introMatch[1]);
+    // If still no intro, try to get it from the abstract/summary section
+    if (!detail.content_intro) {
+      const abstractMatch = html.match(/<div\s+class="abstract"[^>]*>([\s\S]*?)<\/div>/);
+      if (abstractMatch) detail.content_intro = cleanHtml(abstractMatch[1]);
+    }
     const songMatches = html.match(/<div\s+class="song-items-wrapper"[\s\S]*?<\/div>/);
     if (songMatches) {
       const songNames = songMatches[0].match(/<span\s+class="song-name"[^>]*>([^<]+)<\/span>/g);
