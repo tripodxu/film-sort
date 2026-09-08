@@ -8,7 +8,8 @@ ART/RANK 把"从看过、读过、听过的作品里排出自己的 Top N"拆成
 
 ### 排序引擎
 - 电影、书籍、音乐、其他作品四种媒介，每种媒介可创建多个独立榜单。
-- 二分插入排序状态机，支持撤销、略过、暂放，左右两侧各有独立的略过/暂放按钮。
+- 主动式二分插入排序：每个候选作品通过与已排序列表中位数比较，逐步缩小插入范围（O(n log n)）。
+- 支持撤销、左右独立略过/暂放按钮。
 - 排序完成后可随时"重新排序"，从已有榜单重新开始。
 - 前三名显示 🥇🥈🥉 奖牌。
 
@@ -22,6 +23,7 @@ ART/RANK 把"从看过、读过、听过的作品里排出自己的 Top N"拆成
 - **电影**：suggest API + Top250 索引 + search.douban.com 搜索 + IMDb 备用。
 - **书籍**：suggest API（`pic` 字段）+ Top250 索引 + search.douban.com 搜索。
 - **音乐**：Top250 索引 + search.douban.com 搜索（无 suggest API）。
+- **详情接口**：电影使用 search.douban.com 搜索结果（绕过反爬）；书籍/音乐直接抓取详情页。
 - 防限流机制：Edge UA 轮换、请求节流、自动重试、全局冷却期。
 - 海报解析不到或浏览器加载失败都会记录到 `poster_errors` 表，后台可按来源聚合并导出 CSV。
 
@@ -29,6 +31,7 @@ ART/RANK 把"从看过、读过、听过的作品里排出自己的 Top N"拆成
 - 邮箱 + 密码注册/登录，昵称必填。
 - Google / GitHub OAuth 登录，自动获取昵称。
 - 登录后可同步画像到云端，支持改昵称。
+- 关闭网页时自动同步（`pagehide` + `visibilitychange` + `keepalive`）。
 - Token 有效期 30 天，存储在 localStorage。
 
 ### 管理后台 (`/admin`)
@@ -43,14 +46,15 @@ ART/RANK 把"从看过、读过、听过的作品里排出自己的 Top N"拆成
 ### 比较与导出
 - 导入对方 JSON 或生成压缩链接和二维码。
 - 计算作品重合度、加权偏好、Top 3 共识、顺序一致率和最大名次分歧；可请求 AI 生成跨媒介解读。
-- 导出格式：JSON、TXT、Markdown、CSV、PNG。
+- 导出格式：JSON、TXT、Markdown、CSV、PNG（三种布局：Editorial / Collage / Minimal）。
+- 点击作品可查看详情弹窗（海报、评分、元数据）；音乐支持试听。
 
 ### UI/UX
 - 榜单选择页：便利贴卡片布局，2/3/4 列可切换。
 - 海报果冻悬停动画。
 - 海报按原始比例显示，不裁剪。
 - 极简玻璃态界面，3D 光球首页。
-- 响应式支持桌面和手机。
+- 响应式支持桌面和手机（4 断点：1300px / 800px / 600px / 540px）。
 
 ## 项目架构
 
@@ -58,22 +62,22 @@ ART/RANK 把"从看过、读过、听过的作品里排出自己的 Top N"拆成
 src/
 ├── App.tsx                    # 主应用：状态管理、路由、所有视图
 ├── components/
-│   ├── Poster.tsx             # 海报组件：API 解析 + 图片代理
+│   ├── Poster.tsx             # 海报组件：API 解析 + 图片代理 + 错误上报
 │   └── OrbScene.tsx           # Three.js 首页光球
 ├── data/
 │   ├── media.ts               # 媒介类型定义、内置榜单（电影/书籍/音乐/其他）
 │   └── catalog.ts             # 电影目录数据
 ├── lib/
-│   ├── ranking.ts             # 排序状态机（二分插入、撤销、略过、暂放）
+│   ├── ranking.ts             # 排序状态机（二分插入、环检测、冷却、验证阶段）
 │   ├── profile.ts             # 画像解析、合并、重命名、删除、比较、导出
 │   └── collections.ts         # 自定义清单导入
 ├── styles.css                 # 全局样式（含果冻卡片、响应式断点）
 └── types.ts                   # 类型定义
 
 worker/
-├── index.ts                   # Worker 路由、D1 绑定、管理后台
+├── index.ts                   # Worker 路由、D1 绑定、管理后台、海报错误日志
 ├── media.ts                   # 豆瓣/书籍/音乐 API、海报解析、防限流
-├── account.ts                 # 用户注册/登录/OAuth、画像同步
+├── account.ts                 # 用户注册/登录/OAuth、管理员账户管理
 └── imdb-posters.json          # IMDb 海报手动映射表
 
 migrations/
@@ -84,7 +88,8 @@ migrations/
 ├── 0005_oauth_table.sql       # user_oauth
 ├── 0006_nickname.sql          # user_accounts.nickname
 ├── 0007_poster_errors.sql     # poster_errors
-└── 0008_user_collections.sql  # 云端清单、账户状态、海报错误来源
+├── 0008_user_collections.sql  # 云端清单
+└── 0008_disabled_at.sql       # 账户禁用字段
 
 docs/
 ├── USAGE.md                   # 用户操作说明
@@ -109,9 +114,9 @@ docs/
 | GET | `/api/book/list?key=&page=` | 书籍搜索 |
 | GET | `/api/movie/list?key=&page=` | 影视搜索 |
 | GET | `/api/music/list?key=&page=` | 音乐搜索 |
-| GET | `/api/book/detail?url=` | 书籍详情 |
-| GET | `/api/movie/detail?url=` | 影视详情 |
-| GET | `/api/music/detail?url=` | 音乐详情 |
+| GET | `/api/book/detail?url=` | 书籍详情（直接抓取） |
+| GET | `/api/movie/detail?url=&title=` | 影视详情（search.douban.com 优先） |
+| GET | `/api/music/detail?url=` | 音乐详情（直接抓取） |
 | GET | `/api/artwork/detail?kind=&q=` | 比较页作品详情 |
 | POST | `/api/insights` | 生成画像比较解读（需配置 AI Secret） |
 | GET | `/api/music/play?q=` | 音乐试听地址代理 |
@@ -129,9 +134,6 @@ docs/
 | GET | `/api/account/providers` | 可用 OAuth 提供商 |
 | GET | `/api/account/oauth/:provider` | 发起 OAuth |
 | GET | `/api/account/oauth/callback` | OAuth 回调 |
-| GET | `/api/account/collections` | 读取当前用户云端清单 |
-| POST | `/api/account/collections` | 保存当前用户清单 |
-| DELETE | `/api/account/collections/:id` | 删除当前用户清单 |
 
 ### 管理接口（需 ADMIN_PASSWORD）
 | 方法 | 路径 | 说明 |
@@ -141,7 +143,7 @@ docs/
 | GET | `/api/admin/accounts` | 用户列表 |
 | DELETE | `/api/admin/accounts/:id` | 删除用户 |
 | POST | `/api/admin/accounts/:id/reset-password` | 重置密码 |
-| POST | `/api/admin/accounts/:id/disable` | 禁用账户并结束会话 |
+| POST | `/api/admin/accounts/:id/disable` | 禁用账户 |
 | POST | `/api/admin/accounts/:id/restore` | 恢复账户 |
 | DELETE | `/api/admin/accounts/:id/profile` | 删除用户画像 |
 | DELETE | `/api/admin/accounts/:id/collections` | 删除用户云端清单 |
@@ -164,8 +166,8 @@ docs/
 
 ```bash
 npm ci
-npm run dev          # Vite 开发服务器
-npm run worker:dev   # Worker + 静态资源
+npm run dev          # Vite 开发服务器（仅前端）
+npm run worker:dev   # Worker + 静态资源（推荐）
 npm run check        # TypeScript 检查
 npm test             # 测试
 npm run build        # 构建
@@ -187,8 +189,14 @@ npm run deploy
 - `ADMIN_PASSWORD`：管理员后台密码
 - `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET`：Google OAuth
 - `GITHUB_CLIENT_ID` / `GITHUB_CLIENT_SECRET`：GitHub OAuth
-- `AI_API_KEY`：AI 解读服务 Secret（仅 Worker 读取，不写入前端）
+- `AI_API_KEY`：AI 解读服务 Secret
 - `AI_API_URL`：可选，自定义 Anthropic 兼容接口地址
+
+## 已知限制
+
+- `movie.douban.com` 详情页被反爬拦截（302→sec.douban.com），电影详情改用 search.douban.com 搜索结果。
+- `music.douban.com` 无 suggest API，音乐封面依赖 Top250 索引和搜索。
+- 豆瓣可能随时调整反爬策略，需要持续监控。
 
 ## 隐私
 
