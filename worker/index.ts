@@ -1044,8 +1044,8 @@ async function route(request: Request, env: Env): Promise<Response> {
   // Detail APIs
   if (url.pathname === "/api/book/detail" && request.method === "GET") {
     const detailUrl = url.searchParams.get("url")?.trim();
-    const title = url.searchParams.get("title")?.trim();
-    if (!detailUrl && !title) return json({ status: false, msg: "缺少参数 url 或 title", data: null }, 400);
+    const title = url.searchParams.get("name")?.trim() || url.searchParams.get("title")?.trim();
+    if (!detailUrl && !title) return json({ status: false, msg: "缺少参数 url 或 name", data: null }, 400);
 
     let bookTitle = title ?? "";
     const data: Record<string, unknown> = {};
@@ -1070,12 +1070,21 @@ async function route(request: Request, env: Env): Promise<Response> {
       } catch {}
     }
 
-    // Step 2: Try douban detail page
+    // Step 2: Try Wikipedia first for content_intro
+    if (!data.content_intro && bookTitle) {
+      const intro = await fetchContentIntro(bookTitle);
+      if (intro) {
+        data.content_intro = intro.intro;
+        data.content_source = intro.source;
+      }
+    }
+
+    // Step 3: Try douban detail page
     if (detailUrl?.includes("book.douban.com/subject/")) {
       try {
         const detail = await doubanBookDetail(detailUrl);
         if (detail.status && detail.data) {
-          if (detail.data.content_intro) data.content_intro = detail.data.content_intro;
+          if (!data.content_intro && detail.data.content_intro) data.content_intro = detail.data.content_intro;
           if (detail.data.author_intro) data.author_intro = detail.data.author_intro;
           if (detail.data.tags) data.tags = detail.data.tags;
           for (const [k, v] of Object.entries(detail.data)) {
@@ -1085,15 +1094,6 @@ async function route(request: Request, env: Env): Promise<Response> {
       } catch {}
     }
 
-    // Step 3: If no content_intro, try Wikipedia / Baidu Baike
-    if (!data.content_intro && bookTitle) {
-      const intro = await fetchContentIntro(bookTitle);
-      if (intro) {
-        data.content_intro = intro.intro;
-        data.content_source = intro.source;
-      }
-    }
-
     if (data.title) {
       return json({ status: true, msg: "ok", time: "0s", data }, 200, { "cache-control": "public, max-age=86400" });
     }
@@ -1101,8 +1101,8 @@ async function route(request: Request, env: Env): Promise<Response> {
   }
     if (url.pathname === "/api/movie/detail" && request.method === "GET") {
     const detailUrl = url.searchParams.get("url")?.trim();
-    const title = url.searchParams.get("title")?.trim();
-    if (!detailUrl && !title) return json({ status: false, msg: "Missing url or title", data: null }, 400);
+    const title = url.searchParams.get("name")?.trim() || url.searchParams.get("title")?.trim();
+    if (!detailUrl && !title) return json({ status: false, msg: "Missing url or name", data: null }, 400);
 
     const movieId = detailUrl?.match(/subject\/(\d+)/)?.[1];
     let movieTitle = title ?? "";
@@ -1129,26 +1129,26 @@ async function route(request: Request, env: Env): Promise<Response> {
       } catch {}
     }
 
-    // Step 2: Try douban detail page for content_intro
-    if (detailUrl?.includes("movie.douban.com/subject/")) {
-      try {
-        const detail = await doubanMovieDetail(detailUrl);
-        if (detail.status && detail.data) {
-          if (detail.data.content_intro) data.content_intro = detail.data.content_intro;
-          for (const [k, v] of Object.entries(detail.data)) {
-            if (v && !data[k]) data[k] = v;
-          }
-        }
-      } catch {}
-    }
-
-    // Step 3: If no content_intro, try Wikipedia / Baidu Baike
+    // Step 2: Try Wikipedia first for content_intro
     if (!data.content_intro && movieTitle) {
       const intro = await fetchContentIntro(movieTitle);
       if (intro) {
         data.content_intro = intro.intro;
         data.content_source = intro.source;
       }
+    }
+
+    // Step 3: Try douban detail page
+    if (detailUrl?.includes("movie.douban.com/subject/")) {
+      try {
+        const detail = await doubanMovieDetail(detailUrl);
+        if (detail.status && detail.data) {
+          if (!data.content_intro && detail.data.content_intro) data.content_intro = detail.data.content_intro;
+          for (const [k, v] of Object.entries(detail.data)) {
+            if (v && !data[k]) data[k] = v;
+          }
+        }
+      } catch {}
     }
 
     if (data.title) {
@@ -1158,8 +1158,8 @@ async function route(request: Request, env: Env): Promise<Response> {
   }
   if (url.pathname === "/api/music/detail" && request.method === "GET") {
     const detailUrl = url.searchParams.get("url")?.trim();
-    const title = url.searchParams.get("title")?.trim();
-    if (!detailUrl && !title) return json({ status: false, msg: "缺少参数 url 或 title", data: null }, 400);
+    const title = url.searchParams.get("name")?.trim() || url.searchParams.get("title")?.trim();
+    if (!detailUrl && !title) return json({ status: false, msg: "缺少参数 url 或 name", data: null }, 400);
 
     let musicTitle = title ?? "";
     const data: Record<string, unknown> = {};
@@ -1186,27 +1186,27 @@ async function route(request: Request, env: Env): Promise<Response> {
       } catch {}
     }
 
-    // Step 2: Try douban detail page
-    if (detailUrl?.includes("music.douban.com/subject/")) {
-      try {
-        const detail = await doubanMusicDetail(detailUrl);
-        if (detail.status && detail.data) {
-          if (detail.data.content_intro) data.content_intro = detail.data.content_intro;
-          if (detail.data.songs) data.songs = detail.data.songs;
-          for (const [k, v] of Object.entries(detail.data)) {
-            if (v && !data[k]) data[k] = v;
-          }
-        }
-      } catch {}
-    }
-
-    // Step 3: If no content_intro, try Wikipedia / Baidu Baike
+    // Step 2: Try Wikipedia first for content_intro
     if (!data.content_intro && musicTitle) {
       const intro = await fetchContentIntro(musicTitle);
       if (intro) {
         data.content_intro = intro.intro;
         data.content_source = intro.source;
       }
+    }
+
+    // Step 3: Try douban detail page
+    if (detailUrl?.includes("music.douban.com/subject/")) {
+      try {
+        const detail = await doubanMusicDetail(detailUrl);
+        if (detail.status && detail.data) {
+          if (!data.content_intro && detail.data.content_intro) data.content_intro = detail.data.content_intro;
+          if (detail.data.songs) data.songs = detail.data.songs;
+          for (const [k, v] of Object.entries(detail.data)) {
+            if (v && !data[k]) data[k] = v;
+          }
+        }
+      } catch {}
     }
 
     if (data.title) {
