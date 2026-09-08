@@ -1050,7 +1050,32 @@ async function route(request: Request, env: Env): Promise<Response> {
   if (url.pathname === "/api/movie/detail" && request.method === "GET") {
     const detailUrl = url.searchParams.get("url")?.trim();
     if (!detailUrl || !detailUrl.includes("movie.douban.com/subject/")) return json({ status: false, msg: "缺少参数 url", data: null }, 400);
-    return json(await doubanMovieDetail(detailUrl), 200, { "cache-control": "public, max-age=86400" });
+    const result = await doubanMovieDetail(detailUrl);
+    // If direct scrape failed (anti-bot), try search.douban.com for basic info
+    if (!result.status) {
+      try {
+        const movieId = detailUrl.match(/subject\/(\d+)/)?.[1];
+        if (movieId) {
+          const search = await doubanSearch("movie", movieId, 1);
+          const found = search.data.find(i => i.cover_link?.includes(`/subject/${movieId}/`));
+          if (found) {
+            return json({
+              status: true,
+              msg: "获取成功(搜索降级)",
+              time: search.time,
+              data: {
+                title: found.title, pic: found.cover, rating: String(found.rating ?? ""),
+                year: found.year ?? "", 类型: Array.isArray(found.type) ? found.type.join("/") : "",
+                "制片国家/地区": found.country ?? "", 片长: found.duration ?? "",
+                主演: Array.isArray(found.actors) ? found.actors.join("/") : "",
+              },
+              debug: { fallback: "search.douban.com", note: "direct scrape blocked by anti-bot" }
+            }, 200, { "cache-control": "public, max-age=3600" });
+          }
+        }
+      } catch {}
+    }
+    return json(result, result.status ? 200 : 502, { "cache-control": result.status ? "public, max-age=86400" : "public, max-age=60" });
   }
   if (url.pathname === "/api/music/detail" && request.method === "GET") {
     const detailUrl = url.searchParams.get("url")?.trim();
