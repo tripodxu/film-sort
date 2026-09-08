@@ -133,14 +133,16 @@ GET /api/music/list?key={关键词}&page={页码}
 ### 书籍详情
 
 ```
-GET /api/book/detail?url={豆瓣书籍URL}
+GET /api/book/detail?name={书名}
 ```
 
 | 参数 | 类型 | 必填 | 说明 |
 |------|------|------|------|
-| url | string | 是 | `book.douban.com/subject/...` 格式 |
+| name | string | 是 | 书籍标题（优先使用 Wikipedia 获取简介） |
+| title | string | 否 | 兼容旧参数，等同于 name |
+| url | string | 否 | `book.douban.com/subject/...` 格式 |
 
-通过正则解析详情页 HTML，提取标题、封面、评分、出版信息、简介、作者简介、标签等。
+优先通过 Wikipedia/Baidu Baike 获取 content_intro，再从豆瓣补充元数据。
 
 **响应示例：**
 ```json
@@ -171,15 +173,16 @@ GET /api/book/detail?url={豆瓣书籍URL}
 ### 影视详情
 
 ```
-GET /api/movie/detail?url={豆瓣影视URL}&title={标题}
+GET /api/movie/detail?name={电影名}
 ```
 
 | 参数 | 类型 | 必填 | 说明 |
 |------|------|------|------|
+| name | string | 是 | 电影标题（优先使用 Wikipedia 获取简介） |
+| title | string | 否 | 兼容旧参数，等同于 name |
 | url | string | 否 | `movie.douban.com/subject/...` 格式 |
-| title | string | 推荐 | 电影标题（搜索用） |
 
-**策略**：优先用 `title` 通过 `search.douban.com` 搜索获取数据（绕过反爬）；若未提供 title 则尝试直接抓取详情页（可能被拦截）。
+优先通过 Wikipedia/Baidu Baike 获取 content_intro，再从豆瓣搜索补充元数据。
 
 **响应示例：**
 ```json
@@ -205,12 +208,16 @@ GET /api/movie/detail?url={豆瓣影视URL}&title={标题}
 ### 音乐详情
 
 ```
-GET /api/music/detail?url={豆瓣音乐URL}
+GET /api/music/detail?name={专辑名}
 ```
 
 | 参数 | 类型 | 必填 | 说明 |
 |------|------|------|------|
-| url | string | 是 | `music.douban.com/subject/...` 格式 |
+| name | string | 是 | 音乐标题（优先使用 Wikipedia 获取简介） |
+| title | string | 否 | 兼容旧参数，等同于 name |
+| url | string | 否 | `music.douban.com/subject/...` 格式 |
+
+优先通过 Wikipedia/Baidu Baike 获取 content_intro，再从豆瓣补充元数据。
 
 **响应示例：**
 ```json

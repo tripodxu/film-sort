@@ -114,9 +114,9 @@ docs/
 | GET | `/api/book/list?key=&page=` | 书籍搜索 |
 | GET | `/api/movie/list?key=&page=` | 影视搜索 |
 | GET | `/api/music/list?key=&page=` | 音乐搜索 |
-| GET | `/api/book/detail?url=` | 书籍详情（直接抓取） |
-| GET | `/api/movie/detail?url=&title=` | 影视详情（search.douban.com 优先） |
-| GET | `/api/music/detail?url=` | 音乐详情（直接抓取） |
+| GET | `/api/book/detail?name=` | 书籍详情（Wikipedia 优先） |
+| GET | `/api/movie/detail?name=` | 影视详情（Wikipedia 优先） |
+| GET | `/api/music/detail?name=` | 音乐详情（Wikipedia 优先） |
 | GET | `/api/artwork/detail?kind=&q=` | 比较页作品详情 |
 | POST | `/api/insights` | 生成画像比较解读（需配置 AI Secret） |
 | GET | `/api/music/play?q=` | 音乐试听地址代理 |
