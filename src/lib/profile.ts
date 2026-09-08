@@ -108,6 +108,31 @@ export function deleteRanking(profile: ArtisticProfile, index: number): Artistic
   return { ...profile, rankings, updatedAt: new Date().toISOString() };
 }
 
+export function mergeProfiles(cloud: ArtisticProfile, local: ArtisticProfile): ArtisticProfile {
+  const key = (r: RankingExport) => `${r.kind}|${normalizeTitle(r.collectionTitle)}`;
+  const existingKeys = new Set(cloud.rankings.map(key));
+  const existingTitles = new Set(cloud.rankings.map((r) => r.collectionTitle));
+  const appended: RankingExport[] = [];
+  for (const ranking of local.rankings) {
+    if (existingKeys.has(key(ranking))) {
+      // Same kind+title exists — disambiguate with suffix
+      let suffix = 2;
+      let candidate = `${ranking.collectionTitle}（${suffix}）`;
+      while (existingTitles.has(candidate)) { suffix += 1; candidate = `${ranking.collectionTitle}（${suffix}）`; }
+      existingTitles.add(candidate);
+      appended.push({ ...ranking, collectionTitle: candidate });
+    } else {
+      appended.push(ranking);
+      existingTitles.add(ranking.collectionTitle);
+    }
+  }
+  return {
+    ...cloud,
+    updatedAt: new Date().toISOString(),
+    rankings: [...cloud.rankings, ...appended],
+  };
+}
+
 export interface RankingComparisonItem {
   title: string;
   ownRank: number;
