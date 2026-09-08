@@ -321,10 +321,26 @@ async function fetchBaiduBaike(query: string): Promise<{ intro: string; source: 
 }
 
 export async function fetchContentIntro(title: string): Promise<{ intro: string; source: string } | null> {
-  const wiki = await fetchWikipedia(title, "zh") ?? await fetchWikipedia(title, "en");
-  if (wiki) return wiki;
-  const baike = await fetchBaiduBaike(title);
-  if (baike) return baike;
+  // Try Wikipedia first (zh then en)
+  try {
+    const zhWiki = await fetchWikipedia(title, "zh");
+    if (zhWiki) return zhWiki;
+  } catch (e) {
+    console.error(`zh.wikipedia failed for "${title}":`, e instanceof Error ? e.message : e);
+  }
+  try {
+    const enWiki = await fetchWikipedia(title, "en");
+    if (enWiki) return enWiki;
+  } catch (e) {
+    console.error(`en.wikipedia failed for "${title}":`, e instanceof Error ? e.message : e);
+  }
+  // Fallback to Baidu Baike
+  try {
+    const baike = await fetchBaiduBaike(title);
+    if (baike) return baike;
+  } catch (e) {
+    console.error(`baike failed for "${title}":`, e instanceof Error ? e.message : e);
+  }
   return null;
 }
 
