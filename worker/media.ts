@@ -308,9 +308,11 @@ async function fetchWikipedia(titles: string[], lang: "zh" | "en" = "zh", timeou
     const hint = mediaType ? TYPE_HINTS[mediaType]?.[0] : undefined;
 
     if (!direct) {
-      // Phase 1: titles 直查
-      const r1 = await fetchExtracts(titles, lang, timeoutMs);
-      if (r1) return r1;
+      // Phase 1: titles 直查（仅单词标题，多词标题跳过避免重定向误命中）
+      if (titles[0].length <= 10 && !titles[0].includes(" ")) {
+        const r1 = await fetchExtracts(titles, lang, timeoutMs);
+        if (r1) return r1;
+      }
 
       // Phase 2: "标题 类型限定词" 搜索（如 "龙猫 电影"）
       if (hint) {
