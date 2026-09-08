@@ -303,36 +303,38 @@ async function fetchExtracts(titles: string[], lang: "zh" | "en", timeoutMs: num
   return null;
 }
 
-async function fetchWikipedia(titles: string[], lang: "zh" | "en" = "zh", timeoutMs = 8000, mediaType?: "movie" | "book" | "music"): Promise<{ intro: string; source: string } | null> {
+async function fetchWikipedia(titles: string[], lang: "zh" | "en" = "zh", timeoutMs = 8000, mediaType?: "movie" | "book" | "music", direct = false): Promise<{ intro: string; source: string } | null> {
   try {
     const hint = mediaType ? TYPE_HINTS[mediaType]?.[0] : undefined;
 
-    // Phase 1: titles 直查（消歧义页无摘要时跳过）
-    const r1 = await fetchExtracts(titles, lang, timeoutMs);
-    if (r1) return r1;
+    if (!direct) {
+      // Phase 1: titles 直查（消歧义页无摘要时跳过）
+      const r1 = await fetchExtracts(titles, lang, timeoutMs);
+      if (r1) return r1;
 
-    // Phase 2: "标题 类型" 搜索（如 "龙猫 电影"、"三体 小说"）
-    if (hint) {
-      const qualified = titles[0] + " " + hint;
-      const params = new URLSearchParams({
-        action: "query", list: "search", srsearch: qualified,
-        srnamespace: "0", srlimit: "5", redirects: "1", format: "json",
-      });
-      const r = await fetch(`https://${lang}.wikipedia.org/w/api.php?${params}`, {
-        headers: { "user-agent": USER_AGENTS[0], "accept": "application/json" },
-        signal: AbortSignal.timeout(timeoutMs),
-      });
-      if (r.ok) {
-        const d = await r.json() as { query?: { search?: { title: string }[] } };
-        const st = d.query?.search?.map((s) => s.title).filter(Boolean) ?? [];
-        if (st.length > 0) {
-          const result = await fetchExtracts(st, lang, timeoutMs);
-          if (result) return result;
+      // Phase 2: "标题 类型" 搜索（如 "龙猫 电影"、"三体 小说"）
+      if (hint) {
+        const qualified = titles[0] + " " + hint;
+        const params = new URLSearchParams({
+          action: "query", list: "search", srsearch: qualified,
+          srnamespace: "0", srlimit: "5", redirects: "1", format: "json",
+        });
+        const r = await fetch(`https://${lang}.wikipedia.org/w/api.php?${params}`, {
+          headers: { "user-agent": USER_AGENTS[0], "accept": "application/json" },
+          signal: AbortSignal.timeout(timeoutMs),
+        });
+        if (r.ok) {
+          const d = await r.json() as { query?: { search?: { title: string }[] } };
+          const st = d.query?.search?.map((s) => s.title).filter(Boolean) ?? [];
+          if (st.length > 0) {
+            const result = await fetchExtracts(st, lang, timeoutMs);
+            if (result) return result;
+          }
         }
       }
     }
 
-    // Phase 3: 全文搜索标题 → 取第一个有效摘要
+    // Phase 3: 全文搜索 → 取第一个有效摘要
     const params3 = new URLSearchParams({
       action: "query", list: "search", srsearch: titles[0],
       srnamespace: "0", srlimit: "5", redirects: "1", format: "json",
@@ -396,8 +398,8 @@ export async function fetchContentIntro(title: string, mediaType?: "movie" | "bo
   if (creator) {
     const creatorCandidates = [`${title} ${creator}`];
     const [zh2, en2] = await Promise.allSettled([
-      fetchWikipedia(creatorCandidates, "zh", 8000, mediaType),
-      fetchWikipedia(creatorCandidates, "en", 6000, mediaType),
+      fetchWikipedia(creatorCandidates, "zh", 8000, mediaType, true),
+      fetchWikipedia(creatorCandidates, "en", 6000, mediaType, true),
     ]);
     const zhR = zh2.status === "fulfilled" ? zh2.value : null;
     const enR = en2.status === "fulfilled" ? en2.value : null;
