@@ -338,7 +338,7 @@ async function fetchWikipedia(titles: string[], lang: "zh" | "en" = "zh", timeou
     const searchQuery = titles[0];
     const searchWords = searchQuery.split(/\s+/).filter(Boolean);
     // 多词搜索时用 + 前缀强制 AND 匹配
-    const gsrsearch = searchWords.length > 1 ? searchWords.map((w) => "+" + w).join(" ") : searchQuery;
+    const gsrsearch = searchWords.length > 1 ? searchWords.join(" AND ") : searchQuery;
     const params3 = new URLSearchParams({
       action: "query", generator: "search", gsrsearch,
       gsrnamespace: "0", gsrlimit: "5", redirects: "1",
