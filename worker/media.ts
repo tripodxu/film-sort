@@ -332,7 +332,7 @@ async function fetchWikipedia(titles: string[], lang: "zh" | "en" = "zh", timeou
       }
     }
 
-    // Phase 3: 全文搜索 → 取第一个有效摘要（处理日文标题动画电影等特殊情况）
+    // Phase 3: 全文搜索 → 取第一个有摘要的非消歧义页面
     const baseTitle = titles[0];
     const params3 = new URLSearchParams({
       action: "query", list: "search", srsearch: baseTitle,
@@ -343,14 +343,10 @@ async function fetchWikipedia(titles: string[], lang: "zh" | "en" = "zh", timeou
       signal: AbortSignal.timeout(timeoutMs),
     });
     if (r3.ok) {
-      const d3 = await r3.json() as { query?: { search?: { title: string; snippet?: string }[] } };
-      // 优先标题包含关键词的，其次取搜索结果中 snippet 包含关键词的
-      const results = d3.query?.search ?? [];
-      const titleMatch = results.filter((s) => s.title.includes(baseTitle));
-      const snippetMatch = results.filter((s) => !s.title.includes(baseTitle) && (s.snippet ?? "").includes(baseTitle));
-      const orderedTitles = [...titleMatch, ...snippetMatch].map((s) => s.title);
-      if (orderedTitles.length > 0) {
-        const result = await fetchExtracts(orderedTitles, lang, timeoutMs);
+      const d3 = await r3.json() as { query?: { search?: { title: string }[] } };
+      const searchTitles = d3.query?.search?.map((s) => s.title) ?? [];
+      if (searchTitles.length > 0) {
+        const result = await fetchExtracts(searchTitles, lang, timeoutMs);
         if (result) return result;
       }
     }
