@@ -991,48 +991,46 @@ async function route(request: Request, env: Env): Promise<Response> {
     if (!detailUrl || !detailUrl.includes("book.douban.com/subject/")) return json({ status: false, msg: "缺少参数 url", data: null }, 400);
     const result = await doubanBookDetail(detailUrl);
     if (result.status) return json(result, 200, { "cache-control": "public, max-age=86400" });
-    // Fallback: search by extracted title
-    const bookId = detailUrl.match(/subject\/(\d+)/)?.[1];
-    if (bookId) {
-      try {
-        const search = await doubanSearch("book", bookId, 1);
-        const found = search.data.find(i => i.cover_link?.includes(bookId));
-        if (found) return json({ status: true, msg: "获取成功(搜索)", time: search.time, data: { title: found.title, pic: found.cover, rating: found.rating, 作者: found.author, 出版社: found.press, 出版年: found.date } }, 200, { "cache-control": "public, max-age=3600" });
-      } catch {}
-    }
-    return json(result, result.status ? 200 : 502, { "cache-control": "public, max-age=300" });
+    // Fallback: search the URL directly
+    try {
+      const search = await doubanSearch("book", detailUrl, 1);
+      const found = search.data.find(i => i.cover_link === detailUrl || i.cover_link?.includes(detailUrl.split("/").pop() ?? ""));
+      if (found) return json({ status: true, msg: "获取成功(搜索)", time: search.time, data: { title: found.title, pic: found.cover, rating: String(found.rating ?? ""), 作者: found.author, 出版社: found.press, 出版年: found.date } }, 200, { "cache-control": "public, max-age=3600" });
+    } catch {}
+    return json(result, 502, { "cache-control": "public, max-age=300" });
   }
   if (url.pathname === "/api/movie/detail" && request.method === "GET") {
     const detailUrl = url.searchParams.get("url")?.trim();
     if (!detailUrl || !detailUrl.includes("movie.douban.com/subject/")) return json({ status: false, msg: "缺少参数 url", data: null }, 400);
     const result = await doubanMovieDetail(detailUrl);
     if (result.status) return json(result, 200, { "cache-control": "public, max-age=86400" });
-    // Fallback: search by extracted title from URL
+    // Fallback: use artwork detail endpoint logic (search by title from search results)
     const movieId = detailUrl.match(/subject\/(\d+)/)?.[1];
     if (movieId) {
       try {
+        // Search with a broad query and filter by subject ID in results
         const search = await doubanSearch("movie", movieId, 1);
-        const found = search.data.find(i => i.cover_link?.includes(movieId));
-        if (found) return json({ status: true, msg: "获取成功(搜索)", time: search.time, data: { title: found.title, pic: found.cover, rating: found.rating, 类型: Array.isArray(found.type) ? found.type.join("/") : "", "制片国家/地区": found.country, 片长: found.duration } }, 200, { "cache-control": "public, max-age=3600" });
+        const found = search.data.find(i => i.cover_link?.includes(`/subject/${movieId}/`));
+        if (found) return json({ status: true, msg: "获取成功(搜索)", time: search.time, data: { title: found.title, pic: found.cover, rating: String(found.rating ?? ""), 类型: Array.isArray(found.type) ? found.type.join("/") : "", "制片国家/地区": found.country, 片长: found.duration, year: found.year } }, 200, { "cache-control": "public, max-age=3600" });
       } catch {}
     }
-    return json(result, result.status ? 200 : 502, { "cache-control": "public, max-age=300" });
+    return json(result, 502, { "cache-control": "public, max-age=300" });
   }
   if (url.pathname === "/api/music/detail" && request.method === "GET") {
     const detailUrl = url.searchParams.get("url")?.trim();
     if (!detailUrl || !detailUrl.includes("music.douban.com/subject/")) return json({ status: false, msg: "缺少参数 url", data: null }, 400);
     const result = await doubanMusicDetail(detailUrl);
     if (result.status) return json(result, 200, { "cache-control": "public, max-age=86400" });
-    // Fallback: search by extracted title
+    // Fallback: search by subject ID
     const musicId = detailUrl.match(/subject\/(\d+)/)?.[1];
     if (musicId) {
       try {
         const search = await doubanSearch("music", musicId, 1);
-        const found = search.data.find(i => i.cover_link?.includes(musicId));
-        if (found) return json({ status: true, msg: "获取成功(搜索)", time: search.time, data: { title: found.title, pic: found.cover, rating: found.rating, 表演者: found.artist, 流派: found.schools, 专辑类型: found.album, 发行时间: found.date } }, 200, { "cache-control": "public, max-age=3600" });
+        const found = search.data.find(i => i.cover_link?.includes(`/subject/${musicId}/`));
+        if (found) return json({ status: true, msg: "获取成功(搜索)", time: search.time, data: { title: found.title, pic: found.cover, rating: String(found.rating ?? ""), 表演者: found.artist, 流派: found.schools, 专辑类型: found.album, 发行时间: found.date } }, 200, { "cache-control": "public, max-age=3600" });
       } catch {}
     }
-    return json(result, result.status ? 200 : 502, { "cache-control": "public, max-age=300" });
+    return json(result, 502, { "cache-control": "public, max-age=300" });
   }
   if (url.pathname === "/api/artwork/detail" && request.method === "GET") {
     const kind = url.searchParams.get("kind");
