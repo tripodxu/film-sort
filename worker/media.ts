@@ -278,23 +278,34 @@ export async function doubanTop250(limit: number): Promise<DoubanWork[]> {
 
 // ===== Wikipedia & Baidu Baike for content_intro =====
 
-interface WikiSummary {
-  title?: string;
-  extract?: string;
-  thumbnail?: { source?: string };
-}
-
-async function fetchWikipedia(query: string, lang: "zh" | "en" = "zh", timeoutMs = 8000): Promise<{ intro: string; source: string } | null> {
+async function fetchWikipedia(titles: string[], lang: "zh" | "en" = "zh", timeoutMs = 10000): Promise<{ intro: string; source: string } | null> {
   try {
-    const url = `https://${lang}.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(query)}`;
+    // MediaWiki action=query API — 更可靠，支持多标题、自动跟随重定向
+    const params = new URLSearchParams({
+      action: "query",
+      titles: titles.join("|"),
+      prop: "extracts",
+      exintro: "true",
+      explaintext: "true",
+      exlimit: "1",
+      redirects: "1",
+      format: "json",
+    });
+    const url = `https://${lang}.wikipedia.org/w/api.php?${params}`;
     const response = await fetch(url, {
       headers: { "user-agent": USER_AGENTS[0], "accept": "application/json" },
       signal: AbortSignal.timeout(timeoutMs),
     });
     if (!response.ok) return null;
-    const data = await response.json() as WikiSummary;
-    if (data.extract && data.extract.length > 30) {
-      return { intro: data.extract, source: `${lang}wiki` };
+    const data = await response.json() as {
+      query?: { pages?: Record<string, { title?: string; extract?: string; missing?: boolean }> };
+    };
+    if (!data.query?.pages) return null;
+    // 取第一个有 extract 的页面
+    for (const page of Object.values(data.query.pages)) {
+      if (page.extract && !page.missing && page.extract.length > 30) {
+        return { intro: page.extract, source: `${lang}wiki` };
+      }
     }
     return null;
   } catch {
@@ -321,35 +332,25 @@ async function fetchBaiduBaike(query: string): Promise<{ intro: string; source: 
 }
 
 export async function fetchContentIntro(title: string, mediaType?: "movie" | "book" | "music"): Promise<{ intro: string; source: string } | null> {
-  // Build disambiguated query for non-movie types (避免维基百科歧义)
-  const queries: string[] = [title];
-  if (mediaType === "book") queries.push(`${title} (小说)`, `${title} (书籍)`);
-  if (mediaType === "music") queries.push(`${title} (专辑)`);
+  // 构建候选标题列表（含消歧义提示）
+  const candidates = [title];
+  if (mediaType === "book") candidates.push(`${title} (小说)`, `${title} (书籍)`);
+  if (mediaType === "music") candidates.push(`${title} (专辑)`, `${title} (专辑名)`);
 
-  // Try all queries against zh and en Wikipedia concurrently, prefer Chinese
-  const attempts = queries.flatMap((q) => [
-    fetchWikipedia(q, "zh", 12000),
-    fetchWikipedia(q, "en", 8000),
+  // 并行请求中英文维基，每个语言一次 API 调用传入所有候选标题
+  const [zhResult, enResult] = await Promise.allSettled([
+    fetchWikipedia(candidates, "zh", 10000),
+    fetchWikipedia(candidates, "en", 8000),
   ]);
-  const results = await Promise.allSettled(attempts);
 
-  // Collect successful results, preferring zh over en, and earlier queries first
-  const zhResults: string[] = [];
-  const enResults: string[] = [];
-  for (const r of results) {
-    if (r.status === "fulfilled" && r.value) {
-      if (r.value.source === "zhwiki") zhResults.push(r.value.intro);
-      else enResults.push(r.value.intro);
-    }
-  }
+  const zh = zhResult.status === "fulfilled" ? zhResult.value : null;
+  const en = enResult.status === "fulfilled" ? enResult.value : null;
 
-  // Pick best: first zh result, or first en result
-  const bestIntro = zhResults[0] || enResults[0];
-  if (bestIntro) {
-    return { intro: bestIntro, source: zhResults[0] ? "zhwiki" : "enwiki" };
-  }
+  // 优先中文
+  if (zh) return zh;
+  if (en) return en;
 
-  // Fallback to Baidu Baike
+  // 百度百科兜底
   try {
     const baike = await fetchBaiduBaike(title);
     if (baike) return baike;
