@@ -352,11 +352,14 @@ async function fetchWikipedia(titles: string[], lang: "zh" | "en" = "zh", timeou
       const d3 = await r3.json() as { query?: { pages?: Record<string, { title?: string; extract?: string; missing?: boolean }> } };
       if (d3.query?.pages) {
         const pages = Object.values(d3.query.pages).filter((p) => !p.missing && p.extract && p.extract.length > 30);
-        // 多词搜索时，验证摘要包含所有搜索词
+        // 多词搜索时，验证：1) 至少一个词在标题中 2) 所有词在全文中
         const valid = searchWords.length > 1
           ? pages.filter((p) => {
-              const text = ((p.title ?? "") + " " + p.extract!).toLowerCase();
-              return searchWords.every((w) => text.includes(w.toLowerCase()));
+              const titleLower = (p.title ?? "").toLowerCase();
+              const text = (titleLower + " " + p.extract!).toLowerCase();
+              const titleHit = searchWords.some((w) => titleLower.includes(w.toLowerCase()));
+              const allWords = searchWords.every((w) => text.includes(w.toLowerCase()));
+              return titleHit && allWords;
             })
           : pages;
         if (valid.length > 0) return { intro: valid[0].extract!, source: `${lang}wiki` };
