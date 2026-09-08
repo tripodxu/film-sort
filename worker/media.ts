@@ -285,7 +285,7 @@ const TYPE_HINTS: Record<string, string[]> = {
 };
 
 // 从 titles 列表取摘要，返回第一个有效结果
-async function fetchExtracts(titles: string[], lang: "zh" | "en", timeoutMs: number): Promise<{ intro: string; source: string } | null> {
+async function fetchExtracts(titles: string[], lang: "zh" | "en", timeoutMs: number, searchWords?: string[]): Promise<{ intro: string; source: string } | null> {
   const params = new URLSearchParams({
     action: "query", titles: titles.join("|"),
     prop: "extracts", exintro: "true", explaintext: "true", exlimit: "5", redirects: "1", format: "json",
@@ -295,10 +295,19 @@ async function fetchExtracts(titles: string[], lang: "zh" | "en", timeoutMs: num
     signal: AbortSignal.timeout(timeoutMs),
   });
   if (!r.ok) return null;
-  const d = await r.json() as { query?: { pages?: Record<string, { extract?: string; missing?: boolean }> } };
+  const d = await r.json() as { query?: { pages?: Record<string, { title?: string; extract?: string; missing?: boolean }> } };
   if (!d.query?.pages) return null;
   for (const p of Object.values(d.query.pages)) {
-    if (p.extract && !p.missing && p.extract.length > 30) return { intro: p.extract, source: `${lang}wiki` };
+    if (!p.extract || p.missing || p.extract.length <= 30) continue;
+    // 多词搜索时验证：至少一个词在标题中，所有词在全文中
+    if (searchWords && searchWords.length > 1) {
+      const titleLower = (p.title ?? "").toLowerCase();
+      const text = (titleLower + " " + p.extract).toLowerCase();
+      const titleHit = searchWords.some((w) => titleLower.includes(w.toLowerCase()));
+      const allWords = searchWords.every((w) => text.includes(w.toLowerCase()));
+      if (!titleHit || !allWords) continue;
+    }
+    return { intro: p.extract, source: `${lang}wiki` };
   }
   return null;
 }
@@ -306,10 +315,11 @@ async function fetchExtracts(titles: string[], lang: "zh" | "en", timeoutMs: num
 async function fetchWikipedia(titles: string[], lang: "zh" | "en" = "zh", timeoutMs = 8000, mediaType?: "movie" | "book" | "music", direct = false): Promise<{ intro: string; source: string } | null> {
   try {
     const hint = mediaType ? TYPE_HINTS[mediaType]?.[0] : undefined;
+    const searchWords = titles[0].split(/\s+/).filter(Boolean);
 
     if (!direct) {
       // Phase 1: titles 直查（消歧义页无摘要时跳过）
-      const r1 = await fetchExtracts(titles, lang, timeoutMs);
+      const r1 = await fetchExtracts(titles, lang, timeoutMs, searchWords);
       if (r1) return r1;
 
       // Phase 2: "标题 类型" 搜索（如 "龙猫 电影"、"三体 小说"）
@@ -327,7 +337,7 @@ async function fetchWikipedia(titles: string[], lang: "zh" | "en" = "zh", timeou
           const d = await r.json() as { query?: { search?: { title: string }[] } };
           const st = d.query?.search?.map((s) => s.title).filter(Boolean) ?? [];
           if (st.length > 0) {
-            const result = await fetchExtracts(st, lang, timeoutMs);
+            const result = await fetchExtracts(st, lang, timeoutMs, searchWords);
             if (result) return result;
           }
         }
@@ -336,8 +346,6 @@ async function fetchWikipedia(titles: string[], lang: "zh" | "en" = "zh", timeou
 
     // Phase 3: generator=search + prop=extracts 一步到位
     const searchQuery = titles[0];
-    const searchWords = searchQuery.split(/\s+/).filter(Boolean);
-    // 多词搜索时用 + 前缀强制 AND 匹配
     const gsrsearch = searchWords.length > 1 ? searchWords.join(" AND ") : searchQuery;
     const params3 = new URLSearchParams({
       action: "query", generator: "search", gsrsearch,
