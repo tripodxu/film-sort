@@ -303,40 +303,39 @@ async function fetchExtracts(titles: string[], lang: "zh" | "en", timeoutMs: num
   return null;
 }
 
-async function fetchWikipedia(titles: string[], lang: "zh" | "en" = "zh", timeoutMs = 10000, mediaType?: "movie" | "book" | "music"): Promise<{ intro: string; source: string } | null> {
+async function fetchWikipedia(titles: string[], lang: "zh" | "en" = "zh", timeoutMs = 8000, mediaType?: "movie" | "book" | "music"): Promise<{ intro: string; source: string } | null> {
   try {
-    const hints = mediaType ? TYPE_HINTS[mediaType] ?? [] : [];
+    const hint = mediaType ? TYPE_HINTS[mediaType]?.[0] : undefined;
 
     // Phase 1: titles 直查（消歧义页无摘要时跳过）
     const r1 = await fetchExtracts(titles, lang, timeoutMs);
     if (r1) return r1;
 
-    // Phase 2: 标题搜索 + 类型限定词（如 "龙猫 电影"）
-    for (const hint of hints) {
+    // Phase 2: "标题 类型" 搜索（如 "龙猫 电影"、"三体 小说"）
+    if (hint) {
       const qualified = titles[0] + " " + hint;
-      const params2 = new URLSearchParams({
+      const params = new URLSearchParams({
         action: "query", list: "search", srsearch: qualified,
-        srwhat: "title", srnamespace: "0", srlimit: "3", redirects: "1", format: "json",
+        srnamespace: "0", srlimit: "5", redirects: "1", format: "json",
       });
-      const r2 = await fetch(`https://${lang}.wikipedia.org/w/api.php?${params2}`, {
+      const r = await fetch(`https://${lang}.wikipedia.org/w/api.php?${params}`, {
         headers: { "user-agent": USER_AGENTS[0], "accept": "application/json" },
         signal: AbortSignal.timeout(timeoutMs),
       });
-      if (r2.ok) {
-        const d2 = await r2.json() as { query?: { search?: { title: string }[] } };
-        const searchTitles = d2.query?.search?.map((s) => s.title).filter(Boolean) ?? [];
-        if (searchTitles.length > 0) {
-          const result = await fetchExtracts(searchTitles, lang, timeoutMs);
+      if (r.ok) {
+        const d = await r.json() as { query?: { search?: { title: string }[] } };
+        const st = d.query?.search?.map((s) => s.title).filter(Boolean) ?? [];
+        if (st.length > 0) {
+          const result = await fetchExtracts(st, lang, timeoutMs);
           if (result) return result;
         }
       }
     }
 
-    // Phase 3: 全文搜索 → 取第一个有摘要的非消歧义页面
-    const baseTitle = titles[0];
+    // Phase 3: 全文搜索标题 → 取第一个有效摘要
     const params3 = new URLSearchParams({
-      action: "query", list: "search", srsearch: baseTitle,
-      srnamespace: "0", srlimit: "10", redirects: "1", format: "json",
+      action: "query", list: "search", srsearch: titles[0],
+      srnamespace: "0", srlimit: "5", redirects: "1", format: "json",
     });
     const r3 = await fetch(`https://${lang}.wikipedia.org/w/api.php?${params3}`, {
       headers: { "user-agent": USER_AGENTS[0], "accept": "application/json" },
@@ -344,9 +343,9 @@ async function fetchWikipedia(titles: string[], lang: "zh" | "en" = "zh", timeou
     });
     if (r3.ok) {
       const d3 = await r3.json() as { query?: { search?: { title: string }[] } };
-      const searchTitles = d3.query?.search?.map((s) => s.title) ?? [];
-      if (searchTitles.length > 0) {
-        const result = await fetchExtracts(searchTitles, lang, timeoutMs);
+      const st = d3.query?.search?.map((s) => s.title) ?? [];
+      if (st.length > 0) {
+        const result = await fetchExtracts(st, lang, timeoutMs);
         if (result) return result;
       }
     }
@@ -382,8 +381,8 @@ export async function fetchContentIntro(title: string, mediaType?: "movie" | "bo
 
   // 并行请求中英文维基，传入类型限定词减少歧义
   const [zhResult, enResult] = await Promise.allSettled([
-    fetchWikipedia(candidates, "zh", 10000, mediaType),
-    fetchWikipedia(candidates, "en", 8000, mediaType),
+    fetchWikipedia(candidates, "zh", 8000, mediaType),
+    fetchWikipedia(candidates, "en", 6000, mediaType),
   ]);
 
   const zh = zhResult.status === "fulfilled" ? zhResult.value : null;
@@ -397,8 +396,8 @@ export async function fetchContentIntro(title: string, mediaType?: "movie" | "bo
   if (creator) {
     const creatorCandidates = [`${title} ${creator}`];
     const [zh2, en2] = await Promise.allSettled([
-      fetchWikipedia(creatorCandidates, "zh", 10000, mediaType),
-      fetchWikipedia(creatorCandidates, "en", 8000, mediaType),
+      fetchWikipedia(creatorCandidates, "zh", 8000, mediaType),
+      fetchWikipedia(creatorCandidates, "en", 6000, mediaType),
     ]);
     const zhR = zh2.status === "fulfilled" ? zh2.value : null;
     const enR = en2.status === "fulfilled" ? en2.value : null;
