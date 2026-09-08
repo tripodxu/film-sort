@@ -278,54 +278,78 @@ export async function doubanTop250(limit: number): Promise<DoubanWork[]> {
 
 // ===== Wikipedia & Baidu Baike for content_intro =====
 
-async function fetchWikipedia(titles: string[], lang: "zh" | "en" = "zh", timeoutMs = 10000): Promise<{ intro: string; source: string } | null> {
+const TYPE_HINTS: Record<string, string[]> = {
+  movie: ["电影", "film", "影片"],
+  book: ["小说", "novel", "书籍"],
+  music: ["专辑", "album", "音乐专辑"],
+};
+
+// 从 titles 列表取摘要，返回第一个有效结果
+async function fetchExtracts(titles: string[], lang: "zh" | "en", timeoutMs: number): Promise<{ intro: string; source: string } | null> {
+  const params = new URLSearchParams({
+    action: "query", titles: titles.join("|"),
+    prop: "extracts", exintro: "true", explaintext: "true", exlimit: "5", redirects: "1", format: "json",
+  });
+  const r = await fetch(`https://${lang}.wikipedia.org/w/api.php?${params}`, {
+    headers: { "user-agent": USER_AGENTS[0], "accept": "application/json" },
+    signal: AbortSignal.timeout(timeoutMs),
+  });
+  if (!r.ok) return null;
+  const d = await r.json() as { query?: { pages?: Record<string, { extract?: string; missing?: boolean }> } };
+  if (!d.query?.pages) return null;
+  for (const p of Object.values(d.query.pages)) {
+    if (p.extract && !p.missing && p.extract.length > 30) return { intro: p.extract, source: `${lang}wiki` };
+  }
+  return null;
+}
+
+async function fetchWikipedia(titles: string[], lang: "zh" | "en" = "zh", timeoutMs = 10000, mediaType?: "movie" | "book" | "music"): Promise<{ intro: string; source: string } | null> {
   try {
-    // Phase 1: titles 直查（快速，但消歧义页无摘要）
-    const params1 = new URLSearchParams({
-      action: "query", titles: titles.join("|"),
-      prop: "extracts", exintro: "true", explaintext: "true", exlimit: "1", redirects: "1", format: "json",
-    });
-    const r1 = await fetch(`https://${lang}.wikipedia.org/w/api.php?${params1}`, {
-      headers: { "user-agent": USER_AGENTS[0], "accept": "application/json" },
-      signal: AbortSignal.timeout(timeoutMs),
-    });
-    if (r1.ok) {
-      const d1 = await r1.json() as { query?: { pages?: Record<string, { extract?: string; missing?: boolean }> } };
-      if (d1.query?.pages) {
-        for (const p of Object.values(d1.query.pages)) {
-          if (p.extract && !p.missing && p.extract.length > 30) return { intro: p.extract, source: `${lang}wiki` };
+    const hints = mediaType ? TYPE_HINTS[mediaType] ?? [] : [];
+
+    // Phase 1: titles 直查（消歧义页无摘要时跳过）
+    const r1 = await fetchExtracts(titles, lang, timeoutMs);
+    if (r1) return r1;
+
+    // Phase 2: 标题搜索 + 类型限定词（如 "龙猫 电影"）
+    for (const hint of hints) {
+      const qualified = titles[0] + " " + hint;
+      const params2 = new URLSearchParams({
+        action: "query", list: "search", srsearch: qualified,
+        srwhat: "title", srnamespace: "0", srlimit: "3", redirects: "1", format: "json",
+      });
+      const r2 = await fetch(`https://${lang}.wikipedia.org/w/api.php?${params2}`, {
+        headers: { "user-agent": USER_AGENTS[0], "accept": "application/json" },
+        signal: AbortSignal.timeout(timeoutMs),
+      });
+      if (r2.ok) {
+        const d2 = await r2.json() as { query?: { search?: { title: string }[] } };
+        const searchTitles = d2.query?.search?.map((s) => s.title).filter(Boolean) ?? [];
+        if (searchTitles.length > 0) {
+          const result = await fetchExtracts(searchTitles, lang, timeoutMs);
+          if (result) return result;
         }
       }
     }
 
-    // Phase 2: list=search 搜标题 → titles 取摘要（两步，避免 generator 误匹配内容）
-    const params2 = new URLSearchParams({
-      action: "query", list: "search", srsearch: titles.join("|"),
-      srwhat: "title", srnamespace: "0", srlimit: "5", redirects: "1", format: "json",
+    // Phase 3: 全文搜索原始标题 → 过滤标题包含关键词的页面
+    const baseTitle = titles[0];
+    const params3 = new URLSearchParams({
+      action: "query", list: "search", srsearch: baseTitle,
+      srnamespace: "0", srlimit: "10", redirects: "1", format: "json",
     });
-    const r2 = await fetch(`https://${lang}.wikipedia.org/w/api.php?${params2}`, {
+    const r3 = await fetch(`https://${lang}.wikipedia.org/w/api.php?${params3}`, {
       headers: { "user-agent": USER_AGENTS[0], "accept": "application/json" },
       signal: AbortSignal.timeout(timeoutMs),
     });
-    if (r2.ok) {
-      const d2 = await r2.json() as { query?: { search?: { title: string }[] } };
-      const searchTitles = d2.query?.search?.map((s) => s.title).filter(Boolean) ?? [];
-      if (searchTitles.length > 0) {
-        const params3 = new URLSearchParams({
-          action: "query", titles: searchTitles.join("|"),
-          prop: "extracts", exintro: "true", explaintext: "true", exlimit: "5", redirects: "1", format: "json",
-        });
-        const r3 = await fetch(`https://${lang}.wikipedia.org/w/api.php?${params3}`, {
-          headers: { "user-agent": USER_AGENTS[0], "accept": "application/json" },
-          signal: AbortSignal.timeout(timeoutMs),
-        });
-        if (r3.ok) {
-          const d3 = await r3.json() as { query?: { pages?: Record<string, { extract?: string; missing?: boolean }> } };
-          if (d3.query?.pages) {
-            const valid = Object.values(d3.query.pages).filter((p) => !p.missing && p.extract && p.extract.length > 30);
-            if (valid.length > 0) return { intro: valid[0].extract!, source: `${lang}wiki` };
-          }
-        }
+    if (r3.ok) {
+      const d3 = await r3.json() as { query?: { search?: { title: string }[] } };
+      const fullTextTitles = (d3.query?.search ?? [])
+        .map((s) => s.title)
+        .filter((t) => t.includes(baseTitle));
+      if (fullTextTitles.length > 0) {
+        const result = await fetchExtracts(fullTextTitles, lang, timeoutMs);
+        if (result) return result;
       }
     }
     return null;
@@ -358,10 +382,10 @@ export async function fetchContentIntro(title: string, mediaType?: "movie" | "bo
   if (mediaType === "book") candidates.push(`${title} (小说)`, `${title} (书籍)`);
   if (mediaType === "music") candidates.push(`${title} (专辑)`, `${title} (专辑名)`);
 
-  // 并行请求中英文维基，每个语言一次 API 调用传入所有候选标题
+  // 并行请求中英文维基，传入类型限定词减少歧义
   const [zhResult, enResult] = await Promise.allSettled([
-    fetchWikipedia(candidates, "zh", 10000),
-    fetchWikipedia(candidates, "en", 8000),
+    fetchWikipedia(candidates, "zh", 10000, mediaType),
+    fetchWikipedia(candidates, "en", 8000, mediaType),
   ]);
 
   const zh = zhResult.status === "fulfilled" ? zhResult.value : null;
