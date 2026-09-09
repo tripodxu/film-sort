@@ -386,10 +386,11 @@ export function compareProfiles(own: ArtisticProfile, peer: ArtisticProfile): Pr
   };
 }
 
-export function profileText(profile: ArtisticProfile, format: "txt" | "md" | "csv"): string {
+export function profileText(profile: ArtisticProfile, format: "txt" | "md" | "csv", notes?: Record<string, string>): string {
+  const noteFor = (kind: string, workId: string) => notes?.[`work:${kind}:${workId}`]?.trim();
   if (format === "csv") {
     const cell = (value: unknown) => `"${String(value ?? "").replace(/^[=+@-]/, "'$&").replace(/"/g, '""')}"`;
-    return "\uFEFF" + [["medium", "rank", "title", "creator", "year"], ...profile.rankings.flatMap((ranking) => ranking.items.map((item) => [ranking.kind, item.rank, item.title, item.creator, item.year]))].map((row) => row.map(cell).join(",")).join("\r\n");
+    return "\uFEFF" + [["medium", "rank", "title", "creator", "year", "note"], ...profile.rankings.flatMap((ranking) => ranking.items.map((item) => [ranking.kind, item.rank, item.title, item.creator, item.year, noteFor(ranking.kind, item.id) ?? ""]))].map((row) => row.map(cell).join(",")).join("\r\n");
   }
-  return `${format === "md" ? "# " : ""}${profile.profileName}\n\n` + profile.rankings.map((ranking) => `${format === "md" ? "## " : ""}${mediaLabels[ranking.kind].label} / ${ranking.collectionTitle}\n\n${ranking.items.map((item) => `${item.rank}. ${item.title}${item.creator ? ` / ${item.creator}` : ""}`).join("\n")}`).join("\n\n");
+  return `${format === "md" ? "# " : ""}${profile.profileName}\n\n` + profile.rankings.map((ranking) => `${format === "md" ? "## " : ""}${mediaLabels[ranking.kind].label} / ${ranking.collectionTitle}\n\n${ranking.items.map((item) => { const line = `${item.rank}. ${item.title}${item.creator ? ` / ${item.creator}` : ""}`; const note = noteFor(ranking.kind, item.id); return note ? `${line}\n   ${format === "md" ? "> " : "  "}${note}` : line; }).join("\n")}`).join("\n\n");
 }

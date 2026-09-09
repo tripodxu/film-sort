@@ -119,6 +119,8 @@ export interface ProfileViewProps {
   ranking: RankingState | null;
   setRanking: (ranking: RankingState | null) => void;
   collection: MediaCollection | null;
+  notes: Record<string, string>;
+  openNoteModal: (key: string, title: string, kind: MediaKind, posterUrls?: readonly string[]) => void;
 }
 
 export interface CompareViewProps {

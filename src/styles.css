@@ -52,3 +52,12 @@ body{background:#080a0a;color:#edf2e9}.app-shell{min-height:100svh;background:#0
 .ranking-card-top3-item .poster-small{width:30px;height:42px;border-radius:3px}
 .ranking-card-top3-medal{font-size:13px;width:18px;text-align:center;flex-shrink:0}
 .ranking-card-top3-name{font-size:11px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:100px}
+
+/* ===== Note Modal ===== */
+.note-modal{position:relative;max-width:480px;max-height:80vh;overflow:hidden;border-radius:16px;background:var(--card,#141914)}
+.note-modal-bg{position:absolute;inset:0;background-size:cover;background-position:center;filter:blur(24px) brightness(.3);transform:scale(1.15);z-index:0}
+.note-modal-content{position:relative;z-index:1;padding:28px 32px 24px;display:flex;flex-direction:column;gap:10px}
+.note-modal-content h2{color:#f3f6ee;font-size:20px;margin:0}
+.note-textarea{min-height:180px;padding:12px 14px;background:rgba(0,0,0,.45);backdrop-filter:blur(8px);border:1px solid rgba(255,255,255,.1);border-radius:10px;color:#eef4ed;font-size:14px;line-height:1.7;resize:vertical}
+.note-textarea::placeholder{color:rgba(255,255,255,.3)}
+.note-textarea:focus{border-color:var(--accent);outline:none}
