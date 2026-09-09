@@ -400,12 +400,20 @@ export default function App() {
   async function share() {
     const next = namedProfile(); if (!next) return;
     persist(next);
-    const url = `${location.origin}/#profile=${encode(next)}`;
-    if (url.length > 14000) { setNotice(t("画像较大，请导出 JSON 分享。", "This profile is large. Share the JSON export instead.")); return; }
-    setShareUrl(url);
-    try { setQrUrl(await QRCode.toDataURL(url, { width: 240, margin: 2, errorCorrectionLevel: "L" })); } catch { setQrUrl(""); }
-    try { await navigator.clipboard.writeText(url); setNotice(t("比较链接已复制。", "Comparison link copied.")); }
-    catch { setNotice(t("链接已生成，可在下方选中复制。", "Link ready. Select and copy it below.")); }
+    setBusy(true);
+    try {
+      const response = await fetch("/api/share", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ profile: next }) });
+      const data = await response.json() as { url?: string; error?: string };
+      if (response.ok && data.url) {
+        setShareUrl(data.url);
+        try { setQrUrl(await QRCode.toDataURL(data.url, { width: 240, margin: 2, errorCorrectionLevel: "L" })); } catch { setQrUrl(""); }
+        try { await navigator.clipboard.writeText(data.url); setNotice(t("比较链接已复制。", "Comparison link copied.")); }
+        catch { setNotice(t("链接已生成，可在下方选中复制。", "Link ready. Select and copy it below.")); }
+      } else {
+        setNotice(t("生成链接失败，请导出 JSON 分享。", "Failed to create link. Export the JSON instead."));
+      }
+    } catch { setNotice(t("生成链接失败，请导出 JSON 分享。", "Failed to create link. Export the JSON instead.")); }
+    finally { setBusy(false); }
   }
   async function accountLoad(autoApply: boolean) {
     if (!accountToken) return;
