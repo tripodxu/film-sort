@@ -14,10 +14,11 @@ import { SetupView } from "./views/SetupView";
 import { SortingView } from "./views/SortingView";
 import { ProfileView } from "./views/ProfileView";
 import { CompareView } from "./views/CompareView";
+import { ShareView } from "./views/ShareView";
 
-type View = "home" | "source" | "setup" | "sorting" | "profile" | "compare";
-const VIEW_PATH: Record<View, string> = { home: "/", source: "/catalog/source", setup: "/catalog/setup", sorting: "/catalog/sorting", profile: "/myself", compare: "/encounter" };
-function pathToView(p: string): View | null { const clean = p.replace(/\/+$/, "") || "/"; return (Object.entries(VIEW_PATH) as [View, string][]).find(([, v]) => clean === v)?.[0] ?? null; }
+type View = "home" | "source" | "setup" | "sorting" | "profile" | "compare" | "share";
+const VIEW_PATH: Record<View, string> = { home: "/", source: "/catalog/source", setup: "/catalog/setup", sorting: "/catalog/sorting", profile: "/myself", compare: "/encounter", share: "/share" };
+function pathToView(p: string): View | null { const clean = p.replace(/\/+$/, "") || "/"; if (clean.startsWith("/share")) return "share"; return (Object.entries(VIEW_PATH) as [View, string][]).find(([, v]) => clean === v)?.[0] ?? null; }
 type Locale = "zh" | "en";
 type Draft = { collection: MediaCollection; ranking: string; profileName: string };
 const DRAFT_KEY = "art-rank:draft:v2";
@@ -131,6 +132,7 @@ export default function App() {
   const [detailWork, setDetailWork] = useState<{ work: RankedArtwork; kind: MediaKind; data: Record<string, unknown> | null; loading: boolean } | null>(null);
   const [peerUrl, setPeerUrl] = useState("");
   const [peerUrlBusy, setPeerUrlBusy] = useState(false);
+  const [sharePeer, setSharePeer] = useState<ArtisticProfile | null>(null);
   const [showGuide, setShowGuide] = useState(() => { try { return !localStorage.getItem("art-rank:guide-dismissed"); } catch { return true; } });
   const [showTech, setShowTech] = useState(false);
   const syncTimer = useRef<number | null>(null);
@@ -203,6 +205,32 @@ export default function App() {
     } else if (oauthError === "error") {
       setNotice(t("登录失败：" + (params.get("msg") ?? "未知错误"), "Sign in failed: " + (params.get("msg") ?? "Unknown error")));
       history.replaceState(null, "", location.pathname);
+    }
+
+    // Handle /share/:code path — fetch shared profile
+    if (location.pathname.startsWith("/share/")) {
+      const code = location.pathname.split("/share/")[1]?.replace(/\/+$/, "");
+      if (code) {
+        if (/^[0-9a-f]{8}$/i.test(code)) {
+          // Short code — fetch from server
+          fetch(`/api/share/${code}`).then(async (r) => {
+            if (!r.ok) throw new Error();
+            const d = await r.json() as { profile: unknown; notes?: Record<string, string> };
+            setSharePeer(parseProfile(d.profile));
+            if (d.notes && typeof d.notes === "object") {
+              const merged = { ...readNotes(), ...d.notes };
+              setNotes(merged);
+            }
+            setView("share");
+          }).catch(() => setNotice(t("分享链接无效或已过期。", "Share link is invalid or expired.")));
+        } else {
+          // Base64 payload in path
+          decode(code).then((p) => {
+            setSharePeer(p);
+            setView("share");
+          }).catch(() => setNotice(t("分享链接无效或过大。", "Share link is invalid or too large.")));
+        }
+      }
     }
 
     // Restore view from URL path (after peer/profile handlers which take priority)
@@ -618,6 +646,8 @@ export default function App() {
   else if (view === "sorting" && collection && ranking && comparison && progress) content = <SortingView collection={collection} ranking={ranking} comparison={comparison} progress={progress} label={label} kind={kind} t={t} worksById={worksById} act={act} />;
   else if (view === "profile" && profile && activeRanking) content = <ProfileView profile={profile} activeRanking={activeRanking} locale={locale} t={t} label={label} format={format} setFormat={setFormat} exportLayout={exportLayout} setExportLayout={setExportLayout} exportProfile={exportProfile} share={share} shareUrl={shareUrl} qrUrl={qrUrl} profileName={profileName} setProfileName={setProfileName} namedProfile={namedProfile} persist={persist} navigateTo={navigateTo} peer={peer} editingRankIdx={editingRankIdx} setEditingRankIdx={setEditingRankIdx} editingRankTitle={editingRankTitle} setEditingRankTitle={setEditingRankTitle} renameRank={renameRank} openCollection={openCollection} shareSingleRanking={shareSingleRanking} setActiveKind={setActiveKind} ranking={ranking} setRanking={setRanking} collection={collection} notes={notes} openNoteModal={openNoteModal} />;
   else if (view === "compare") content = <CompareView kinds={kinds} profile={profile} peer={peer} compareActiveKind={compareActiveKind} setCompareActiveKind={setCompareActiveKind} compareMode={compareMode} setCompareMode={setCompareMode} manualOwnSelections={manualOwnSelections} setManualOwnSelections={setManualOwnSelections} manualPeerSelections={manualPeerSelections} setManualPeerSelections={setManualPeerSelections} compareRankings={compareRankings} mergeDimensionRankings={mergeDimensionRankings} compareDimensions={compareDimensions} compareProfiles={compareProfiles} navigateTo={navigateTo} setPeer={setPeer} setAiInsight={setAiInsight} label={label} t={t} setCompareSortBy={setCompareSortBy} compareSortBy={compareSortBy} setCompareRankDetail={setCompareRankDetail} shareSingleRanking={shareSingleRanking} exportProfile={exportProfile} setFormat={setFormat} busy={busy} namedProfile={namedProfile} setNotice={setNotice} requestInsight={requestInsight} aiBusy={aiBusy} aiInsight={aiInsight} createFromPeer={createFromPeer} setPeerRankPickOpen={setPeerRankPickOpen} openArtworkDetail={openArtworkDetail} peerUrl={peerUrl} setPeerUrl={setPeerUrl} peerUrlBusy={peerUrlBusy} importPeerFromUrl={importPeerFromUrl} importProfile={importProfile} setActiveKind={setActiveKind} notes={notes} />;
+  else if (view === "share" && sharePeer) content = <ShareView peer={sharePeer} t={t} label={label} navigateTo={(v) => { if (v === "compare") acceptPeer(sharePeer); else navigateTo(v as View); }} openCollection={openCollection} profile={profile} notes={notes} openArtworkDetail={openArtworkDetail} />;
+  else if (view === "share" && !sharePeer) content = <div className="empty-state"><p style={{ marginBottom: 12 }}>{t("正在加载分享内容…", "Loading shared content…")}</p><button className="button secondary" onClick={() => navigateTo("home")}>{t("返回首页", "Back home")}</button></div>;
   else content = <div className="empty-state"><button className="button primary" onClick={() => navigateTo("home")}>{t("返回首页", "Back home")}</button></div>;
   return <div className="app-shell"><header className="topbar"><button className="wordmark" onClick={() => navigateTo("home")}>ART<span>/</span>RANK</button><nav aria-label={t("主导航", "Main navigation")}><button className={view === "home" || view === "source" || view === "setup" || view === "sorting" ? "active" : ""} onClick={() => navigateTo("home")}>{t("清单", "Catalog")}</button><button className={view === "compare" ? "active" : ""} onClick={() => navigateTo("compare")}>{t("相遇", "Encounter")}</button>{profile && <button className={view === "profile" ? "active" : ""} onClick={() => navigateTo("profile")}>{t("我的文化索引", "My Index")}</button>}</nav><div className="header-tools"><IconButton title={locale === "zh" ? "English" : "中文"} onClick={() => { const next = locale === "zh" ? "en" : "zh"; setLocale(next); const url = new URL(location.href); url.searchParams.set("lang", next); history.replaceState(null, "", url); }}><Languages size={18} /></IconButton><a className="icon-button" href="https://github.com/tripodxu/film-sort" target="_blank" rel="noopener noreferrer" title="GitHub"><Github size={18} /><span className="tooltip" role="tooltip">GitHub</span></a><IconButton title={accountEmail ? t("同步 / 退出", "Sync / Sign out") : t("登录 / 同步", "Sign in / Sync")} onClick={() => setAccountOpen(true)}><UserRound size={18} />{accountToken && <span style={{ position: "absolute", top: 4, right: 4, width: 7, height: 7, borderRadius: "50%", background: syncStatus === "saving" ? "var(--yellow)" : syncStatus === "saved" ? "var(--green)" : syncStatus === "error" ? "var(--red)" : "var(--muted)", border: "1.5px solid var(--bg)", zIndex: 1 }} />}</IconButton></div></header>
     <main className={`main view-${view}`}>{view !== "home" && <button className="back-link" onClick={() => navigateTo(view === "setup" ? "source" : "home")}><ArrowLeft size={15} />{t("回到上一层", "Back")}</button>}{content}</main><footer><span>ART/RANK</span><span>{t("偏好没有标准答案", "Preference has no answer key")}</span></footer>

@@ -123,6 +123,17 @@ export interface ProfileViewProps {
   openNoteModal: (key: string, title: string, kind: MediaKind, posterUrls?: readonly string[]) => void;
 }
 
+export interface ShareViewProps {
+  peer: ArtisticProfile;
+  t: (zh: string, en: string) => string;
+  label: (kind: MediaKind) => string;
+  navigateTo: (view: string) => void;
+  openCollection: (collection: MediaCollection) => void;
+  profile: ArtisticProfile | null;
+  notes: Record<string, string>;
+  openArtworkDetail: (work: RankedArtwork, kind: MediaKind) => void;
+}
+
 export interface CompareViewProps {
   kinds: MediaKind[];
   profile: ArtisticProfile | null;
