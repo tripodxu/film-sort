@@ -438,14 +438,28 @@ function withSecurityHeaders(response: Response): Response {
   return result;
 }
 
-// ===== API Logging =====
+// ===== API Logging (batched) =====
+const logQueue: Array<[string, string, number, number, string, string | null, string | null]> = [];
+let logFlushScheduled = false;
+let cachedDB: D1Database | undefined;
+function enqueueLog(db: D1Database | undefined, path: string, method: string, status: number, durationMs: number, source: string, error?: string, ip?: string) {
+  if (db) cachedDB = db;
+  logQueue.push([path, method, status, durationMs, source, error ?? null, ip ?? null]);
+  if (logQueue.length >= 50) void flushLogs();
+  else if (!logFlushScheduled) { logFlushScheduled = true; setTimeout(() => void flushLogs(), 5000); }
+}
+async function flushLogs() {
+  logFlushScheduled = false;
+  const batch = logQueue.splice(0);
+  if (!batch.length || !cachedDB) return;
+  try {
+    const stmt = cachedDB.prepare("INSERT INTO api_logs (path, method, status, duration_ms, source, error, ip) VALUES (?, ?, ?, ?, ?, ?, ?)");
+    await cachedDB.batch(batch.map(([p, m, s, d, src, e, ip]) => stmt.bind(p, m, s, d, src, e, ip)));
+  } catch { /* logging should never break requests */ }
+}
 async function logApiCall(env: Env | undefined, path: string, method: string, status: number, durationMs: number, source: string, error?: string, ip?: string) {
   if (!env?.DB) return;
-  try {
-    await env.DB.prepare(
-      "INSERT INTO api_logs (path, method, status, duration_ms, source, error, ip) VALUES (?, ?, ?, ?, ?, ?, ?)"
-    ).bind(path, method, status, durationMs, source, error ?? null, ip ?? null).run();
-  } catch { /* logging should never break the request */ }
+  enqueueLog(env.DB, path, method, status, durationMs, source, error, ip);
 }
 
 // ===== Admin Auth =====
@@ -674,23 +688,7 @@ async function getDashboard(env: Env): Promise<Response> {
       safeAll(env.DB.prepare(`SELECT id, path, method, status, duration_ms, source, error, created_at FROM api_logs ORDER BY created_at DESC LIMIT 30`).all()),
       safeAll(env.DB.prepare(`SELECT id, path, method, status, duration_ms, source, error, created_at FROM api_logs WHERE status >= 400 ORDER BY created_at DESC LIMIT 20`).all()),
       safeAll(env.DB.prepare(`SELECT id, email, nickname, disabled_at, created_at FROM user_accounts ORDER BY created_at DESC LIMIT 50`).all()),
-      safe(Promise.all([
-        env.DB.prepare("SELECT COUNT(*) AS cnt FROM analytics_events").first<{cnt: number}>(),
-        env.DB.prepare("SELECT COUNT(*) AS cnt FROM api_logs").first<{cnt: number}>(),
-        env.DB.prepare("SELECT COUNT(*) AS cnt FROM user_accounts").first<{cnt: number}>(),
-        env.DB.prepare("SELECT COUNT(*) AS cnt FROM user_sessions").first<{cnt: number}>(),
-        env.DB.prepare("SELECT COUNT(*) AS cnt FROM user_profiles_v2").first<{cnt: number}>(),
-        env.DB.prepare("SELECT COUNT(*) AS cnt FROM challenge_sets").first<{cnt: number}>(),
-        env.DB.prepare("SELECT COUNT(*) AS cnt FROM user_collections").first<{cnt: number}>(),
-      ]).then(([ae, al, ua, us, up, cs, uc]) => [
-        { tbl: "analytics_events", cnt: ae?.cnt ?? 0 },
-        { tbl: "api_logs", cnt: al?.cnt ?? 0 },
-        { tbl: "user_accounts", cnt: ua?.cnt ?? 0 },
-        { tbl: "user_sessions", cnt: us?.cnt ?? 0 },
-        { tbl: "user_profiles_v2", cnt: up?.cnt ?? 0 },
-        { tbl: "challenge_sets", cnt: cs?.cnt ?? 0 },
-        { tbl: "user_collections", cnt: uc?.cnt ?? 0 },
-      ]), []),
+      safe(env.DB.prepare(`SELECT 'analytics_events' AS tbl, COUNT(*) AS cnt FROM analytics_events UNION ALL SELECT 'api_logs', COUNT(*) FROM api_logs UNION ALL SELECT 'user_accounts', COUNT(*) FROM user_accounts UNION ALL SELECT 'user_sessions', COUNT(*) FROM user_sessions UNION ALL SELECT 'user_profiles_v2', COUNT(*) FROM user_profiles_v2 UNION ALL SELECT 'challenge_sets', COUNT(*) FROM challenge_sets UNION ALL SELECT 'user_collections', COUNT(*) FROM user_collections`).all().then((r) => r.results ?? []), []),
       // Poster errors - last 7 days
       safeAll(env.DB.prepare("SELECT id, title, media_type, error, source, created_at FROM poster_errors WHERE created_at >= datetime('now', '-7 days') ORDER BY created_at DESC LIMIT 50").all()),
       safeAll(env.DB.prepare("SELECT media_type, source, error, COUNT(*) AS count FROM poster_errors WHERE created_at >= datetime('now', '-30 days') GROUP BY media_type, source, error ORDER BY count DESC LIMIT 30").all()),
