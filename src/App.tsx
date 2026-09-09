@@ -428,6 +428,7 @@ export default function App() {
   async function shareSingleRanking(ranking: RankingExport) {
     const name = profileName.trim() || t("我的艺术人格", "My artistic profile");
     const singleProfile: ArtisticProfile = { version: 2, profileId: crypto.randomUUID(), profileName: name, updatedAt: new Date().toISOString(), rankings: [{ ...ranking, profileName: name }] };
+    try { parseProfile(singleProfile); } catch { setNotice(t("数据格式错误。", "Invalid profile data.")); return; }
     setBusy(true);
     try {
       const response = await fetch("/api/share", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ profile: singleProfile }) });
@@ -441,6 +442,7 @@ export default function App() {
   }
   async function share() {
     const next = namedProfile(); if (!next) return;
+    try { parseProfile(next); } catch { setNotice(t("数据格式错误。", "Invalid profile data.")); return; }
     persist(next);
     setBusy(true);
     try {
