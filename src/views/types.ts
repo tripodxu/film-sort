@@ -164,4 +164,6 @@ export interface CompareViewProps {
   peerUrlBusy: boolean;
   importPeerFromUrl: () => void;
   importProfile: (file: File, target: "own" | "peer") => void;
+  setActiveKind: (kind: string) => void;
+  notes?: Record<string, string>;
 }
