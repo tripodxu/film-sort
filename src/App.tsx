@@ -490,13 +490,18 @@ export default function App() {
     try {
       const response = await fetch("/api/account/profile", { headers: { authorization: `Bearer ${accountToken}` } });
       if (!response.ok) throw new Error();
-      const data = await response.json() as { email: string; nickname?: string; profile: unknown };
+      const data = await response.json() as { email: string; nickname?: string; profile: unknown; notes?: Record<string, string> };
       if (data.email) setAccountEmail(data.email);
       if (data.nickname) setAccountNickname(data.nickname);
       if (data.profile) {
         const parsed = parseProfile(data.profile);
         if (autoApply && !profile) { persist(parsed); setNotice(t("已从云端恢复画像。", "Profile restored from cloud.")); }
         else if (!autoApply) { persist(parsed); setNotice(t("已从云端同步画像。", "Profile synced from cloud.")); }
+      }
+      if (data.notes && typeof data.notes === "object") {
+        const merged = { ...notes, ...data.notes };
+        setNotes(merged);
+        writeNotes(merged);
       }
     } catch { if (!autoApply) setNotice(t("读取失败，请重新登录。", "Failed to load. Please sign in again.")); }
     finally { setBusy(false); }
@@ -506,7 +511,8 @@ export default function App() {
     const next = namedProfile(); if (!next) return;
     setBusy(true);
     try {
-      const response = await fetch("/api/account/profile", { method: "PUT", headers: { "content-type": "application/json", authorization: `Bearer ${accountToken}` }, body: JSON.stringify({ profile: next }) });
+      const hasAnyNotes = Object.keys(notes).length > 0;
+      const response = await fetch("/api/account/profile", { method: "PUT", headers: { "content-type": "application/json", authorization: `Bearer ${accountToken}` }, body: JSON.stringify({ profile: next, ...(hasAnyNotes ? { notes } : {}) }) });
       if (!response.ok) throw new Error();
       persist(next); setSyncStatus("saved"); setNotice(t("画像已保存到云端。", "Profile saved to cloud."));
     } catch { setNotice(t("同步失败，本地画像仍然保留。", "Sync failed. Your local profile is still available.")); }
@@ -518,7 +524,8 @@ export default function App() {
     syncing.current = true;
     setSyncStatus("saving");
     try {
-      const ok = (await fetch("/api/account/profile", { method: "PUT", headers: { "content-type": "application/json", authorization: `Bearer ${accountToken}` }, body: JSON.stringify({ profile: next }), keepalive })).ok;
+      const hasAnyNotes = Object.keys(notes).length > 0;
+      const ok = (await fetch("/api/account/profile", { method: "PUT", headers: { "content-type": "application/json", authorization: `Bearer ${accountToken}` }, body: JSON.stringify({ profile: next, ...(hasAnyNotes ? { notes } : {}) }), keepalive })).ok;
       setSyncStatus(ok ? "saved" : "error");
     } catch { setSyncStatus("error"); }
     finally { syncing.current = false; }
