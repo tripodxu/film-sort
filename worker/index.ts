@@ -1280,7 +1280,7 @@ async function route(request: Request, env: Env): Promise<Response> {
     const code = crypto.randomUUID().replace(/-/g, "").slice(0, 8);
     const expires = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
     await env.DB.prepare("INSERT INTO shared_links (code, profile, expires_at) VALUES (?, ?, ?)").bind(code, profileStr, expires).run();
-    return json({ code, url: `${new URL(request.url).origin}/?payload=${code}` });
+    return json({ code, url: `${new URL(request.url).origin}/encounter?payload=${code}` });
   }
   if (url.pathname.startsWith("/api/share/") && request.method === "GET") {
     if (!env.DB) return json({ error: "database_unavailable" }, 503);

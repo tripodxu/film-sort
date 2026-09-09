@@ -133,7 +133,9 @@ export default function App() {
 
   function navigateTo(nextView: View) {
     setView(nextView);
-    history.pushState({ view: nextView }, "", VIEW_PATH[nextView] + location.search);
+    const lang = new URLSearchParams(location.search).get("lang");
+    const qs = lang ? `?lang=${lang}` : "";
+    history.pushState({ view: nextView }, "", VIEW_PATH[nextView] + qs);
   }
   function persist(next: ArtisticProfile) {
     setProfile(next); setProfileName(next.profileName); setShareUrl(""); setQrUrl("");
