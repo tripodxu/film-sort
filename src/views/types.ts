@@ -121,6 +121,8 @@ export interface ProfileViewProps {
   collection: MediaCollection | null;
   notes: Record<string, string>;
   openNoteModal: (key: string, title: string, kind: MediaKind, posterUrls?: readonly string[]) => void;
+  accountToken: string;
+  publishToPlaza: (ranking: RankingExport) => void;
 }
 
 export interface ShareViewProps {
