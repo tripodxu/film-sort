@@ -4,15 +4,24 @@ import type { Artwork, MediaKind } from "../data/media";
 
 const requests = new Map<string, Promise<string[]>>();
 const reportedFailures = new Set<string>();
+const POSTER_CACHE_KEY = "art-rank:poster-cache";
+function readPosterCache(key: string): string[] | null {
+  try { const cache = JSON.parse(sessionStorage.getItem(POSTER_CACHE_KEY) ?? "{}"); return cache[key] ?? null; } catch { return null; }
+}
+function writePosterCache(key: string, urls: string[]) {
+  try { const cache = JSON.parse(sessionStorage.getItem(POSTER_CACHE_KEY) ?? "{}"); cache[key] = urls; sessionStorage.setItem(POSTER_CACHE_KEY, JSON.stringify(cache)); } catch { /* Quota exceeded — silently skip */ }
+}
 function resolve(work: Artwork, kind: MediaKind): Promise<string[]> {
   const key = `${kind}|${work.title}|${work.subtitle ?? ""}|${work.year ?? ""}`;
   let request = requests.get(key);
   if (!request) {
+    const cached = readPosterCache(key);
+    if (cached) { request = Promise.resolve(cached); requests.set(key, request); return request; }
     const type = kind === "book" ? "book" : kind === "music" ? "music" : "movie";
     const params = new URLSearchParams({ q: work.title, en: work.subtitle ?? work.title, type, ...(work.year ? { year: String(work.year) } : {}) });
     request = fetch(`/api/posters?${params}`, { signal: AbortSignal.timeout(20000) })
       .then(async (response) => response.ok ? await response.json() as { poster_urls?: string[] } : {})
-      .then((data) => data.poster_urls ?? []).catch(() => []);
+      .then((data) => { const urls = data.poster_urls ?? []; if (urls.length) writePosterCache(key, urls); return urls; }).catch(() => []);
     requests.set(key, request);
   }
   return request;
