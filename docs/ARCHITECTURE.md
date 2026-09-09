@@ -431,6 +431,12 @@ CREATE TABLE api_logs (
 
 每个来源返回的 URL 会生成多个 CDN 镜像变体（img1-img9.doubanio.com），前端按顺序尝试加载。
 
+**海报缓存策略（前端 Poster 组件）**：
+- **一级缓存**：模块级 `Map<string, Promise<string[]>>`（内存，最快，页面刷新丢失）
+- **二级缓存**：`sessionStorage`（`art-rank:poster-cache` key，跨组件和页面刷新共享）
+- **初始化**：组件挂载时 `useState` 初始化函数直接读取缓存，避免已加载海报的黑屏闪烁
+- **失败上报**：图片 `onError` 时上报到 `/api/poster-errors/client`，同一 URL 不重复上报
+
 ### 5.4 详情获取策略
 
 作品详情（简介、元数据）获取优先级：
