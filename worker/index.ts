@@ -1,5 +1,6 @@
 import { doubanTop250, doubanSuggest, doubanBookTop250, doubanBookSuggest, doubanMusicTop250, doubanSearch, doubanBookDetail, doubanMovieDetail, doubanMusicDetail, fetchContentIntro, proxyImage, resolvePosters } from "./media";
 import { accountRoute } from "./account";
+import { plazaRoute } from "./plaza";
 
 export interface Env {
   DB?: D1Database;
@@ -1265,6 +1266,9 @@ async function route(request: Request, env: Env): Promise<Response> {
   }
 
   if (url.pathname === "/api/auth/config") return json({ enabled: Boolean(env.DB) });
+  if (url.pathname.startsWith("/api/plaza/") || url.pathname.startsWith("/api/comments/")) {
+    return withSecurityHeaders(await plazaRoute(request, env));
+  }
   if (url.pathname.startsWith("/api/account/")) {
     if (request.method !== "GET") assertSameOrigin(request);
     return withSecurityHeaders(await accountRoute(request, env));

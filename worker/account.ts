@@ -41,7 +41,7 @@ function validateCollectionBody(body: Record<string, unknown> | null): { kind: "
   return { kind, title, description, items };
 }
 
-async function getUserFromToken(request: Request, db: D1Database): Promise<{ id: number; email: string } | null> {
+export async function getUserFromToken(request: Request, db: D1Database): Promise<{ id: number; email: string } | null> {
   const auth = request.headers.get("authorization");
   const token = auth?.startsWith("Bearer ") ? auth.slice(7) : new URL(request.url).searchParams.get("token");
   if (!token || token.length < 32) return null;
