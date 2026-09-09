@@ -15,10 +15,12 @@ import { SortingView } from "./views/SortingView";
 import { ProfileView } from "./views/ProfileView";
 import { CompareView } from "./views/CompareView";
 import { ShareView } from "./views/ShareView";
+import { PlazaView } from "./views/PlazaView";
+import { PlazaPostView } from "./views/PlazaPostView";
 
-type View = "home" | "source" | "setup" | "sorting" | "profile" | "compare" | "share";
-const VIEW_PATH: Record<View, string> = { home: "/", source: "/catalog/source", setup: "/catalog/setup", sorting: "/catalog/sorting", profile: "/myself", compare: "/encounter", share: "/share" };
-function pathToView(p: string): View | null { const clean = p.replace(/\/+$/, "") || "/"; if (clean.startsWith("/share")) return "share"; return (Object.entries(VIEW_PATH) as [View, string][]).find(([, v]) => clean === v)?.[0] ?? null; }
+type View = "home" | "source" | "setup" | "sorting" | "profile" | "compare" | "share" | "plaza" | "plazaPost";
+const VIEW_PATH: Record<View, string> = { home: "/", source: "/catalog/source", setup: "/catalog/setup", sorting: "/catalog/sorting", profile: "/myself", compare: "/encounter", share: "/share", plaza: "/plaza", plazaPost: "/plaza/0" };
+function pathToView(p: string): View | null { const clean = p.replace(/\/+$/, "") || "/"; if (clean.startsWith("/share")) return "share"; if (/^\/plaza\/\d+/.test(clean)) return "plazaPost"; if (clean === "/plaza") return "plaza"; return (Object.entries(VIEW_PATH) as [View, string][]).find(([, v]) => clean === v)?.[0] ?? null; }
 type Locale = "zh" | "en";
 type Draft = { collection: MediaCollection; ranking: string; profileName: string };
 const DRAFT_KEY = "art-rank:draft:v2";
@@ -135,6 +137,7 @@ export default function App() {
   const [sharePeer, setSharePeer] = useState<ArtisticProfile | null>(null);
   const [showGuide, setShowGuide] = useState(() => { try { return !localStorage.getItem("art-rank:guide-dismissed"); } catch { return true; } });
   const [showTech, setShowTech] = useState(false);
+  const [plazaPostId, setPlazaPostId] = useState<number>(0);
   const syncTimer = useRef<number | null>(null);
   const syncing = useRef(false);
 
@@ -144,7 +147,19 @@ export default function App() {
   const collections = getCollectionsByKind(kind).filter((item) => [item.title, item.description, ...item.works.map((work) => work.title)].join(" ").toLowerCase().includes(search.toLowerCase()));
   const activeRanking = profile?.rankings.find((entry, idx) => `${entry.kind}-${idx}` === activeKind) ?? profile?.rankings[0];
 
-  function navigateTo(nextView: View) {
+  function navigateTo(nextViewOrPlaza: View | string) {
+    const nextView = (typeof nextViewOrPlaza === "string" && nextViewOrPlaza.startsWith("plazaPost:"))
+      ? "plazaPost" as View
+      : nextViewOrPlaza as View;
+    if (nextView === "plazaPost" && typeof nextViewOrPlaza === "string") {
+      const id = Number(nextViewOrPlaza.split(":")[1]) || 0;
+      setPlazaPostId(id);
+      setView("plazaPost");
+      const lang = new URLSearchParams(location.search).get("lang");
+      const qs = lang ? `?lang=${lang}` : "";
+      history.pushState({ view: "plazaPost" }, "", `/plaza/${id}${qs}`);
+      return;
+    }
     setView(nextView);
     const lang = new URLSearchParams(location.search).get("lang");
     const qs = lang ? `?lang=${lang}` : "";
@@ -235,7 +250,13 @@ export default function App() {
 
     // Restore view from URL path (after peer/profile handlers which take priority)
     const initialView = pathToView(location.pathname);
-    if (initialView) setView(initialView);
+    if (initialView) {
+      setView(initialView);
+      if (initialView === "plazaPost") {
+        const match = location.pathname.match(/^\/plaza\/(\d+)/);
+        if (match) setPlazaPostId(Number(match[1]));
+      }
+    }
 
     // Restore session
     const savedToken = oauthToken || accountToken;
@@ -251,7 +272,16 @@ export default function App() {
   useEffect(() => { document.documentElement.lang = locale === "zh" ? "zh-CN" : "en"; }, [locale]);
   useEffect(() => { window.scrollTo(0, 0); }, [view]);
   useEffect(() => {
-    function onPopState() { const v = pathToView(location.pathname); if (v) setView(v); else setView("home"); }
+    function onPopState() {
+      const v = pathToView(location.pathname);
+      if (v) {
+        setView(v);
+        if (v === "plazaPost") {
+          const match = location.pathname.match(/^\/plaza\/(\d+)/);
+          if (match) setPlazaPostId(Number(match[1]));
+        }
+      } else setView("home");
+    }
     window.addEventListener("popstate", onPopState);
     return () => window.removeEventListener("popstate", onPopState);
   }, []);
@@ -648,8 +678,10 @@ export default function App() {
   else if (view === "compare") content = <CompareView kinds={kinds} profile={profile} peer={peer} compareActiveKind={compareActiveKind} setCompareActiveKind={setCompareActiveKind} compareMode={compareMode} setCompareMode={setCompareMode} manualOwnSelections={manualOwnSelections} setManualOwnSelections={setManualOwnSelections} manualPeerSelections={manualPeerSelections} setManualPeerSelections={setManualPeerSelections} compareRankings={compareRankings} mergeDimensionRankings={mergeDimensionRankings} compareDimensions={compareDimensions} compareProfiles={compareProfiles} navigateTo={navigateTo} setPeer={setPeer} setAiInsight={setAiInsight} label={label} t={t} setCompareSortBy={setCompareSortBy} compareSortBy={compareSortBy} setCompareRankDetail={setCompareRankDetail} shareSingleRanking={shareSingleRanking} exportProfile={exportProfile} setFormat={setFormat} busy={busy} namedProfile={namedProfile} setNotice={setNotice} requestInsight={requestInsight} aiBusy={aiBusy} aiInsight={aiInsight} createFromPeer={createFromPeer} setPeerRankPickOpen={setPeerRankPickOpen} openArtworkDetail={openArtworkDetail} peerUrl={peerUrl} setPeerUrl={setPeerUrl} peerUrlBusy={peerUrlBusy} importPeerFromUrl={importPeerFromUrl} importProfile={importProfile} setActiveKind={setActiveKind} notes={notes} />;
   else if (view === "share" && sharePeer) content = <ShareView peer={sharePeer} t={t} label={label} navigateTo={(v) => { if (v === "compare") acceptPeer(sharePeer); else navigateTo(v as View); }} openCollection={openCollection} profile={profile} notes={notes} openArtworkDetail={openArtworkDetail} />;
   else if (view === "share" && !sharePeer) content = <div className="empty-state"><p style={{ marginBottom: 12 }}>{t("正在加载分享内容…", "Loading shared content…")}</p><button className="button secondary" onClick={() => navigateTo("home")}>{t("返回首页", "Back home")}</button></div>;
+  else if (view === "plaza") content = <PlazaView t={t} label={label} navigateTo={navigateTo} accountToken={accountToken} openCollection={openCollection} profile={profile} />;
+  else if (view === "plazaPost") content = <PlazaPostView postId={plazaPostId} t={t} label={label} navigateTo={navigateTo} accountToken={accountToken} accountNickname={accountNickname} openCollection={openCollection} profile={profile} setNotice={setNotice} setPeer={setPeer} openArtworkDetail={openArtworkDetail} />;
   else content = <div className="empty-state"><button className="button primary" onClick={() => navigateTo("home")}>{t("返回首页", "Back home")}</button></div>;
-  return <div className="app-shell"><header className="topbar"><button className="wordmark" onClick={() => navigateTo("home")}>ART<span>/</span>RANK</button><nav aria-label={t("主导航", "Main navigation")}><button className={view === "home" || view === "source" || view === "setup" || view === "sorting" ? "active" : ""} onClick={() => navigateTo("home")}>{t("清单", "Catalog")}</button><button className={view === "compare" ? "active" : ""} onClick={() => navigateTo("compare")}>{t("相遇", "Encounter")}</button>{profile && <button className={view === "profile" ? "active" : ""} onClick={() => navigateTo("profile")}>{t("我的文化索引", "My Index")}</button>}</nav><div className="header-tools"><IconButton title={locale === "zh" ? "English" : "中文"} onClick={() => { const next = locale === "zh" ? "en" : "zh"; setLocale(next); const url = new URL(location.href); url.searchParams.set("lang", next); history.replaceState(null, "", url); }}><Languages size={18} /></IconButton><a className="icon-button" href="https://github.com/tripodxu/film-sort" target="_blank" rel="noopener noreferrer" title="GitHub"><Github size={18} /><span className="tooltip" role="tooltip">GitHub</span></a><IconButton title={accountEmail ? t("同步 / 退出", "Sync / Sign out") : t("登录 / 同步", "Sign in / Sync")} onClick={() => setAccountOpen(true)}><UserRound size={18} />{accountToken && <span style={{ position: "absolute", top: 4, right: 4, width: 7, height: 7, borderRadius: "50%", background: syncStatus === "saving" ? "var(--yellow)" : syncStatus === "saved" ? "var(--green)" : syncStatus === "error" ? "var(--red)" : "var(--muted)", border: "1.5px solid var(--bg)", zIndex: 1 }} />}</IconButton></div></header>
+  return <div className="app-shell"><header className="topbar"><button className="wordmark" onClick={() => navigateTo("home")}>ART<span>/</span>RANK</button><nav aria-label={t("主导航", "Main navigation")}><button className={view === "home" || view === "source" || view === "setup" || view === "sorting" ? "active" : ""} onClick={() => navigateTo("home")}>{t("清单", "Catalog")}</button><button className={view === "compare" ? "active" : ""} onClick={() => navigateTo("compare")}>{t("相遇", "Encounter")}</button><button className={view === "plaza" || view === "plazaPost" ? "active" : ""} onClick={() => navigateTo("plaza")}>{t("广场", "Plaza")}</button>{profile && <button className={view === "profile" ? "active" : ""} onClick={() => navigateTo("profile")}>{t("我的文化索引", "My Index")}</button>}</nav><div className="header-tools"><IconButton title={locale === "zh" ? "English" : "中文"} onClick={() => { const next = locale === "zh" ? "en" : "zh"; setLocale(next); const url = new URL(location.href); url.searchParams.set("lang", next); history.replaceState(null, "", url); }}><Languages size={18} /></IconButton><a className="icon-button" href="https://github.com/tripodxu/film-sort" target="_blank" rel="noopener noreferrer" title="GitHub"><Github size={18} /><span className="tooltip" role="tooltip">GitHub</span></a><IconButton title={accountEmail ? t("同步 / 退出", "Sync / Sign out") : t("登录 / 同步", "Sign in / Sync")} onClick={() => setAccountOpen(true)}><UserRound size={18} />{accountToken && <span style={{ position: "absolute", top: 4, right: 4, width: 7, height: 7, borderRadius: "50%", background: syncStatus === "saving" ? "var(--yellow)" : syncStatus === "saved" ? "var(--green)" : syncStatus === "error" ? "var(--red)" : "var(--muted)", border: "1.5px solid var(--bg)", zIndex: 1 }} />}</IconButton></div></header>
     <main className={`main view-${view}`}>{view !== "home" && <button className="back-link" onClick={() => navigateTo(view === "setup" ? "source" : "home")}><ArrowLeft size={15} />{t("回到上一层", "Back")}</button>}{content}</main><footer><span>ART/RANK</span><span>{t("偏好没有标准答案", "Preference has no answer key")}</span></footer>
     {notice && <div className="toast" role="status"><span>{notice}</span><IconButton title={t("关闭提示", "Dismiss")} onClick={() => setNotice("")}><X size={16} /></IconButton></div>}
     {cloudConflict && <div className="modal-backdrop" onClick={() => setCloudConflict(null)}><section className="account-dialog" role="dialog" aria-modal="true" onClick={(event) => event.stopPropagation()} onKeyDown={(event) => { if (event.key === "Escape") setCloudConflict(null); }}><div className="section-heading"><h2>{t("数据冲突", "Data conflict")}</h2><IconButton title={t("关闭", "Close")} onClick={() => setCloudConflict(null)}><X size={18} /></IconButton></div><p style={{ marginBottom: 16, fontSize: 13, color: "var(--muted)", lineHeight: 1.6 }}>{t("本地有游客数据，云端也有数据。请选择如何处理：", "You have local guest data and cloud data. Choose how to proceed:")}</p><div style={{ display: "flex", flexDirection: "column", gap: 8 }}><button className="button primary" onClick={() => { if (profile && cloudConflict) { const merged = mergeProfiles(cloudConflict, profile); persist(merged); setSyncStatus("saving"); fetch("/api/account/profile", { method: "PUT", headers: { "content-type": "application/json", authorization: `Bearer ${accountToken}` }, body: JSON.stringify({ profile: merged }) }).then((r) => { setSyncStatus(r.ok ? "saved" : "error"); if (r.ok) setNotice(t("已增量合并到云端。", "Merged to cloud.")); }).catch(() => setSyncStatus("error")); } setCloudConflict(null); }}><CloudUpload size={16} />{t("增量合并到云端", "Merge to cloud")}</button><button className="button secondary" onClick={() => { persist(cloudConflict); setCloudConflict(null); setNotice(t("已使用云端数据。", "Cloud data applied.")); }}><CloudDownload size={16} />{t("使用云端数据", "Use cloud data")}</button><button className="button quiet" onClick={() => setCloudConflict(null)}>{t("取消，各自保留", "Cancel, keep both")}</button></div></section></div>}

@@ -134,6 +134,55 @@ export interface ShareViewProps {
   openArtworkDetail: (work: RankedArtwork, kind: MediaKind) => void;
 }
 
+export interface PlazaPost {
+  id: number;
+  user_id: number;
+  post_type: string;
+  kind: MediaKind;
+  collection_title: string;
+  items: RankedArtwork[];
+  notes: string;
+  item_count: number;
+  like_count: number;
+  comment_count: number;
+  is_public: number;
+  created_at: string;
+  updated_at: string;
+  nickname: string;
+}
+
+export interface PlazaComment {
+  id: number;
+  post_id: number;
+  user_id: number;
+  content: string;
+  created_at: string;
+  nickname: string;
+}
+
+export interface PlazaViewProps {
+  t: (zh: string, en: string) => string;
+  label: (kind: MediaKind) => string;
+  navigateTo: (view: string) => void;
+  accountToken: string;
+  openCollection: (collection: MediaCollection) => void;
+  profile: ArtisticProfile | null;
+}
+
+export interface PlazaPostViewProps {
+  postId: number;
+  t: (zh: string, en: string) => string;
+  label: (kind: MediaKind) => string;
+  navigateTo: (view: string) => void;
+  accountToken: string;
+  accountNickname: string;
+  openCollection: (collection: MediaCollection) => void;
+  profile: ArtisticProfile | null;
+  setNotice: (msg: string) => void;
+  setPeer: (peer: ArtisticProfile | null) => void;
+  openArtworkDetail: (work: RankedArtwork, kind: MediaKind) => void;
+}
+
 export interface CompareViewProps {
   kinds: MediaKind[];
   profile: ArtisticProfile | null;
