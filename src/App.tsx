@@ -3,7 +3,7 @@ import { ArrowLeft, ArrowRight, CloudDownload, CloudUpload, Download, Github, La
 
 import { createRankingState, chooseSide, deferWork, deserializeRankingState, getCurrentComparison, getRankingProgress, getRankingResult, serializeRankingState, skipWork, undoLastAction, type RankingState } from "./lib/ranking";
 import { getCollectionsByKind, mediaLabels, type MediaCollection, type MediaKind } from "./data/media";
-import { compareDimensions, compareProfiles, compareRankings, LIBRARY_KEY, MAX_PROFILE_BYTES, mergeDimensionRankings, mergeProfiles, mergeRanking, parseProfile, profileText, readProfile, renameRanking, deleteRanking, type ArtisticProfile, type RankingExport, type RankedArtwork } from "./lib/profile";
+import { compareDimensions, compareProfiles, compareRankings, LIBRARY_KEY, MAX_PROFILE_BYTES, mergeDimensionRankings, mergeProfiles, mergeRanking, parseProfile, profileText, readProfile, renameRanking, deleteRanking, reorderRanking, type ArtisticProfile, type RankingExport, type RankedArtwork } from "./lib/profile";
 import { importCollection } from "./lib/collections";
 import { readNotes, writeNotes, setNote, type NoteScope } from "./lib/notes";
 import { Poster } from "./components/Poster";
@@ -138,6 +138,8 @@ export default function App() {
   const [showGuide, setShowGuide] = useState(() => { try { return !localStorage.getItem("art-rank:guide-dismissed"); } catch { return true; } });
   const [showTech, setShowTech] = useState(false);
   const [plazaPostId, setPlazaPostId] = useState<number>(0);
+  const [reorderMode, setReorderMode] = useState<number | null>(null);
+  const [reorderItems, setReorderItems] = useState<RankedArtwork[]>([]);
   const syncTimer = useRef<number | null>(null);
   const syncing = useRef(false);
 
@@ -285,7 +287,7 @@ export default function App() {
     window.addEventListener("popstate", onPopState);
     return () => window.removeEventListener("popstate", onPopState);
   }, []);
-  useEffect(() => { setEditingRankIdx(null); setEditingRankTitle(""); }, [view]);
+  useEffect(() => { setEditingRankIdx(null); setEditingRankTitle(""); setReorderMode(null); setReorderItems([]); }, [view]);
   useEffect(() => { if (!notice) return; const timer = setTimeout(() => setNotice(""), 4000); return () => clearTimeout(timer); }, [notice]);
   useEffect(() => {
     if (view !== "sorting" || !ranking || !collection) return;
@@ -362,6 +364,32 @@ export default function App() {
     if (next) persist(next);
     else { setProfile(null); try { localStorage.removeItem(LIBRARY_KEY); } catch {} }
     setEditingRankIdx(null);
+  }
+  function startReorder(rankingIdx: number) {
+    if (!profile) return;
+    setReorderMode(rankingIdx);
+    setReorderItems([...profile.rankings[rankingIdx].items]);
+  }
+  function saveReorder() {
+    if (!profile || reorderMode === null) return;
+    const newOrderIds = reorderItems.map((item) => item.id);
+    const next = reorderRanking(profile, reorderMode, newOrderIds);
+    persist(next);
+    setReorderMode(null);
+    setReorderItems([]);
+  }
+  function cancelReorder() {
+    setReorderMode(null);
+    setReorderItems([]);
+  }
+  function moveItem(from: number, to: number) {
+    setReorderItems((current) => {
+      if (to < 0 || to >= current.length || from === to) return current;
+      const next = [...current];
+      const [moved] = next.splice(from, 1);
+      next.splice(to, 0, moved);
+      return next;
+    });
   }
   function clearAllData() {
     setProfile(null); setDraft(null); setPeer(null);
@@ -689,7 +717,7 @@ export default function App() {
   else if (view === "source") content = <SourceView kind={kind} t={t} label={label} source={source} setSource={setSource} setNotice={setNotice} search={search} setSearch={setSearch} colCount={colCount} changeCols={changeCols} collections={collections} openCollection={openCollection} customItem={customItem} setCustomItem={setCustomItem} addCustomItem={addCustomItem} customText={customText} setCustomText={setCustomText} importCollection={importCollection} saveCollectionCloud={saveCollectionCloud} cloudCollections={cloudCollections} loadCloudCollections={loadCloudCollections} deleteCloudCollection={deleteCloudCollection} doubanLimit={doubanLimit} setDoubanLimit={setDoubanLimit} busy={busy} loadDouban={loadDouban} />;
   else if (view === "setup" && collection) content = <SetupView collection={collection} kind={kind} t={t} label={label} selected={selected} setSelected={setSelected} topN={topN} setTopN={setTopN} seed={seed} setSeed={setSeed} setCollection={setCollection} startRanking={startRanking} />;
   else if (view === "sorting" && collection && ranking && comparison && progress) content = <SortingView collection={collection} ranking={ranking} comparison={comparison} progress={progress} label={label} kind={kind} t={t} worksById={worksById} act={act} />;
-  else if (view === "profile" && profile && activeRanking) content = <ProfileView profile={profile} activeRanking={activeRanking} locale={locale} t={t} label={label} format={format} setFormat={setFormat} exportLayout={exportLayout} setExportLayout={setExportLayout} exportProfile={exportProfile} share={share} shareUrl={shareUrl} qrUrl={qrUrl} profileName={profileName} setProfileName={setProfileName} namedProfile={namedProfile} persist={persist} navigateTo={navigateTo} peer={peer} editingRankIdx={editingRankIdx} setEditingRankIdx={setEditingRankIdx} editingRankTitle={editingRankTitle} setEditingRankTitle={setEditingRankTitle} renameRank={renameRank} openCollection={openCollection} shareSingleRanking={shareSingleRanking} setActiveKind={setActiveKind} ranking={ranking} setRanking={setRanking} collection={collection} notes={notes} openNoteModal={openNoteModal} accountToken={accountToken} publishToPlaza={publishToPlaza} />;
+  else if (view === "profile" && profile && activeRanking) content = <ProfileView profile={profile} activeRanking={activeRanking} locale={locale} t={t} label={label} format={format} setFormat={setFormat} exportLayout={exportLayout} setExportLayout={setExportLayout} exportProfile={exportProfile} share={share} shareUrl={shareUrl} qrUrl={qrUrl} profileName={profileName} setProfileName={setProfileName} namedProfile={namedProfile} persist={persist} navigateTo={navigateTo} peer={peer} editingRankIdx={editingRankIdx} setEditingRankIdx={setEditingRankIdx} editingRankTitle={editingRankTitle} setEditingRankTitle={setEditingRankTitle} renameRank={renameRank} openCollection={openCollection} shareSingleRanking={shareSingleRanking} setActiveKind={setActiveKind} ranking={ranking} setRanking={setRanking} collection={collection} notes={notes} openNoteModal={openNoteModal} accountToken={accountToken} publishToPlaza={publishToPlaza} reorderMode={reorderMode} reorderItems={reorderItems} startReorder={startReorder} saveReorder={saveReorder} cancelReorder={cancelReorder} moveItem={moveItem} />;
   else if (view === "compare") content = <CompareView kinds={kinds} profile={profile} peer={peer} compareActiveKind={compareActiveKind} setCompareActiveKind={setCompareActiveKind} compareMode={compareMode} setCompareMode={setCompareMode} manualOwnSelections={manualOwnSelections} setManualOwnSelections={setManualOwnSelections} manualPeerSelections={manualPeerSelections} setManualPeerSelections={setManualPeerSelections} compareRankings={compareRankings} mergeDimensionRankings={mergeDimensionRankings} compareDimensions={compareDimensions} compareProfiles={compareProfiles} navigateTo={navigateTo} setPeer={setPeer} setAiInsight={setAiInsight} label={label} t={t} setCompareSortBy={setCompareSortBy} compareSortBy={compareSortBy} setCompareRankDetail={setCompareRankDetail} shareSingleRanking={shareSingleRanking} exportProfile={exportProfile} setFormat={setFormat} busy={busy} namedProfile={namedProfile} setNotice={setNotice} requestInsight={requestInsight} aiBusy={aiBusy} aiInsight={aiInsight} createFromPeer={createFromPeer} setPeerRankPickOpen={setPeerRankPickOpen} openArtworkDetail={openArtworkDetail} peerUrl={peerUrl} setPeerUrl={setPeerUrl} peerUrlBusy={peerUrlBusy} importPeerFromUrl={importPeerFromUrl} importProfile={importProfile} setActiveKind={setActiveKind} notes={notes} />;
   else if (view === "share" && sharePeer) content = <ShareView peer={sharePeer} t={t} label={label} navigateTo={(v) => { if (v === "compare") acceptPeer(sharePeer); else navigateTo(v as View); }} openCollection={openCollection} profile={profile} notes={notes} openArtworkDetail={openArtworkDetail} />;
   else if (view === "share" && !sharePeer) content = <div className="empty-state"><p style={{ marginBottom: 12 }}>{t("正在加载分享内容…", "Loading shared content…")}</p><button className="button secondary" onClick={() => navigateTo("home")}>{t("返回首页", "Back home")}</button></div>;

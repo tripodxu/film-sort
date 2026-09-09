@@ -95,6 +95,21 @@ export function mergeRanking(profile: ArtisticProfile | null, ranking: RankingEx
   };
 }
 
+export function reorderRanking(profile: ArtisticProfile, rankingIdx: number, newOrder: string[]): ArtisticProfile {
+  const ranking = profile.rankings[rankingIdx];
+  if (!ranking) return profile;
+  const byId = new Map(ranking.items.map((item) => [item.id, item]));
+  const reordered = newOrder.map((id, index) => {
+    const item = byId.get(id);
+    if (!item) return null;
+    return { ...item, rank: index + 1 };
+  }).filter(Boolean) as RankedArtwork[];
+  if (reordered.length !== ranking.items.length) return profile;
+  const rankings = [...profile.rankings];
+  rankings[rankingIdx] = { ...ranking, items: reordered };
+  return { ...profile, rankings, updatedAt: new Date().toISOString() };
+}
+
 export function renameRanking(profile: ArtisticProfile, index: number, newTitle: string): ArtisticProfile {
   const rankings = [...profile.rankings];
   if (index < 0 || index >= rankings.length) return profile;

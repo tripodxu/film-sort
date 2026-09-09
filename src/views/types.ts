@@ -123,6 +123,12 @@ export interface ProfileViewProps {
   openNoteModal: (key: string, title: string, kind: MediaKind, posterUrls?: readonly string[]) => void;
   accountToken: string;
   publishToPlaza: (ranking: RankingExport) => void;
+  reorderMode: number | null;
+  reorderItems: RankedArtwork[];
+  startReorder: (idx: number) => void;
+  saveReorder: () => void;
+  cancelReorder: () => void;
+  moveItem: (from: number, to: number) => void;
 }
 
 export interface ShareViewProps {
