@@ -223,6 +223,7 @@ film-sort3/
 │   ├── ARCHITECTURE.md            # 技术架构文档
 │   ├── API.md                     # API 接口参考
 │   ├── USAGE.md                   # 用户操作说明
+│   ├── OPTIMIZATION.md            # 优化路线图
 │   ├── CLOUDFLARE.md              # Cloudflare 部署文档
 │   └── DOUBAN_API.md              # 豆瓣 API 接口文档
 │
