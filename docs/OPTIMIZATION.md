@@ -86,7 +86,7 @@ async function generateQR(url: string) {
 }
 ```
 
-### 2.2 排序撤销性能
+### 2.2 排序撤销性能 （❌ 未完成）
 
 **现状**：`undoLastAction` 从头重放整个决策日志，时间复杂度 O(n)，300 作品的榜单撤销需要重放约 30 次比较。
 
@@ -192,7 +192,7 @@ async function flushLogs() {
 }
 ```
 
-### 3.3 缓存策略改进
+### 3.3 缓存策略改进 （❌ 未完成）
 
 | 资源 | 当前 | 建议 |
 |------|------|------|
@@ -231,7 +231,7 @@ export default {
 
 ## 4. 安全加固
 
-### 4.1 Token 存储
+### 4.1 Token 存储 （❌ 未完成）
 
 **现状**：`accountToken` 存储在 `localStorage`，XSS 攻击可窃取。
 
@@ -306,7 +306,7 @@ export default defineConfig({
 })
 ```
 
-### 5.2 TypeScript 严格化
+### 5.2 TypeScript 严格化 （❌ 未完成）
 
 ```jsonc
 // tsconfig.app.json 建议开启
@@ -321,7 +321,7 @@ export default defineConfig({
 
 **注意**：开启 `noUncheckedIndexedAccess` 需要大量类型断言修复，建议逐步开启。
 
-### 5.3 CSS 可维护性
+### 5.3 CSS 可维护性 （❌ 未完成）
 
 **现状**：`styles.css` 单文件 38 行（每行 2000+ 字符的压缩格式），不可读、不可 diff。
 
@@ -334,7 +334,7 @@ export default defineConfig({
 
 ## 6. 用户体验
 
-### 6.1 排序进度预估改进
+### 6.1 排序进度预估改进 （❌ 未完成）
 
 **现状**：`estimateTotalComparisons` 用理论公式 `Σ⌈log₂(min(i, N)+1)⌉`，实际偏差较大（用户可能跳过/暂放）。
 
@@ -348,7 +348,7 @@ const remaining = sourceIds.length - processedCount;
 const estimatedRemaining = Math.round(remaining * avgComparisonsPerItem);
 ```
 
-### 6.2 PWA 离线支持
+### 6.2 PWA 离线支持 （❌ 未完成）
 
 **建议**：
 - 使用 `vite-plugin-pwa` 添加 Service Worker
@@ -356,7 +356,7 @@ const estimatedRemaining = Math.round(remaining * avgComparisonsPerItem);
 - 排序中断后可离线恢复草稿
 - 添加「安装到主屏幕」提示
 
-### 6.3 无障碍改进
+### 6.3 无障碍改进 （❌ 未完成）
 
 | 问题 | 修复 |
 |------|------|
@@ -366,7 +366,7 @@ const estimatedRemaining = Math.round(remaining * avgComparisonsPerItem);
 | 海报图片 alt 文本 | 当前使用 `"海报"`，改为具体作品名称 |
 | 颜色对比度 | `--muted` (#a1a8a2) 在深色背景上对比度偏低，建议提高到 #b8c0b8 |
 
-### 6.4 国际化完善
+### 6.4 国际化完善 （❌ 未完成）
 
 **现状**：使用 `t(zh, en)` 函数内联翻译，缺少系统性。
 
@@ -404,13 +404,13 @@ jobs:
       - run: npm run build
 ```
 
-### 7.2 监控
+### 7.2 监控 （❌ 未完成）
 
 - `/api/health` 添加外部监控（UptimeRobot / Cloudflare Notifications）
 - 豆瓣接口错误率告警（基于 `poster_errors` 表的增长速率）
 - Worker CPU 时间和内存使用监控（Cloudflare Dashboard → Observability）
 
-### 7.3 环境管理
+### 7.3 环境管理 （❌ 未完成）
 
 **建议**：
 - 预览环境使用独立 D1 数据库（避免污染生产数据）
