@@ -122,6 +122,7 @@ export default function App() {
   const [detailWork, setDetailWork] = useState<{ work: RankedArtwork; kind: MediaKind; data: Record<string, unknown> | null; loading: boolean } | null>(null);
   const [peerUrl, setPeerUrl] = useState("");
   const [peerUrlBusy, setPeerUrlBusy] = useState(false);
+  const [showGuide, setShowGuide] = useState(() => { try { return !localStorage.getItem("art-rank:guide-dismissed"); } catch { return true; } });
   const syncTimer = useRef<number | null>(null);
   const syncing = useRef(false);
 
@@ -557,6 +558,7 @@ export default function App() {
       <div className="orb-hero-inner">
         <div className="home-heading"><div><span className="eyebrow">YOUR PERSONAL CULTURE INDEX</span><h1>ART<span>/</span>RANK<small>{t("我的艺术人格", "My Artistic Profile")}</small></h1><p>{t("在两件作品之间，找到你真正想留下的那一个。", "Choose between two works and reveal what stays with you.")}</p></div></div>
         <div className="identity glass-capsule"><UserRound size={15} /><span>{accountEmail || t("本地游客", "Local guest")}</span><button className="text-button" onClick={() => setAccountOpen(true)}>{t("登录 / 同步", "Sign in / Sync")}<ArrowRight size={13} /></button></div>
+        <button className="guide-help-btn" onClick={() => setShowGuide(true)} aria-label={t("使用说明", "Guide")} title={t("使用说明", "Guide")}>?</button>
         <div className="home-actions glass-capsule"><button className="button primary" onClick={() => chooseKind(kind)}><Play size={16} />{t("开始准备", "Start preparing")}</button><button className="button secondary" onClick={() => navigateTo("compare")}><Users size={16} />{t("开始相遇", "Start encounter")}</button>{draft && <button className="button quiet" onClick={resume}><Play size={16} />{t("继续上次进度", "Resume")}</button>}</div>
         <div className="orb-index" aria-hidden="true"><span>01</span><i /><span>∞</span></div>
       </div>
@@ -674,6 +676,7 @@ export default function App() {
       </>}
       <button className="button quiet" onClick={() => setAccountOpen(false)}><UserRound size={16} />{t("继续使用游客模式", "Continue as guest")}</button>
     </section></div>}
+    {showGuide && <div className="modal-backdrop" onClick={() => setShowGuide(false)}><section className="guide-modal account-dialog" role="dialog" aria-modal="true" aria-labelledby="guide-heading" onClick={(event) => event.stopPropagation()} onKeyDown={(event) => { if (event.key === "Escape") setShowGuide(false); }}><span className="eyebrow">ART/RANK {t("使用说明", "GUIDE")}</span><h2 id="guide-heading">{t("欢迎来到 ART/RANK", "Welcome to ART/RANK")}</h2><p className="guide-subtitle">{t("在两件作品之间做出选择，找到你真正想留下的那一个。以下是快速上手指南：", "Choose between two works and reveal what stays with you. Here's a quick guide:")}</p><div className="guide-steps"><div className="guide-step"><span className="guide-step-num">1</span><div className="guide-step-body"><strong>{t("选择媒介维度", "Choose a medium")}</strong><p>{t("电影、书籍、音乐或其他——每个维度可以创建多个独立榜单。", "Film, Books, Music, or Other — each medium can have multiple independent lists.")}</p></div></div><div className="guide-step"><span className="guide-step-num">2</span><div className="guide-step-body"><strong>{t("选择作品来源", "Pick your works")}</strong><p>{t("从精选榜单中挑选，粘贴自己的清单，或从豆瓣 Top250 导入。", "Pick from curated lists, paste your own collection, or import from Douban Top250.")}</p></div></div><div className="guide-step"><span className="guide-step-num">3</span><div className="guide-step-body"><strong>{t("1v1 取舍排序", "Sort by choosing")}</strong><p>{t("每次看到两件作品，点击你更想留下的那个。支持键盘快捷键 A/D 或 ←/→。", "Each time you see two works, tap the one you'd keep. Keyboard: A/D or ←/→.")}</p></div></div><div className="guide-step"><span className="guide-step-num">4</span><div className="guide-step-body"><strong>{t("查看文化索引", "View your index")}</strong><p>{t("排序完成后自动保存，可导出为 JSON/TXT/Markdown/CSV/PNG。", "Results save automatically. Export as JSON, TXT, Markdown, CSV, or PNG.")}</p></div></div><div className="guide-step"><span className="guide-step-num">5</span><div className="guide-step-body"><strong>{t("与朋友比较", "Compare with friends")}</strong><p>{t("生成比较链接或二维码发给对方，看看你们的品味在哪里重合。", "Generate a compare link or QR code and see where your tastes overlap.")}</p></div></div></div><div className="guide-modal-footer"><button className="button quiet" onClick={() => { try { localStorage.setItem("art-rank:guide-dismissed", "1"); } catch {} setShowGuide(false); }}>{t("不再显示", "Don't show again")}</button><button className="button primary" onClick={() => setShowGuide(false)}>{t("知道了", "Got it")}</button></div></section></div>}
   </div>;
 }
 
