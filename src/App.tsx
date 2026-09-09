@@ -186,6 +186,7 @@ export default function App() {
   useEffect(() => { document.documentElement.lang = locale === "zh" ? "zh-CN" : "en"; }, [locale]);
   useEffect(() => { window.scrollTo(0, 0); }, [view]);
   useEffect(() => { setEditingRankIdx(null); setEditingRankTitle(""); }, [view]);
+  useEffect(() => { if (!notice) return; const timer = setTimeout(() => setNotice(""), 4000); return () => clearTimeout(timer); }, [notice]);
   useEffect(() => {
     if (view !== "sorting" || !ranking || !collection) return;
     const next = { collection, ranking: serializeRankingState(ranking), profileName };
