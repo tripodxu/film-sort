@@ -11,8 +11,17 @@ function readPosterCache(key: string): string[] | null {
 function writePosterCache(key: string, urls: string[]) {
   try { const cache = JSON.parse(sessionStorage.getItem(POSTER_CACHE_KEY) ?? "{}"); cache[key] = urls; sessionStorage.setItem(POSTER_CACHE_KEY, JSON.stringify(cache)); } catch { /* Quota exceeded — silently skip */ }
 }
+function posterKey(work: Artwork, kind: MediaKind): string {
+  return `${kind}|${work.title}|${work.subtitle ?? ""}|${work.year ?? ""}`;
+}
+function resolveSync(work: Artwork, kind: MediaKind): string[] | null {
+  const key = posterKey(work, kind);
+  const req = requests.get(key);
+  if (req) { let result: string[] | null = null; req.then((urls) => { result = urls; }); return result; }
+  return readPosterCache(key);
+}
 function resolve(work: Artwork, kind: MediaKind): Promise<string[]> {
-  const key = `${kind}|${work.title}|${work.subtitle ?? ""}|${work.year ?? ""}`;
+  const key = posterKey(work, kind);
   let request = requests.get(key);
   if (!request) {
     const cached = readPosterCache(key);
@@ -48,12 +57,16 @@ function reportImageFailure(work: Artwork, kind: MediaKind, url: string) {
 }
 
 export function Poster({ work, kind, large = false }: { work: Artwork; kind: MediaKind; large?: boolean }) {
-  const [resolved, setResolved] = useState<string[]>([]);
+  const [resolved, setResolved] = useState<string[]>(() => {
+    if (kind !== "film" && kind !== "book" && kind !== "music") return [];
+    return resolveSync(work, kind) ?? [...(work.posterUrls ?? [])];
+  });
   const [failed, setFailed] = useState<Set<string>>(() => new Set());
   useEffect(() => {
     let active = true;
-    setResolved([]); setFailed(new Set());
-    if (kind === "film" || kind === "book" || kind === "music") void resolve(work, kind).then((urls) => { if (active) setResolved(urls); });
+    if (kind === "film" || kind === "book" || kind === "music") {
+      void resolve(work, kind).then((urls) => { if (active && urls.length) setResolved(urls); });
+    }
     return () => { active = false; };
   }, [work.id, work.title, kind, large]);
   const urls = [...new Set([...resolved, ...(work.posterUrls ?? [])])];
