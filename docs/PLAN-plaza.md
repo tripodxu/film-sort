@@ -76,6 +76,7 @@ CREATE TABLE plaza_comments (
 | GET | `/api/plaza/posts?page=&limit=&kind=` | 获取广场帖子列表（分页、可按媒介筛选） |
 | GET | `/api/plaza/posts/:id` | 获取单个帖子详情（含留言） |
 | POST | `/api/plaza/posts` | 发布帖子到广场（需登录） |
+| PUT | `/api/plaza/posts/:id` | 编辑自己的帖子（标题/描述/批注/排序，需登录 + 所有权） |
 | DELETE | `/api/plaza/posts/:id` | 删除自己的帖子（需登录 + 所有权） |
 | POST | `/api/plaza/posts/:id/like` | 点赞/取消点赞（需登录） |
 | GET | `/api/plaza/posts/:id/comments` | 获取留言列表 |
@@ -197,18 +198,22 @@ CREATE TABLE plaza_comments (
 | CommentSection | `src/components/CommentSection.tsx` | 留言区组件 |
 | PublishModal | `src/components/PublishModal.tsx` | 发布到广场弹窗 |
 | SharePageLayout | `src/components/SharePageLayout.tsx` | 分享查看页布局 |
+| ReorderableList | `src/components/ReorderableList.tsx` | 拖拽排序列表（HTML5 DnD + touch） |
+| EditPostModal | `src/components/EditPostModal.tsx` | 编辑广场帖子弹窗 |
 
 ### 改动文件
 
 | 文件 | 改动 |
 |------|------|
 | `App.tsx` | 新增路由 `/share/:code`、`/plaza`、`/plaza/:id` |
-| `src/views/ProfileView.tsx` | 添加「发布到广场」按钮 |
+| `src/views/ProfileView.tsx` | 添加「发布到广场」「手动调整」按钮 |
 | `src/views/types.ts` | 新增 ShareViewProps、PlazaViewProps 等 |
-| `worker/index.ts` | 新增 `/api/plaza/*` 路由 |
+| `worker/index.ts` | 新增 `/api/plaza/*` 路由（含 PUT 编辑） |
 | `worker/account.ts` | 扩展 plaza 相关接口 |
 | `migrations/` | 新增 plaza_posts、plaza_likes、plaza_comments 迁移 |
-| `src/styles.css` | 新增广场/分享查看页样式 |
+| `src/styles.css` | 新增广场/分享查看页/拖拽排序样式 |
+| `src/lib/profile.ts` | 扩展 `reorderRanking()` 函数支持手动调整排序 |
+| `src/components/ReorderableList.tsx` | 拖拽排序组件（HTML5 DnD + touch 适配） |
 
 ---
 
@@ -260,6 +265,48 @@ CREATE TABLE plaza_comments (
   → POST /api/plaza/posts
   → 发布成功，按钮变为「已发布」
 ```
+
+### 7.5 编辑/删除广场帖子
+
+```
+用户查看自己的广场帖子
+  → 帖子详情页显示「编辑」和「删除」按钮
+  → 点击「编辑」
+    → 可修改标题、描述、批注
+    → 可调整排序（人工优化，见 7.6）
+    → PUT /api/plaza/posts/:id
+  → 点击「删除」
+    → 确认弹窗 → DELETE /api/plaza/posts/:id
+    → 返回广场列表
+```
+
+### 7.6 人工优化排序
+
+排序完成后，如果对结果不满意，支持手动调整：
+
+```
+用户在「我的文化索引」页面查看已完成的榜单
+  → 点击「手动调整」按钮
+  → 进入拖拽排序模式：
+    - 每个作品行左侧显示拖拽手柄（⠿）
+    - 拖拽作品行调整位置
+    - 或使用上下箭头按钮逐位移动
+    - 实时更新排名数字
+  → 点击「保存」
+    → 更新本地画像 + 云端同步
+    → 如果已发布到广场，同步更新广场帖子
+```
+
+**实现方式**：
+- 使用 HTML5 Drag and Drop API（无需引入第三方库）
+- 拖拽时显示半透明预览和插入位置指示线
+- 移动端使用 touch 事件适配
+- 保存时重新计算 rank 字段（连续 1, 2, 3...）
+
+**入口**：
+- 「我的文化索引」页面：每个榜单标题区域增加「手动调整」按钮
+- 排序完成后的结果页面：增加「手动微调」按钮
+- 广场帖子编辑页：可调整排序
 
 ---
 
@@ -324,21 +371,23 @@ CREATE INDEX idx_plaza_comments_post ON plaza_comments(post_id);
 
 | 阶段 | 内容 | 工作量 |
 |------|------|--------|
-| **Phase 1** | 数据库迁移 + 广场 API（CRUD + 点赞 + 留言） | 1-2 天 |
+| **Phase 1** | 数据库迁移 + 广场 API（CRUD + 点赞 + 留言 + 编辑） | 1-2 天 |
 | **Phase 2** | 查看分享页（/share/:code）改造 | 1 天 |
-| **Phase 3** | 广场列表页 + 帖子详情页 | 2-3 天 |
+| **Phase 3** | 广场列表页 + 帖子详情页（含编辑/删除） | 2-3 天 |
 | **Phase 4** | 发布到广场功能（ProfileView 集成） | 0.5 天 |
-| **Phase 5** | 广场 → 排序/比较 交互流程 | 1 天 |
-| **Phase 6** | 文档更新 + 测试 | 0.5 天 |
+| **Phase 5** | 人工优化排序（拖拽/上下移动） | 1-2 天 |
+| **Phase 6** | 广场 → 排序/比较 交互流程 | 1 天 |
+| **Phase 7** | 文档更新 + 测试 | 0.5 天 |
 
-**总计：约 6-8 天**
+**总计：约 7-10 天**
 
 ---
 
 ## 十一、待确认
 
-1. 广场帖子是否支持编辑（修改标题/描述）？
-2. 留言是否支持回复（嵌套评论）？
-3. 是否需要举报/屏蔽功能？
-4. 广场帖子的排序策略（最新/最热/混合）？
-5. 每个用户发布帖子的数量限制？
+1. ~~广场帖子是否支持编辑（修改标题/描述）？~~ → 已确认：支持编辑（标题/描述/批注/排序）
+2. ~~排序结果不满意怎么办？~~ → 已确认：支持人工优化排序（拖拽/上下移动）
+3. 留言是否支持回复（嵌套评论）？
+4. 是否需要举报/屏蔽功能？
+5. 广场帖子的排序策略（最新/最热/混合）？
+6. 每个用户发布帖子的数量限制？
