@@ -5,3 +5,8 @@ dist/
 *.log
 .DS_Store
 *.tsbuildinfo
+*.bak
+.localappdata/
+.npm-cache/
+.mimocode/plans/
+docs/old/
