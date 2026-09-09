@@ -8,28 +8,30 @@
 
 ### 1.1 App.tsx 单体组件拆分
 
-**现状**：`App.tsx` 约 700 行，包含 6 个视图、40+ 个 useState、所有业务逻辑和 JSX 渲染。
+**现状**：✅ 已完成。6 个视图组件已提取到 `src/views/`。
 
-**目标结构**：
+**已实现结构**：
 
 ```
 src/
-├── App.tsx                    # 路由 + 全局状态 + 布局壳
+├── App.tsx                    # 路由 + 全局状态 + 弹窗
 ├── views/
 │   ├── HomeView.tsx           # 首页（光球 + 媒介选择 + 品味年轮）
 │   ├── SourceView.tsx         # 清单来源选择（内置/自定义/豆瓣）
 │   ├── SetupView.tsx          # 排序配置（Top N、候选筛选）
 │   ├── SortingView.tsx        # 1v1 取舍界面
 │   ├── ProfileView.tsx        # 文化索引（榜单列表 + 导出）
-│   └── CompareView.tsx        # 相遇比较（指标 + 共同作品 + AI）
+│   ├── CompareView.tsx        # 相遇比较（指标 + 共同作品 + AI）
+│   ├── types.ts               # 各视图 Props 接口
+│   ├── helpers.tsx            # 共享辅助函数
+│   └── IconButton.tsx         # 提取的 IconButton 组件
 ├── components/
-│   ├── GuideModal.tsx         # 使用说明弹窗
-│   ├── TechModal.tsx          # 技术说明弹窗
-│   ├── AccountDialog.tsx      # 登录/同步/冲突弹窗
-│   └── ...existing
-└── hooks/
-    ├── useProfile.ts          # 画像读写 + 云端同步 + 冲突处理
-    └── useAccount.ts          # 认证状态（登录/注册/OAuth/登出）
+│   ├── Poster.tsx             # 海报组件
+│   └── OrbScene.tsx           # 3D 光球
+└── lib/
+    ├── ranking.ts             # 排序状态机
+    ├── profile.ts             # 画像管理
+    └── collections.ts         # 清单导入
 ```
 
 **收益**：
@@ -66,8 +68,8 @@ src/
 |--------|----------|------|----------|------|
 | QRCode 库 | ~15 KB gzipped | 仅在点击「分享」时 `import("qrcode")` | 首屏 -15 KB | ✅ 已完成 |
 | fflate | ~8 KB gzipped | 仅在分享链接解析/生成时动态 import | 首屏 -8 KB | ✅ 已完成 |
-| lucide-react | ~20 KB gzipped | 确认 tree-shaking 生效；未使用的图标不打包 | -5~10 KB |
-| catalog.ts | ~20-50 KB | 电影目录数据改为动态 import 或从 API 加载 | 首屏 -20~50 KB |
+| lucide-react | ~20 KB gzipped | `sideEffects: false` 已添加，Vite 默认 tree-shaking 已生效 | -5~10 KB | ✅ sideEffects 已添加 |
+| catalog.ts | ~36 KB | 电影目录数据改为动态 import | 首屏 -36 KB | ❌ 需 async 重构 mediaCollections |
 
 **实施**：
 
@@ -379,19 +381,23 @@ const estimatedRemaining = Math.round(remaining * avgComparisonsPerItem);
 
 ### 7.1 CI/CD
 
-建议添加 GitHub Actions：
+**现状**：✅ 已完成。`.github/workflows/ci.yml` 已配置。
 
 ```yaml
-# .github/workflows/ci.yml
+# .github/workflows/ci.yml — 已部署
 name: CI
-on: [push, pull_request]
+on:
+  push:
+    branches: [main, "docs/**"]
+  pull_request:
+    branches: [main]
 jobs:
   check:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
-        with: { node-version: 20 }
+        with: { node-version: 20, cache: npm }
       - run: npm ci
       - run: npm run check
       - run: npm test -- --run
@@ -415,19 +421,23 @@ jobs:
 
 ## 实施优先级
 
-| 优先级 | 项目 | 工作量 | 收益 |
-|--------|------|--------|------|
-| **P0** | App.tsx 视图拆分 | 2-3 天 | 可维护性、性能、协作 |
+| 优先级 | 项目 | 工作量 | 收益 | 状态 |
+|--------|------|--------|------|------|
+| **P0** | App.tsx 视图拆分 | 2-3 天 | 可维护性、性能、协作 | ✅ 6 个视图组件 |
 | **P0** | 排序/画像核心测试 | 1-2 天 | 防回归、信心 | ✅ 58 tests |
-| **P1** | Bundle 按需加载 | 0.5 天 | 首屏加载速度 | ✅ |
+| **P1** | Bundle 按需加载 | 0.5 天 | 首屏加载速度 | ✅ QRCode+fflate 动态 import |
 | **P1** | D1 查询合并 + 日志批量写 | 0.5 天 | 后端性能 | ✅ |
-| **P1** | CSP 加固 + Token 安全 | 0.5 天 | 安全性 | ✅ CSP 已加固 |
-| **P1** | CI/CD 流水线 | 0.5 天 | 开发效率 |
-| **P2** | 海报缓存优化 | 0.5 天 | 加载体验 | ✅ |
-| **P2** | TypeScript 严格化 | 1 天 | 代码质量 |
-| **P2** | 数据库自动清理 | 0.5 天 | 运维 | ✅ |
-| **P2** | 无障碍改进 | 1 天 | 可访问性 |
-| **P3** | PWA 离线支持 | 1-2 天 | 用户体验 |
-| **P3** | CSS 模块化 | 1-2 天 | 可维护性 |
-| **P3** | 国际化系统化 | 1 天 | 多语言支持 |
-| **P3** | 排序撤销性能优化 | 0.5 天 | 大榜单体验 |
+| **P1** | CSP 加固 | 0.5 天 | 安全性 | ✅ img-src 白名单 |
+| **P1** | Token 安全加固 | 0.5 天 | 安全性 | ❌ 仍在 localStorage |
+| **P1** | CI/CD 流水线 | 0.5 天 | 开发效率 | ✅ GitHub Actions |
+| **P2** | 海报缓存优化 | 0.5 天 | 加载体验 | ✅ sessionStorage |
+| **P2** | TypeScript 严格化 | 1 天 | 代码质量 | ❌ |
+| **P2** | 数据库自动清理 | 0.5 天 | 运维 | ✅ Cron Trigger |
+| **P2** | 无障碍改进 | 1 天 | 可访问性 | ❌ |
+| **P3** | PWA 离线支持 | 1-2 天 | 用户体验 | ❌ |
+| **P3** | CSS 模块化 | 1-2 天 | 可维护性 | ❌ |
+| **P3** | 国际化系统化 | 1 天 | 多语言支持 | ❌ |
+| **P3** | 排序撤销性能优化 | 0.5 天 | 大榜单体验 | ❌ |
+| **P3** | catalog.ts 动态加载 | 0.5 天 | 首屏 -36KB | ❌ 需 async 重构 |
+
+**统计：10 项已完成 / 6 项未完成**
