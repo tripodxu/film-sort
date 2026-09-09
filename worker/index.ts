@@ -1348,4 +1348,19 @@ export default {
 
     return response;
   },
+
+  async scheduled(_event, env) {
+    if (!env.DB) return;
+    try {
+      await env.DB.batch([
+        env.DB.prepare("DELETE FROM analytics_events WHERE created_at < datetime('now', '-90 days')"),
+        env.DB.prepare("DELETE FROM api_logs WHERE created_at < datetime('now', '-90 days')"),
+        env.DB.prepare("DELETE FROM poster_errors WHERE created_at < datetime('now', '-180 days')"),
+        env.DB.prepare("DELETE FROM admin_sessions WHERE expires_at < datetime('now')"),
+        env.DB.prepare("DELETE FROM user_sessions WHERE expires_at < datetime('now')"),
+      ]);
+    } catch (error) {
+      console.error("scheduled cleanup failed", error instanceof Error ? error.message : error);
+    }
+  },
 } satisfies ExportedHandler<Env>;
