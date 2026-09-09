@@ -1,7 +1,6 @@
 import { lazy, Suspense, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { ArrowLeft, ArrowLeftRight, ArrowRight, BookOpen, Check, ChevronRight, CloudDownload, CloudUpload, Download, Film, Github, Languages, Library, Link, LogIn, Music2, Pause, Play, Plus, Search, Share2, SkipForward, Sparkles, Trash2, Undo2, Upload, UserRound, Users, X } from "lucide-react";
-import { compressSync, decompressSync, strFromU8, strToU8 } from "fflate";
-import QRCode from "qrcode";
+
 import { createRankingState, chooseSide, deferWork, deserializeRankingState, getCurrentComparison, getRankingProgress, getRankingResult, serializeRankingState, skipWork, undoLastAction, type RankingState } from "./lib/ranking";
 import { getCollectionsByKind, mediaLabels, type MediaCollection, type MediaKind } from "./data/media";
 import { compareDimensions, compareProfiles, compareRankings, LIBRARY_KEY, MAX_PROFILE_BYTES, mergeDimensionRankings, mergeProfiles, mergeRanking, parseProfile, profileText, readProfile, renameRanking, deleteRanking, type ArtisticProfile, type RankingExport, type RankedArtwork } from "./lib/profile";
@@ -40,10 +39,12 @@ function track(event: string, payload: Record<string, string | number>) {
     void fetch("/api/events", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ event_name: event, session_id: id, payload }) }).catch(() => undefined);
   } catch { /* Local privacy settings must not interrupt sorting. */ }
 }
-function encode(profile: ArtisticProfile) {
+async function encode(profile: ArtisticProfile) {
+  const { compressSync, strToU8 } = await import("fflate");
   return btoa(Array.from(compressSync(strToU8(JSON.stringify(profile))), (byte) => String.fromCharCode(byte)).join("")).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
 }
-function decode(payload: string) {
+async function decode(payload: string) {
+  const { decompressSync, strFromU8 } = await import("fflate");
   if (payload.length > 100000) throw new Error("Link too large");
   const binary = atob(payload.replace(/-/g, "+").replace(/_/g, "/") + "=".repeat((4 - payload.length % 4) % 4));
   const data = decompressSync(Uint8Array.from(binary, (char) => char.charCodeAt(0)), { out: new Uint8Array(MAX_PROFILE_BYTES + 1) });
@@ -157,7 +158,7 @@ export default function App() {
         fetch(`/api/share/${payload}`).then(async (r) => { if (!r.ok) throw new Error(); const d = await r.json() as { profile: unknown }; acceptPeer(parseProfile(d.profile)); }).catch(() => setNotice(t("比较链接无效或已过期。", "Compare link is invalid or expired.")));
       } else {
         // Base64-encoded profile
-        try { acceptPeer(decode(payload)); } catch { setNotice(t("比较链接无效或过大，请导入 JSON 文件。", "Invalid or oversized link. Import the JSON file instead.")); }
+        decode(payload).then(acceptPeer).catch(() => setNotice(t("比较链接无效或过大，请导入 JSON 文件。", "Invalid or oversized link. Import the JSON file instead.")));
       }
     }
     void fetch("/api/auth/config").then((response) => response.json()).then((data: { enabled?: boolean }) => setAccountEnabled(Boolean(data.enabled))).catch(() => undefined);
@@ -447,7 +448,7 @@ export default function App() {
       const data = await response.json() as { url?: string; error?: string };
       if (response.ok && data.url) {
         setShareUrl(data.url);
-        try { setQrUrl(await QRCode.toDataURL(data.url, { width: 240, margin: 2, errorCorrectionLevel: "L" })); } catch { setQrUrl(""); }
+        try { const QRCode = await import("qrcode"); setQrUrl(await QRCode.default.toDataURL(data.url, { width: 240, margin: 2, errorCorrectionLevel: "L" })); } catch { setQrUrl(""); }
         try { await navigator.clipboard.writeText(data.url); setNotice(t("比较链接已复制。", "Comparison link copied.")); }
         catch { setNotice(t("链接已生成，可在下方选中复制。", "Link ready. Select and copy it below.")); }
       } else {
@@ -554,7 +555,7 @@ export default function App() {
         if (/^[0-9a-f]{8}$/i.test(payload)) {
           const r = await fetch(`/api/share/${payload}`); if (!r.ok) throw new Error();
           const d = await r.json() as { profile: unknown }; acceptPeer(parseProfile(d.profile));
-        } else { acceptPeer(decode(payload)); }
+        } else { acceptPeer(await decode(payload)); }
         setPeerUrl(""); return;
       }
       const r = await fetch(url); if (!r.ok) throw new Error();
