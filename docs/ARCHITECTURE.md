@@ -103,6 +103,15 @@ App.tsx 使用 React useState 管理所有状态，主要状态分组：
 - `compareActiveKind`: 当前比较维度
 - `aiInsight`: AI 生成的解读文本
 
+**弹窗状态**
+- `showGuide`: 使用说明弹窗显示状态，首次访问自动弹出（检查 `art-rank:guide-dismissed`）
+- `showTech`: 技术说明弹窗显示状态，从使用说明弹窗进入
+- `accountOpen`: 账号弹窗
+- `cloudConflict`: 数据冲突弹窗
+- `detailWork`: 作品详情弹窗
+- `compareRankDetail`: 比较排名详情弹窗
+- `peerRankPickOpen`: 选择对方榜单弹窗
+
 ### 2.4 数据持久化
 
 | 数据 | Key | 存储 | 大小限制 |
@@ -114,6 +123,7 @@ App.tsx 使用 React useState 管理所有状态，主要状态分组：
 | 会话 ID | `art-rank:session:v1` | localStorage | — |
 | 列布局 | `art-rank:cols` | localStorage | — |
 | 年轮布局 | `art-rank:rings-layout` | localStorage | — |
+| 使用说明已关闭 | `art-rank:guide-dismissed` | localStorage | — |
 
 ### 2.5 分享链接编码
 
