@@ -441,3 +441,65 @@ jobs:
 | **P3** | catalog.ts 动态加载 | 0.5 天 | 首屏 -36KB | ❌ 需 async 重构 |
 
 **统计：10 项已完成 / 6 项未完成**
+
+---
+
+## 未完成项说明
+
+### ❌ Token 安全加固（P1）
+
+**原因**：需要改造整个认证流程。当前 `accountToken` 存储在 `localStorage`，改为 HttpOnly Cookie 需要：
+- Worker 端登录响应改用 `Set-Cookie` 替代 JSON body 返回 token
+- 前端所有 `/api/account/*` 请求不再手动携带 `Authorization` 头，改为浏览器自动附带 Cookie
+- OAuth 回调流程从 URL 参数传 token 改为 Cookie 设置
+- 同步机制（`syncProfile`、`pagehide`/`visibilitychange` 的 keepalive 请求）需要适配 Cookie 模式
+- 影响范围：`worker/account.ts`（登录/OAuth）+ `src/App.tsx`（所有认证相关逻辑）
+
+改动量大且涉及安全关键路径，需要充分测试，不宜在批量优化中一并处理。
+
+### ❌ TypeScript 严格化（P2）
+
+**原因**：开启 `noUncheckedIndexedAccess` 后，所有 `Map.get()`、数组索引访问都返回 `T | undefined`，需要在数百处添加非空断言或类型守卫。`exactOptionalPropertyTypes` 会改变 `interface` 中 `prop?: T` 的语义，现有代码中大量使用 `undefined` 赋值的地方需要逐一修复。
+
+建议在大版本迭代时逐步开启，而非一次性修改。
+
+### ❌ 无障碍改进（P2）
+
+**原因**：涉及多个子项，工作量和风险各异：
+- ARIA 角色补充（排序卡片 `role="group"`）——简单，但需要确认不干扰现有键盘导航
+- 焦点陷阱（弹窗焦点捕获）——需要引入 Radix Dialog 或手动实现，与现有 `modal-backdrop` 模式冲突
+- 海报 alt 文本改为作品名——当前 `Poster` 组件的 `alt` 是通用文案，改为动态值需要调整组件接口
+- `--muted` 对比度调整——需要验证所有使用场景的视觉效果
+
+各项独立性高，建议按子项逐步推进，不阻塞其他优化。
+
+### ❌ PWA 离线支持（P3）
+
+**原因**：需要引入 `vite-plugin-pwa` 并配置 Service Worker 策略。当前项目使用 Cloudflare Workers 静态资源服务，需要确认 Service Worker 与 Workers Assets 的缓存策略不冲突。排序草稿已有 localStorage 保存机制，离线恢复的实际收益有限。
+
+优先级低，可在用户体验优化阶段单独处理。
+
+### ❌ CSS 模块化（P3）
+
+**原因**：`styles.css` 是单文件压缩格式（38 行，每行 2000+ 字符），迁移到 CSS Modules 或 Tailwind 需要：
+- 拆分所有压缩行到独立文件
+- 重写所有 class 引用（App.tsx + 6 个视图组件 + 组件库）
+- 确保与现有的 `glass-capsule`、`poster-*`、`medium-*` 等自定义 class 兼容
+- 响应式断点和动画需要重新组织
+
+工作量大（1-2 天），收益主要是可维护性而非功能/性能，建议在下一次大规模 UI 改版时一并处理。
+
+### ❌ 排序撤销性能优化（P3）
+
+**原因**：当前 `undoLastAction` 通过重放决策日志实现，300 作品约需重放 30 次比较，单次撤销耗时 < 1ms。实际用户场景中，排序榜单很少超过 100 件作品，撤销操作也不频繁，当前性能完全可接受。
+
+只有在支持超大榜单（500+ 作品）且用户频繁撤销的场景下才值得优化。
+
+### ❌ catalog.ts 动态加载（P3）
+
+**原因**：`catalog.ts`（36 KB）是电影目录数据，通过 `media.ts` 的 `fromFilms()` 在模块初始化时构建 `mediaCollections` 常量。改为动态加载需要：
+- 将 `mediaCollections` 从同步常量改为异步加载（`Promise<MediaCollection[]>`）
+- 所有调用 `getCollectionsByKind()` 的地方改为 `await`（涉及 HomeView、SourceView 等多个组件）
+- 首页媒介选择卡片需要在数据加载前显示骨架屏
+
+改动链路长且影响首屏渲染逻辑。`"sideEffects": false` 已添加，Vite tree-shaking 已生效，实际收益有限。
