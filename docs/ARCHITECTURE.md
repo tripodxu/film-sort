@@ -345,11 +345,12 @@ CREATE TABLE user_sessions (
 );
 ```
 
-**user_profiles_v2** — 用户画像
+**user_profiles_v2** — 用户画像 + 批注
 ```sql
 CREATE TABLE user_profiles_v2 (
   user_id INTEGER PRIMARY KEY REFERENCES user_accounts(id),
   profile TEXT NOT NULL,
+  notes TEXT DEFAULT '{}',
   updated_at TEXT DEFAULT (datetime('now'))
 );
 ```
