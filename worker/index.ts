@@ -1279,16 +1279,16 @@ async function route(request: Request, env: Env): Promise<Response> {
     if (profileStr.length > 512 * 1024) return json({ error: "profile_too_large" }, 400);
     const code = crypto.randomUUID().replace(/-/g, "").slice(0, 8);
     const expires = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
-    await env.DB.prepare("INSERT INTO shared_links (code, profile_data, expires_at) VALUES (?, ?, ?)").bind(code, profileStr, expires).run();
+    await env.DB.prepare("INSERT INTO shared_links (code, profile, expires_at) VALUES (?, ?, ?)").bind(code, profileStr, expires).run();
     return json({ code, url: `${new URL(request.url).origin}/?payload=${code}` });
   }
   if (url.pathname.startsWith("/api/share/") && request.method === "GET") {
     if (!env.DB) return json({ error: "database_unavailable" }, 503);
     const code = url.pathname.slice("/api/share/".length);
     if (!code || code.length > 20) return json({ error: "invalid_code" }, 400);
-    const row = await env.DB.prepare("SELECT profile_data FROM shared_links WHERE code = ? AND expires_at > datetime('now')").bind(code).first<{ profile_data: string }>();
+    const row = await env.DB.prepare("SELECT profile FROM shared_links WHERE code = ? AND expires_at > datetime('now')").bind(code).first<{ profile: string }>();
     if (!row) return json({ error: "link_expired_or_not_found" }, 404);
-    return json({ profile: JSON.parse(row.profile_data) }, 200, { "cache-control": "public, max-age=3600" });
+    return json({ profile: JSON.parse(row.profile) }, 200, { "cache-control": "public, max-age=3600" });
   }
   if (url.pathname === "/api/challenges" && request.method === "POST") {
     return createChallenge(request, env);
