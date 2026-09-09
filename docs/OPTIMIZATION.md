@@ -60,12 +60,12 @@ src/
 
 ### 2.1 Bundle 按需加载
 
-**现状**：主包 384 KB（gzip 127 KB），Three.js 522 KB 已做 lazy load。
+**现状**：主包 353 KB（gzip 115 KB），Three.js 522 KB 已做 lazy load。QRCode 和 fflate 已完成动态 import。
 
-| 优化项 | 当前大小 | 方案 | 预估收益 |
-|--------|----------|------|----------|
-| QRCode 库 | ~15 KB gzipped | 仅在点击「分享」时 `import("qrcode")` | 首屏 -15 KB |
-| fflate | ~8 KB gzipped | 仅在分享链接解析/生成时动态 import | 首屏 -8 KB |
+| 优化项 | 当前大小 | 方案 | 预估收益 | 状态 |
+|--------|----------|------|----------|------|
+| QRCode 库 | ~15 KB gzipped | 仅在点击「分享」时 `import("qrcode")` | 首屏 -15 KB | ✅ 已完成 |
+| fflate | ~8 KB gzipped | 仅在分享链接解析/生成时动态 import | 首屏 -8 KB | ✅ 已完成 |
 | lucide-react | ~20 KB gzipped | 确认 tree-shaking 生效；未使用的图标不打包 | -5~10 KB |
 | catalog.ts | ~20-50 KB | 电影目录数据改为动态 import 或从 API 加载 | 首屏 -20~50 KB |
 
@@ -419,7 +419,7 @@ jobs:
 |--------|------|--------|------|
 | **P0** | App.tsx 视图拆分 | 2-3 天 | 可维护性、性能、协作 |
 | **P0** | 排序/画像核心测试 | 1-2 天 | 防回归、信心 |
-| **P1** | Bundle 按需加载 | 0.5 天 | 首屏加载速度 |
+| **P1** | Bundle 按需加载 | 0.5 天 | 首屏加载速度 | ✅ |
 | **P1** | D1 查询合并 + 日志批量写 | 0.5 天 | 后端性能 |
 | **P1** | CSP 加固 + Token 安全 | 0.5 天 | 安全性 |
 | **P1** | CI/CD 流水线 | 0.5 天 | 开发效率 |
