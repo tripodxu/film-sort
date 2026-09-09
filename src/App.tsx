@@ -161,7 +161,7 @@ export default function App() {
   }
   function persist(next: ArtisticProfile) {
     setProfile(next); setProfileName(next.profileName); setShareUrl(""); setQrUrl("");
-    try { localStorage.setItem(LIBRARY_KEY, JSON.stringify(next)); }
+    try { localStorage.setItem(LIBRARY_KEY, JSON.stringify(next)); writeNotes(notes); }
     catch { setNotice(t("浏览器无法保存，请及时导出画像。", "Browser storage is unavailable. Export your profile to keep it.")); }
   }
   function acceptPeer(next: ArtisticProfile) {
