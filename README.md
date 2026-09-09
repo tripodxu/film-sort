@@ -56,6 +56,21 @@ ART/RANK 把"从看过、读过、听过的作品里排出自己的 Top N"拆成
 - 日志清理：支持按时间范围批量清理 API 日志、分析事件和海报错误。
 - 缓存策略说明。
 
+### 广场（Plaza）
+
+- 登录用户可将自己的榜单或画像发布到广场，与其他用户分享。
+- 广场是公共信息流，所有用户可浏览、按媒介筛选（全部/电影/书籍/音乐/其他），支持最新和最热排序。
+- 每个帖子显示前三名海报、榜单名称、发布者昵称、点赞数和留言数。
+- 其他用户可以点赞（toggle）、留言（最长 500 字）、用对方榜单排序或发起比较。
+- 发布者可编辑（标题/描述/批注/排序）或删除自己的帖子和留言。
+- 支持人工优化排序：拖拽或上下箭头调整作品排名。
+
+### 查看分享（`/share/:code`）
+
+- 直接打开分享链接时进入查看页面，展示对方榜单/画像内容（含批注）。
+- 可选择「用此榜单排序」或「与我比较」，也可点赞和留言。
+- 在「相遇」页面粘贴链接的行为不变，仍直接进入比较界面。
+
 ### 比较与导出
 
 - 导入对方 JSON 或生成压缩链接和二维码。
@@ -83,6 +98,9 @@ ART/RANK 把"从看过、读过、听过的作品里排出自己的 Top N"拆成
 | `/encounter` | 相遇 | 与他人比较 |
 | `/encounter?payload=<code>` | 相遇 | 通过分享链接导入对方索引 |
 | `/myself` | 我的文化索引 | 已完成的榜单和画像 |
+| `/share/:code` | 查看分享 | 查看他人分享的榜单/画像 |
+| `/plaza` | 广场 | 公共信息流，浏览和互动 |
+| `/plaza/:id` | 广场帖子详情 | 单个帖子详情 + 留言 |
 
 - 所有页面支持浏览器前进/后退、直接输入路径访问、书签收藏。
 - `?lang=en` 参数在页面切换时保留。
@@ -101,7 +119,7 @@ ART/RANK 把"从看过、读过、听过的作品里排出自己的 Top N"拆成
 
 ### 导航栏
 
-- 右上角固定工具栏：中英文切换、GitHub 项目链接（图标按钮，点击跳转仓库）、用户按钮（未登录显示「登录/同步」，已登录显示「同步/退出」）。
+- 右上角固定工具栏：中英文切换、广场入口、GitHub 项目链接（图标按钮，点击跳转仓库）、用户按钮（未登录显示「登录/同步」，已登录显示「同步/退出」）。
 - GitHub 图标使用 Lucide `Github` 图标，hover 显示 tooltip。
 
 ### UI/UX
@@ -209,6 +227,7 @@ film-sort3/
 │   ├── index.ts                   # Worker 路由、D1 绑定、管理后台、海报错误日志
 │   ├── media.ts                   # 豆瓣/书籍/音乐 API、海报解析、防限流、Wikipedia/百度百科
 │   ├── account.ts                 # 用户注册/登录/OAuth、管理员账户管理、云端清单
+│   └── plaza.ts                   # 广场接口（帖子 CRUD、点赞、留言）
 │   └── imdb-posters.json          # IMDb 海报手动映射表
 │
 ├── migrations/                    # D1 数据库迁移
@@ -221,7 +240,8 @@ film-sort3/
 │   ├── 0007_poster_errors.sql     # poster_errors
 │   ├── 0008_user_collections.sql  # 云端清单
 │   ├── 0008_disabled_at.sql       # 账户禁用字段
-│   └── 0009_shared_links.sql      # 共享链接短码
+│   ├── 0009_shared_links.sql      # 共享链接短码
+│   └── 0011_plaza.sql             # 广场帖子、点赞、留言
 │
 ├── docs/                          # 文档
 │   ├── ARCHITECTURE.md            # 技术架构文档
@@ -301,6 +321,20 @@ film-sort3/
 | GET | `/api/account/collections` | 获取云端清单 |
 | POST | `/api/account/collections` | 保存云端清单 |
 | DELETE | `/api/account/collections/:id` | 删除云端清单 |
+
+### 广场接口
+
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| GET | `/api/plaza/posts?page=&limit=&kind=` | 获取广场帖子列表（分页、可按媒介筛选） |
+| GET | `/api/plaza/posts/:id` | 获取单个帖子详情（含留言） |
+| POST | `/api/plaza/posts` | 发布帖子到广场（需登录） |
+| PUT | `/api/plaza/posts/:id` | 编辑自己的帖子（需登录 + 所有权） |
+| DELETE | `/api/plaza/posts/:id` | 删除自己的帖子（需登录 + 所有权） |
+| POST | `/api/plaza/posts/:id/like` | 点赞/取消点赞（需登录） |
+| GET | `/api/plaza/posts/:id/comments` | 获取留言列表 |
+| POST | `/api/plaza/posts/:id/comments` | 发表留言（需登录） |
+| DELETE | `/api/comments/:id` | 删除自己的留言 |
 
 ### 管理接口（需 ADMIN_PASSWORD）
 

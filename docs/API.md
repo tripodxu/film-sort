@@ -404,6 +404,191 @@ ART/RANK 后端 API 完整参考。所有接口由 Cloudflare Worker 处理，�
 
 ---
 
+## 广场
+
+### GET /api/plaza/posts
+
+获取广场帖子列表（公开，无需登录）。
+
+| 参数 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| page | number | 否 | 页码，默认 1 |
+| limit | number | 否 | 每页数量，默认 20，最大 50 |
+| kind | string | 否 | 按媒介筛选：`film` / `book` / `music` / `other` |
+
+**响应：**
+```json
+{
+  "posts": [
+    {
+      "id": 1,
+      "user_id": 5,
+      "post_type": "ranking",
+      "kind": "film",
+      "collection_title": "我的华语电影 Top 10",
+      "items": [...],
+      "notes": null,
+      "item_count": 10,
+      "like_count": 24,
+      "comment_count": 5,
+      "is_public": 1,
+      "created_at": "2025-01-15T...",
+      "updated_at": "2025-01-15T...",
+      "nickname": "影迷小王"
+    }
+  ],
+  "page": 1,
+  "limit": 20,
+  "total": 156
+}
+```
+
+### GET /api/plaza/posts/:id
+
+获取单个帖子详情，包含留言列表。
+
+**响应：**
+```json
+{
+  "post": {
+    "id": 1,
+    "user_id": 5,
+    "post_type": "ranking",
+    "kind": "film",
+    "collection_title": "我的华语电影 Top 10",
+    "items": [
+      { "id": "...", "title": "花样年华", "rank": 1, "creator": "王家卫", "year": 2000 }
+    ],
+    "notes": "{\"work:film:xxx\":\"这是一部...\"}",
+    "item_count": 10,
+    "like_count": 24,
+    "comment_count": 5,
+    "is_public": 1,
+    "created_at": "2025-01-15T...",
+    "nickname": "影迷小王"
+  },
+  "comments": [
+    {
+      "id": 1,
+      "post_id": 1,
+      "user_id": 8,
+      "content": "很棒的榜单！",
+      "created_at": "2025-01-16T...",
+      "nickname": "书虫小李"
+    }
+  ]
+}
+```
+
+### POST /api/plaza/posts
+
+发布帖子到广场。需 Bearer Token。
+
+**请求体：**
+```json
+{
+  "post_type": "ranking",
+  "kind": "film",
+  "collection_title": "我的华语电影 Top 10",
+  "items": [
+    { "id": "...", "title": "花样年华", "rank": 1, "creator": "王家卫", "year": 2000 }
+  ],
+  "notes": "{\"work:film:xxx\":\"这是一部...\"}",
+  "is_public": true
+}
+```
+
+**约束：** `post_type` 必填（`ranking` 或 `profile`），`items` 不能为空数组，`collection_title` 最长 200 字符，`notes` 最长 2000 字符。
+
+**响应：** `201`
+```json
+{ "id": 42, "stored": true }
+```
+
+### PUT /api/plaza/posts/:id
+
+编辑自己的帖子。需 Bearer Token + 帖子所有权。
+
+**请求体：** 同 POST，所有字段可选（未传则保留原值）。支持修改标题、描述、批注和排序（通过 `items` 传入新顺序）。
+
+**响应：**
+```json
+{ "ok": true }
+```
+
+**错误：**
+- `401` — `authentication_required`
+- `403` — `forbidden`（非帖子作者）
+- `404` — `post_not_found`
+
+### DELETE /api/plaza/posts/:id
+
+删除自己的帖子（同时删除关联的点赞和留言）。需 Bearer Token + 帖子所有权。
+
+**响应：**
+```json
+{ "ok": true }
+```
+
+### POST /api/plaza/posts/:id/like
+
+点赞或取消点赞（toggle 机制）。需 Bearer Token。
+
+- 如未点赞 → 点赞，返回 `{ "liked": true }`
+- 如已点赞 → 取消点赞，返回 `{ "liked": false }`
+
+**响应：**
+```json
+{ "liked": true }
+```
+
+### GET /api/plaza/posts/:id/comments
+
+获取帖子的留言列表（按时间正序，最多 100 条）。
+
+**响应：**
+```json
+{
+  "comments": [
+    {
+      "id": 1,
+      "post_id": 1,
+      "user_id": 8,
+      "content": "很棒的榜单！",
+      "created_at": "2025-01-16T...",
+      "nickname": "书虫小李"
+    }
+  ]
+}
+```
+
+### POST /api/plaza/posts/:id/comments
+
+发表留言。需 Bearer Token。
+
+**请求体：**
+```json
+{ "content": "很棒的榜单！" }
+```
+
+**约束：** 内容最长 500 字符，不能为空，不能包含控制字符。
+
+**响应：** `201`
+```json
+{ "id": 5, "stored": true }
+```
+
+### DELETE /api/comments/:id
+
+删除自己的留言（同时更新帖子的 comment_count）。需 Bearer Token + 留言所有权。
+
+**响应：**
+```json
+{ "ok": true }
+```
+
+---
+
 ## 用户认证
 
 ### POST /api/account/register

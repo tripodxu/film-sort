@@ -305,11 +305,15 @@ async function route(request: Request, env: Env): Promise<Response> {
   // /api/account/* → 用户接口
   // /api/admin/* → 管理接口
   // /api/share → 短链接
+  // /api/plaza/* → 广场接口
+  // /api/comments/* → 留言删除
   // /api/insights → AI 解读
   // /api/auth/config → 认证配置
   // 其他 → 静态资源或 SPA 回退
 }
 ```
+
+广场相关路由（`/api/plaza/*`、`/api/comments/*`）由独立模块 `worker/plaza.ts` 处理，通过 `index.ts` 导入并分发。
 
 ### 5.2 数据库 Schema
 
@@ -410,6 +414,47 @@ CREATE TABLE api_logs (
 **admin_sessions / admin_config** — 管理员会话和配置
 
 **challenge_sets** — 旧版挑战片单（遗留）
+
+**plaza_posts** — 广场帖子
+```sql
+CREATE TABLE plaza_posts (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id INTEGER NOT NULL REFERENCES user_accounts(id),
+  post_type TEXT NOT NULL,          -- 'ranking' | 'profile'
+  kind TEXT,                         -- 媒介类型（ranking 时有值）
+  collection_title TEXT NOT NULL,
+  items TEXT NOT NULL,               -- JSON: RankedArtwork[] 或 RankingExport[]
+  notes TEXT,                        -- JSON: Record<string, string> 批注
+  item_count INTEGER,
+  like_count INTEGER DEFAULT 0,
+  comment_count INTEGER DEFAULT 0,
+  is_public INTEGER DEFAULT 1,
+  created_at TEXT DEFAULT (datetime('now')),
+  updated_at TEXT DEFAULT (datetime('now'))
+);
+```
+
+**plaza_likes** — 广场点赞
+```sql
+CREATE TABLE plaza_likes (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  post_id INTEGER NOT NULL REFERENCES plaza_posts(id),
+  user_id INTEGER NOT NULL REFERENCES user_accounts(id),
+  created_at TEXT DEFAULT (datetime('now')),
+  UNIQUE(post_id, user_id)
+);
+```
+
+**plaza_comments** — 广场留言
+```sql
+CREATE TABLE plaza_comments (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  post_id INTEGER NOT NULL REFERENCES plaza_posts(id),
+  user_id INTEGER NOT NULL REFERENCES user_accounts(id),
+  content TEXT NOT NULL,             -- 最长 500 字符
+  created_at TEXT DEFAULT (datetime('now'))
+);
+```
 
 ### 5.3 海报解析策略
 
