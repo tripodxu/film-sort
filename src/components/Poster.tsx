@@ -72,6 +72,7 @@ export function Poster({ work, kind, large = false }: { work: Artwork; kind: Med
     return resolveSync(work, kind) ?? [...(work.posterUrls ?? [])];
   });
   const [failed, setFailed] = useState<Set<string>>(() => new Set());
+  const [imgLoaded, setImgLoaded] = useState(false);
   useEffect(() => {
     let active = true;
     if (kind === "film" || kind === "book" || kind === "music") {
@@ -83,7 +84,7 @@ export function Poster({ work, kind, large = false }: { work: Artwork; kind: Med
   const url = urls.find((candidate) => !failed.has(candidate));
   const Icon = { film: Film, book: BookOpen, music: Music2, other: Library }[kind];
   return <div className={`poster ${large ? "poster-large" : "poster-small"} poster-${kind}`}>
-    {url ? <img src={imageUrl(url)} alt={`${work.title}${work.creator ? ` - ${work.creator}` : ""}${work.year ? ` (${work.year})` : ""}`} referrerPolicy="no-referrer" loading={large ? "eager" : "lazy"} onError={() => { reportImageFailure(work, kind, url); setFailed((previous) => new Set([...previous, url])); }} /> :
+    {url ? <><img src={imageUrl(url)} alt={`${work.title}${work.creator ? ` - ${work.creator}` : ""}${work.year ? ` (${work.year})` : ""}`} referrerPolicy="no-referrer" loading={large ? "eager" : "lazy"} onLoad={() => setImgLoaded(true)} onError={() => { reportImageFailure(work, kind, url); setFailed((previous) => new Set([...previous, url])); }} style={imgLoaded ? undefined : { opacity: 0 }} />{!imgLoaded && <div className="poster-loading"><Icon size={large ? 24 : 12} /></div>}</> :
       <div className="cover-fallback"><Icon size={large ? 36 : 16} />{large && <span>{work.title}</span>}</div>}
   </div>;
 }

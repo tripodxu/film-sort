@@ -290,3 +290,20 @@ html{scroll-behavior:smooth}
 
 /* ===== Selection Color ===== */
 ::selection{background:rgba(216,248,106,.2);color:#f3f6ee}
+
+/* ===== Poster Loading State ===== */
+.poster{position:relative;overflow:hidden}
+.poster-loading{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;background:var(--line);animation:posterLoad 1.2s ease-in-out infinite}
+@keyframes posterLoad{0%,100%{opacity:.4}50%{opacity:.8}}
+.poster img{transition:opacity .3s ease}
+
+/* ===== Scroll to Top Button ===== */
+.scroll-top{position:fixed;bottom:28px;left:28px;z-index:50;width:40px;height:40px;border-radius:50%;border:1px solid var(--line);background:rgba(20,27,25,.7);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);color:var(--muted);display:flex;align-items:center;justify-content:center;cursor:pointer;transition:all .2s ease;opacity:0;transform:translateY(10px);pointer-events:none}
+.scroll-top.visible{opacity:1;transform:translateY(0);pointer-events:auto}
+.scroll-top:hover{border-color:var(--accent);color:var(--accent)}
+
+/* ===== Mobile Touch Feedback ===== */
+@media(hover:none){.button:active:not(:disabled){transform:scale(.95);background:rgba(216,248,106,.08)}.plaza-sticker:active{transform:scale(.98)}.medium-item:active{transform:scale(.97)}}
+
+/* ===== Better Mobile Navigation ===== */
+@media(max-width:540px){.topbar nav{gap:10px}.topbar nav button{font-size:11px;padding:0 1px}.topbar{height:64px}}
