@@ -143,6 +143,7 @@ export default function App() {
   const [reorderItems, setReorderItems] = useState<RankedArtwork[]>([]);
   const syncTimer = useRef<number | null>(null);
   const syncing = useRef(false);
+  const rankingSnapshots = useRef<string[]>([]);
 
   const comparison = ranking ? getCurrentComparison(ranking) : null;
   const progress = ranking ? getRankingProgress(ranking) : null;
@@ -442,18 +443,30 @@ export default function App() {
     if (!collection || selected.length < 2) return;
     const works = collection.works.filter((work) => selected.includes(work.id));
     const next = createRankingState(works.map((work) => work.id), { topN, seed: seed.trim() || crypto.randomUUID() });
-    setCollection({ ...collection, works }); setRanking(next); navigateTo("sorting"); setNotice("");
+    rankingSnapshots.current = []; setCollection({ ...collection, works }); setRanking(next); navigateTo("sorting"); setNotice("");
     track("sorting_started", { mode: kind, item_count: works.length, top_k: next.topN });
   }
   function act(action: "left" | "right" | "undo" | "skip-left" | "skip-right" | "defer-left" | "defer-right") {
     if (!ranking || !collection || (ranking.completed && action !== "undo")) return;
     let next: RankingState;
-    if (action === "undo") next = undoLastAction(ranking);
-    else if (action === "skip-left") next = skipWork(ranking, comparison!.leftId);
-    else if (action === "skip-right") next = skipWork(ranking, comparison!.rightId);
-    else if (action === "defer-left") next = deferWork(ranking, comparison!.leftId);
-    else if (action === "defer-right") next = deferWork(ranking, comparison!.rightId);
-    else next = chooseSide(ranking, action);
+    if (action === "undo") {
+      // O(1) undo via snapshot
+      if (rankingSnapshots.current.length > 0) {
+        const prev = rankingSnapshots.current.pop()!;
+        next = deserializeRankingState(prev);
+      } else {
+        next = undoLastAction(ranking); // fallback
+      }
+    } else {
+      // Save snapshot before decision (cap at 500 to prevent memory issues)
+      if (rankingSnapshots.current.length >= 500) rankingSnapshots.current.shift();
+      rankingSnapshots.current.push(serializeRankingState(ranking));
+      if (action === "skip-left") next = skipWork(ranking, comparison!.leftId);
+      else if (action === "skip-right") next = skipWork(ranking, comparison!.rightId);
+      else if (action === "defer-left") next = deferWork(ranking, comparison!.leftId);
+      else if (action === "defer-right") next = deferWork(ranking, comparison!.rightId);
+      else next = chooseSide(ranking, action);
+    }
     setRanking(next);
     if (next.completed) {
       const result: RankingExport = {
@@ -469,7 +482,7 @@ export default function App() {
   }
   function resume() {
     if (!draft) return;
-    try { setCollection(draft.collection); setKind(draft.collection.kind); setRanking(deserializeRankingState(draft.ranking)); setProfileName(draft.profileName); navigateTo("sorting"); }
+    try { rankingSnapshots.current = []; setCollection(draft.collection); setKind(draft.collection.kind); setRanking(deserializeRankingState(draft.ranking)); setProfileName(draft.profileName); navigateTo("sorting"); }
     catch { setNotice(t("草稿无法读取。", "The draft could not be restored.")); }
   }
   async function openArtworkDetail(work: RankedArtwork, detailKind: MediaKind) {

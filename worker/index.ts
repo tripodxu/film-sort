@@ -894,7 +894,14 @@ async function route(request: Request, env: Env): Promise<Response> {
     return json({ error: "cross_origin_forbidden" }, 405, { allow: "GET, POST" });
   }
   if (url.pathname === "/api/health" && request.method === "GET") {
-    return json({ ok: true, storage: env.DB ? "d1" : "disabled" });
+    const checks: Record<string, string> = { storage: env.DB ? "d1" : "disabled" };
+    if (env.DB) {
+      try {
+        await env.DB.prepare("SELECT 1").first();
+        checks.database = "ok";
+      } catch { checks.database = "error"; }
+    }
+    return json({ ok: true, version: "2.0.0", timestamp: new Date().toISOString(), checks }, 200, { "cache-control": "no-store" });
   }
   if (url.pathname === "/api/events" && request.method === "POST") {
     return createEvent(request, env);
