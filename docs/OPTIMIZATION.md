@@ -471,6 +471,13 @@ jobs:
 - 4 列模式单海报（紧凑模式）
 - 发布粒子爆炸动画（12 粒子彩色飞散）
 - 下拉模组 UI 美化（details/summary 圆角卡片 + 动画箭头）
+- 批注截断 30 字 + 弹窗查看（不再 inline 展开）
+- 发布到广场弹窗设计（类 note-modal 风格 + 大 textarea）
+- 排序进度混合预估（60% 实际速率 + 40% 理论速率）
+- 无障碍 ARIA 属性增强（duel-grid、plaza filters、poster alt 改进）
+- 云端批注自动恢复（登录 / OAuth / session 刷新三入口）
+- 留言回复功能（嵌套评论 + 缩进显示 + 回复按钮）
+- 区分比较链接和分享链接（`/encounter?payload=` vs `/share/:code`）
 
 ---
 
