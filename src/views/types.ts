@@ -141,6 +141,7 @@ export interface ShareViewProps {
   openCollection: (collection: MediaCollection) => void;
   profile: ArtisticProfile | null;
   notes: Record<string, string>;
+  peerNotes?: Record<string, string>;
   openArtworkDetail: (work: RankedArtwork, kind: MediaKind) => void;
   openNoteView?: (title: string, text: string, posterUrls?: readonly string[]) => void;
 }
@@ -240,5 +241,6 @@ export interface CompareViewProps {
   importProfile: (file: File, target: "own" | "peer") => void;
   setActiveKind: (kind: string) => void;
   notes?: Record<string, string>;
+  peerNotes?: Record<string, string>;
   generateShareLink?: (ranking?: RankingExport) => void;
 }

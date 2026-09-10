@@ -5,7 +5,8 @@ import { heading } from "./helpers";
 import type { ShareViewProps } from "./types";
 import type { MediaKind } from "../data/media";
 
-export function ShareView({ peer, t, label, navigateTo, openCollection, profile, notes, openArtworkDetail, openNoteView }: ShareViewProps) {
+export function ShareView({ peer, t, label, navigateTo, openCollection, profile, notes, peerNotes, openArtworkDetail, openNoteView }: ShareViewProps) {
+  const viewNotes = peerNotes && Object.keys(peerNotes).length > 0 ? peerNotes : notes;
   return (
     <>
       {heading(
@@ -33,12 +34,12 @@ export function ShareView({ peer, t, label, navigateTo, openCollection, profile,
                 </div>
 
                 {/* Notes */}
-                {notes[noteKey] && <ExpandableNote text={notes[noteKey]} maxLength={30} onView={openNoteView ? (text) => openNoteView(entry.collectionTitle, text) : undefined} style={{ marginBottom: 8 }} />}
+                {viewNotes[noteKey] && <ExpandableNote text={viewNotes[noteKey]} maxLength={30} onView={openNoteView ? (text) => openNoteView(entry.collectionTitle, text) : undefined} style={{ marginBottom: 8 }} />}
 
                 {/* Ranking list */}
                 <ol className="ranking-list">
                   {entry.items.map((work) => {
-                    const workNote = notes[`work:${entry.kind}:${work.id}`];
+                    const workNote = viewNotes[`work:${entry.kind}:${work.id}`];
                     return (
                       <li key={work.id}>
                         <span className="row-number">
@@ -72,9 +73,9 @@ export function ShareView({ peer, t, label, navigateTo, openCollection, profile,
       })}
 
       {/* Profile-level notes */}
-      {notes[`profile:${peer.profileId}`] && (
+      {viewNotes[`profile:${peer.profileId}`] && (
         <div style={{ margin: "16px 0", padding: "12px 16px", borderRadius: 8, background: "rgba(121,217,174,.06)", border: "1px solid var(--line)" }}>
-          <ExpandableNote text={notes[`profile:${peer.profileId}`]} maxLength={30} onView={openNoteView ? (text) => openNoteView(peer.profileName, text) : undefined} style={{ margin: 0 }} />
+          <ExpandableNote text={viewNotes[`profile:${peer.profileId}`]} maxLength={30} onView={openNoteView ? (text) => openNoteView(peer.profileName, text) : undefined} style={{ margin: 0 }} />
         </div>
       )}
 
