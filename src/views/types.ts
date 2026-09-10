@@ -115,6 +115,7 @@ export interface ProfileViewProps {
   renameRank: (idx: number) => void;
   openCollection: (collection: MediaCollection) => void;
   shareSingleRanking: (ranking: RankingExport) => void;
+  generateShareLink: (ranking?: RankingExport) => void;
   setActiveKind: (kind: string) => void;
   ranking: RankingState | null;
   setRanking: (ranking: RankingState | null) => void;
@@ -235,4 +236,5 @@ export interface CompareViewProps {
   importProfile: (file: File, target: "own" | "peer") => void;
   setActiveKind: (kind: string) => void;
   notes?: Record<string, string>;
+  generateShareLink?: (ranking?: RankingExport) => void;
 }

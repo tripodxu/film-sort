@@ -574,16 +574,35 @@ export default function App() {
     setBusy(true);
     try {
       const response = await fetch("/api/share", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(shareData) });
-      const data = await response.json() as { url?: string; error?: string };
-      if (response.ok && data.url) {
-        setShareUrl(data.url);
-        try { const QRCode = await import("qrcode"); setQrUrl(await QRCode.default.toDataURL(data.url, { width: 240, margin: 2, errorCorrectionLevel: "L" })); } catch { setQrUrl(""); }
-        try { await navigator.clipboard.writeText(data.url); setNotice(t("比较链接已复制。", "Comparison link copied.")); }
+      const data = await response.json() as { url?: string; compareUrl?: string; error?: string };
+      if (response.ok && data.compareUrl) {
+        setShareUrl(data.compareUrl);
+        try { const QRCode = await import("qrcode"); setQrUrl(await QRCode.default.toDataURL(data.compareUrl, { width: 240, margin: 2, errorCorrectionLevel: "L" })); } catch { setQrUrl(""); }
+        try { await navigator.clipboard.writeText(data.compareUrl); setNotice(t("比较链接已复制。", "Comparison link copied.")); }
         catch { setNotice(t("链接已生成，可在下方选中复制。", "Link ready. Select and copy it below.")); }
       } else {
         setNotice(t("生成链接失败，请导出 JSON 分享。", "Failed to create link. Export the JSON instead."));
       }
     } catch { setNotice(t("生成链接失败，请导出 JSON 分享。", "Failed to create link. Export the JSON instead.")); }
+    finally { setBusy(false); }
+  }
+  async function generateShareLink(ranking?: RankingExport) {
+    const profileData = ranking
+      ? { version: 2 as const, profileId: crypto.randomUUID(), profileName: profileName.trim() || t("我的艺术人格", "My artistic profile"), updatedAt: new Date().toISOString(), rankings: [{ ...ranking, profileName: profileName.trim() || t("我的艺术人格", "My artistic profile") }] }
+      : namedProfile();
+    if (!profileData) return;
+    try { parseProfile(profileData); } catch { setNotice(t("数据格式错误。", "Invalid profile data.")); return; }
+    const shareData: Record<string, unknown> = { profile: profileData };
+    if (Object.keys(notes).length > 0) shareData.notes = notes;
+    setBusy(true);
+    try {
+      const response = await fetch("/api/share", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(shareData) });
+      const data = await response.json() as { url?: string; error?: string };
+      if (response.ok && data.url) {
+        try { await navigator.clipboard.writeText(data.url); setNotice(t("分享链接已复制，打开即可查看榜单。", "Share link copied. Open it to view the ranking.")); }
+        catch { setNotice(t("链接已生成：" + data.url, "Link ready: " + data.url)); }
+      } else { setNotice(t("生成链接失败。", "Failed to create link.")); }
+    } catch { setNotice(t("生成链接失败。", "Failed to create link.")); }
     finally { setBusy(false); }
   }
   async function accountLoad(autoApply: boolean) {
@@ -718,8 +737,8 @@ export default function App() {
   else if (view === "source") content = <SourceView kind={kind} t={t} label={label} source={source} setSource={setSource} setNotice={setNotice} search={search} setSearch={setSearch} colCount={colCount} changeCols={changeCols} collections={collections} openCollection={openCollection} customItem={customItem} setCustomItem={setCustomItem} addCustomItem={addCustomItem} customText={customText} setCustomText={setCustomText} importCollection={importCollection} saveCollectionCloud={saveCollectionCloud} cloudCollections={cloudCollections} loadCloudCollections={loadCloudCollections} deleteCloudCollection={deleteCloudCollection} doubanLimit={doubanLimit} setDoubanLimit={setDoubanLimit} busy={busy} loadDouban={loadDouban} />;
   else if (view === "setup" && collection) content = <SetupView collection={collection} kind={kind} t={t} label={label} selected={selected} setSelected={setSelected} topN={topN} setTopN={setTopN} seed={seed} setSeed={setSeed} setCollection={setCollection} startRanking={startRanking} />;
   else if (view === "sorting" && collection && ranking && comparison && progress) content = <SortingView collection={collection} ranking={ranking} comparison={comparison} progress={progress} label={label} kind={kind} t={t} worksById={worksById} act={act} />;
-  else if (view === "profile" && profile && activeRanking) content = <ProfileView profile={profile} activeRanking={activeRanking} locale={locale} t={t} label={label} format={format} setFormat={setFormat} exportLayout={exportLayout} setExportLayout={setExportLayout} exportProfile={exportProfile} share={share} shareUrl={shareUrl} qrUrl={qrUrl} profileName={profileName} setProfileName={setProfileName} namedProfile={namedProfile} persist={persist} navigateTo={navigateTo} peer={peer} editingRankIdx={editingRankIdx} setEditingRankIdx={setEditingRankIdx} editingRankTitle={editingRankTitle} setEditingRankTitle={setEditingRankTitle} renameRank={renameRank} openCollection={openCollection} shareSingleRanking={shareSingleRanking} setActiveKind={setActiveKind} ranking={ranking} setRanking={setRanking} collection={collection} notes={notes} openNoteModal={openNoteModal} accountToken={accountToken} publishToPlaza={publishToPlaza} reorderMode={reorderMode} reorderItems={reorderItems} startReorder={startReorder} saveReorder={saveReorder} cancelReorder={cancelReorder} moveItem={moveItem} />;
-  else if (view === "compare") content = <CompareView kinds={kinds} profile={profile} peer={peer} compareActiveKind={compareActiveKind} setCompareActiveKind={setCompareActiveKind} compareMode={compareMode} setCompareMode={setCompareMode} manualOwnSelections={manualOwnSelections} setManualOwnSelections={setManualOwnSelections} manualPeerSelections={manualPeerSelections} setManualPeerSelections={setManualPeerSelections} compareRankings={compareRankings} mergeDimensionRankings={mergeDimensionRankings} compareDimensions={compareDimensions} compareProfiles={compareProfiles} navigateTo={navigateTo} setPeer={setPeer} setAiInsight={setAiInsight} label={label} t={t} setCompareSortBy={setCompareSortBy} compareSortBy={compareSortBy} setCompareRankDetail={setCompareRankDetail} shareSingleRanking={shareSingleRanking} exportProfile={exportProfile} setFormat={setFormat} busy={busy} namedProfile={namedProfile} setNotice={setNotice} requestInsight={requestInsight} aiBusy={aiBusy} aiInsight={aiInsight} createFromPeer={createFromPeer} setPeerRankPickOpen={setPeerRankPickOpen} openArtworkDetail={openArtworkDetail} peerUrl={peerUrl} setPeerUrl={setPeerUrl} peerUrlBusy={peerUrlBusy} importPeerFromUrl={importPeerFromUrl} importProfile={importProfile} setActiveKind={setActiveKind} notes={notes} />;
+  else if (view === "profile" && profile && activeRanking) content = <ProfileView profile={profile} activeRanking={activeRanking} locale={locale} t={t} label={label} format={format} setFormat={setFormat} exportLayout={exportLayout} setExportLayout={setExportLayout} exportProfile={exportProfile} share={share} shareUrl={shareUrl} qrUrl={qrUrl} profileName={profileName} setProfileName={setProfileName} namedProfile={namedProfile} persist={persist} navigateTo={navigateTo} peer={peer} editingRankIdx={editingRankIdx} setEditingRankIdx={setEditingRankIdx} editingRankTitle={editingRankTitle} setEditingRankTitle={setEditingRankTitle} renameRank={renameRank} openCollection={openCollection} shareSingleRanking={shareSingleRanking} generateShareLink={generateShareLink} setActiveKind={setActiveKind} ranking={ranking} setRanking={setRanking} collection={collection} notes={notes} openNoteModal={openNoteModal} accountToken={accountToken} publishToPlaza={publishToPlaza} reorderMode={reorderMode} reorderItems={reorderItems} startReorder={startReorder} saveReorder={saveReorder} cancelReorder={cancelReorder} moveItem={moveItem} />;
+  else if (view === "compare") content = <CompareView kinds={kinds} profile={profile} peer={peer} compareActiveKind={compareActiveKind} setCompareActiveKind={setCompareActiveKind} compareMode={compareMode} setCompareMode={setCompareMode} manualOwnSelections={manualOwnSelections} setManualOwnSelections={setManualOwnSelections} manualPeerSelections={manualPeerSelections} setManualPeerSelections={setManualPeerSelections} compareRankings={compareRankings} mergeDimensionRankings={mergeDimensionRankings} compareDimensions={compareDimensions} compareProfiles={compareProfiles} navigateTo={navigateTo} setPeer={setPeer} setAiInsight={setAiInsight} label={label} t={t} setCompareSortBy={setCompareSortBy} compareSortBy={compareSortBy} setCompareRankDetail={setCompareRankDetail} shareSingleRanking={shareSingleRanking} exportProfile={exportProfile} setFormat={setFormat} busy={busy} namedProfile={namedProfile} setNotice={setNotice} requestInsight={requestInsight} aiBusy={aiBusy} aiInsight={aiInsight} createFromPeer={createFromPeer} setPeerRankPickOpen={setPeerRankPickOpen} openArtworkDetail={openArtworkDetail} peerUrl={peerUrl} setPeerUrl={setPeerUrl} peerUrlBusy={peerUrlBusy} importPeerFromUrl={importPeerFromUrl} importProfile={importProfile} setActiveKind={setActiveKind} notes={notes} generateShareLink={generateShareLink} />;
   else if (view === "share" && sharePeer) content = <ShareView peer={sharePeer} t={t} label={label} navigateTo={(v) => { if (v === "compare") acceptPeer(sharePeer); else navigateTo(v as View); }} openCollection={openCollection} profile={profile} notes={notes} openArtworkDetail={openArtworkDetail} />;
   else if (view === "share" && !sharePeer) content = <div className="empty-state"><p style={{ marginBottom: 12 }}>{t("正在加载分享内容…", "Loading shared content…")}</p><button className="button secondary" onClick={() => navigateTo("home")}>{t("返回首页", "Back home")}</button></div>;
   else if (view === "plaza") content = <PlazaView t={t} label={label} navigateTo={navigateTo} accountToken={accountToken} openCollection={openCollection} profile={profile} />;
