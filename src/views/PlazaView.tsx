@@ -209,7 +209,7 @@ export function PlazaView({ t, label, navigateTo, accountToken, openCollection, 
             className="button secondary"
             disabled={loading}
             onClick={() => void loadPosts(page + 1, kindFilter)}
-            style={{ minWidth: 160 }}
+            style={{ minWidth: 160, borderRadius: 999, paddingInline: 28 }}
           >
             {loading ? t("加载中…", "Loading…") : t("加载更多", "Load more")}
           </button>
