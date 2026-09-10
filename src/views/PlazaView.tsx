@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { ChevronRight, Heart, MessageCircle, Play, Eye, Send, Globe } from "lucide-react";
+import { ChevronRight, Heart, MessageCircle, Play, Send } from "lucide-react";
 import { Poster } from "../components/Poster";
 import { heading } from "./helpers";
 import type { PlazaViewProps, PlazaPost } from "./types";
@@ -22,14 +22,17 @@ export function PlazaView({ t, label, navigateTo, accountToken, openCollection, 
   const [posts, setPosts] = useState<PlazaPost[]>([]);
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
+  const [initialLoading, setInitialLoading] = useState(true);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [kindFilter, setKindFilter] = useState("");
   const [sort, setSort] = useState<"newest" | "hottest">("newest");
+  const [colCount, setColCount] = useState<number>(() => { try { return Number(localStorage.getItem("art-rank:plaza-cols")) || 2; } catch { return 2; } });
 
-  useEffect(() => { loadPosts(1, kindFilter); }, [kindFilter]);
+  useEffect(() => { void loadPosts(1, kindFilter); }, [kindFilter]);
 
   async function loadPosts(p: number, kind: string) {
+    if (p === 1) setInitialLoading(true);
     setLoading(true);
     setError("");
     try {
@@ -45,6 +48,7 @@ export function PlazaView({ t, label, navigateTo, accountToken, openCollection, 
       setError(t("无法加载广场内容，请稍后重试。", "Failed to load plaza. Please try again."));
     } finally {
       setLoading(false);
+      setInitialLoading(false);
     }
   }
 
@@ -60,8 +64,9 @@ export function PlazaView({ t, label, navigateTo, accountToken, openCollection, 
     setPosts((prev) => sortPosts(prev, next));
   }
 
-  function handleLoadMore() {
-    void loadPosts(page + 1, kindFilter);
+  function changeCols(n: number) {
+    setColCount(n);
+    try { localStorage.setItem("art-rank:plaza-cols", String(n)); } catch {}
   }
 
   function useForSorting(post: PlazaPost) {
@@ -100,7 +105,7 @@ export function PlazaView({ t, label, navigateTo, accountToken, openCollection, 
             </button>
           ))}
         </div>
-        <div className="plaza-filter-sort">
+        <div style={{ display: "flex", gap: 4, alignItems: "center" }}>
           {SORT_OPTIONS.map((item) => (
             <button
               key={item.value}
@@ -111,8 +116,35 @@ export function PlazaView({ t, label, navigateTo, accountToken, openCollection, 
               {t(item.zh, item.en)}
             </button>
           ))}
+          <span style={{ width: 1, height: 18, background: "var(--line)", margin: "0 4px" }} />
+          {[2, 3, 4].map((n) => (
+            <button
+              key={n}
+              onClick={() => changeCols(n)}
+              style={{ width: 28, height: 28, borderRadius: 6, border: colCount === n ? "1px solid var(--accent)" : "1px solid var(--line)", background: colCount === n ? "rgba(216,248,106,.1)" : "transparent", color: colCount === n ? "var(--accent)" : "var(--muted)", fontSize: 11, fontWeight: 600, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}
+            >
+              {n}
+            </button>
+          ))}
         </div>
       </div>
+
+      {/* Loading skeleton */}
+      {initialLoading && (
+        <div className="plaza-grid" style={{ gridTemplateColumns: `repeat(${colCount}, minmax(0, 1fr))` }}>
+          {Array.from({ length: 6 }).map((_, i) => (
+            <div key={i} className="plaza-sticker plaza-skeleton">
+              <div className="plaza-skeleton-posters">
+                <div className="plaza-skeleton-img" /><div className="plaza-skeleton-img" /><div className="plaza-skeleton-img" />
+              </div>
+              <div className="plaza-skeleton-info">
+                <div className="plaza-skeleton-line" style={{ width: "70%" }} />
+                <div className="plaza-skeleton-line" style={{ width: "50%" }} />
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
 
       {/* Error state */}
       {error && (
@@ -124,8 +156,8 @@ export function PlazaView({ t, label, navigateTo, accountToken, openCollection, 
         </div>
       )}
 
-      {/* Empty state */}
-      {!loading && !error && posts.length === 0 && (
+      {/* Empty state — only after initial load completes */}
+      {!initialLoading && !loading && !error && posts.length === 0 && (
         <div className="empty-state" style={{ padding: 40 }}>
           <p style={{ marginBottom: 12 }}>{t("广场还没有内容，快来发布第一个吧！", "The plaza is empty. Be the first to post!")}</p>
           {accountToken && (
@@ -137,37 +169,38 @@ export function PlazaView({ t, label, navigateTo, accountToken, openCollection, 
       )}
 
       {/* Post cards */}
-      <div className="plaza-grid">
-        {posts.map((post) => (
-          <div key={post.id} className="plaza-sticker" onClick={() => navigateTo(`plazaPost:${post.id}`)}>
-            <div className="plaza-sticker-posters">
-              {post.items.slice(0, 3).map((work, idx) => (
-                <div key={work.id} className="plaza-sticker-poster">
-                  <span className="plaza-sticker-medal">{idx === 0 ? "🥇" : idx === 1 ? "🥈" : "🥉"}</span>
-                  <Poster work={work} kind={post.kind as MediaKind} />
+      {!initialLoading && posts.length > 0 && (
+        <div className="plaza-grid" style={{ gridTemplateColumns: `repeat(${colCount}, minmax(0, 1fr))` }}>
+          {posts.map((post) => (
+            <div key={post.id} className="plaza-sticker" onClick={() => navigateTo(`plazaPost:${post.id}`)}>
+              <div className="plaza-sticker-posters">
+                {post.items.slice(0, 3).map((work, idx) => (
+                  <div key={work.id} className="plaza-sticker-poster">
+                    <span className="plaza-sticker-medal">{idx === 0 ? "🥇" : idx === 1 ? "🥈" : "🥉"}</span>
+                    <Poster work={work} kind={post.kind as MediaKind} />
+                  </div>
+                ))}
+              </div>
+              <div className="plaza-sticker-info">
+                <h3 className="plaza-sticker-title">{post.collection_title}</h3>
+                <div className="plaza-sticker-meta">
+                  <span className="plaza-sticker-author">{post.nickname || t("匿名用户", "Anonymous")}</span>
+                  <span className={`plaza-sticker-kind kind-${post.kind}`}>{label(post.kind as MediaKind)}</span>
+                  <span className="plaza-sticker-count">{post.item_count} {t("件", "works")}</span>
                 </div>
-              ))}
-            </div>
-            <div className="plaza-sticker-info">
-              <h3 className="plaza-sticker-title">{post.collection_title}</h3>
-              <div className="plaza-sticker-meta">
-                <span className="plaza-sticker-author">{post.nickname || t("匿名用户", "Anonymous")}</span>
-                <span className={`plaza-sticker-kind kind-${post.kind}`}>{label(post.kind as MediaKind)}</span>
-                <span className="plaza-sticker-count">{post.item_count} {t("件", "works")}</span>
+                <div className="plaza-sticker-stats">
+                  <span><Heart size={12} /> {post.like_count}</span>
+                  <span><MessageCircle size={12} /> {post.comment_count}</span>
+                </div>
               </div>
-              <div className="plaza-sticker-stats">
-                <span><Heart size={12} /> {post.like_count}</span>
-                <span><MessageCircle size={12} /> {post.comment_count}</span>
+              <div className="plaza-sticker-actions">
+                <button className="plaza-sticker-btn" onClick={(e) => { e.stopPropagation(); useForSorting(post); }} title={t("用此榜单排序", "Sort with this")}><Play size={14} /></button>
+                <ChevronRight size={16} className="plaza-sticker-arrow" />
               </div>
             </div>
-            <div className="plaza-sticker-actions">
-              <button className="plaza-sticker-btn" onClick={(e) => { e.stopPropagation(); useForSorting(post); }} title={t("用此榜单排序", "Sort with this")}><Play size={14} /></button>
-              <ChevronRight size={16} className="plaza-sticker-arrow" />
-            </div>
-          </div>
-        ))}
-        {!loading && !error && posts.length === 0 && <p className="empty-state">{t("广场还没有内容，快来发布第一个吧！", "The plaza is empty. Be the first to post!")}</p>}
-      </div>
+          ))}
+        </div>
+      )}
 
       {/* Load more */}
       {hasMore && !error && (
@@ -175,7 +208,7 @@ export function PlazaView({ t, label, navigateTo, accountToken, openCollection, 
           <button
             className="button secondary"
             disabled={loading}
-            onClick={handleLoadMore}
+            onClick={() => void loadPosts(page + 1, kindFilter)}
             style={{ minWidth: 160 }}
           >
             {loading ? t("加载中…", "Loading…") : t("加载更多", "Load more")}
