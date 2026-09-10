@@ -123,6 +123,7 @@ export interface ProfileViewProps {
   notes: Record<string, string>;
   openNoteModal: (key: string, title: string, kind: MediaKind, posterUrls?: readonly string[]) => void;
   accountToken: string;
+  busy: boolean;
   publishToPlaza: (ranking: RankingExport, description?: string) => void;
   reorderMode: number | null;
   reorderItems: RankedArtwork[];

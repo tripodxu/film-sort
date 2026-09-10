@@ -7,13 +7,14 @@ import type { ProfileViewProps } from "./types";
 import type { RankedArtwork } from "../lib/profile";
 import { useRef, useState } from "react";
 
-export function ProfileView({ profile, activeRanking, locale, t, label, format, setFormat, exportLayout, setExportLayout, exportProfile, share, shareUrl, qrUrl, profileName, setProfileName, namedProfile, persist, navigateTo, peer, editingRankIdx, setEditingRankIdx, editingRankTitle, setEditingRankTitle, renameRank, openCollection, shareSingleRanking, generateShareLink, setActiveKind, ranking, setRanking, collection, notes, openNoteModal, accountToken, publishToPlaza, reorderMode, reorderItems, startReorder, saveReorder, cancelReorder, moveItem }: ProfileViewProps) {
+export function ProfileView({ profile, activeRanking, locale, t, label, format, setFormat, exportLayout, setExportLayout, exportProfile, share, shareUrl, qrUrl, profileName, setProfileName, namedProfile, persist, navigateTo, peer, editingRankIdx, setEditingRankIdx, editingRankTitle, setEditingRankTitle, renameRank, openCollection, shareSingleRanking, generateShareLink, setActiveKind, ranking, setRanking, collection, notes, openNoteModal, accountToken, publishToPlaza, reorderMode, reorderItems, startReorder, saveReorder, cancelReorder, moveItem, busy }: ProfileViewProps) {
   const profileRankIdx = profile.rankings.indexOf(activeRanking);
   const isRenamingProfile = editingRankIdx === profileRankIdx;
   const isReordering = reorderMode === profileRankIdx;
   const [publishDesc, setPublishDesc] = useState("");
   const [showPublishModal, setShowPublishModal] = useState(false);
   const [publishBurst, setPublishBurst] = useState(false);
+  const [exporting, setExporting] = useState(false);
 
   function handlePublish() {
     publishToPlaza(activeRanking, publishDesc);
@@ -27,6 +28,7 @@ export function ProfileView({ profile, activeRanking, locale, t, label, format, 
     {heading(t("我的文化索引", "MY CULTURE INDEX"), profile.profileName, `${profile.rankings.length} ${t("个领域", "media")} / ${profile.rankings.reduce((count, entry) => count + entry.items.length, 0)} ${t("件作品", "works")}`)}
     <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 8, gap: 8, alignItems: "center" }}>
       <button className="button secondary" title={t("批注此画像", "Annotate this profile")} onClick={() => openNoteModal(noteKey("profile", profile.profileId), profile.profileName, "film")} style={{ fontSize: 12, gap: 5, padding: "5px 12px", borderRadius: 999, color: hasNote(notes, noteKey("profile", profile.profileId)) ? "var(--accent)" : "var(--muted)", borderColor: hasNote(notes, noteKey("profile", profile.profileId)) ? "var(--accent)" : "var(--line)" }}><StickyNote size={14} />{hasNote(notes, noteKey("profile", profile.profileId)) ? t("画像批注", "Profile note") : t("添加画像批注", "Add profile note")}</button>
+      <button className="button secondary" title={t("分享链接", "Share link")} disabled={busy} onClick={() => void generateShareLink()} style={{ fontSize: 12, gap: 5, padding: "5px 12px", borderRadius: 999 }}><Share2 size={14} />{busy ? t("生成中…", "Generating…") : t("分享链接", "Share link")}</button>
     </div>
     {format === "png" && <div className="export-layout-switch"><span>{t("PNG 版式", "PNG layout")}</span><div className="segmented"><button className={exportLayout === "editorial" ? "active" : ""} onClick={() => setExportLayout("editorial")}>{t("编辑", "Editorial")}</button><button className={exportLayout === "collage" ? "active" : ""} onClick={() => setExportLayout("collage")}>{t("拼贴", "Collage")}</button><button className={exportLayout === "minimal" ? "active" : ""} onClick={() => setExportLayout("minimal")}>{t("极简", "Minimal")}</button></div></div>}
     <div className="profile-dimensions">{profile.rankings.map((entry, idx) => { const key = `${entry.kind}-${idx}`; return <button className={`profile-dimension medium-${entry.kind} ${activeRanking === entry ? "active" : ""}`} key={key} onClick={() => setActiveKind(key)}><Poster work={entry.items[0]} kind={entry.kind} /><span>{label(entry.kind)}</span><strong>{entry.collectionTitle}</strong><small>TOP {entry.items.length}</small></button>; })}</div>
@@ -87,7 +89,7 @@ export function ProfileView({ profile, activeRanking, locale, t, label, format, 
         <input id="profile-name" value={profileName} maxLength={80} onChange={(event) => { setProfileName(event.target.value); }} onBlur={() => { const next = namedProfile(); if (next) persist(next); }} />
         <label htmlFor="export-format">{t("导出格式", "Export format")}</label>
         <select id="export-format" value={format} onChange={(event) => setFormat(event.target.value as typeof format)}>{["json", "png", "txt", "csv", "md"].map((item) => <option key={item} value={item}>{item.toUpperCase()}</option>)}</select>
-        <button className="button primary" onClick={exportProfile}><Download size={16} />{t("导出全部维度", "Export all media")}</button>
+        <button className="button primary" disabled={exporting} onClick={async () => { setExporting(true); try { await exportProfile(); } finally { setExporting(false); } }}><Download size={16} />{exporting ? t("导出中…", "Exporting…") : t("导出全部维度", "Export all media")}</button>
         <button className="button secondary" onClick={share}><Share2 size={16} />{t("复制比较链接", "Copy comparison link")}</button>
         {shareUrl && <div className="share-output"><input aria-label={t("比较链接", "Comparison link")} readOnly value={shareUrl} onFocus={(event) => event.target.select()} />{qrUrl && <img src={qrUrl} alt={t("比较二维码", "Comparison QR code")} />}</div>}
         <button className="button quiet" onClick={() => navigateTo("home")}><Plus size={16} />{t("添加另一个维度", "Add another medium")}</button>
