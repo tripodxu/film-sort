@@ -178,6 +178,7 @@ export function PlazaPostView({ postId, t, label, navigateTo, accountToken, acco
         post.collection_title,
         `${post.nickname || t("匿名用户", "Anonymous")} / ${label(post.kind as MediaKind)} / ${post.item_count} ${t("件作品", "works")}`,
       )}
+      {post.description && <p style={{ fontSize: 14, color: "var(--muted)", marginBottom: 16, lineHeight: 1.7 }}>{post.description}</p>}
 
       {/* Full ranking list */}
       <div className="plaza-post-detail">

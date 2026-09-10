@@ -548,7 +548,7 @@ export default function App() {
     } catch { setNotice(t("生成链接失败，请导出 JSON 分享。", "Failed to create link. Export the JSON instead.")); }
     finally { setBusy(false); }
   }
-  async function publishToPlaza(ranking: RankingExport) {
+  async function publishToPlaza(ranking: RankingExport, description?: string) {
     if (!accountToken) { setNotice(t("请先登录。", "Please sign in first.")); return; }
     const rankingNotes: Record<string, string> = {};
     for (const [key, val] of Object.entries(notes)) {
@@ -556,7 +556,7 @@ export default function App() {
     }
     setBusy(true);
     try {
-      const response = await fetch("/api/plaza/posts", { method: "POST", headers: { "content-type": "application/json", authorization: `Bearer ${accountToken}` }, body: JSON.stringify({ post_type: "ranking", kind: ranking.kind, collection_title: ranking.collectionTitle, items: ranking.items, notes: Object.keys(rankingNotes).length > 0 ? rankingNotes : null, item_count: ranking.items.length }) });
+      const response = await fetch("/api/plaza/posts", { method: "POST", headers: { "content-type": "application/json", authorization: `Bearer ${accountToken}` }, body: JSON.stringify({ post_type: "ranking", kind: ranking.kind, collection_title: ranking.collectionTitle, description: description?.trim() || null, items: ranking.items, notes: Object.keys(rankingNotes).length > 0 ? rankingNotes : null, item_count: ranking.items.length }) });
       const data = await response.json() as { id?: number; error?: string };
       if (response.ok && data.id) setNotice(t("已发布到广场！", "Published to plaza!"));
       else setNotice(t("发布失败。", "Publish failed."));

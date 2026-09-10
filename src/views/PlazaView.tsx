@@ -191,6 +191,7 @@ export function PlazaView({ t, label, navigateTo, accountToken, openCollection, 
                   <span className={`plaza-sticker-kind kind-${post.kind}`}>{label(post.kind as MediaKind)}</span>
                   <span className="plaza-sticker-count">{post.item_count} {t("件", "works")}</span>
                 </div>
+                {post.description && <p className="plaza-sticker-desc">{post.description}</p>}
                 <div className="plaza-sticker-stats">
                   <span><Heart size={12} /> {post.like_count}</span>
                   <span><MessageCircle size={12} /> {post.comment_count}</span>

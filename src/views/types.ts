@@ -122,7 +122,7 @@ export interface ProfileViewProps {
   notes: Record<string, string>;
   openNoteModal: (key: string, title: string, kind: MediaKind, posterUrls?: readonly string[]) => void;
   accountToken: string;
-  publishToPlaza: (ranking: RankingExport) => void;
+  publishToPlaza: (ranking: RankingExport, description?: string) => void;
   reorderMode: number | null;
   reorderItems: RankedArtwork[];
   startReorder: (idx: number) => void;
@@ -148,6 +148,7 @@ export interface PlazaPost {
   post_type: string;
   kind: MediaKind;
   collection_title: string;
+  description?: string;
   items: RankedArtwork[];
   notes: string;
   item_count: number;

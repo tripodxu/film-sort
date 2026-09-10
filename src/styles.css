@@ -156,3 +156,4 @@ body{background:#080a0a;color:#edf2e9}.app-shell{min-height:100svh;background:#0
 .plaza-toolbar-btn{padding:5px 14px;border-radius:999px;border:1px solid var(--line);background:transparent;color:var(--muted);font-size:12px;font-weight:500;cursor:pointer;transition:all .15s ease}
 .plaza-toolbar-btn:hover{border-color:rgba(216,248,106,.3);color:#eef4ed}
 .plaza-toolbar-btn.active{border-color:var(--accent);color:var(--accent);background:rgba(216,248,106,.06)}
+.plaza-sticker-desc{font-size:11px;color:var(--muted);line-height:1.5;margin:0;overflow:hidden;text-overflow:ellipsis;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}

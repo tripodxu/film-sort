@@ -22,7 +22,7 @@ export async function plazaRoute(request: Request, env: Env): Promise<Response> 
     const kind = url.searchParams.get("kind")?.trim() || null;
     const offset = (page - 1) * limit;
 
-    let sql = `SELECT p.id, p.user_id, p.post_type, p.kind, p.collection_title, p.items, p.notes, p.item_count, p.like_count, p.comment_count, p.is_public, p.created_at, p.updated_at, u.nickname
+    let sql = `SELECT p.id, p.user_id, p.post_type, p.kind, p.collection_title, p.description, p.items, p.notes, p.item_count, p.like_count, p.comment_count, p.is_public, p.created_at, p.updated_at, u.nickname
       FROM plaza_posts p LEFT JOIN user_accounts u ON p.user_id = u.id WHERE p.is_public = 1`;
     const params: unknown[] = [];
     if (kind) {
@@ -55,7 +55,7 @@ export async function plazaRoute(request: Request, env: Env): Promise<Response> 
   if (postDetailMatch && method === "GET") {
     const postId = Number(postDetailMatch[1]);
     const post = await env.DB.prepare(
-      `SELECT p.id, p.user_id, p.post_type, p.kind, p.collection_title, p.items, p.notes, p.item_count, p.like_count, p.comment_count, p.is_public, p.created_at, p.updated_at, u.nickname
+      `SELECT p.id, p.user_id, p.post_type, p.kind, p.collection_title, p.description, p.items, p.notes, p.item_count, p.like_count, p.comment_count, p.is_public, p.created_at, p.updated_at, u.nickname
        FROM plaza_posts p LEFT JOIN user_accounts u ON p.user_id = u.id WHERE p.id = ?`
     ).bind(postId).first<Record<string, unknown>>();
     if (!post) return json({ error: "post_not_found" }, 404);
@@ -85,6 +85,7 @@ export async function plazaRoute(request: Request, env: Env): Promise<Response> 
     const kind = cleanString(body.kind, 20);
     const collectionTitle = cleanString(body.collection_title, 200);
     if (!collectionTitle) return json({ error: "invalid_collection_title" }, 400);
+    const description = cleanString(body.description, 500);
     const notes = cleanString(body.notes, 2000);
     const isPublic = body.is_public === undefined || body.is_public === null ? 1 : (body.is_public ? 1 : 0);
 
@@ -93,8 +94,8 @@ export async function plazaRoute(request: Request, env: Env): Promise<Response> 
     const itemCount = body.items.length;
 
     const result = await env.DB.prepare(
-      `INSERT INTO plaza_posts (user_id, post_type, kind, collection_title, items, notes, item_count, is_public) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
-    ).bind(user.id, postType, kind, collectionTitle, itemsJson, notes, itemCount, isPublic).run();
+      `INSERT INTO plaza_posts (user_id, post_type, kind, collection_title, description, items, notes, item_count, is_public) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    ).bind(user.id, postType, kind, collectionTitle, description, itemsJson, notes, itemCount, isPublic).run();
 
     return json({ id: result.meta.last_row_id, stored: true }, 201);
   }
@@ -117,6 +118,7 @@ export async function plazaRoute(request: Request, env: Env): Promise<Response> 
     const postType = cleanString(body.post_type, 40);
     const kind = cleanString(body.kind, 20);
     const collectionTitle = cleanString(body.collection_title, 200);
+    const description = cleanString(body.description, 500);
     const notes = cleanString(body.notes, 2000);
     const isPublic = body.is_public === undefined || body.is_public === null ? undefined : (body.is_public ? 1 : 0);
 
@@ -129,8 +131,8 @@ export async function plazaRoute(request: Request, env: Env): Promise<Response> 
     }
 
     await env.DB.prepare(
-      `UPDATE plaza_posts SET post_type = COALESCE(?, post_type), kind = COALESCE(?, kind), collection_title = COALESCE(?, collection_title), items = COALESCE(?, items), notes = COALESCE(?, notes), item_count = COALESCE(?, item_count), is_public = COALESCE(?, is_public), updated_at = datetime('now') WHERE id = ?`
-    ).bind(postType, kind, collectionTitle, itemsJson, notes, itemCount, isPublic, postId).run();
+      `UPDATE plaza_posts SET post_type = COALESCE(?, post_type), kind = COALESCE(?, kind), collection_title = COALESCE(?, collection_title), description = COALESCE(?, description), items = COALESCE(?, items), notes = COALESCE(?, notes), item_count = COALESCE(?, item_count), is_public = COALESCE(?, is_public), updated_at = datetime('now') WHERE id = ?`
+    ).bind(postType, kind, collectionTitle, description, itemsJson, notes, itemCount, isPublic, postId).run();
 
     return json({ ok: true });
   }

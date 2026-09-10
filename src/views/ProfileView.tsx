@@ -11,6 +11,8 @@ export function ProfileView({ profile, activeRanking, locale, t, label, format, 
   const profileRankIdx = profile.rankings.indexOf(activeRanking);
   const isRenamingProfile = editingRankIdx === profileRankIdx;
   const isReordering = reorderMode === profileRankIdx;
+  const [publishDesc, setPublishDesc] = useState("");
+  const [showPublishInput, setShowPublishInput] = useState(false);
 
   return <>
     {heading(t("我的文化索引", "MY CULTURE INDEX"), profile.profileName, `${profile.rankings.length} ${t("个领域", "media")} / ${profile.rankings.reduce((count, entry) => count + entry.items.length, 0)} ${t("件作品", "works")}`)}
@@ -39,7 +41,7 @@ export function ProfileView({ profile, activeRanking, locale, t, label, format, 
             <button className="text-button" onClick={() => { setEditingRankIdx(profileRankIdx); setEditingRankTitle(activeRanking.collectionTitle); }} style={{ fontSize: 12, color: "var(--muted)" }}>{t("改名", "Rename")}</button>
             <button className="text-button" onClick={() => { const works = activeRanking.items.map(item => ({ id: item.id, title: item.title, subtitle: item.subtitle, creator: item.creator, year: item.year, posterUrls: item.posterUrls })); openCollection({ id: `rerank-${activeRanking.profileId}`, kind: activeRanking.kind, source: "custom", title: activeRanking.collectionTitle, description: "", topN: activeRanking.items.length, works }); }} style={{ fontSize: 12, color: "var(--accent)" }}>{t("重新排序", "Re-rank")}</button>
             <button className="text-button" onClick={() => void shareSingleRanking(activeRanking)} style={{ fontSize: 12, color: "var(--accent)" }}>{t("分享此榜单", "Share this list")}</button>
-            {accountToken && <button className="text-button" onClick={() => publishToPlaza(activeRanking)} style={{ fontSize: 12, color: "var(--accent)" }}><Globe size={12} style={{ verticalAlign: "middle", marginRight: 3 }} />{t("发布到广场", "Publish to plaza")}</button>}
+            {accountToken && !showPublishInput && <button className="text-button" onClick={() => setShowPublishInput(true)} style={{ fontSize: 12, color: "var(--accent)" }}><Globe size={12} style={{ verticalAlign: "middle", marginRight: 3 }} />{t("发布到广场", "Publish to plaza")}</button>}{accountToken && showPublishInput && <div style={{ display: "flex", gap: 6, alignItems: "center" }}><input type="text" value={publishDesc} onChange={(e) => setPublishDesc(e.target.value)} placeholder={t("添加描述（可选）", "Add description (optional)")} style={{ fontSize: 12, padding: "3px 8px", minHeight: "auto", width: 180 }} autoFocus onKeyDown={(e) => { if (e.key === "Enter") { publishToPlaza(activeRanking, publishDesc); setShowPublishInput(false); setPublishDesc(""); } if (e.key === "Escape") { setShowPublishInput(false); setPublishDesc(""); } }} /><button className="text-button" onClick={() => { publishToPlaza(activeRanking, publishDesc); setShowPublishInput(false); setPublishDesc(""); }} style={{ fontSize: 12, color: "var(--accent)" }}>{t("发布", "Publish")}</button><button className="text-button" onClick={() => { setShowPublishInput(false); setPublishDesc(""); }} style={{ fontSize: 12, color: "var(--muted)" }}>✕</button></div>}
             {!isReordering && <button className="text-button" onClick={() => startReorder(profileRankIdx)} style={{ fontSize: 12, color: "var(--accent)" }}>{t("手动调整", "Manual order")}</button>}
           </div>
         </div>
