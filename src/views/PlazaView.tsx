@@ -93,37 +93,38 @@ export function PlazaView({ t, label, navigateTo, accountToken, openCollection, 
         <p>{t("发现他人的品味，找到灵感。在这里浏览、点赞、留言，或用他人的榜单开始你自己的排序。", "Discover others' tastes, find inspiration. Browse, like, comment, or start your own ranking from theirs.")}</p>
       </div>
 
-      {/* Filter bar */}
-      <div className="plaza-filters">
-        <div className="plaza-filter-kinds">
-          {FILTER_KINDS.map((item) => (
+      {/* Ability selector */}
+      <div className="plaza-abilities">
+        {FILTER_KINDS.map((item) => (
+          <button
+            key={item.value}
+            className={`plaza-ability ${kindFilter === item.value ? "active" : ""}`}
+            onClick={() => { setKindFilter(item.value); setPosts([]); }}
+          >
+            <span className="plaza-ability-label">{t(item.zh, item.en)}</span>
+          </button>
+        ))}
+      </div>
+
+      {/* Toolbar */}
+      <div className="plaza-toolbar">
+        <div className="plaza-toolbar-left">
+          {SORT_OPTIONS.map((item) => (
             <button
               key={item.value}
-              className={`button ${kindFilter === item.value ? "primary" : "secondary"}`}
-              onClick={() => { setKindFilter(item.value); setPosts([]); }}
-              style={{ minHeight: 34, paddingInline: 12, fontSize: 13 }}
+              className={`plaza-toolbar-btn ${sort === item.value ? "active" : ""}`}
+              onClick={() => handleSortChange(item.value as "newest" | "hottest")}
             >
               {t(item.zh, item.en)}
             </button>
           ))}
         </div>
-        <div style={{ display: "flex", gap: 4, alignItems: "center" }}>
-          {SORT_OPTIONS.map((item) => (
-            <button
-              key={item.value}
-              className={`button ${sort === item.value ? "primary" : "secondary"}`}
-              onClick={() => handleSortChange(item.value as "newest" | "hottest")}
-              style={{ minHeight: 34, paddingInline: 12, fontSize: 13 }}
-            >
-              {t(item.zh, item.en)}
-            </button>
-          ))}
-          <span style={{ width: 1, height: 18, background: "var(--line)", margin: "0 4px" }} />
+        <div className="plaza-toolbar-right">
           {[2, 3, 4].map((n) => (
             <button
               key={n}
+              className={`plaza-toolbar-btn ${colCount === n ? "active" : ""}`}
               onClick={() => changeCols(n)}
-              style={{ width: 28, height: 28, borderRadius: 6, border: colCount === n ? "1px solid var(--accent)" : "1px solid var(--line)", background: colCount === n ? "rgba(216,248,106,.1)" : "transparent", color: colCount === n ? "var(--accent)" : "var(--muted)", fontSize: 11, fontWeight: 600, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}
             >
               {n}
             </button>
