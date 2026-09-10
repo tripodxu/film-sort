@@ -351,7 +351,7 @@ export default function App() {
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  });
+  }, [view, comparison, accountOpen, act]);
 
   function chooseKind(next: MediaKind) { setKind(next); setSource("builtin"); setSearch(""); setCustomText(""); navigateTo("source"); }
   function addCustomItem() {
@@ -839,9 +839,9 @@ export default function App() {
           </a>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 8, margin: "8px 0" }}>
-          <div style={{ flex: 1, height: 1, background: "var(--border)" }} />
+          <div style={{ flex: 1, height: 1, background: "var(--line)" }} />
           <span style={{ fontSize: 11, color: "var(--muted)" }}>{t("或使用邮箱", "or use email")}</span>
-          <div style={{ flex: 1, height: 1, background: "var(--border)" }} />
+          <div style={{ flex: 1, height: 1, background: "var(--line)" }} />
         </div>
         <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
           <button className={`button ${authMode === "login" ? "primary" : "secondary"}`} onClick={() => { setAuthMode("login"); setAuthError(""); }} style={{ flex: 1 }}>{t("登录", "Sign in")}</button>

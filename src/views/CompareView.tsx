@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { ArrowLeftRight, ArrowRight, Link, Play, Plus, Share2, Sparkles, X } from "lucide-react";
 import { Poster } from "../components/Poster";
 import { heading, fileInput } from "./helpers";
@@ -10,12 +11,14 @@ export function CompareView({ kinds, profile, peer, compareActiveKind, setCompar
   const ownRankings = profile?.rankings.filter((entry) => entry.kind === compareKind) ?? [];
   const peerRankings = peer?.rankings.filter((entry) => entry.kind === compareKind) ?? [];
   // 手动模式下默认全选（首次进入或维度切换时）
-  if (manualOwnSelections.size === 0 && ownRankings.length > 0) {
-    setManualOwnSelections(new Set(ownRankings.map((_, i) => i)));
-  }
-  if (manualPeerSelections.size === 0 && peerRankings.length > 0) {
-    setManualPeerSelections(new Set(peerRankings.map((_, i) => i)));
-  }
+  useEffect(() => {
+    if (manualOwnSelections.size === 0 && ownRankings.length > 0) {
+      setManualOwnSelections(new Set(ownRankings.map((_, i) => i)));
+    }
+    if (manualPeerSelections.size === 0 && peerRankings.length > 0) {
+      setManualPeerSelections(new Set(peerRankings.map((_, i) => i)));
+    }
+  }, [compareKind, ownRankings.length, peerRankings.length]);
   const selectedOwn = compareMode === "manual" ? ownRankings.filter((_, i) => manualOwnSelections.has(i)) : ownRankings;
   const selectedPeer = compareMode === "manual" ? peerRankings.filter((_, i) => manualPeerSelections.has(i)) : peerRankings;
   const result = (() => {
