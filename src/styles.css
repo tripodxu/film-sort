@@ -54,13 +54,13 @@ body{background:#080a0a;color:#edf2e9}.app-shell{min-height:100svh;background:#0
 .ranking-card-top3-name{font-size:11px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:100px}
 
 /* ===== Note Modal ===== */
-.note-modal{position:relative;max-width:860px;max-height:90vh;overflow:hidden;border-radius:24px;background:rgba(10,14,12,.92);backdrop-filter:blur(32px) saturate(1.4);-webkit-backdrop-filter:blur(32px) saturate(1.4);border:1px solid rgba(216,248,106,.15);box-shadow:0 32px 100px rgba(0,0,0,.6),0 0 1px rgba(216,248,106,.2),inset 0 1px rgba(255,255,255,.04)}
-.note-modal-bg{position:absolute;inset:0;background-size:cover;background-position:center;filter:blur(32px) brightness(.25) saturate(1.2);transform:scale(1.2);z-index:0;opacity:.6}
-.note-modal-content{position:relative;z-index:1;padding:32px 36px 28px;display:flex;flex-direction:column;gap:12px}
-.note-modal-content h2{color:#f3f6ee;font-size:24px;margin:0;font-weight:600}
-.note-textarea{min-height:380px;padding:20px 22px;background:rgba(0,0,0,.3);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);border:1px solid rgba(255,255,255,.08);border-radius:16px;color:#eef4ed;font-size:15px;line-height:1.9;resize:vertical;font-family:inherit;white-space:pre-wrap;transition:border-color .2s ease}
+
+
+
+
+
 .note-textarea::placeholder{color:rgba(255,255,255,.3)}
-.note-textarea:focus{border-color:var(--accent);outline:none}
+
 
 /* ===== Plaza Styles ===== */
 .plaza-filters{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:24px;padding:12px 0;border-bottom:1px solid var(--line)}
@@ -216,12 +216,12 @@ details > div, details > .tech-body{padding:18px 20px}
 @media(max-width:600px){.guide-help-btn{bottom:18px;right:18px;width:42px;height:42px;font-size:20px}.guide-modal{padding:24px 20px 20px;max-width:calc(100vw - 32px)}.guide-modal h2{font-size:19px}}
 
 /* ===== Note Modal ===== */
-.note-modal{position:relative;max-width:720px;max-height:88vh;overflow:hidden;border-radius:20px;background:rgba(14,18,16,.85);backdrop-filter:blur(24px) saturate(1.3);-webkit-backdrop-filter:blur(24px) saturate(1.3);border:1px solid rgba(216,248,106,.12);box-shadow:0 24px 80px rgba(0,0,0,.5),0 0 1px rgba(216,248,106,.15)}
-.note-modal-bg{position:absolute;inset:0;background-size:cover;background-position:center;filter:blur(32px) brightness(.25) saturate(1.2);transform:scale(1.2);z-index:0;opacity:.6}
-.note-modal-content{position:relative;z-index:1;padding:32px 36px 28px;display:flex;flex-direction:column;gap:12px}
-.note-modal-content h2{color:#f3f6ee;font-size:24px;margin:0;font-weight:600}
-.note-textarea{min-height:320px;padding:18px 20px;background:rgba(0,0,0,.35);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);border:1px solid rgba(255,255,255,.1);border-radius:14px;color:#eef4ed;font-size:15px;line-height:1.9;resize:vertical;font-family:inherit;white-space:pre-wrap;transition:border-color .2s ease}
-.note-textarea:focus{border-color:var(--accent);outline:none}
+
+
+
+
+
+
 
 /* ===== Ranking Card in Comparison ===== */
 .ranking-card-poster{flex-shrink:0;cursor:pointer}
@@ -315,3 +315,21 @@ kbd{display:inline-flex;align-items:center;justify-content:center;min-width:22px
 /* ===== Metrics Color Bars ===== */
 .metrics-wide>div{position:relative;padding-bottom:6px}
 .metrics-wide>div::after{content:'';position:absolute;bottom:0;left:0;height:3px;border-radius:2px;background:var(--accent);width:var(--metric-pct,0%);opacity:.6;transition:width .6s ease}
+
+/* ===== Note Reader (Amado-inspired glass panel) ===== */
+.note-reader{position:relative;max-width:520px;max-height:75vh;display:flex;flex-direction:column;overflow:hidden;background:rgba(0,0,0,.65);backdrop-filter:blur(16px) saturate(160%);-webkit-backdrop-filter:blur(16px) saturate(160%);border:1px solid rgba(255,255,255,.1);border-radius:0;box-shadow:0 32px 80px rgba(0,0,0,.5)}
+.note-reader::after{content:"";position:absolute;bottom:8px;right:8px;width:12px;height:12px;border-right:2px solid rgba(255,255,255,.25);border-bottom:2px solid rgba(255,255,255,.25);pointer-events:none;z-index:2}
+.note-reader-bg{position:absolute;inset:0;background-size:cover;background-position:center;filter:blur(32px) brightness(.2) saturate(1.2);transform:scale(1.3);z-index:0;opacity:.5}
+.note-reader-header{position:relative;z-index:1;padding:36px 40px 16px;text-align:center;flex-shrink:0}
+.note-reader-eyebrow{font-family:'Geist Mono',Consolas,monospace;font-size:10px;letter-spacing:.2em;color:rgba(216,248,106,.7);text-transform:uppercase}
+.note-reader-header h2{font-family:'Geist Mono',Consolas,monospace;font-size:22px;font-weight:500;letter-spacing:.1em;color:#fff;margin:6px 0 0}
+.note-reader-body{position:relative;z-index:1;flex:1;overflow-y:auto;padding:0 40px 20px;background:transparent;border:none;outline:none;resize:none;font-family:'Georgia','Playfair Display',serif;font-size:16px;line-height:1.85;color:rgba(255,255,255,.85);scrollbar-width:none}
+.note-reader-body::-webkit-scrollbar{display:none}
+.note-reader-body::placeholder{color:rgba(255,255,255,.25)}
+.note-reader-view{padding:0 40px 20px}
+.note-reader-view p{margin:0;white-space:pre-wrap;word-break:break-word}
+.note-reader-footer{position:relative;z-index:1;display:flex;align-items:center;gap:8px;padding:12px 40px 20px;flex-shrink:0}
+.note-footer-btn{background:none;border:1px solid rgba(255,255,255,.1);border-radius:20px;padding:6px 16px;color:rgba(255,255,255,.5);font-family:'Geist Mono',Consolas,monospace;font-size:10px;letter-spacing:.12em;text-transform:uppercase;cursor:pointer;transition:all .15s}
+.note-footer-btn:hover{color:rgba(255,255,255,.9);border-color:rgba(255,255,255,.3)}
+.note-footer-primary{background:rgba(216,248,106,.12);border-color:rgba(216,248,106,.3);color:#d8f86a}
+.note-footer-primary:hover{background:rgba(216,248,106,.2);color:#fff}
