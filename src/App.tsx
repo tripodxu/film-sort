@@ -304,7 +304,7 @@ export default function App() {
     }
   }, []);
   useEffect(() => { document.documentElement.lang = locale === "zh" ? "zh-CN" : "en"; }, [locale]);
-  useEffect(() => { window.scrollTo(0, 0); }, [view]);
+  useEffect(() => { window.scrollTo({ top: 0, behavior: "smooth" }); }, [view]);
   useEffect(() => {
     function onPopState() {
       const v = pathToView(location.pathname);

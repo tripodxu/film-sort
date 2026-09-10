@@ -234,3 +234,59 @@ details > div, details > .tech-body{padding:18px 20px}
 /* ===== Responsive ===== */
 @media(max-width:800px){.plaza-header{padding:24px 20px 20px}.plaza-header h1{font-size:24px}.plaza-abilities{gap:8px}.plaza-ability{padding:8px 14px;font-size:12px}}
 @media(max-width:540px){.plaza-sticker{padding:12px 14px;gap:10px}.plaza-sticker-poster .poster-small{width:36px;height:50px}.plaza-sticker-title{font-size:13px}.plaza-sticker-btn{width:28px;height:28px}}
+
+/* ===== Page Transitions ===== */
+.main{animation:pageEnter .3s ease both}
+@keyframes pageEnter{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+
+/* ===== Button Click Feedback ===== */
+.button:active:not(:disabled){transform:scale(.97);transition:transform .08s ease}
+.text-button:active:not(:disabled){transform:scale(.95);transition:transform .08s ease}
+.icon-button:active:not(:disabled){transform:scale(.9);transition:transform .08s ease}
+
+/* ===== Smooth Scroll ===== */
+html{scroll-behavior:smooth}
+
+/* ===== Profile Skeleton ===== */
+.profile-skeleton{display:flex;flex-direction:column;gap:12px}
+.profile-skeleton-row{display:flex;gap:8px;align-items:center}
+.profile-skeleton-avatar{width:40px;height:56px;border-radius:6px;background:var(--line);animation:plaza-pulse 1.5s ease-in-out infinite}
+.profile-skeleton-line{height:14px;border-radius:4px;background:var(--line);animation:plaza-pulse 1.5s ease-in-out infinite}
+
+/* ===== Better Empty States ===== */
+.empty-state{padding:40px 20px;text-align:center}
+.empty-state p{color:var(--muted);font-size:14px;line-height:1.7;max-width:400px;margin:0 auto 16px}
+
+/* ===== Card Hover Polish ===== */
+.profile-dimension{transition:transform .2s ease,box-shadow .2s ease,border-color .2s ease}
+.profile-dimension:hover{transform:translateY(-2px);box-shadow:0 8px 24px rgba(0,0,0,.2)}
+.profile-dimension.active{border-color:var(--accent);box-shadow:0 0 16px rgba(216,248,106,.1)}
+
+/* ===== Toast Polish ===== */
+.toast{animation:toastIn .3s cubic-bezier(.34,1.56,.64,1) both}
+
+/* ===== Enhanced Interactive Feedback ===== */
+.medium-item{transition:transform .2s cubic-bezier(.34,1.56,.64,1),box-shadow .2s ease,border-color .2s ease}
+.medium-item:hover{transform:translateY(-3px);box-shadow:0 12px 32px rgba(0,0,0,.3)}
+
+.segmented button{transition:background .15s ease,color .15s ease,border-color .15s ease}
+.segmented button:hover:not(.active){background:rgba(216,248,106,.05)}
+
+.text-button{transition:color .15s ease,opacity .15s ease}
+.text-button:hover{opacity:.85}
+
+/* ===== Better Focus States ===== */
+:focus-visible{outline:2px solid var(--accent);outline-offset:3px;border-radius:4px}
+.button:focus-visible{outline-offset:4px}
+
+/* ===== Improved Contrast ===== */
+:root{--muted:#b8c0b8}
+
+/* ===== Scrollbar Styling ===== */
+::-webkit-scrollbar{width:6px;height:6px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:rgba(216,248,106,.15);border-radius:3px}
+::-webkit-scrollbar-thumb:hover{background:rgba(216,248,106,.25)}
+
+/* ===== Selection Color ===== */
+::selection{background:rgba(216,248,106,.2);color:#f3f6ee}
