@@ -6,12 +6,10 @@
 
 ## 1. 严重问题（必须修复）
 
-### 1.1 CompareView 渲染期间调用 setState
+### 1.1 CompareView 渲染期间调用 setState ✅ 已修复
 **位置**：`src/views/CompareView.tsx:13-18`
 
-`setManualOwnSelections` 和 `setManualPeerSelections` 在渲染体内直接调用（不在 useEffect 或事件处理器中），React 18+ StrictMode 会触发两次同步渲染。
-
-**修复**：用 `useEffect` 包裹或改用 `useRef` + 懒初始化。
+已用 `useEffect` 包裹，依赖 `[compareKind, ownRankings.length, peerRankings.length]`。
 
 ### 1.2 App.tsx 单体组件过大（~80 个 useState，~800 行）
 
@@ -50,19 +48,19 @@
 - 生成分享链接无 spinner
 - AI 解读区域无骨架屏
 
-### 2.4 HomeView 渲染中 Math.random()
-`src/views/HomeView.tsx:25` 在渲染体内调用 `Math.random()`，每次重渲染产生不同海报，导致闪烁。应用 `useMemo` 固定。
+### 2.4 HomeView 渲染中 Math.random() ✅ 已修复
+已用 `useMemo` 包裹，依赖 `builtinWorks` 长度，避免每次渲染闪烁。
 
 ### 2.5 无错误边界
 整个应用没有 React Error Boundary，任何视图运行时错误都会白屏。
 
-### 2.6 键盘可访问性缺陷
-- 广场卡片 `<div onClick>` 无 `tabIndex`、`role="button"`、`onKeyDown`
-- 批注条目 `<div onClick>` 无键盘支持
-- 海报点击 `<div onClick>` 无键盘等效操作
+### 2.6 键盘可访问性缺陷 ✅ 部分修复
+- 广场卡片 `<div onClick>` ✅ 已添加 `tabIndex`、`role="button"`、`onKeyDown`
+- 批注条目 `<div onClick>` ✅ 已添加 `tabIndex`、`role="button"`、`onKeyDown`
+- 海报点击 `<div onClick>` ❌ 待修复
 
-### 2.7 useEffect 缺少依赖数组
-`src/App.tsx:354` 的键盘事件监听 useEffect 无依赖数组，每次渲染都重新注册。
+### 2.7 useEffect 缺少依赖数组 ✅ 已修复
+已添加依赖 `[view, comparison, accountOpen, act]`。
 
 ---
 
@@ -76,8 +74,8 @@
 | sessionStorage 无限增长 | Poster.tsx:8-13 | 海报缓存无 LRU 或大小限制 |
 | 广场网格响应式冲突 | PlazaView + CSS | inline gridTemplateColumns 覆盖媒体查询 |
 | note-textarea placeholder 换行 | App.tsx:813 | 浏览器忽略 textarea placeholder 中的 \n |
-| --border 变量未定义 | App.tsx:842 | `var(--border)` 应为 `var(--line)` |
-| .note-textarea:focus 重复定义 | styles.css:61,63 | 两个规则冲突 |
+| --border 变量未定义 | App.tsx:842 | ✅ 已修复为 `var(--line)` |
+| .note-textarea:focus 重复定义 | styles.css:61,63 | ✅ 已移除重复规则 |
 | 奖牌 emoji 无 aria-hidden | 多个文件 | 屏幕阅读器不一致朗读 |
 
 ---

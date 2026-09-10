@@ -10,7 +10,7 @@ function NoteEntry({ scope, parts, value, t, openNoteView }: { scope: string; pa
   const isLong = value.length > 30;
   const label = scope === "profile" ? t("画像", "Profile") : scope === "ranking" ? t("榜单", "Ranking") : parts.slice(2).join(":") || t("作品", "Work");
   return (
-    <div onClick={() => isLong && openNoteView?.(label, value)} style={{ marginBottom: 8, padding: "8px 12px", borderRadius: 8, background: "rgba(121,217,174,.04)", borderLeft: "2px solid rgba(216,248,106,.2)", cursor: isLong && openNoteView ? "pointer" : undefined }}>
+    <div onClick={() => isLong && openNoteView?.(label, value)} role={isLong && openNoteView ? "button" : undefined} tabIndex={isLong && openNoteView ? 0 : undefined} onKeyDown={(e) => { if ((e.key === "Enter" || e.key === " ") && isLong && openNoteView) { e.preventDefault(); openNoteView(label, value); } }} style={{ marginBottom: 8, padding: "8px 12px", borderRadius: 8, background: "rgba(121,217,174,.04)", borderLeft: "2px solid rgba(216,248,106,.2)", cursor: isLong && openNoteView ? "pointer" : undefined }}>
       <span style={{ fontSize: 10, color: "var(--muted)", textTransform: "uppercase", letterSpacing: ".3px" }}>{label}</span>
       <p style={{ fontSize: 13, color: "#d9e6da", lineHeight: 1.65, margin: "3px 0 0", whiteSpace: "pre-wrap" }}>📝 {isLong ? value.slice(0, 30) + "…" : value}{isLong && <span style={{ fontSize: 11, marginLeft: 4, textDecoration: "underline", color: "var(--accent)" }}>{t("查看全文", "Read more")}</span>}</p>
     </div>
