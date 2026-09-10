@@ -220,6 +220,20 @@ export default function App() {
         setAccountOpen(true);
       }
       setNotice(t("登录成功！", "Signed in!"));
+      // Restore notes from cloud after OAuth login
+      setTimeout(async () => {
+        try {
+          const r = await fetch("/api/account/profile", { headers: { authorization: `Bearer ${oauthToken}` } });
+          if (!r.ok) return;
+          const d = await r.json() as { notes?: Record<string, string> };
+          if (d.notes && typeof d.notes === "object") {
+            const localNotes = readNotes();
+            const merged = { ...localNotes, ...d.notes };
+            setNotes(merged);
+            writeNotes(merged);
+          }
+        } catch {}
+      }, 100);
     } else if (oauthError === "error") {
       setNotice(t("登录失败：" + (params.get("msg") ?? "未知错误"), "Sign in failed: " + (params.get("msg") ?? "Unknown error")));
       history.replaceState(null, "", location.pathname);
@@ -266,8 +280,18 @@ export default function App() {
     if (savedToken) {
       void fetch("/api/account/profile", { headers: { authorization: `Bearer ${savedToken}` } })
         .then((r) => r.ok ? r.json() : null)
-        .then((data: { email?: string; nickname?: string; profile?: unknown } | null) => {
-          if (data?.email) { setAccountEmail(data.email); setAccountNickname(data.nickname ?? data.email.split("@")[0]); }
+        .then((data: { email?: string; nickname?: string; profile?: unknown; notes?: Record<string, string> } | null) => {
+          if (data?.email) {
+            setAccountEmail(data.email);
+            setAccountNickname(data.nickname ?? data.email.split("@")[0]);
+            // Restore notes from cloud on session restore
+            if (data.notes && typeof data.notes === "object") {
+              const localNotes = readNotes();
+              const merged = { ...localNotes, ...data.notes };
+              setNotes(merged);
+              writeNotes(merged);
+            }
+          }
           else if (!oauthToken) { setAccountToken(""); try { localStorage.removeItem("art-rank:account-token"); } catch {} }
         }).catch(() => {});
     }
@@ -661,18 +685,25 @@ export default function App() {
       setAccountToken(data.token); setAccountEmail(data.email ?? authEmail); setAccountNickname(data.nickname ?? ""); setAuthEmail(""); setAuthPassword(""); setAuthNickname("");
       try { localStorage.setItem("art-rank:account-token", data.token); } catch {}
       setNotice(t("登录成功！", "Signed in!"));
-      // Auto-load cloud profile after login, detect conflicts
+      // Auto-load cloud profile + notes after login, detect conflicts
       const freshToken = data.token;
       setTimeout(async () => {
         try {
           const r = await fetch("/api/account/profile", { headers: { authorization: `Bearer ${freshToken}` } });
           if (!r.ok) return;
-          const d = await r.json() as { nickname?: string; profile: unknown };
+          const d = await r.json() as { nickname?: string; profile: unknown; notes?: Record<string, string> };
           if (d.nickname) setAccountNickname(d.nickname);
+          // Restore notes from cloud
+          if (d.notes && typeof d.notes === "object") {
+            const localNotes = readNotes();
+            const merged = { ...localNotes, ...d.notes };
+            setNotes(merged);
+            writeNotes(merged);
+          }
           if (d.profile) {
             const cloudParsed = parseProfile(d.profile);
             if (profile) { setCloudConflict(cloudParsed); } // both local & cloud → show conflict dialog
-            else { persist(cloudParsed); setNotice(t("已从云端恢复画像。", "Profile restored from cloud.")); }
+            else { persist(cloudParsed); setNotice(t("已从云端恢复画像和批注。", "Profile and notes restored from cloud.")); }
           }
         } catch {}
       }, 100);
