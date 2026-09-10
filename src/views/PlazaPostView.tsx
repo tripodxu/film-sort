@@ -6,6 +6,19 @@ import type { PlazaPostViewProps, PlazaPost, PlazaComment } from "./types";
 import type { MediaKind } from "../data/media";
 import type { ArtisticProfile, RankedArtwork } from "../lib/profile";
 
+function NoteEntry({ scope, parts, value, isLong, t }: { scope: string; parts: string[]; value: string; isLong: boolean; t: (zh: string, en: string) => string }) {
+  const [expanded, setExpanded] = useState(false);
+  const show = !isLong || expanded;
+  const label = scope === "profile" ? t("画像", "Profile") : scope === "ranking" ? t("榜单", "Ranking") : parts.slice(2).join(":") || t("作品", "Work");
+  return (
+    <div style={{ marginBottom: 8, padding: "8px 12px", borderRadius: 8, background: "rgba(121,217,174,.04)", borderLeft: "2px solid rgba(216,248,106,.2)" }}>
+      <span style={{ fontSize: 10, color: "var(--muted)", textTransform: "uppercase", letterSpacing: ".3px" }}>{label}</span>
+      <p style={{ fontSize: 13, color: "#d9e6da", lineHeight: 1.65, margin: "3px 0 0", whiteSpace: "pre-wrap" }}>{show ? value : value.slice(0, 120) + "…"}</p>
+      {isLong && <button className="text-button" onClick={() => setExpanded(!expanded)} style={{ fontSize: 11, color: "var(--accent)", marginTop: 2 }}>{expanded ? t("收起", "Collapse") : t("展开全文", "Expand")}</button>}
+    </div>
+  );
+}
+
 export function PlazaPostView({ postId, t, label, navigateTo, accountToken, accountNickname, openCollection, profile, setNotice, setPeer, openArtworkDetail }: PlazaPostViewProps) {
   const [post, setPost] = useState<PlazaPost | null>(null);
   const [comments, setComments] = useState<PlazaComment[]>([]);
@@ -206,12 +219,26 @@ export function PlazaPostView({ postId, t, label, navigateTo, accountToken, acco
         </ol>
       </div>
 
-      {/* Notes */}
-      {post.notes && (
-        <div style={{ margin: "16px 0", padding: "12px 16px", borderRadius: 8, background: "rgba(121,217,174,.06)", border: "1px solid var(--line)" }}>
-          <p style={{ fontSize: 13, color: "var(--accent)", lineHeight: 1.6 }}>{post.notes}</p>
-        </div>
-      )}
+      {/* Notes — parsed from JSON */}
+      {post.notes && (() => {
+        let parsed: Record<string, string> = {};
+        try { parsed = typeof post.notes === "string" ? JSON.parse(post.notes) : post.notes; } catch { return null; }
+        const entries = Object.entries(parsed).filter(([, v]) => v?.trim());
+        if (!entries.length) return null;
+        return (
+          <div style={{ margin: "16px 0" }}>
+            <h3 style={{ fontSize: 13, fontWeight: 600, color: "var(--accent)", marginBottom: 10, display: "flex", alignItems: "center", gap: 6 }}>📝 {t("批注", "Notes")}</h3>
+            {entries.map(([key, val]) => {
+              const parts = key.split(":");
+              const scope = parts[0];
+              const isLong = val.length > 120;
+              return (
+                <NoteEntry key={key} scope={scope} parts={parts} value={val} isLong={isLong} t={t} />
+              );
+            })}
+          </div>
+        );
+      })()}
 
       {/* Actions */}
       <div style={{ display: "flex", gap: 12, flexWrap: "wrap", margin: "24px 0" }}>

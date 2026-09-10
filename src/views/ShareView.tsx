@@ -1,5 +1,6 @@
-import { ArrowLeft, MessageCircle, ThumbsUp, Play } from "lucide-react";
+import { ArrowLeft, Play, Share2 } from "lucide-react";
 import { Poster } from "../components/Poster";
+import { ExpandableNote } from "../components/ExpandableNote";
 import { heading } from "./helpers";
 import type { ShareViewProps } from "./types";
 import type { MediaKind } from "../data/media";
@@ -32,11 +33,7 @@ export function ShareView({ peer, t, label, navigateTo, openCollection, profile,
                 </div>
 
                 {/* Notes */}
-                {notes[noteKey] && (
-                  <p style={{ fontSize: 12, color: "var(--accent)", marginTop: 4, marginBottom: 8, opacity: 0.85 }}>
-                    {notes[noteKey]}
-                  </p>
-                )}
+                {notes[noteKey] && <ExpandableNote text={notes[noteKey]} style={{ marginBottom: 8 }} />}
 
                 {/* Ranking list */}
                 <ol className="ranking-list">
@@ -59,11 +56,7 @@ export function ShareView({ peer, t, label, navigateTo, openCollection, profile,
                         <div>
                           <strong>{work.title}</strong>
                           <small>{work.creator} {work.year}</small>
-                          {workNote && (
-                            <p style={{ fontSize: 12, color: "var(--accent)", marginTop: 4, lineHeight: 1.5, opacity: 0.85 }}>
-                              {workNote}
-                            </p>
-                          )}
+                          {workNote && <ExpandableNote text={workNote} />}
                         </div>
                       </li>
                     );
@@ -78,9 +71,7 @@ export function ShareView({ peer, t, label, navigateTo, openCollection, profile,
       {/* Profile-level notes */}
       {notes[`profile:${peer.profileId}`] && (
         <div style={{ margin: "16px 0", padding: "12px 16px", borderRadius: 8, background: "rgba(121,217,174,.06)", border: "1px solid var(--line)" }}>
-          <p style={{ fontSize: 13, color: "var(--accent)", lineHeight: 1.6 }}>
-            {notes[`profile:${peer.profileId}`]}
-          </p>
+          <ExpandableNote text={notes[`profile:${peer.profileId}`]} style={{ margin: 0 }} />
         </div>
       )}
 
@@ -119,29 +110,25 @@ export function ShareView({ peer, t, label, navigateTo, openCollection, profile,
         </button>
       </div>
 
-      {/* Like / Comment counts (placeholder for plaza integration) */}
-      <div style={{ display: "flex", gap: 20, alignItems: "center", margin: "16px 0", color: "var(--muted)", fontSize: 13 }}>
-        <span style={{ display: "flex", alignItems: "center", gap: 5, cursor: "pointer" }}>
-          <ThumbsUp size={14} /> {t("赞", "Like")}
-        </span>
-        <span style={{ display: "flex", alignItems: "center", gap: 5, cursor: "pointer" }}>
-          <MessageCircle size={14} /> {t("评论", "Comment")}
-        </span>
-      </div>
-
-      {/* Comment section placeholder */}
-      <section style={{ marginTop: 24, padding: "20px 0", borderTop: "1px solid var(--line)" }}>
-        <h3 style={{ fontSize: 14, fontWeight: 600, marginBottom: 12, color: "var(--muted)" }}>
-          {t("评论", "Comments")}
-        </h3>
-        <p className="empty-state" style={{ fontSize: 13, color: "var(--muted)" }}>
-          {t("评论功能即将上线，敬请期待。", "Comments coming soon. Stay tuned.")}
-        </p>
-      </section>
+      {/* How to create your own share link */}
+      {!profile && (
+        <div style={{ margin: "24px 0", padding: "20px 24px", borderRadius: 14, border: "1px solid var(--line)", background: "rgba(20,27,25,.4)" }}>
+          <h3 style={{ fontSize: 14, fontWeight: 600, color: "#eef4ed", marginBottom: 8, display: "flex", alignItems: "center", gap: 8 }}><Share2 size={15} />{t("如何创建自己的分享链接？", "How to create your own share link?")}</h3>
+          <ol style={{ fontSize: 13, color: "var(--muted)", lineHeight: 2, paddingLeft: 20, margin: 0 }}>
+            <li>{t("选择一个媒介维度，完成排序", "Choose a medium and complete a ranking")}</li>
+            <li>{t("在「我的文化索引」页面，点击「分享此榜单」或「复制比较链接」", "In 'My Culture Index', click 'Share this list' or 'Copy compare link'")}</li>
+            <li>{t("将链接发给朋友，对方打开即可查看你的榜单", "Send the link to a friend — they can view your ranking when they open it")}</li>
+          </ol>
+          <button className="button primary" onClick={() => navigateTo("home")} style={{ marginTop: 14, minHeight: 38 }}>
+            <Play size={15} />
+            {t("开始创建我的榜单", "Start creating my ranking")}
+          </button>
+        </div>
+      )}
 
       {/* Back button */}
-      <div style={{ marginTop: 24 }}>
-        <button className="button secondary" onClick={() => navigateTo("home")}>
+      <div style={{ marginTop: 16 }}>
+        <button className="button secondary" onClick={() => navigateTo("home")} style={{ minHeight: 34 }}>
           <ArrowLeft size={15} />
           {t("返回首页", "Back home")}
         </button>

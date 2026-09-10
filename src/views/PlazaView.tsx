@@ -175,9 +175,11 @@ export function PlazaView({ t, label, navigateTo, accountToken, openCollection, 
       {!initialLoading && posts.length > 0 && (
         <div className="plaza-grid" style={{ gridTemplateColumns: `repeat(${colCount}, minmax(0, 1fr))` }}>
           {posts.map((post) => (
-            <div key={post.id} className="plaza-sticker" onClick={() => navigateTo(`plazaPost:${post.id}`)}>
+            <div key={post.id} className={`plaza-sticker ${colCount >= 4 ? "plaza-sticker-compact" : ""}`} onClick={() => navigateTo(`plazaPost:${post.id}`)}>
               <div className="plaza-sticker-posters">
-                {post.items.slice(0, 3).map((work, idx) => (
+                {colCount >= 4 ? (
+                  post.items[0] && <div className="plaza-sticker-poster"><Poster work={post.items[0]} kind={post.kind as MediaKind} /></div>
+                ) : post.items.slice(0, 3).map((work, idx) => (
                   <div key={work.id} className="plaza-sticker-poster">
                     <span className="plaza-sticker-medal">{idx === 0 ? "🥇" : idx === 1 ? "🥈" : "🥉"}</span>
                     <Poster work={work} kind={post.kind as MediaKind} />

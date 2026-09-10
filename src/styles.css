@@ -54,11 +54,11 @@ body{background:#080a0a;color:#edf2e9}.app-shell{min-height:100svh;background:#0
 .ranking-card-top3-name{font-size:11px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:100px}
 
 /* ===== Note Modal ===== */
-.note-modal{position:relative;max-width:480px;max-height:80vh;overflow:hidden;border-radius:16px;background:var(--card,#141914)}
+.note-modal{position:relative;max-width:580px;max-height:85vh;overflow:hidden;border-radius:16px;background:var(--card,#141914)}
 .note-modal-bg{position:absolute;inset:0;background-size:cover;background-position:center;filter:blur(24px) brightness(.3);transform:scale(1.15);z-index:0}
 .note-modal-content{position:relative;z-index:1;padding:28px 32px 24px;display:flex;flex-direction:column;gap:10px}
 .note-modal-content h2{color:#f3f6ee;font-size:20px;margin:0}
-.note-textarea{min-height:180px;padding:12px 14px;background:rgba(0,0,0,.45);backdrop-filter:blur(8px);border:1px solid rgba(255,255,255,.1);border-radius:10px;color:#eef4ed;font-size:14px;line-height:1.7;resize:vertical}
+.note-textarea{min-height:280px;padding:16px 18px;background:rgba(0,0,0,.45);backdrop-filter:blur(8px);border:1px solid rgba(255,255,255,.12);border-radius:12px;color:#eef4ed;font-size:15px;line-height:1.8;resize:vertical;font-family:inherit;white-space:pre-wrap}
 .note-textarea::placeholder{color:rgba(255,255,255,.3)}
 .note-textarea:focus{border-color:var(--accent);outline:none}
 
@@ -157,3 +157,22 @@ body{background:#080a0a;color:#edf2e9}.app-shell{min-height:100svh;background:#0
 .plaza-toolbar-btn:hover{border-color:rgba(216,248,106,.3);color:#eef4ed}
 .plaza-toolbar-btn.active{border-color:var(--accent);color:var(--accent);background:rgba(216,248,106,.06)}
 .plaza-sticker-desc{font-size:11px;color:#aab5aa;line-height:1.5;margin:2px 0 0;padding-left:8px;border-left:2px solid rgba(216,248,106,.2);font-style:italic;overflow:hidden;text-overflow:ellipsis;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
+
+/* ===== Plaza 4-col compact ===== */
+.plaza-sticker-compact{padding:12px 14px;gap:10px}
+.plaza-sticker-compact .plaza-sticker-poster .poster-small{width:36px;height:50px}
+.plaza-sticker-compact .plaza-sticker-title{font-size:13px}
+.plaza-sticker-compact .plaza-sticker-meta{font-size:10px}
+.plaza-sticker-compact .plaza-sticker-stats{font-size:10px}
+.plaza-sticker-compact .plaza-sticker-desc{font-size:10px;-webkit-line-clamp:1}
+.plaza-sticker-compact .plaza-sticker-btn{width:26px;height:26px}
+.plaza-sticker-compact .plaza-sticker-arrow{display:none}
+/* ===== Details/Summary (tech modal + notes) ===== */
+details{border:1px solid var(--line);border-radius:10px;padding:0;margin-bottom:8px;background:rgba(20,27,25,.3);overflow:hidden}
+details summary{padding:14px 18px;font-size:14px;font-weight:600;color:#eef4ed;cursor:pointer;list-style:none;display:flex;align-items:center;gap:8px;transition:background .15s ease}
+details summary:hover{background:rgba(216,248,106,.04)}
+details summary::-webkit-details-marker{display:none}
+details summary::before{content:"▸";font-size:12px;color:var(--accent);transition:transform .2s ease;flex-shrink:0}
+details[open] summary{border-bottom:1px solid var(--line)}
+details[open] summary::before{transform:rotate(90deg)}
+details > div, details > .tech-body{padding:16px 18px}
