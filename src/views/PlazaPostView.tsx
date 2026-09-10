@@ -29,6 +29,8 @@ export function PlazaPostView({ postId, t, label, navigateTo, accountToken, acco
   const [commentText, setCommentText] = useState("");
   const [commentBusy, setCommentBusy] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState(false);
+  const [replyTo, setReplyTo] = useState<number | null>(null);
+  const [replyText, setReplyText] = useState("");
 
   useEffect(() => { void loadPost(); }, [postId]);
 
@@ -67,19 +69,19 @@ export function PlazaPostView({ postId, t, label, navigateTo, accountToken, acco
     }
   }
 
-  async function handleAddComment() {
+  async function handleAddComment(parentId?: number) {
     if (!accountToken) {
       setNotice(t("请先登录。", "Please sign in first."));
       return;
     }
-    const content = commentText.trim();
+    const content = parentId ? replyText.trim() : commentText.trim();
     if (!content) return;
     setCommentBusy(true);
     try {
       const response = await fetch(`/api/plaza/posts/${postId}/comments`, {
         method: "POST",
         headers: { "content-type": "application/json", authorization: `Bearer ${accountToken}` },
-        body: JSON.stringify({ content }),
+        body: JSON.stringify({ content, parent_id: parentId || null }),
       });
       if (!response.ok) throw new Error();
       const data = await response.json() as { id: number };
@@ -88,10 +90,12 @@ export function PlazaPostView({ postId, t, label, navigateTo, accountToken, acco
         post_id: postId,
         user_id: 0,
         content,
+        parent_id: parentId || null,
         created_at: new Date().toISOString(),
         nickname: accountNickname || t("我", "Me"),
       }]);
-      setCommentText("");
+      if (parentId) { setReplyTo(null); setReplyText(""); }
+      else setCommentText("");
     } catch {
       setNotice(t("评论发送失败，请重试。", "Failed to post comment. Please retry."));
     } finally {
@@ -306,25 +310,40 @@ export function PlazaPostView({ postId, t, label, navigateTo, accountToken, acco
           </p>
         )}
 
-        {/* Comment list */}
-        {comments.map((comment) => (
-          <div key={comment.id} className="comment-item">
-            <div className="comment-item-header">
-              <span className="comment-author">{comment.nickname || t("匿名用户", "Anonymous")}</span>
-              <span className="comment-time">{new Date(comment.created_at).toLocaleString()}</span>
+        {/* Comment list — threaded */}
+        {(() => {
+          const roots = comments.filter((c) => !c.parent_id);
+          const repliesOf = (parentId: number) => comments.filter((c) => c.parent_id === parentId);
+          const renderComment = (comment: PlazaComment, depth: number) => (
+            <div key={comment.id} className="comment-item" style={depth > 0 ? { marginLeft: 24, borderLeft: "2px solid var(--line)", paddingLeft: 12 } : undefined}>
+              <div className="comment-item-header">
+                <span className="comment-author">{comment.nickname || t("匿名用户", "Anonymous")}</span>
+                <span className="comment-time">{new Date(comment.created_at).toLocaleString()}</span>
+              </div>
+              <p className="comment-content">{comment.content}</p>
+              <div style={{ display: "flex", gap: 8, marginTop: 4 }}>
+                {accountToken && (
+                  <button className="text-button" onClick={() => { setReplyTo(replyTo === comment.id ? null : comment.id); setReplyText(""); }} style={{ fontSize: 11, color: "var(--accent)" }}>
+                    {replyTo === comment.id ? t("取消回复", "Cancel reply") : t("回复", "Reply")}
+                  </button>
+                )}
+                {accountToken && comment.nickname === accountNickname && (
+                  <button className="text-button" onClick={() => void handleDeleteComment(comment.id)} style={{ fontSize: 11, color: "var(--muted)" }}>
+                    {t("删除", "Delete")}
+                  </button>
+                )}
+              </div>
+              {replyTo === comment.id && (
+                <div style={{ marginTop: 8, display: "flex", gap: 8 }}>
+                  <input type="text" value={replyText} onChange={(e) => setReplyText(e.target.value)} placeholder={t("写下你的回复…", "Write your reply…")} maxLength={500} style={{ fontSize: 12, padding: "6px 10px", minHeight: "auto", flex: 1 }} autoFocus onKeyDown={(e) => { if (e.key === "Enter") void handleAddComment(comment.id); if (e.key === "Escape") { setReplyTo(null); setReplyText(""); } }} />
+                  <button className="button primary" disabled={commentBusy || !replyText.trim()} onClick={() => void handleAddComment(comment.id)} style={{ minHeight: 32, fontSize: 12, paddingInline: 12 }}>{t("回复", "Reply")}</button>
+                </div>
+              )}
+              {repliesOf(comment.id).map((reply) => renderComment(reply, depth + 1))}
             </div>
-            <p className="comment-content">{comment.content}</p>
-            {accountToken && comment.nickname === accountNickname && (
-              <button
-                className="text-button"
-                onClick={() => void handleDeleteComment(comment.id)}
-                style={{ fontSize: 11, color: "var(--muted)", marginTop: 4 }}
-              >
-                {t("删除", "Delete")}
-              </button>
-            )}
-          </div>
-        ))}
+          );
+          return roots.map((comment) => renderComment(comment, 0));
+        })()}
 
         {/* Add comment form */}
         {accountToken ? (

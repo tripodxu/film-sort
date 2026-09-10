@@ -181,3 +181,11 @@ details > div, details > .tech-body{padding:16px 18px}
 .publish-burst{position:absolute;top:50%;left:50%;pointer-events:none;z-index:10}
 .publish-particle{position:absolute;width:6px;height:6px;border-radius:50%;background:var(--color,var(--accent));animation:publish-fly .8s cubic-bezier(.25,.46,.45,.94) var(--delay,0s) both}
 @keyframes publish-fly{0%{transform:translate(-50%,-50%) rotate(var(--angle,0deg)) translateY(0) scale(1);opacity:1}60%{opacity:1}100%{transform:translate(-50%,-50%) rotate(var(--angle,0deg)) translateY(-40px) translateX(20px) scale(0);opacity:0}}
+
+/* ===== Threaded Comments ===== */
+.comment-item{padding:10px 0;border-bottom:1px solid var(--line)}
+.comment-item:last-child{border-bottom:none}
+.comment-item-header{display:flex;align-items:center;gap:8px;margin-bottom:4px}
+.comment-author{font-size:13px;font-weight:600;color:#eef4ed}
+.comment-time{font-size:11px;color:var(--muted)}
+.comment-content{font-size:13px;color:#d9e6da;line-height:1.6;margin:0}

@@ -61,8 +61,8 @@ export async function plazaRoute(request: Request, env: Env): Promise<Response> 
     if (!post) return json({ error: "post_not_found" }, 404);
 
     const comments = await env.DB.prepare(
-      `SELECT c.id, c.post_id, c.user_id, c.content, c.created_at, u.nickname
-       FROM plaza_comments c LEFT JOIN user_accounts u ON c.user_id = u.id WHERE c.post_id = ? ORDER BY c.created_at ASC LIMIT 100`
+      `SELECT c.id, c.post_id, c.user_id, c.content, c.parent_id, c.created_at, u.nickname
+       FROM plaza_comments c LEFT JOIN user_accounts u ON c.user_id = u.id WHERE c.post_id = ? ORDER BY c.created_at ASC LIMIT 200`
     ).bind(postId).all();
 
     return json({
@@ -185,8 +185,8 @@ export async function plazaRoute(request: Request, env: Env): Promise<Response> 
   if (commentsGetMatch && method === "GET") {
     const postId = Number(commentsGetMatch[1]);
     const comments = await env.DB.prepare(
-      `SELECT c.id, c.post_id, c.user_id, c.content, c.created_at, u.nickname
-       FROM plaza_comments c LEFT JOIN user_accounts u ON c.user_id = u.id WHERE c.post_id = ? ORDER BY c.created_at ASC LIMIT 100`
+      `SELECT c.id, c.post_id, c.user_id, c.content, c.parent_id, c.created_at, u.nickname
+       FROM plaza_comments c LEFT JOIN user_accounts u ON c.user_id = u.id WHERE c.post_id = ? ORDER BY c.created_at ASC LIMIT 200`
     ).bind(postId).all();
 
     return json({ comments: comments.results ?? [] });
@@ -207,8 +207,10 @@ export async function plazaRoute(request: Request, env: Env): Promise<Response> 
 
     const content = cleanString(body.content, 500);
     if (!content) return json({ error: "invalid_content", msg: "评论内容不能为空且不超过500字" }, 400);
+    const parentId = body.parent_id ? Number(body.parent_id) : null;
+    if (parentId !== null && (!Number.isInteger(parentId) || parentId < 1)) return json({ error: "invalid_parent_id" }, 400);
 
-    const result = await env.DB.prepare("INSERT INTO plaza_comments (post_id, user_id, content) VALUES (?, ?, ?)").bind(postId, user.id, content).run();
+    const result = await env.DB.prepare("INSERT INTO plaza_comments (post_id, user_id, content, parent_id) VALUES (?, ?, ?, ?)").bind(postId, user.id, content, parentId).run();
     await env.DB.prepare("UPDATE plaza_posts SET comment_count = comment_count + 1 WHERE id = ?").bind(postId).run();
 
     return json({ id: result.meta.last_row_id, stored: true }, 201);

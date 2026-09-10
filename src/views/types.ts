@@ -166,6 +166,7 @@ export interface PlazaComment {
   post_id: number;
   user_id: number;
   content: string;
+  parent_id: number | null;
   created_at: string;
   nickname: string;
 }
