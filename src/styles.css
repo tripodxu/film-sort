@@ -92,3 +92,7 @@ body{background:#080a0a;color:#edf2e9}.app-shell{min-height:100svh;background:#0
 .profile-layout aside{border:1px solid rgba(216,248,106,.08);border-radius:14px;padding:20px;background:rgba(15,20,17,.4)}
 /* ===== Publish Modal ===== */
 .publish-modal{max-width:520px;max-height:80vh;overflow-y:auto}
+
+/* ===== Toast Animation ===== */
+@keyframes toastIn{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:translateY(0)}}
+.toast{animation:toastIn .25s ease both}

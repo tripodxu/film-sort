@@ -8,8 +8,18 @@ const POSTER_CACHE_KEY = "art-rank:poster-cache";
 function readPosterCache(key: string): string[] | null {
   try { const cache = JSON.parse(sessionStorage.getItem(POSTER_CACHE_KEY) ?? "{}"); return cache[key] ?? null; } catch { return null; }
 }
+const POSTER_CACHE_MAX = 500;
 function writePosterCache(key: string, urls: string[]) {
-  try { const cache = JSON.parse(sessionStorage.getItem(POSTER_CACHE_KEY) ?? "{}"); cache[key] = urls; sessionStorage.setItem(POSTER_CACHE_KEY, JSON.stringify(cache)); } catch { /* Quota exceeded — silently skip */ }
+  try {
+    const cache = JSON.parse(sessionStorage.getItem(POSTER_CACHE_KEY) ?? "{}");
+    const keys = Object.keys(cache);
+    if (keys.length >= POSTER_CACHE_MAX) {
+      // Evict oldest half
+      for (let i = 0; i < Math.floor(keys.length / 2); i++) delete cache[keys[i]];
+    }
+    cache[key] = urls;
+    sessionStorage.setItem(POSTER_CACHE_KEY, JSON.stringify(cache));
+  } catch { /* Quota exceeded — silently skip */ }
 }
 function posterKey(work: Artwork, kind: MediaKind): string {
   return `${kind}|${work.title}|${work.subtitle ?? ""}|${work.year ?? ""}`;
