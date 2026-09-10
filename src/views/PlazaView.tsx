@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Heart, MessageCircle, Play, Eye, Send } from "lucide-react";
+import { ChevronRight, Heart, MessageCircle, Play, Eye, Send } from "lucide-react";
 import { Poster } from "../components/Poster";
 import { heading } from "./helpers";
 import type { PlazaViewProps, PlazaPost } from "./types";
@@ -136,53 +136,24 @@ export function PlazaView({ t, label, navigateTo, accountToken, openCollection, 
         </div>
       )}
 
-      {/* Post cards */}
-      <div className="plaza-cards">
-        {posts.map((post) => (
-          <div key={post.id} className="plaza-card">
-            <div className="plaza-card-posters">
-              {post.items.slice(0, 3).map((work, idx) => (
-                <div key={work.id} className="plaza-card-poster-item">
-                  <span className="plaza-card-medal">
-                    {idx === 0 ? "🥇" : idx === 1 ? "🥈" : "🥉"}
-                  </span>
-                  <Poster work={work} kind={post.kind as MediaKind} />
-                </div>
-              ))}
+      {/* Post cards - sticker card style like curated collections */}
+      <div className="collection-list" style={{ gridTemplateColumns: `repeat(${typeof window !== 'undefined' && window.innerWidth > 800 ? 2 : 1}, minmax(0, 1fr))` }}>
+        {posts.map((post, index) => (
+          <button key={post.id} className="collection-row" onClick={() => navigateTo(`plazaPost:${post.id}`)}>
+            <span className="row-number">{String(index + 1).padStart(2, "0")}</span>
+            {post.items[0] && <Poster work={post.items[0]} kind={post.kind as MediaKind} />}
+            <div>
+              <h3>{post.collection_title}</h3>
+              <small>
+                {post.nickname || t("匿名用户", "Anonymous")} · {label(post.kind as MediaKind)} · {post.item_count} {t("件", "")}
+                {" "}<Heart size={10} style={{ verticalAlign: "middle", marginLeft: 4 }} /> {post.like_count}
+                {" "}<MessageCircle size={10} style={{ verticalAlign: "middle", marginLeft: 4 }} /> {post.comment_count}
+              </small>
             </div>
-            <div className="plaza-card-body">
-              <h3 className="plaza-card-title">{post.collection_title}</h3>
-              <div className="plaza-card-meta">
-                <span className="plaza-card-author">{post.nickname || t("匿名用户", "Anonymous")}</span>
-                <span className="plaza-card-kind">{label(post.kind as MediaKind)}</span>
-                <span className="plaza-card-stat">
-                  <Heart size={12} /> {post.like_count}
-                </span>
-                <span className="plaza-card-stat">
-                  <MessageCircle size={12} /> {post.comment_count}
-                </span>
-              </div>
-              <div className="plaza-card-actions">
-                <button
-                  className="button secondary"
-                  onClick={() => navigateTo(`plazaPost:${post.id}`)}
-                  style={{ minHeight: 34, paddingInline: 12, fontSize: 12 }}
-                >
-                  <Eye size={14} />
-                  {t("查看详情", "View detail")}
-                </button>
-                <button
-                  className="button primary"
-                  onClick={() => useForSorting(post)}
-                  style={{ minHeight: 34, paddingInline: 12, fontSize: 12 }}
-                >
-                  <Play size={14} />
-                  {t("用此榜单排序", "Sort with this")}
-                </button>
-              </div>
-            </div>
-          </div>
+            <ChevronRight size={18} />
+          </button>
         ))}
+        {!loading && !error && posts.length === 0 && <p className="empty-state">{t("广场还没有内容，快来发布第一个吧！", "The plaza is empty. Be the first to post!")}</p>}
       </div>
 
       {/* Load more */}
