@@ -86,7 +86,10 @@ export async function plazaRoute(request: Request, env: Env): Promise<Response> 
     const collectionTitle = cleanString(body.collection_title, 200);
     if (!collectionTitle) return json({ error: "invalid_collection_title" }, 400);
     const description = cleanString(body.description, 500);
-    const notes = cleanString(body.notes, 2000);
+    const notesRaw = body.notes;
+    const notes = notesRaw && typeof notesRaw === "object" && !Array.isArray(notesRaw) && Object.keys(notesRaw).length > 0
+      ? JSON.stringify(notesRaw)
+      : typeof notesRaw === "string" ? cleanString(notesRaw, 50000) : null;
     const isPublic = body.is_public === undefined || body.is_public === null ? 1 : (body.is_public ? 1 : 0);
 
     if (!Array.isArray(body.items) || body.items.length < 1) return json({ error: "invalid_items" }, 400);
