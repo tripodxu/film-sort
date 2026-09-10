@@ -99,6 +99,9 @@ export function PlazaView({ t, label, navigateTo, accountToken, openCollection, 
           <button
             key={item.value}
             className={`plaza-ability ${kindFilter === item.value ? "active" : ""}`}
+            role="tab"
+            aria-selected={kindFilter === item.value}
+            aria-label={t(item.zh, item.en)}
             onClick={() => { setKindFilter(item.value); setPosts([]); }}
           >
             <span className="plaza-ability-label">{t(item.zh, item.en)}</span>
@@ -114,6 +117,9 @@ export function PlazaView({ t, label, navigateTo, accountToken, openCollection, 
               key={item.value}
               className={`plaza-toolbar-btn ${sort === item.value ? "active" : ""}`}
               onClick={() => handleSortChange(item.value as "newest" | "hottest")}
+              aria-label={t(item.zh, item.en)}
+              role="tab"
+              aria-selected={sort === item.value}
             >
               {t(item.zh, item.en)}
             </button>

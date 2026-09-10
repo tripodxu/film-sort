@@ -232,7 +232,18 @@ export function deferWork(state: RankingState, workId: string): RankingState { c
 function replayDecision(state: RankingState, decision: RankingDecision): RankingState { const comparison = getCurrentComparison(state); if (!comparison || comparison.candidateId !== decision.candidateId || comparison.opponentId !== decision.opponentId || comparison.phase !== decision.phase) throw new Error("Decision log cannot be replayed against this ranking"); if (decision.kind === "choose") { if (!decision.preferredId) throw new Error("A choose decision is missing its preferred item"); return choosePreferred(state, decision.preferredId); } if (decision.phase === "verification") return decision.kind === "skip" ? skipCurrent(state) : deferCurrent(state); const targetId = decision.targetId ?? comparison.candidateId; return decision.kind === "skip" ? skipWork(state, targetId) : deferWork(state, targetId); }
 export function undoLastAction(state: RankingState): RankingState { if (!state.decisionLog.length) return state; let restored = createRankingState(state.sourceIds, { seed: state.seed, topN: state.topN || undefined }); for (const decision of state.decisionLog.slice(0, -1)) restored = replayDecision(restored, decision); return restored; }
 export function getRankingResult(state: RankingState): string[] { return [...state.rankedIds]; }
-export function getRankingProgress(state: RankingState): RankingProgress { const estimatedRemaining = state.completed ? 0 : Math.max(state.estimatedTotalComparisons - state.comparisonCount, state.verificationQueue.length + (state.activeVerification ? 1 : 0), 0); const comparisonFraction = state.estimatedTotalComparisons === 0 ? 0 : state.comparisonCount / state.estimatedTotalComparisons; const processedFraction = state.sourceIds.length === 0 ? 1 : state.processedCount / state.sourceIds.length; return { comparisonCount: state.comparisonCount, estimatedTotal: state.estimatedTotalComparisons, estimatedRemaining, processed: state.processedCount, total: state.sourceIds.length, fraction: state.completed ? 1 : Math.min(Math.max(comparisonFraction, processedFraction), 0.99), phase: state.phase, verificationRemaining: state.verificationQueue.length + (state.activeVerification ? 1 : 0) }; }
+export function getRankingProgress(state: RankingState): RankingProgress {
+  const remaining = state.sourceIds.length - state.processedCount;
+  // Blend: use observed rate when enough data, otherwise theoretical
+  const observedRate = state.processedCount > 2 ? state.comparisonCount / state.processedCount : null;
+  const theoreticalRate = state.sourceIds.length > 0 ? state.estimatedTotalComparisons / state.sourceIds.length : 0;
+  const rate = observedRate !== null ? 0.6 * observedRate + 0.4 * theoreticalRate : theoreticalRate;
+  const estimatedFromRate = Math.round(remaining * rate) + state.verificationQueue.length + (state.activeVerification ? 1 : 0);
+  const estimatedRemaining = state.completed ? 0 : Math.max(estimatedFromRate, 0);
+  const estimatedTotal = state.completed ? state.comparisonCount : state.comparisonCount + estimatedRemaining;
+  const fraction = state.completed ? 1 : estimatedTotal === 0 ? 0 : Math.min(Math.max(state.comparisonCount / estimatedTotal, state.processedCount / state.sourceIds.length), 0.99);
+  return { comparisonCount: state.comparisonCount, estimatedTotal, estimatedRemaining, processed: state.processedCount, total: state.sourceIds.length, fraction, phase: state.phase, verificationRemaining: state.verificationQueue.length + (state.activeVerification ? 1 : 0) };
+}
 export function serializeRankingState(state: RankingState): string { return JSON.stringify(state); }
 
 function isStringArray(value: unknown): value is string[] { return Array.isArray(value) && value.every((entry) => typeof entry === "string"); }

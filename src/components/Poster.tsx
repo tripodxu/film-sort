@@ -73,7 +73,7 @@ export function Poster({ work, kind, large = false }: { work: Artwork; kind: Med
   const url = urls.find((candidate) => !failed.has(candidate));
   const Icon = { film: Film, book: BookOpen, music: Music2, other: Library }[kind];
   return <div className={`poster ${large ? "poster-large" : "poster-small"} poster-${kind}`}>
-    {url ? <img src={imageUrl(url)} alt={`${work.title} ${kind === "film" ? "海报" : "封面"}`} referrerPolicy="no-referrer" loading={large ? "eager" : "lazy"} onError={() => { reportImageFailure(work, kind, url); setFailed((previous) => new Set([...previous, url])); }} /> :
+    {url ? <img src={imageUrl(url)} alt={`${work.title}${work.creator ? ` - ${work.creator}` : ""}${work.year ? ` (${work.year})` : ""}`} referrerPolicy="no-referrer" loading={large ? "eager" : "lazy"} onError={() => { reportImageFailure(work, kind, url); setFailed((previous) => new Set([...previous, url])); }} /> :
       <div className="cover-fallback"><Icon size={large ? 36 : 16} />{large && <span>{work.title}</span>}</div>}
   </div>;
 }
