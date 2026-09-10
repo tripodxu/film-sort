@@ -311,3 +311,7 @@ html{scroll-behavior:smooth}
 /* ===== Keyboard Hints ===== */
 kbd{display:inline-flex;align-items:center;justify-content:center;min-width:22px;height:22px;padding:0 6px;border-radius:4px;border:1px solid rgba(216,248,106,.2);background:rgba(216,248,106,.06);color:var(--accent);font-size:11px;font-weight:600;font-family:Consolas,monospace;line-height:1}
 .keyboard-hint{display:flex;align-items:center;gap:6px;color:var(--muted);font-size:12px}
+
+/* ===== Metrics Color Bars ===== */
+.metrics-wide>div{position:relative;padding-bottom:6px}
+.metrics-wide>div::after{content:'';position:absolute;bottom:0;left:0;height:3px;border-radius:2px;background:var(--accent);width:var(--metric-pct,0%);opacity:.6;transition:width .6s ease}
