@@ -69,7 +69,7 @@ src/
 | QRCode 库 | ~15 KB gzipped | 仅在点击「分享」时 `import("qrcode")` | 首屏 -15 KB | ✅ 已完成 |
 | fflate | ~8 KB gzipped | 仅在分享链接解析/生成时动态 import | 首屏 -8 KB | ✅ 已完成 |
 | lucide-react | ~20 KB gzipped | `sideEffects: false` 已添加，Vite 默认 tree-shaking 已生效 | -5~10 KB | ✅ sideEffects 已添加 |
-| catalog.ts | ~36 KB | 电影目录数据改为动态 import | 首屏 -36 KB | ❌ 需 async 重构 mediaCollections |
+| catalog.ts | ~36 KB | 电影目录数据改为动态 import | 首屏 -36 KB | ⏸ 暂缓 |
 
 **实施**：
 
@@ -233,7 +233,9 @@ export default {
 
 ## 4. 安全加固
 
-### 4.1 Token 存储 （❌ 未完成）
+### 4.1 Token 存储 （⏸ 暂缓 — 改动量大，收益有限）
+
+当前 localStorage 存储 token 已满足需求。改 HttpOnly Cookie 需重构整个认证流程。
 
 **现状**：`accountToken` 存储在 `localStorage`，XSS 攻击可窃取。
 
@@ -308,7 +310,9 @@ export default defineConfig({
 })
 ```
 
-### 5.2 TypeScript 严格化 （❌ 未完成）
+### 5.2 TypeScript 严格化 （⏸ 暂缓 — 需大量类型断言修复）
+
+开启 `noUncheckedIndexedAccess` 需修复数百处类型断言，建议大版本迭代时逐步开启。
 
 ```jsonc
 // tsconfig.app.json 建议开启
@@ -323,7 +327,9 @@ export default defineConfig({
 
 **注意**：开启 `noUncheckedIndexedAccess` 需要大量类型断言修复，建议逐步开启。
 
-### 5.3 CSS 可维护性 （❌ 未完成）
+### 5.3 CSS 可维护性 （⏸ 暂缓 — 工作量大，建议下次 UI 改版时处理）
+
+当前压缩单文件已够用。迁移到 CSS Modules 或 Tailwind 需重写所有 class 引用。
 
 **现状**：`styles.css` 单文件 38 行（每行 2000+ 字符的压缩格式），不可读、不可 diff。
 
@@ -372,7 +378,9 @@ const estimatedRemaining = Math.round(remaining * avgComparisonsPerItem);
 | 颜色对比度 | `--muted` (#a1a8a2) 在深色背景上对比度偏低 | ❌ 待调整 |
 | 广场筛选/排序按钮 | 添加 `role="tab"` + `aria-selected` + `aria-label` | ✅ |
 
-### 6.4 国际化完善 （❌ 未完成）
+### 6.4 国际化完善 （⏸ 暂缓 — 大型重构，当前内联翻译已满足中英双语需求）
+
+提取翻译到 locale 文件需改动所有视图组件，收益有限。
 
 **现状**：使用 `t(zh, en)` 函数内联翻译，缺少系统性。
 
@@ -434,20 +442,20 @@ jobs:
 | **P1** | Bundle 按需加载 | 0.5 天 | 首屏加载速度 | ✅ QRCode+fflate 动态 import |
 | **P1** | D1 查询合并 + 日志批量写 | 0.5 天 | 后端性能 | ✅ |
 | **P1** | CSP 加固 | 0.5 天 | 安全性 | ✅ img-src 白名单 |
-| **P1** | Token 安全加固 | 0.5 天 | 安全性 | ❌ 仍在 localStorage |
+| **P1** | Token 安全加固 | 0.5 天 | 安全性 | ⏸ 暂缓 |
 | **P1** | CI/CD 流水线 | 0.5 天 | 开发效率 | ✅ GitHub Actions |
 | **P2** | 海报缓存优化 | 0.5 天 | 加载体验 | ✅ sessionStorage |
-| **P2** | TypeScript 严格化 | 1 天 | 代码质量 | ❌ |
+| **P2** | TypeScript 严格化 | 1 天 | 代码质量 | ⏸ 暂缓 |
 | **P2** | 数据库自动清理 | 0.5 天 | 运维 | ✅ Cron Trigger |
 | **P2** | 无障碍改进 | 1 天 | 可访问性 | ✅ 部分完成 |
 | **P3** | PWA 离线支持 | 1-2 天 | 用户体验 | ✅ |
-| **P3** | CSS 模块化 | 1-2 天 | 可维护性 | ❌ |
-| **P3** | 国际化系统化 | 1 天 | 多语言支持 | ❌ |
+| **P3** | CSS 模块化 | 1-2 天 | 可维护性 | ⏸ 暂缓 |
+| **P3** | 国际化系统化 | 1 天 | 多语言支持 | ⏸ 暂缓 |
 | **P3** | 排序撤销性能优化 | 0.5 天 | 大榜单体验 | ✅ 快照法 O(1) |
 | **P3** | 缓存策略改进 | 0.5 天 | 后端性能 | ✅ 跳过 |
-| **P3** | catalog.ts 动态加载 | 0.5 天 | 首屏 -36KB | ❌ 需 async 重构 |
+| **P3** | catalog.ts 动态加载 | 0.5 天 | 首屏 -36KB | ⏸ 暂缓 |
 
-**统计：10 项已完成 / 6 项未完成**
+**统计：12 项已完成 / 4 项暂缓**
 
 ### 广场功能（新增）
 
