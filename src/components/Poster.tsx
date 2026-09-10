@@ -85,6 +85,6 @@ export function Poster({ work, kind, large = false }: { work: Artwork; kind: Med
   const Icon = { film: Film, book: BookOpen, music: Music2, other: Library }[kind];
   return <div className={`poster ${large ? "poster-large" : "poster-small"} poster-${kind}`}>
     {url ? <><img src={imageUrl(url)} alt={`${work.title}${work.creator ? ` - ${work.creator}` : ""}${work.year ? ` (${work.year})` : ""}`} referrerPolicy="no-referrer" loading={large ? "eager" : "lazy"} onLoad={() => setImgLoaded(true)} onError={() => { reportImageFailure(work, kind, url); setFailed((previous) => new Set([...previous, url])); }} style={imgLoaded ? undefined : { opacity: 0 }} />{!imgLoaded && <div className="poster-loading"><Icon size={large ? 24 : 12} /></div>}</> :
-      <div className="cover-fallback"><Icon size={large ? 36 : 16} />{large && <span>{work.title}</span>}</div>}
+      <div className="cover-fallback"><Icon size={large ? 36 : 16} />{large ? <span>{work.title}</span> : <span style={{ fontSize: 9, opacity: 0.7, lineHeight: 1.3, textAlign: "center", padding: "0 2px" }}>{work.title}</span>}</div>}
   </div>;
 }
