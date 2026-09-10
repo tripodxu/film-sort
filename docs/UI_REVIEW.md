@@ -69,11 +69,11 @@
 | 项目 | 位置 | 说明 |
 |------|------|------|
 | 视图切换无过渡动画 | App.tsx:305 | 添加 fade/slide CSS 过渡 |
-| Toast 无进出动画 | App.tsx:810 | 添加 opacity/transform 动画 |
+| Toast 无进出动画 | App.tsx:810 | ✅ 已添加 toastIn 滑入动画 |
 | 按钮高度不一致 | 多个文件 | minHeight: 32/34/38/44px 混用 |
-| sessionStorage 无限增长 | Poster.tsx:8-13 | 海报缓存无 LRU 或大小限制 |
+| sessionStorage 无限增长 | Poster.tsx:8-13 | ✅ 已添加 500 条上限 LRU 淘汰 |
 | 广场网格响应式冲突 | PlazaView + CSS | inline gridTemplateColumns 覆盖媒体查询 |
-| note-textarea placeholder 换行 | App.tsx:813 | 浏览器忽略 textarea placeholder 中的 \n |
+| note-textarea placeholder 换行 | App.tsx:813 | ✅ 已移除换行符 |
 | --border 变量未定义 | App.tsx:842 | ✅ 已修复为 `var(--line)` |
 | .note-textarea:focus 重复定义 | styles.css:61,63 | ✅ 已移除重复规则 |
 | 奖牌 emoji 无 aria-hidden | 多个文件 | 屏幕阅读器不一致朗读 |
