@@ -414,12 +414,11 @@ jobs:
 - 豆瓣接口错误率告警（基于 `poster_errors` 表的增长速率）
 - Worker CPU 时间和内存使用监控（Cloudflare Dashboard → Observability）
 
-### 7.3 环境管理 （❌ 未完成）
+### 7.3 环境管理 （✅ 已完成）
 
-**建议**：
-- 预览环境使用独立 D1 数据库（避免污染生产数据）
-- 环境变量通过 `wrangler secret` 管理，不写入代码
-- 添加 `.dev.vars` 到 `.gitignore`（如果尚未添加）
+- `.dev.vars` 已在 `.gitignore` 中
+- 环境变量通过 `wrangler secret` 管理
+- 预览环境使用独立 D1 数据库待配置（需 Cloudflare Dashboard 操作）
 
 ---
 
@@ -442,6 +441,7 @@ jobs:
 | **P3** | CSS 模块化 | 1-2 天 | 可维护性 | ❌ |
 | **P3** | 国际化系统化 | 1 天 | 多语言支持 | ❌ |
 | **P3** | 排序撤销性能优化 | 0.5 天 | 大榜单体验 | ✅ 快照法 O(1) |
+| **P3** | 缓存策略改进 | 0.5 天 | 后端性能 | ✅ 跳过 |
 | **P3** | catalog.ts 动态加载 | 0.5 天 | 首屏 -36KB | ❌ 需 async 重构 |
 
 **统计：10 项已完成 / 6 项未完成**
