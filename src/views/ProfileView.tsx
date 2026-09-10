@@ -1,4 +1,4 @@
-import { Download, Globe, GripVertical, ArrowDown, ArrowUp, Plus, Share2, StickyNote, Undo2, Users } from "lucide-react";
+import { Download, Globe, GripVertical, ArrowDown, ArrowUp, Link, Plus, Share2, StickyNote, Undo2, Users } from "lucide-react";
 import { Poster } from "../components/Poster";
 import { heading } from "./helpers";
 import { undoLastAction } from "../lib/ranking";
@@ -91,6 +91,7 @@ export function ProfileView({ profile, activeRanking, locale, t, label, format, 
         <select id="export-format" value={format} onChange={(event) => setFormat(event.target.value as typeof format)}>{["json", "png", "txt", "csv", "md"].map((item) => <option key={item} value={item}>{item.toUpperCase()}</option>)}</select>
         <button className="button primary" disabled={exporting} onClick={async () => { setExporting(true); try { await exportProfile(); } finally { setExporting(false); } }}><Download size={16} />{exporting ? t("导出中…", "Exporting…") : t("导出全部维度", "Export all media")}</button>
         <button className="button secondary" onClick={share}><Share2 size={16} />{t("复制比较链接", "Copy comparison link")}</button>
+        <button className="button secondary" onClick={() => void generateShareLink()}><Link size={16} />{t("复制分享链接", "Copy share link")}</button>
         {shareUrl && <div className="share-output"><input aria-label={t("比较链接", "Comparison link")} readOnly value={shareUrl} onFocus={(event) => event.target.select()} />{qrUrl && <img src={qrUrl} alt={t("比较二维码", "Comparison QR code")} />}</div>}
         <button className="button quiet" onClick={() => navigateTo("home")}><Plus size={16} />{t("添加另一个维度", "Add another medium")}</button>
         <button className="button quiet" onClick={() => navigateTo("compare")}><Users size={16} />{peer ? t("继续与好友比较", "Continue comparison") : t("与他人比较", "Compare with someone")}</button>
