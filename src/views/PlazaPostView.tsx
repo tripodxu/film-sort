@@ -1,21 +1,11 @@
 import { useEffect, useState } from "react";
 import { ArrowLeft, Heart, MessageCircle, Play, Trash2, Send } from "lucide-react";
 import { Poster } from "../components/Poster";
+import { ExpandableNote } from "../components/ExpandableNote";
 import { heading } from "./helpers";
 import type { PlazaPostViewProps, PlazaPost, PlazaComment } from "./types";
 import type { MediaKind } from "../data/media";
 import type { ArtisticProfile, RankedArtwork } from "../lib/profile";
-
-function NoteEntry({ scope, parts, value, t, openNoteView }: { scope: string; parts: string[]; value: string; t: (zh: string, en: string) => string; openNoteView?: (title: string, text: string, posterUrls?: readonly string[]) => void }) {
-  const isLong = value.length > 30;
-  const label = scope === "profile" ? t("画像", "Profile") : scope === "ranking" ? t("榜单", "Ranking") : parts.slice(2).join(":") || t("作品", "Work");
-  return (
-    <div onClick={() => isLong && openNoteView?.(label, value)} role={isLong && openNoteView ? "button" : undefined} tabIndex={isLong && openNoteView ? 0 : undefined} onKeyDown={(e) => { if ((e.key === "Enter" || e.key === " ") && isLong && openNoteView) { e.preventDefault(); openNoteView(label, value); } }} style={{ marginBottom: 8, padding: "8px 12px", borderRadius: 8, background: "rgba(121,217,174,.04)", borderLeft: "2px solid rgba(216,248,106,.2)", cursor: isLong && openNoteView ? "pointer" : undefined }}>
-      <span style={{ fontSize: 10, color: "var(--muted)", textTransform: "uppercase", letterSpacing: ".3px" }}>{label}</span>
-      <p style={{ fontSize: 13, color: "#d9e6da", lineHeight: 1.65, margin: "3px 0 0", whiteSpace: "pre-wrap" }}>📝 {isLong ? value.slice(0, 30) + "…" : value}{isLong && <span style={{ fontSize: 11, marginLeft: 4, textDecoration: "underline", color: "var(--accent)" }}>{t("查看全文", "Read more")}</span>}</p>
-    </div>
-  );
-}
 
 export function PlazaPostView({ postId, t, label, navigateTo, accountToken, accountNickname, openCollection, profile, setNotice, setPeer, openArtworkDetail, openNoteView }: PlazaPostViewProps) {
   const [post, setPost] = useState<PlazaPost | null>(null);
@@ -27,6 +17,17 @@ export function PlazaPostView({ postId, t, label, navigateTo, accountToken, acco
   const [commentText, setCommentText] = useState("");
   const [commentBusy, setCommentBusy] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState(false);
+
+  // Parse notes from post
+  const parsedNotes: Record<string, string> = (() => {
+    if (!post?.notes) return {};
+    try {
+      const raw = typeof post.notes === "string" ? JSON.parse(post.notes) : post.notes;
+      return raw && typeof raw === "object" ? raw : {};
+    } catch { return {}; }
+  })();
+  const rankingNoteKey = post ? `ranking:${post.kind}:${post.collection_title}` : "";
+  const hasNotes = Object.keys(parsedNotes).length > 0;
   const [replyTo, setReplyTo] = useState<number | null>(null);
   const [replyText, setReplyText] = useState("");
 
@@ -218,32 +219,19 @@ export function PlazaPostView({ postId, t, label, navigateTo, accountToken, acco
               <div>
                 <strong>{work.title}</strong>
                 <small>{work.creator} {work.year}</small>
+                {parsedNotes[`work:${post.kind}:${work.id}`] && <ExpandableNote text={parsedNotes[`work:${post.kind}:${work.id}`]} onView={openNoteView ? (text) => openNoteView(work.title, text, work.posterUrls) : undefined} />}
               </div>
             </li>
           ))}
         </ol>
       </div>
 
-      {/* Notes — parsed from JSON */}
-      {post.notes && (() => {
-        let parsed: Record<string, string> = {};
-        try { parsed = typeof post.notes === "string" ? JSON.parse(post.notes) : post.notes; } catch { return null; }
-        const entries = Object.entries(parsed).filter(([, v]) => v?.trim());
-        if (!entries.length) return null;
-        return (
-          <div style={{ margin: "16px 0" }}>
-            <h3 style={{ fontSize: 13, fontWeight: 600, color: "var(--accent)", marginBottom: 10, display: "flex", alignItems: "center", gap: 6 }}>📝 {t("批注", "Notes")}</h3>
-            {entries.map(([key, val]) => {
-              const parts = key.split(":");
-              const scope = parts[0];
-              const isLong = val.length > 120;
-              return (
-                <NoteEntry key={key} scope={scope} parts={parts} value={val} t={t} openNoteView={openNoteView} />
-              );
-            })}
-          </div>
-        );
-      })()}
+      {/* Ranking-level note */}
+      {parsedNotes[rankingNoteKey] && (
+        <div style={{ margin: "16px 0", padding: "12px 16px", borderRadius: 10, background: "rgba(121,217,174,.05)", borderLeft: "2px solid rgba(216,248,106,.2)" }}>
+          <ExpandableNote text={parsedNotes[rankingNoteKey]} onView={openNoteView ? (text) => openNoteView(post!.collection_title, text) : undefined} style={{ margin: 0 }} />
+        </div>
+      )}
 
       {/* Actions */}
       <div style={{ display: "flex", gap: 12, flexWrap: "wrap", margin: "24px 0" }}>

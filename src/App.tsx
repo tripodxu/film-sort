@@ -584,9 +584,20 @@ export default function App() {
     const name = profileName.trim() || t("我的艺术人格", "My artistic profile");
     const singleProfile: ArtisticProfile = { version: 2, profileId: crypto.randomUUID(), profileName: name, updatedAt: new Date().toISOString(), rankings: [{ ...ranking, profileName: name }] };
     try { parseProfile(singleProfile); } catch { setNotice(t("数据格式错误。", "Invalid profile data.")); return; }
-    const hasAnyNotes = Object.keys(notes).length > 0;
+    // 只保留该榜单相关的批注
+    const workIds = new Set(ranking.items.map((item) => item.id));
+    const rankingNotes: Record<string, string> = {};
+    for (const [key, val] of Object.entries(notes)) {
+      if (!val?.trim()) continue;
+      if (key === `ranking:${ranking.kind}:${ranking.collectionTitle}`) rankingNotes[key] = val;
+      else if (key.startsWith(`work:${ranking.kind}:`)) {
+        const workId = key.slice(`work:${ranking.kind}:`.length);
+        if (workIds.has(workId)) rankingNotes[key] = val;
+      }
+    }
+    const hasNotes = Object.keys(rankingNotes).length > 0;
     const shareData: Record<string, unknown> = { profile: singleProfile };
-    if (hasAnyNotes) shareData.notes = notes;
+    if (hasNotes) shareData.notes = rankingNotes;
     setBusy(true);
     try {
       const response = await fetch("/api/share", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(shareData) });
@@ -600,10 +611,21 @@ export default function App() {
   }
   async function publishToPlaza(ranking: RankingExport, description?: string) {
     if (!accountToken) { setNotice(t("请先登录。", "Please sign in first.")); return; }
+    // 只保留该榜单相关的批注
+    const workIds = new Set(ranking.items.map((item) => item.id));
+    const rankingNotes: Record<string, string> = {};
+    for (const [key, val] of Object.entries(notes)) {
+      if (!val?.trim()) continue;
+      if (key === `ranking:${ranking.kind}:${ranking.collectionTitle}`) rankingNotes[key] = val;
+      else if (key.startsWith(`work:${ranking.kind}:`)) {
+        const workId = key.slice(`work:${ranking.kind}:`.length);
+        if (workIds.has(workId)) rankingNotes[key] = val;
+      }
+    }
+    const hasNotes = Object.keys(rankingNotes).length > 0;
     setBusy(true);
     try {
-      const hasAnyNotes = Object.keys(notes).length > 0;
-      const response = await fetch("/api/plaza/posts", { method: "POST", headers: { "content-type": "application/json", authorization: `Bearer ${accountToken}` }, body: JSON.stringify({ post_type: "ranking", kind: ranking.kind, collection_title: ranking.collectionTitle, description: description?.trim() || null, items: ranking.items, notes: hasAnyNotes ? notes : null, item_count: ranking.items.length }) });
+      const response = await fetch("/api/plaza/posts", { method: "POST", headers: { "content-type": "application/json", authorization: `Bearer ${accountToken}` }, body: JSON.stringify({ post_type: "ranking", kind: ranking.kind, collection_title: ranking.collectionTitle, description: description?.trim() || null, items: ranking.items, notes: hasNotes ? rankingNotes : null, item_count: ranking.items.length }) });
       const data = await response.json() as { id?: number; error?: string };
       if (response.ok && data.id) setNotice(t("已发布到广场！", "Published to plaza!"));
       else setNotice(t("发布失败。", "Publish failed."));
