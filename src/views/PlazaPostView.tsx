@@ -6,16 +6,30 @@ import type { PlazaPostViewProps, PlazaPost, PlazaComment } from "./types";
 import type { MediaKind } from "../data/media";
 import type { ArtisticProfile, RankedArtwork } from "../lib/profile";
 
-function NoteEntry({ scope, parts, value, isLong, t }: { scope: string; parts: string[]; value: string; isLong: boolean; t: (zh: string, en: string) => string }) {
-  const [expanded, setExpanded] = useState(false);
-  const show = !isLong || expanded;
+function NoteEntry({ scope, parts, value, t }: { scope: string; parts: string[]; value: string; t: (zh: string, en: string) => string }) {
+  const [showModal, setShowModal] = useState(false);
+  const isLong = value.length > 30;
   const label = scope === "profile" ? t("画像", "Profile") : scope === "ranking" ? t("榜单", "Ranking") : parts.slice(2).join(":") || t("作品", "Work");
   return (
-    <div style={{ marginBottom: 8, padding: "8px 12px", borderRadius: 8, background: "rgba(121,217,174,.04)", borderLeft: "2px solid rgba(216,248,106,.2)" }}>
-      <span style={{ fontSize: 10, color: "var(--muted)", textTransform: "uppercase", letterSpacing: ".3px" }}>{label}</span>
-      <p style={{ fontSize: 13, color: "#d9e6da", lineHeight: 1.65, margin: "3px 0 0", whiteSpace: "pre-wrap" }}>{show ? value : value.slice(0, 120) + "…"}</p>
-      {isLong && <button className="text-button" onClick={() => setExpanded(!expanded)} style={{ fontSize: 11, color: "var(--accent)", marginTop: 2 }}>{expanded ? t("收起", "Collapse") : t("展开全文", "Expand")}</button>}
-    </div>
+    <>
+      <div onClick={() => isLong && setShowModal(true)} style={{ marginBottom: 8, padding: "8px 12px", borderRadius: 8, background: "rgba(121,217,174,.04)", borderLeft: "2px solid rgba(216,248,106,.2)", cursor: isLong ? "pointer" : undefined }}>
+        <span style={{ fontSize: 10, color: "var(--muted)", textTransform: "uppercase", letterSpacing: ".3px" }}>{label}</span>
+        <p style={{ fontSize: 13, color: "#d9e6da", lineHeight: 1.65, margin: "3px 0 0", whiteSpace: "pre-wrap" }}>📝 {isLong ? value.slice(0, 30) + "…" : value}{isLong && <span style={{ fontSize: 11, marginLeft: 4, textDecoration: "underline", color: "var(--accent)" }}>{t("查看全文", "Read more")}</span>}</p>
+      </div>
+      {showModal && (
+        <div className="modal-backdrop" onClick={() => setShowModal(false)}>
+          <section className="note-modal" role="dialog" aria-modal="true" onClick={(event) => event.stopPropagation()}>
+            <div className="note-modal-bg" />
+            <div className="note-modal-content">
+              <span className="eyebrow">{label.toUpperCase()}</span>
+              <h2>{t("批注", "Note")}</h2>
+              <p style={{ fontSize: 15, color: "#d9e6da", lineHeight: 1.8, whiteSpace: "pre-wrap" }}>{value}</p>
+              <div className="guide-modal-footer"><button className="button primary" onClick={() => setShowModal(false)}>{t("关闭", "Close")}</button></div>
+            </div>
+          </section>
+        </div>
+      )}
+    </>
   );
 }
 
@@ -237,7 +251,7 @@ export function PlazaPostView({ postId, t, label, navigateTo, accountToken, acco
               const scope = parts[0];
               const isLong = val.length > 120;
               return (
-                <NoteEntry key={key} scope={scope} parts={parts} value={val} isLong={isLong} t={t} />
+                <NoteEntry key={key} scope={scope} parts={parts} value={val} t={t} />
               );
             })}
           </div>

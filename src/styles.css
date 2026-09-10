@@ -168,14 +168,14 @@ body{background:#080a0a;color:#edf2e9}.app-shell{min-height:100svh;background:#0
 .plaza-sticker-compact .plaza-sticker-btn{width:26px;height:26px}
 .plaza-sticker-compact .plaza-sticker-arrow{display:none}
 /* ===== Details/Summary (tech modal + notes) ===== */
-details{border:1px solid var(--line);border-radius:10px;padding:0;margin-bottom:8px;background:rgba(20,27,25,.3);overflow:hidden}
-details summary{padding:14px 18px;font-size:14px;font-weight:600;color:#eef4ed;cursor:pointer;list-style:none;display:flex;align-items:center;gap:8px;transition:background .15s ease}
-details summary:hover{background:rgba(216,248,106,.04)}
+details{border:1px solid rgba(216,248,106,.1);border-radius:12px;padding:0;margin-bottom:10px;background:rgba(15,20,17,.6);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);overflow:hidden;transition:border-color .2s ease}
+details summary{padding:16px 20px;font-size:14px;font-weight:600;color:#eef4ed;cursor:pointer;list-style:none;display:flex;align-items:center;gap:10px;transition:background .15s ease}
+details summary:hover{background:rgba(216,248,106,.06)}
 details summary::-webkit-details-marker{display:none}
 details summary::before{content:"▸";font-size:12px;color:var(--accent);transition:transform .2s ease;flex-shrink:0}
-details[open] summary{border-bottom:1px solid var(--line)}
+details[open] summary{border-bottom:1px solid rgba(216,248,106,.1)}
 details[open] summary::before{transform:rotate(90deg)}
-details > div, details > .tech-body{padding:16px 18px}
+details > div, details > .tech-body{padding:18px 20px}
 
 /* ===== Publish Burst Animation ===== */
 .publish-burst{position:absolute;top:50%;left:50%;pointer-events:none;z-index:10}
@@ -183,9 +183,19 @@ details > div, details > .tech-body{padding:16px 18px}
 @keyframes publish-fly{0%{transform:translate(-50%,-50%) rotate(var(--angle,0deg)) translateY(0) scale(1);opacity:1}60%{opacity:1}100%{transform:translate(-50%,-50%) rotate(var(--angle,0deg)) translateY(-40px) translateX(20px) scale(0);opacity:0}}
 
 /* ===== Threaded Comments ===== */
-.comment-item{padding:10px 0;border-bottom:1px solid var(--line)}
+.comment-item{padding:12px 0;border-bottom:1px solid rgba(216,248,106,.08)}
 .comment-item:last-child{border-bottom:none}
 .comment-item-header{display:flex;align-items:center;gap:8px;margin-bottom:4px}
 .comment-author{font-size:13px;font-weight:600;color:#eef4ed}
 .comment-time{font-size:11px;color:var(--muted)}
 .comment-content{font-size:13px;color:#d9e6da;line-height:1.6;margin:0}
+
+/* ===== Ranking Detail Modal Polish ===== */
+.rank-detail-dialog{border-radius:16px;border:1px solid rgba(216,248,106,.12);background:rgba(12,16,14,.95);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);box-shadow:0 20px 60px rgba(0,0,0,.4)}
+.rank-detail-dialog .ranking-list li{transition:background .15s ease}
+.rank-detail-dialog .ranking-list li:hover{background:rgba(216,248,106,.03)}
+/* ===== Profile Detail Polish ===== */
+.profile-layout section{border:1px solid rgba(216,248,106,.08);border-radius:14px;padding:20px;background:rgba(15,20,17,.4)}
+.profile-layout aside{border:1px solid rgba(216,248,106,.08);border-radius:14px;padding:20px;background:rgba(15,20,17,.4)}
+/* ===== Publish Modal ===== */
+.publish-modal{max-width:520px;max-height:80vh;overflow-y:auto}

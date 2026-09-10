@@ -1,13 +1,9 @@
-import { useState } from "react";
-
-export function ExpandableNote({ text, maxLength = 100, style }: { text: string; maxLength?: number; style?: React.CSSProperties }) {
-  const [expanded, setExpanded] = useState(false);
+export function ExpandableNote({ text, maxLength = 30, onExpand, style }: { text: string; maxLength?: number; onExpand?: () => void; style?: React.CSSProperties }) {
   const isLong = text.length > maxLength;
-  const show = !isLong || expanded;
   return (
-    <p style={{ fontSize: 12, color: "var(--accent)", marginTop: 4, lineHeight: 1.5, opacity: 0.85, whiteSpace: "pre-wrap", ...style }}>
-      📝 {show ? text : text.slice(0, maxLength) + "…"}
-      {isLong && <button onClick={(e) => { e.stopPropagation(); setExpanded(!expanded); }} style={{ background: "none", border: "none", color: "var(--accent)", cursor: "pointer", fontSize: 11, marginLeft: 4, textDecoration: "underline" }}>{expanded ? "收起" : "展开"}</button>}
+    <p onClick={(e) => { if (isLong && onExpand) { e.stopPropagation(); onExpand(); } }} style={{ fontSize: 12, color: "var(--accent)", marginTop: 4, lineHeight: 1.5, opacity: 0.85, whiteSpace: "pre-wrap", cursor: isLong && onExpand ? "pointer" : undefined, ...style }}>
+      📝 {isLong ? text.slice(0, maxLength) + "…" : text}
+      {isLong && onExpand && <span style={{ fontSize: 11, marginLeft: 4, textDecoration: "underline" }}>查看全文</span>}
     </p>
   );
 }

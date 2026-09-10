@@ -12,12 +12,12 @@ export function ProfileView({ profile, activeRanking, locale, t, label, format, 
   const isRenamingProfile = editingRankIdx === profileRankIdx;
   const isReordering = reorderMode === profileRankIdx;
   const [publishDesc, setPublishDesc] = useState("");
-  const [showPublishInput, setShowPublishInput] = useState(false);
+  const [showPublishModal, setShowPublishModal] = useState(false);
   const [publishBurst, setPublishBurst] = useState(false);
 
   function handlePublish() {
     publishToPlaza(activeRanking, publishDesc);
-    setShowPublishInput(false);
+    setShowPublishModal(false);
     setPublishDesc("");
     setPublishBurst(true);
     setTimeout(() => setPublishBurst(false), 1200);
@@ -51,7 +51,7 @@ export function ProfileView({ profile, activeRanking, locale, t, label, format, 
             <button className="text-button" onClick={() => { const works = activeRanking.items.map(item => ({ id: item.id, title: item.title, subtitle: item.subtitle, creator: item.creator, year: item.year, posterUrls: item.posterUrls })); openCollection({ id: `rerank-${activeRanking.profileId}`, kind: activeRanking.kind, source: "custom", title: activeRanking.collectionTitle, description: "", topN: activeRanking.items.length, works }); }} style={{ fontSize: 12, color: "var(--accent)" }}>{t("重新排序", "Re-rank")}</button>
             <button className="text-button" onClick={() => void shareSingleRanking(activeRanking)} style={{ fontSize: 12, color: "var(--accent)" }}>{t("比较链接", "Compare link")}</button>
             <button className="text-button" onClick={() => void generateShareLink(activeRanking)} style={{ fontSize: 12, color: "var(--accent)" }}>{t("分享链接", "Share link")}</button>
-            {accountToken && !showPublishInput && <button className="text-button" onClick={() => setShowPublishInput(true)} style={{ fontSize: 12, color: "var(--accent)" }}><Globe size={12} style={{ verticalAlign: "middle", marginRight: 3 }} />{t("发布到广场", "Publish to plaza")}</button>}{accountToken && showPublishInput && <div style={{ display: "flex", gap: 6, alignItems: "center" }}><input type="text" value={publishDesc} onChange={(e) => setPublishDesc(e.target.value)} placeholder={t("添加描述（可选）", "Add description (optional)")} style={{ fontSize: 12, padding: "3px 8px", minHeight: "auto", width: 180 }} autoFocus onKeyDown={(e) => { if (e.key === "Enter") handlePublish(); if (e.key === "Escape") { setShowPublishInput(false); setPublishDesc(""); } }} /><button className="text-button" onClick={handlePublish} style={{ fontSize: 12, color: "var(--accent)", position: "relative" }}>{t("发布", "Publish")}{publishBurst && <span className="publish-burst">{Array.from({ length: 12 }).map((_, i) => { const colors = ["var(--accent)", "#4ade80", "#818cf8", "#f472b6", "#facc15"]; return <span key={i} className="publish-particle" style={{ "--angle": i * 30 + "deg", "--delay": i * 0.03 + "s", "--color": colors[i % 5] } as any} />; })}</span>}</button><button className="text-button" onClick={() => { setShowPublishInput(false); setPublishDesc(""); }} style={{ fontSize: 12, color: "var(--muted)" }}>✕</button></div>}
+            {accountToken && <button className="text-button" onClick={() => setShowPublishModal(true)} style={{ fontSize: 12, color: "var(--accent)", position: "relative" }}><Globe size={12} style={{ verticalAlign: "middle", marginRight: 3 }} />{t("发布到广场", "Publish to plaza")}{publishBurst && <span className="publish-burst">{Array.from({ length: 12 }).map((_, i) => { const colors = ["var(--accent)", "#4ade80", "#818cf8", "#f472b6", "#facc15"]; return <span key={i} className="publish-particle" style={{ "--angle": i * 30 + "deg", "--delay": i * 0.03 + "s", "--color": colors[i % 5] } as any} />; })}</span>}</button>}
             {!isReordering && <button className="text-button" onClick={() => startReorder(profileRankIdx)} style={{ fontSize: 12, color: "var(--accent)" }}>{t("手动调整", "Manual order")}</button>}
           </div>
         </div>
@@ -95,6 +95,30 @@ export function ProfileView({ profile, activeRanking, locale, t, label, format, 
         {ranking?.completed && collection?.kind === activeRanking.kind && <button className="button quiet" onClick={() => { setRanking(undoLastAction(ranking)); navigateTo("sorting"); }}><Undo2 size={16} />{t("返回最后一次取舍", "Revisit last choice")}</button>}
       </aside>
     </div>
+
+    {/* Publish to Plaza Modal */}
+    {showPublishModal && (
+      <div className="modal-backdrop" onClick={() => setShowPublishModal(false)}>
+        <section className="note-modal" role="dialog" aria-modal="true" onClick={(event) => event.stopPropagation()} onKeyDown={(event) => { if (event.key === "Escape") setShowPublishModal(false); }}>
+          <div className="note-modal-content">
+            <span className="eyebrow">PLAZA</span>
+            <h2>{t("发布到广场", "Publish to Plaza")}</h2>
+            <p style={{ fontSize: 13, color: "var(--muted)", marginBottom: 12, lineHeight: 1.7 }}>
+              {t(`将「${activeRanking.collectionTitle}」发布到文化广场，其他用户可以看到、点赞、留言和使用你的榜单排序。`, `Publish "${activeRanking.collectionTitle}" to the Culture Plaza. Others can see, like, comment, and sort with your ranking.`)}
+            </p>
+            <textarea className="note-textarea" value={publishDesc} onChange={(e) => setPublishDesc(e.target.value)} placeholder={t("添加描述，让其他人了解你的榜单…（可选）\n\n例如：这是我看过的最好的华语电影 Top 10", "Add a description to help others understand your ranking… (optional)\n\nFor example: My top 10 Chinese films of all time")} rows={5} autoFocus />
+            <div className="guide-modal-footer">
+              <button className="button secondary" onClick={() => { setShowPublishModal(false); setPublishDesc(""); }}>{t("取消", "Cancel")}</button>
+              <button className="button primary" onClick={handlePublish} style={{ position: "relative" }}>
+                <Globe size={14} style={{ marginRight: 4 }} />
+                {t("发布", "Publish")}
+                {publishBurst && <span className="publish-burst">{Array.from({ length: 12 }).map((_, i) => { const colors = ["var(--accent)", "#4ade80", "#818cf8", "#f472b6", "#facc15"]; return <span key={i} className="publish-particle" style={{ "--angle": i * 30 + "deg", "--delay": i * 0.03 + "s", "--color": colors[i % 5] } as any} />; })}</span>}
+              </button>
+            </div>
+          </div>
+        </section>
+      </div>
+    )}
   </>;
 }
 

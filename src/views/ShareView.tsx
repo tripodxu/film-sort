@@ -33,7 +33,7 @@ export function ShareView({ peer, t, label, navigateTo, openCollection, profile,
                 </div>
 
                 {/* Notes */}
-                {notes[noteKey] && <ExpandableNote text={notes[noteKey]} style={{ marginBottom: 8 }} />}
+                {notes[noteKey] && <ExpandableNote text={notes[noteKey]} maxLength={30} style={{ marginBottom: 8 }} />}
 
                 {/* Ranking list */}
                 <ol className="ranking-list">
@@ -56,7 +56,7 @@ export function ShareView({ peer, t, label, navigateTo, openCollection, profile,
                         <div>
                           <strong>{work.title}</strong>
                           <small>{work.creator} {work.year}</small>
-                          {workNote && <ExpandableNote text={workNote} />}
+                          {workNote && <ExpandableNote text={workNote} maxLength={30} />}
                         </div>
                       </li>
                     );
@@ -71,7 +71,7 @@ export function ShareView({ peer, t, label, navigateTo, openCollection, profile,
       {/* Profile-level notes */}
       {notes[`profile:${peer.profileId}`] && (
         <div style={{ margin: "16px 0", padding: "12px 16px", borderRadius: 8, background: "rgba(121,217,174,.06)", border: "1px solid var(--line)" }}>
-          <ExpandableNote text={notes[`profile:${peer.profileId}`]} style={{ margin: 0 }} />
+          <ExpandableNote text={notes[`profile:${peer.profileId}`]} maxLength={30} style={{ margin: 0 }} />
         </div>
       )}
 
