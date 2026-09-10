@@ -1,0 +1,16 @@
+{
+  "name": "ART/RANK",
+  "short_name": "ART/RANK",
+  "description": "在两件作品之间，找到你真正想留下的那一个",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#080a0a",
+  "theme_color": "#d8f86a",
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml"
+    }
+  ]
+}

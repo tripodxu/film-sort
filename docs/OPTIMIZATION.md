@@ -350,13 +350,16 @@ const remaining = sourceIds.length - processedCount;
 const estimatedRemaining = Math.round(remaining * avgComparisonsPerItem);
 ```
 
-### 6.2 PWA 离线支持 （❌ 未完成）
+### 6.2 PWA 离线支持 （✅ 已完成）
 
-**建议**：
-- 使用 `vite-plugin-pwa` 添加 Service Worker
-- 缓存静态资源（JS/CSS/字体/图标）
-- 排序中断后可离线恢复草稿
-- 添加「安装到主屏幕」提示
+- `public/manifest.json`：PWA 清单文件（名称、主题色、图标）
+- `public/sw.js`：Service Worker 缓存静态资源（JS/CSS/HTML/图片）
+  - Cache-first 策略：优先读取缓存，回退到网络
+  - 导航请求离线回退到 `/index.html`（SPA 路由兼容）
+  - API 请求不缓存（`/api/*` 跳过）
+  - 新版本自动清除旧缓存
+- `index.html`：注册 Service Worker + 链接 manifest
+- 支持「添加到主屏幕」（standalone 模式）
 
 ### 6.3 无障碍改进 （✅ 部分完成）
 
@@ -437,7 +440,7 @@ jobs:
 | **P2** | TypeScript 严格化 | 1 天 | 代码质量 | ❌ |
 | **P2** | 数据库自动清理 | 0.5 天 | 运维 | ✅ Cron Trigger |
 | **P2** | 无障碍改进 | 1 天 | 可访问性 | ✅ 部分完成 |
-| **P3** | PWA 离线支持 | 1-2 天 | 用户体验 | ❌ |
+| **P3** | PWA 离线支持 | 1-2 天 | 用户体验 | ✅ |
 | **P3** | CSS 模块化 | 1-2 天 | 可维护性 | ❌ |
 | **P3** | 国际化系统化 | 1 天 | 多语言支持 | ❌ |
 | **P3** | 排序撤销性能优化 | 0.5 天 | 大榜单体验 | ✅ 快照法 O(1) |
