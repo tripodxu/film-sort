@@ -194,6 +194,7 @@ export function PlazaView({ t, label, navigateTo, accountToken, openCollection, 
               </div>
               <div className="plaza-sticker-info">
                 <h3 className="plaza-sticker-title">{post.collection_title}</h3>
+                {post.notes && (() => { try { const n = typeof post.notes === "string" ? JSON.parse(post.notes) : post.notes; return Object.keys(n).length > 0 ? <span style={{ fontSize: 10, color: "var(--accent)", opacity: 0.7 }}>📝 {Object.keys(n).length}{t("条批注", " notes")}</span> : null; } catch { return null; } })()}
                 <div className="plaza-sticker-meta">
                   <span className="plaza-sticker-author">{post.nickname || t("匿名用户", "Anonymous")}</span>
                   <span className={`plaza-sticker-kind kind-${post.kind}`}>{label(post.kind as MediaKind)}</span>

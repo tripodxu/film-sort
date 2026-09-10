@@ -141,6 +141,7 @@ export interface ShareViewProps {
   profile: ArtisticProfile | null;
   notes: Record<string, string>;
   openArtworkDetail: (work: RankedArtwork, kind: MediaKind) => void;
+  openNoteView?: (title: string, text: string, posterUrls?: readonly string[]) => void;
 }
 
 export interface PlazaPost {
@@ -192,6 +193,7 @@ export interface PlazaPostViewProps {
   setNotice: (msg: string) => void;
   setPeer: (peer: ArtisticProfile | null) => void;
   openArtworkDetail: (work: RankedArtwork, kind: MediaKind) => void;
+  openNoteView?: (title: string, text: string, posterUrls?: readonly string[]) => void;
 }
 
 export interface CompareViewProps {
