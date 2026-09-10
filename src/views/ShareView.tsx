@@ -50,6 +50,9 @@ export function ShareView({ peer, t, label, navigateTo, openCollection, profile,
                           className="ranking-card-poster"
                           style={{ cursor: "pointer" }}
                           onClick={() => openArtworkDetail(work, entry.kind)}
+                          role="button"
+                          tabIndex={0}
+                          onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); openArtworkDetail(work, entry.kind); } }}
                         >
                           <Poster work={work} kind={entry.kind} />
                         </div>

@@ -57,7 +57,7 @@
 ### 2.6 键盘可访问性缺陷 ✅ 部分修复
 - 广场卡片 `<div onClick>` ✅ 已添加 `tabIndex`、`role="button"`、`onKeyDown`
 - 批注条目 `<div onClick>` ✅ 已添加 `tabIndex`、`role="button"`、`onKeyDown`
-- 海报点击 `<div onClick>` ❌ 待修复
+- 海报点击 `<div onClick>` ✅ 已添加 `tabIndex`、`role="button"`、`onKeyDown`（PlazaPostView、ShareView、CompareRankDetail）
 
 ### 2.7 useEffect 缺少依赖数组 ✅ 已修复
 已添加依赖 `[view, comparison, accountOpen, act]`。

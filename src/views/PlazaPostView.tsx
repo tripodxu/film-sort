@@ -209,6 +209,9 @@ export function PlazaPostView({ postId, t, label, navigateTo, accountToken, acco
                 className="ranking-card-poster"
                 style={{ cursor: "pointer" }}
                 onClick={() => openArtworkDetail(work, post.kind as MediaKind)}
+                role="button"
+                tabIndex={0}
+                onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); openArtworkDetail(work, post.kind as MediaKind); } }}
               >
                 <Poster work={work} kind={post.kind as MediaKind} />
               </div>
