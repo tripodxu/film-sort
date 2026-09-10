@@ -176,3 +176,8 @@ details summary::before{content:"▸";font-size:12px;color:var(--accent);transit
 details[open] summary{border-bottom:1px solid var(--line)}
 details[open] summary::before{transform:rotate(90deg)}
 details > div, details > .tech-body{padding:16px 18px}
+
+/* ===== Publish Burst Animation ===== */
+.publish-burst{position:absolute;top:50%;left:50%;pointer-events:none;z-index:10}
+.publish-particle{position:absolute;width:6px;height:6px;border-radius:50%;background:var(--color,var(--accent));animation:publish-fly .8s cubic-bezier(.25,.46,.45,.94) var(--delay,0s) both}
+@keyframes publish-fly{0%{transform:translate(-50%,-50%) rotate(var(--angle,0deg)) translateY(0) scale(1);opacity:1}60%{opacity:1}100%{transform:translate(-50%,-50%) rotate(var(--angle,0deg)) translateY(-40px) translateX(20px) scale(0);opacity:0}}
