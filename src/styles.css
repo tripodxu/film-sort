@@ -317,7 +317,7 @@ kbd{display:inline-flex;align-items:center;justify-content:center;min-width:22px
 .metrics-wide>div::after{content:'';position:absolute;bottom:0;left:0;height:3px;border-radius:2px;background:var(--accent);width:var(--metric-pct,0%);opacity:.6;transition:width .6s ease}
 
 /* ===== Note Reader (Amado-inspired glass panel) ===== */
-.note-reader{position:relative;max-width:680px;max-height:82vh;display:flex;flex-direction:column;overflow:hidden;background:rgba(0,0,0,.65);backdrop-filter:blur(16px) saturate(160%);-webkit-backdrop-filter:blur(16px) saturate(160%);border:1px solid rgba(255,255,255,.1);border-radius:0;box-shadow:0 32px 80px rgba(0,0,0,.5)}
+.note-reader{position:relative;max-width:800px;max-height:88vh;display:flex;flex-direction:column;overflow:hidden;background:rgba(0,0,0,.65);backdrop-filter:blur(16px) saturate(160%);-webkit-backdrop-filter:blur(16px) saturate(160%);border:1px solid rgba(255,255,255,.1);border-radius:0;box-shadow:0 32px 80px rgba(0,0,0,.5)}
 .note-reader::after{content:"";position:absolute;bottom:8px;right:8px;width:12px;height:12px;border-right:2px solid rgba(255,255,255,.25);border-bottom:2px solid rgba(255,255,255,.25);pointer-events:none;z-index:2}
 .note-reader-bg{position:absolute;inset:0;background-size:cover;background-position:center;filter:blur(32px) brightness(.2) saturate(1.2);transform:scale(1.3);z-index:0;opacity:.5}
 .note-reader-header{position:relative;z-index:1;padding:40px 48px 20px;text-align:center;flex-shrink:0}
