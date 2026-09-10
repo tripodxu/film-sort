@@ -98,7 +98,7 @@ body{background:#080a0a;color:#edf2e9}.app-shell{min-height:100svh;background:#0
 .toast{animation:toastIn .25s ease both}
 
 /* ===== Plaza Grid ===== */
-.plaza-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin-top:16px}
+@media(max-width:800px){.plaza-grid{grid-template-columns:1fr!important}}.plaza-grid{display:grid;grid-template-columns:repeat(var(--plaza-cols,2),minmax(0,1fr));gap:12px;margin-top:16px}
 @media(max-width:800px){.plaza-grid{grid-template-columns:1fr}}
 
 /* ===== Plaza Header ===== */

@@ -140,7 +140,7 @@ export function PlazaView({ t, label, navigateTo, accountToken, openCollection, 
 
       {/* Loading skeleton */}
       {initialLoading && (
-        <div className="plaza-grid" style={{ gridTemplateColumns: `repeat(${colCount}, minmax(0, 1fr))` }}>
+        <div className="plaza-grid" style={{ "--plaza-cols": colCount } as React.CSSProperties}>
           {Array.from({ length: 6 }).map((_, i) => (
             <div key={i} className="plaza-sticker plaza-skeleton">
               <div className="plaza-skeleton-posters">
@@ -179,7 +179,7 @@ export function PlazaView({ t, label, navigateTo, accountToken, openCollection, 
 
       {/* Post cards */}
       {!initialLoading && posts.length > 0 && (
-        <div className="plaza-grid" style={{ gridTemplateColumns: `repeat(${colCount}, minmax(0, 1fr))` }}>
+        <div className="plaza-grid" style={{ "--plaza-cols": colCount } as React.CSSProperties}>
           {posts.map((post) => (
             <div key={post.id} className={`plaza-sticker ${colCount >= 4 ? "plaza-sticker-compact" : ""}`} onClick={() => navigateTo(`plazaPost:${post.id}`)} role="button" tabIndex={0} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); navigateTo(`plazaPost:${post.id}`); } }}>
               <div className="plaza-sticker-posters">
