@@ -137,3 +137,9 @@ body{background:#080a0a;color:#edf2e9}.app-shell{min-height:100svh;background:#0
 .plaza-skeleton-img{width:42px;height:60px;border-radius:4px;background:var(--line)}
 .plaza-skeleton-info{flex:1;display:flex;flex-direction:column;gap:6px;padding:4px 0}
 .plaza-skeleton-line{height:12px;border-radius:4px;background:var(--line)}
+
+/* ===== Plaza Header ===== */
+.plaza-header{position:relative;margin-bottom:24px;padding:28px 32px 24px;border:1px solid var(--line);border-radius:16px;background:linear-gradient(135deg,rgba(20,27,25,.6),rgba(15,22,18,.8))}
+.plaza-header-tab{display:inline-flex;align-items:center;gap:6px;padding:4px 14px;border-radius:8px 8px 0 0;border:1px solid var(--line);border-bottom:none;background:rgba(216,248,106,.08);color:var(--accent);font-size:11px;font-weight:700;letter-spacing:.8px;text-transform:uppercase;position:absolute;top:-1px;left:24px;transform:translateY(-100%)}
+.plaza-header h1{font-size:28px;font-weight:700;color:#f3f6ee;margin:0 0 8px}
+.plaza-header p{font-size:14px;color:var(--muted);line-height:1.7;margin:0;max-width:600px}

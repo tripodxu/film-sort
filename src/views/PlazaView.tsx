@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react";
-import { ChevronRight, Heart, MessageCircle, Play, Send } from "lucide-react";
+import { ChevronRight, Globe, Heart, MessageCircle, Play, Send } from "lucide-react";
 import { Poster } from "../components/Poster";
-import { heading } from "./helpers";
 import type { PlazaViewProps, PlazaPost } from "./types";
 import type { MediaKind } from "../data/media";
 
@@ -85,11 +84,14 @@ export function PlazaView({ t, label, navigateTo, accountToken, openCollection, 
 
   return (
     <>
-      {heading(
-        t("广场", "PLAZA"),
-        t("文化广场", "Culture Plaza"),
-        t("发现他人的品味，找到灵感。", "Discover others' tastes, find inspiration."),
-      )}
+      <div className="plaza-header">
+        <div className="plaza-header-tab">
+          <Globe size={14} />
+          <span>{t("广场", "PLAZA")}</span>
+        </div>
+        <h1>{t("文化广场", "Culture Plaza")}</h1>
+        <p>{t("发现他人的品味，找到灵感。在这里浏览、点赞、留言，或用他人的榜单开始你自己的排序。", "Discover others' tastes, find inspiration. Browse, like, comment, or start your own ranking from theirs.")}</p>
+      </div>
 
       {/* Filter bar */}
       <div className="plaza-filters">
