@@ -39,7 +39,7 @@ export function PlazaView({ t, label, navigateTo, accountToken, openCollection, 
       const params = new URLSearchParams({ page: String(p), limit: "20", kind });
       if (sortKey === "hottest") params.set("sort", "hottest");
       if (q.trim()) params.set("q", q.trim());
-      const response = await fetch(`/api/plaza/posts?${params}`);
+      const response = await fetch(`/api/plaza/posts?${params}`, accountToken ? { headers: { authorization: `Bearer ${accountToken}` } } : undefined);
       if (!response.ok) throw new Error();
       const data = await response.json() as { posts: PlazaPost[]; total: number };
       if (append) setPosts((prev) => [...prev, ...data.posts]);

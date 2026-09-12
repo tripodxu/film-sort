@@ -17,6 +17,7 @@ export async function plazaRoute(request: Request, env: Env): Promise<Response> 
   const method = request.method;
 
   // GET /api/plaza/posts — list posts (paginated, filterable by kind, searchable, server-side sort)
+  // 登录用户额外可见自己的隐藏帖（is_public = 0），便于找回与恢复
   if (path === "/api/plaza/posts" && method === "GET") {
     const page = Math.max(1, Number(url.searchParams.get("page") ?? "1") || 1);
     const limit = Math.min(50, Math.max(1, Number(url.searchParams.get("limit") ?? "20") || 20));
@@ -26,8 +27,9 @@ export async function plazaRoute(request: Request, env: Env): Promise<Response> 
     const offset = (page - 1) * limit;
 
     // 列表瘦身：不返回 items/notes 大 JSON，用 json_extract 只取前三名作品与批注数量
-    const where: string[] = ["p.is_public = 1"];
-    const params: unknown[] = [];
+    const viewer = await getUserFromToken(request, env.DB);
+    const where: string[] = [viewer ? "(p.is_public = 1 OR p.user_id = ?)" : "p.is_public = 1"];
+    const params: unknown[] = viewer ? [viewer.id] : [];
     if (kind) { where.push("p.kind = ?"); params.push(kind); }
     if (q) {
       const like = `%${q.replace(/[\\%_]/g, (m) => `\\${m}`)}%`;
@@ -47,9 +49,6 @@ export async function plazaRoute(request: Request, env: Env): Promise<Response> 
     ).bind(...params, limit, offset).all();
 
     const total = await env.DB.prepare(`SELECT COUNT(*) AS total FROM plaza_posts p LEFT JOIN user_accounts u ON p.user_id = u.id${whereSql}`).bind(...params).first<{ total: number }>();
-
-    // 可选登录态：为每行标记当前用户是否为作者（卡片「管理」入口用）
-    const viewer = await getUserFromToken(request, env.DB);
 
     return json({
       posts: (rows.results ?? []).map((row) => {
@@ -82,13 +81,17 @@ export async function plazaRoute(request: Request, env: Env): Promise<Response> 
     ).bind(postId).first<Record<string, unknown>>();
     if (!post) return json({ error: "post_not_found" }, 404);
 
+    // 可选登录态：隐藏帖仅作者可见；is_author / liked_by_me 供前端按钮分支
+    const viewer = await getUserFromToken(request, env.DB);
+    if (!post.is_public && (!viewer || viewer.id !== post.user_id)) {
+      return json({ error: "post_not_found" }, 404);
+    }
+
     const comments = await env.DB.prepare(
       `SELECT c.id, c.post_id, c.user_id, c.content, c.parent_id, c.created_at, u.nickname
        FROM plaza_comments c LEFT JOIN user_accounts u ON c.user_id = u.id WHERE c.post_id = ? ORDER BY c.created_at ASC LIMIT 200`
     ).bind(postId).all();
 
-    // 可选登录态：返回当前用户是否为作者、是否已点赞（替代不可靠的昵称判断）
-    const viewer = await getUserFromToken(request, env.DB);
     let likedByMe = false;
     if (viewer) {
       const like = await env.DB.prepare("SELECT id FROM plaza_likes WHERE post_id = ? AND user_id = ?").bind(postId, viewer.id).first();
@@ -201,6 +204,23 @@ export async function plazaRoute(request: Request, env: Env): Promise<Response> 
     if (existing.user_id !== user.id) return json({ error: "forbidden" }, 403);
     const rows = await env.DB.prepare("SELECT id, action, detail, created_at FROM plaza_post_edits WHERE post_id = ? ORDER BY created_at DESC, id DESC LIMIT 200").bind(postId).all();
     return json({ edits: rows.results ?? [] });
+  }
+
+  // POST /api/plaza/posts/:id/visibility — 作者隐藏/恢复自己的帖子（区别于管理员同名接口）
+  const authorVisibilityMatch = path.match(/^\/api\/plaza\/posts\/(\d+)\/visibility$/);
+  if (authorVisibilityMatch && method === "POST") {
+    const user = await getUserFromToken(request, env.DB);
+    if (!user) return json({ error: "authentication_required" }, 401);
+    const postId = Number(authorVisibilityMatch[1]);
+    const existing = await env.DB.prepare("SELECT id, user_id, is_public FROM plaza_posts WHERE id = ?").bind(postId).first<{ id: number; user_id: number; is_public: number }>();
+    if (!existing) return json({ error: "post_not_found" }, 404);
+    if (existing.user_id !== user.id) return json({ error: "forbidden" }, 403);
+
+    const body = await request.json().catch(() => null) as Record<string, unknown> | null;
+    const isPublic = body?.is_public ? 1 : 0;
+    await env.DB.prepare("UPDATE plaza_posts SET is_public = ?, updated_at = datetime('now') WHERE id = ?").bind(isPublic, postId).run();
+    await env.DB.prepare("INSERT INTO plaza_post_edits (post_id, action, detail) VALUES (?, ?, ?)").bind(postId, isPublic ? "restore" : "hide", isPublic ? "恢复公开展示" : "隐藏帖子（仅自己可见）").run();
+    return json({ ok: true, is_public: isPublic });
   }
 
   // DELETE /api/plaza/posts/:id — delete own post

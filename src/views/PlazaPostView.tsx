@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { ArrowDown, ArrowLeft, ArrowUp, GripVertical, Heart, MessageCircle, PenLine, Play, Plus, Trash2, Send } from "lucide-react";
+import { ArrowDown, ArrowLeft, ArrowUp, Eye, EyeOff, GripVertical, Heart, MessageCircle, PenLine, Play, Plus, Trash2, Send } from "lucide-react";
 import { Poster } from "../components/Poster";
 import { RankingDetail } from "../components/RankingDetail";
 import { ExpandableNote } from "../components/ExpandableNote";
@@ -8,7 +8,7 @@ import type { PlazaPostViewProps, PlazaPost, PlazaComment } from "./types";
 import type { MediaKind } from "../data/media";
 import type { ArtisticProfile, RankedArtwork } from "../lib/profile";
 
-export function PlazaPostView({ postId, t, label, navigateTo, accountToken, accountNickname, openCollection, profile, setNotice, setPeer, openArtworkDetail, openNoteView }: PlazaPostViewProps) {
+export function PlazaPostView({ postId, t, label, navigateTo, accountToken, accountNickname, openCollection, profile, setNotice, setPeer, notes, openArtworkDetail, openNoteView }: PlazaPostViewProps) {
   const [post, setPost] = useState<PlazaPost | null>(null);
   const [comments, setComments] = useState<PlazaComment[]>([]);
   const [loading, setLoading] = useState(true);
@@ -21,6 +21,10 @@ export function PlazaPostView({ postId, t, label, navigateTo, accountToken, acco
   const [editItems, setEditItems] = useState<RankedArtwork[] | null>(null);
   const [editManual, setEditManual] = useState("");
   const [editHistory, setEditHistory] = useState<Array<{ id: number; action: string; detail: string | null; created_at: string }> | null>(null);
+  const [editInfoOpen, setEditInfoOpen] = useState(false);
+  const [infoDesc, setInfoDesc] = useState("");
+  const [editDesc, setEditDesc] = useState("");
+  const [syncProfileData, setSyncProfileData] = useState(false);
 
   // Parse notes from post
   const parsedNotes: Record<string, string> = (() => {
@@ -39,7 +43,7 @@ export function PlazaPostView({ postId, t, label, navigateTo, accountToken, acco
     setLoading(true);
     setError("");
     try {
-      const response = await fetch(`/api/plaza/posts/${postId}`);
+      const response = await fetch(`/api/plaza/posts/${postId}`, accountToken ? { headers: { authorization: `Bearer ${accountToken}` } } : undefined);
       if (!response.ok) throw new Error();
       const data = await response.json() as { post: PlazaPost; comments: PlazaComment[] };
       setPost(data.post);
@@ -208,8 +212,8 @@ export function PlazaPostView({ postId, t, label, navigateTo, accountToken, acco
 
   const isProfilePost = post.post_type === "profile";
   const profileRankings = isProfilePost ? ((post.items ?? []) as unknown as ArtisticProfile["rankings"]) : [];
-  // 服务端按 token 判定作者身份；旧数据兜底用昵称比对
-  const isAuthor = !!(accountToken && (post.is_author || (profile && !post.is_author && post.nickname === accountNickname && post.is_author === undefined)));
+  // 服务端按 token 判定作者身份（详情请求已带鉴权头）
+  const isAuthor = !!(accountToken && post.is_author);
 
   function openCollectionFromRanking(kind: MediaKind, title: string, works: RankedArtwork[], key: string) {
     openCollection({
@@ -226,7 +230,51 @@ export function PlazaPostView({ postId, t, label, navigateTo, accountToken, acco
   function startEdit() {
     if (!post) return;
     setEditItems((post.items ?? []).map((w) => ({ ...w })));
+    setEditDesc(post.description ?? "");
     setEditManual("");
+  }
+
+  function startEditInfo() {
+    setInfoDesc(post?.description ?? "");
+    setSyncProfileData(false);
+    setEditInfoOpen(true);
+  }
+
+  async function saveEditInfo() {
+    if (!post) return;
+    setCommentBusy(true);
+    try {
+      const body: Record<string, unknown> = {
+        description: infoDesc.trim() || null,
+        edits: [{ action: "meta", detail: t("更新帖子信息", "Updated post info") }],
+      };
+      // 画像帖可一键同步当前画像数据（榜单/作品/批注）
+      if (isProfilePost && syncProfileData && profile) {
+        body.items = profile.rankings;
+        body.item_count = profile.rankings.reduce((sum, r) => sum + r.items.length, 0);
+        body.notes = notes && Object.keys(notes).length > 0 ? notes : null;
+        body.edits = [{ action: "sync", detail: t("同步当前画像数据", "Synced current profile data") }];
+      }
+      const response = await fetch(`/api/plaza/posts/${postId}`, { method: "PUT", headers: { "content-type": "application/json", authorization: `Bearer ${accountToken}` }, body: JSON.stringify(body) });
+      if (!response.ok) throw new Error();
+      setEditInfoOpen(false);
+      setSyncProfileData(false);
+      setNotice(t("帖子信息已更新。", "Post info updated."));
+      await loadPost();
+    } catch { setNotice(t("保存失败，请重试。", "Failed to save. Please retry.")); }
+    finally { setCommentBusy(false); }
+  }
+
+  async function handleToggleVisibility() {
+    if (!post) return;
+    const makePublic = !post.is_public;
+    if (!confirm(makePublic ? t("恢复公开展示该帖子？", "Restore this post to public?") : t("隐藏该帖子？其他用户将无法看到，仅你自己可见。", "Hide this post? Others will not see it."))) return;
+    try {
+      const response = await fetch(`/api/plaza/posts/${postId}/visibility`, { method: "POST", headers: { "content-type": "application/json", authorization: `Bearer ${accountToken}` }, body: JSON.stringify({ is_public: makePublic }) });
+      if (!response.ok) throw new Error();
+      setNotice(makePublic ? t("帖子已恢复公开展示。", "Post restored.") : t("帖子已隐藏，仅你自己可见。", "Post hidden — only you can see it."));
+      await loadPost();
+    } catch { setNotice(t("操作失败，请重试。", "Action failed. Please retry.")); }
   }
   function moveEditItem(from: number, to: number) {
     setEditItems((cur) => {
@@ -269,7 +317,7 @@ export function PlazaPostView({ postId, t, label, navigateTo, accountToken, acco
       for (const title of before) if (!after.includes(title)) edits.push({ action: "remove", detail: title });
       for (const title of after) if (!before.includes(title)) edits.push({ action: "add", detail: title });
       if (!edits.length && JSON.stringify(before) !== JSON.stringify(after)) edits.push({ action: "reorder", detail: t("调整作品顺序", "Reordered works") });
-      const response = await fetch(`/api/plaza/posts/${postId}`, { method: "PUT", headers: { "content-type": "application/json", authorization: `Bearer ${accountToken}` }, body: JSON.stringify({ items: editItems, item_count: editItems.length, edits }) });
+      const response = await fetch(`/api/plaza/posts/${postId}`, { method: "PUT", headers: { "content-type": "application/json", authorization: `Bearer ${accountToken}` }, body: JSON.stringify({ items: editItems, item_count: editItems.length, description: editDesc.trim() || null, edits }) });
       if (!response.ok) throw new Error();
       setEditItems(null);
       setNotice(t("帖子已更新。", "Post updated."));
@@ -294,6 +342,13 @@ export function PlazaPostView({ postId, t, label, navigateTo, accountToken, acco
       )}
       {post.description && <p style={{ fontSize: 14, color: "var(--muted)", marginBottom: 16, lineHeight: 1.7 }}>{post.description}</p>}
 
+      {isAuthor && !post.is_public && (
+        <div style={{ display: "flex", alignItems: "center", gap: 8, margin: "0 0 16px", padding: "10px 14px", borderRadius: 10, background: "rgba(250,204,21,.06)", border: "1px solid rgba(250,204,21,.35)", fontSize: 12, color: "var(--yellow)" }}>
+          <EyeOff size={14} style={{ flexShrink: 0 }} />
+          {t("该帖子已隐藏，其他用户无法看到（仅你可见），可随时恢复。", "Hidden — only you can see this post. Restore anytime.")}
+        </div>
+      )}
+
       {/* Edit timestamp marker (public); full history is author-only */}
       {(post.edit_count ?? 0) > 0 && (
         <p className="mini-note" style={{ fontSize: 12, color: "var(--muted)", margin: "-8px 0 14px", display: "flex", gap: 10, alignItems: "center" }}>
@@ -317,6 +372,24 @@ export function PlazaPostView({ postId, t, label, navigateTo, accountToken, acco
         </div>
       )}
 
+      {editInfoOpen && isAuthor && (
+        <div style={{ padding: 16, border: "1px solid var(--line)", borderRadius: 12, marginBottom: 16, display: "grid", gap: 10 }}>
+          <div className="section-heading" style={{ margin: 0 }}><h2>{t("编辑帖子信息", "Edit post info")}</h2></div>
+          <label style={{ fontSize: 12, color: "var(--muted)" }}>{t("描述", "Description")}</label>
+          <textarea value={infoDesc} onChange={(e) => setInfoDesc(e.target.value)} rows={3} placeholder={t("介绍这份榜单或画像…（可选）", "Describe this ranking or profile… (optional)")} style={{ minHeight: 70, fontSize: 13 }} />
+          {isProfilePost && profile && (
+            <label style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 13, cursor: "pointer" }}>
+              <input type="checkbox" checked={syncProfileData} onChange={(e) => setSyncProfileData(e.target.checked)} style={{ flexShrink: 0 }} />
+              {t("同时用我当前的画像数据覆盖帖子内容（榜单/作品/批注）", "Also overwrite post content with my current profile")}
+            </label>
+          )}
+          <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+            <button className="button secondary" onClick={() => setEditInfoOpen(false)} style={{ minHeight: 34 }}>{t("取消", "Cancel")}</button>
+            <button className="button primary" disabled={commentBusy} onClick={() => void saveEditInfo()} style={{ minHeight: 34 }}>{commentBusy ? t("保存中…", "Saving…") : t("保存", "Save")}</button>
+          </div>
+        </div>
+      )}
+
       {/* Unified ranking detail (same component as share page & compare detail) */}
       {editItems !== null && isAuthor && !isProfilePost ? (
         <div className="plaza-post-detail">
@@ -337,6 +410,8 @@ export function PlazaPostView({ postId, t, label, navigateTo, accountToken, acco
             ))}
           </ol>
           <div style={{ display: "grid", gap: 10, marginTop: 16, padding: 16, border: "1px solid var(--line)", borderRadius: 12 }}>
+            <label style={{ fontSize: 12, color: "var(--muted)" }}>{t("描述", "Description")}</label>
+            <textarea value={editDesc} onChange={(e) => setEditDesc(e.target.value)} rows={2} placeholder={t("介绍这份榜单…（可选）", "Describe this ranking… (optional)")} style={{ minHeight: 60, fontSize: 13 }} />
             <label style={{ fontSize: 12, color: "var(--muted)" }}>{t("添加作品（每行一件，支持「标题 - 创作者（年份）」）", "Add works (one per line: Title - Creator (Year))")}</label>
             <textarea value={editManual} onChange={(e) => setEditManual(e.target.value)} rows={3} style={{ minHeight: 70, fontSize: 13 }} />
             <div style={{ display: "flex", gap: 8 }}>
@@ -409,6 +484,17 @@ export function PlazaPostView({ postId, t, label, navigateTo, accountToken, acco
           <button className="button secondary" onClick={startEdit} style={{ minHeight: 38, fontSize: 13 }}>
             <PenLine size={15} />
             {t("编辑榜单", "Edit works")}
+          </button>
+        )}
+        {isAuthor && (isProfilePost || editItems !== null) && (
+          <button className="button secondary" onClick={startEditInfo} style={{ minHeight: 38, fontSize: 13 }}>
+            <PenLine size={15} />
+            {isProfilePost ? t("编辑信息", "Edit info") : t("编辑描述", "Edit description")}
+          </button>
+        )}
+        {isAuthor && (
+          <button className="button secondary" onClick={() => void handleToggleVisibility()} style={{ minHeight: 38, fontSize: 13 }}>
+            {post.is_public ? <><EyeOff size={15} />{t("隐藏", "Hide")}</> : <><Eye size={15} />{t("恢复公开", "Restore")}</>}
           </button>
         )}
       </div>

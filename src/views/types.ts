@@ -213,6 +213,7 @@ export interface PlazaPostViewProps {
   profile: ArtisticProfile | null;
   setNotice: (msg: string) => void;
   setPeer: (peer: ArtisticProfile | null) => void;
+  notes?: Record<string, string>;
   openArtworkDetail: (work: RankedArtwork, kind: MediaKind) => void;
   openNoteView?: (title: string, text: string, posterUrls?: readonly string[]) => void;
 }
