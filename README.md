@@ -36,6 +36,18 @@ ART/RANK 把"从看过、读过、听过的作品里排出自己的 Top N"拆成
 - **防限流机制**：Edge UA 轮换、请求节流（同域名间隔 800ms）、自动重试（指数退避）、全局冷却期。
 - 海报解析不到或浏览器加载失败都会记录到 `poster_errors` 表，后台可按来源聚合并导出 CSV。
 
+### 外部导入（登录用户）
+
+自定义清单来源页提供三种导入方式（均按当前媒介加入「已添加作品」区，可增删后载入排序并自动存云端清单）：
+
+- **即搜即加**：输入标题回车，豆瓣搜索候选（电影/书籍/音乐三类全启用）以海报+元数据点选加入；无匹配可仅以标题加入；原批量 TXT/JSON 导入折叠为高级入口。
+- **豆瓣豆列**：粘贴 `douban.com/doulist/` 链接，Worker 端分页抓取整份豆列（最多 300 条，含标题/创作者/年份/评分/海报），按条目链接自动识别媒介；非当前媒介的作品会提示切换媒介后重导。
+- **网易云歌单**：音乐媒介粘贴歌单链接或 ID，抓取歌名/歌手/专辑封面（上限 300 首）；专辑封面经图片代理加载（`music.126.net` 已入白名单）。
+
+**网易云扫码连接**：音乐媒介可「扫码连接网易云」——用网易云音乐 App 扫二维码授权后，可浏览并一键导入自己的歌单（含「我喜欢的音乐」）。授权 Cookie 仅提取 `MUSIC_U` 并以 **AES-GCM 加密**存于 D1（绝不落明文，密钥存服务端配置），可随时断开并删除。豆瓣无公开扫码/OAuth 接口且详情页有反爬限制，故不支持豆瓣账号连接，请用豆列链接方式导入。
+
+- 导入接口仅登录用户可用；`/api/import/*` IP 限流 8 次/10 分钟，扫码轮询独立限流。
+
 ### 用户系统
 
 - 邮箱 + 密码注册/登录，昵称必填。
@@ -202,7 +214,7 @@ npx wrangler login
 npx wrangler d1 create film-sort
 # 记下 database_id，填入 wrangler.jsonc
 
-# 应用数据库迁移（0015 OAuth 交换 / 0016 管理审计 / 0017 海报错误 source 列）
+# 应用数据库迁移（0015 OAuth / 0016 审计 / 0017 海报 source / 0018 广场索引 / 0019 编辑历史 / 0020 Cookie 保险库）
 npx wrangler d1 migrations apply film-sort --remote
 
 # 部署
@@ -271,7 +283,8 @@ film-sort3/
 │   ├── 0016_admin_audit.sql       # 管理操作审计日志
 │   ├── 0017_poster_errors_source.sql # poster_errors 补充 source 列
 │   ├── 0018_plaza_perf.sql        # 广场排序/筛选索引
-│   └── 0019_plaza_post_edits.sql  # 广场帖子编辑历史
+│   ├── 0019_plaza_post_edits.sql  # 广场帖子编辑历史
+│   └── 0020_cookie_vault.sql      # 外部平台 Cookie 加密保险库
 │
 ├── docs/                          # 文档
 │   ├── ARCHITECTURE.md            # 技术架构文档
@@ -336,6 +349,13 @@ film-sort3/
 | POST | `/api/poster-errors/client` | 浏览器端海报加载失败上报 |
 | POST | `/api/share` | 创建分享短链（可选 expires_days：7/30/90/365 天，返回 url/compareUrl/expires_at） |
 | GET | `/api/share/:code` | 获取分享内容（profile + notes + expires_at） |
+| GET | `/api/import/doulist?url=` | 导入豆瓣豆列（登录用户，IP 限流） |
+| GET | `/api/import/netease?url=` | 导入网易云歌单（登录用户，支持连接 Cookie 导入私有歌单） |
+| GET | `/api/import/netease/mine` | 我的网易云歌单列表（需扫码连接） |
+| GET | `/api/netease/qr/issue` | 生成网易云扫码登录二维码（登录用户） |
+| GET | `/api/netease/qr/poll?unikey=` | 轮询扫码状态 waiting/scanned/confirmed/expired |
+| GET | `/api/netease/status` | 网易云连接状态 |
+| POST | `/api/netease/disconnect` | 断开网易云连接并删除加密 Cookie |
 
 ### 用户接口
 
@@ -426,6 +446,7 @@ film-sort3/
 - 分享链接包含排名作品，请确认后传播。
 - OAuth 回调强制校验发起时写入的 HttpOnly Cookie state（CSRF 防护）；登录成功后通过一次性 code（5 分钟有效、用后即焚，存于 `oauth_exchanges` 表）交换会话 token，30 天 token 不再出现在重定向 URL 和浏览器历史。
 - 管理后台所有危险操作（数据重置/删帖/删户/改密等）写入 `admin_audit` 审计日志（时间/操作/详情/来源 IP）；数据重置需确认短语 + 密码双重验证，并受 IP 限流保护。
+- 外部平台（网易云）授权 Cookie 以 AES-GCM 加密存储于 `user_cookie_vault`（加密密钥存服务端配置，不与数据同源暴露），仅用于用户本人歌单导入，断开即删。
 
 ---
 
