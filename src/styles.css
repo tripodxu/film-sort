@@ -405,7 +405,6 @@ kbd{display:inline-flex;align-items:center;justify-content:center;min-width:22px
 /* ===== 榜单行对齐 / 大量榜单横向滚动 / 导入已添加海报卡片 ===== */
 .ranking-list .row-number{width:36px;min-width:36px;display:inline-flex;align-items:center;justify-content:center;font-size:16px}
 .profile-dimensions{display:flex;gap:10px;overflow-x:auto;padding-bottom:10px;scrollbar-width:thin}
-.profile-dimensions>.profile-dimension{flex:0 0 200px;min-width:200px}
 .import-form{max-width:920px}
 .custom-added-grid{grid-template-columns:repeat(auto-fill,minmax(128px,1fr));gap:12px}
 .custom-added-item{display:flex;flex-direction:column;align-items:stretch;gap:7px;padding:9px;position:relative}
@@ -413,7 +412,7 @@ kbd{display:inline-flex;align-items:center;justify-content:center;min-width:22px
 .custom-added-item .poster-small img{width:100%;height:100%;object-fit:cover}
 .custom-added-item>span{font-size:13px;line-height:1.4;white-space:normal;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;text-align:center}
 .custom-added-item .icon-button{position:absolute;top:6px;right:6px;width:24px;height:24px;background:rgba(0,0,0,.6);border-radius:50%}
-@media(max-width:600px){.custom-added-grid{grid-template-columns:repeat(auto-fill,minmax(104px,1fr))}.profile-dimensions>.profile-dimension{flex-basis:168px;min-width:168px}}
+@media(max-width:600px){.custom-added-grid{grid-template-columns:repeat(auto-fill,minmax(104px,1fr))}}
 
 /* ===== 榜单动作栏：胶囊按钮 + 溢出菜单 + 删除确认条 ===== */
 .rank-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap;justify-content:flex-end}
@@ -437,3 +436,20 @@ kbd{display:inline-flex;align-items:center;justify-content:center;min-width:22px
 .db-quick .eyebrow{font-size:10px}
 .rank-delete-bar{display:flex;align-items:center;gap:12px;margin:2px 0 16px;padding:12px 16px;border:1px solid rgba(248,113,113,.4);border-radius:12px;background:rgba(248,113,113,.07);font-size:13px;color:#f0d5d5;line-height:1.5}
 @media(max-width:600px){.rank-actions{gap:6px}.rank-pill{padding:0 11px;font-size:11px}.rank-date{display:none}}
+
+/* ===== 榜单切换胶囊（dim-chip） ===== */
+.profile-dimensions{gap:8px;padding-bottom:12px}
+.profile-dimensions::-webkit-scrollbar{height:5px}
+.profile-dimensions::-webkit-scrollbar-thumb{background:rgba(216,248,106,.22);border-radius:99px}
+.profile-dimensions::-webkit-scrollbar-track{background:transparent}
+.dim-chip{display:flex;align-items:center;gap:10px;flex:0 0 auto;min-height:52px;padding:7px 15px 7px 7px;border:1px solid rgba(218,238,211,.14);border-radius:999px;background:rgba(22,29,25,.55);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);transition:border-color .18s,background .18s,transform .18s,box-shadow .18s;text-align:left}
+.dim-chip .poster-small{width:32px;height:46px;border-radius:6px;flex-shrink:0;box-shadow:0 3px 10px rgba(0,0,0,.35)}
+.dim-chip-text{display:grid;gap:2px;min-width:0}
+.dim-chip-meta{display:flex;align-items:center;gap:5px;font-size:10px;color:var(--muted);font-family:Consolas,monospace}
+.dim-chip-meta i{font-style:normal;color:rgba(218,238,211,.3)}
+.dim-chip strong{font-size:13px;font-weight:500;color:#e4ead9;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:150px}
+.dim-chip:hover{border-color:var(--medium-color);transform:translateY(-2px);background:rgba(34,45,36,.7)}
+.dim-chip.active{border-color:var(--medium-color);background:linear-gradient(135deg,color-mix(in srgb,var(--medium-color) 18%,transparent),rgba(22,29,25,.6));box-shadow:0 0 0 1px color-mix(in srgb,var(--medium-color) 35%,transparent),0 6px 22px rgba(0,0,0,.32),inset 0 1px rgba(255,255,255,.06)}
+.dim-chip.active strong{color:var(--medium-color)}
+.dim-chip.active .dim-chip-meta{color:color-mix(in srgb,var(--medium-color) 70%,#fff)}
+@media(max-width:600px){.dim-chip{min-height:46px;padding:6px 12px 6px 6px}.dim-chip .poster-small{width:26px;height:38px}.dim-chip strong{max-width:110px}}
