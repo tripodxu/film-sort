@@ -49,7 +49,7 @@ function resolve(work: Artwork, kind: MediaKind): Promise<string[]> {
 function imageUrl(url: string): string {
   try {
     const parsed = new URL(url);
-    return /^(?:img\d+\.doubanio\.com|m\.media-amazon\.com|ia\.media-imdb\.com|image\.tmdb\.org)$/.test(parsed.hostname)
+    return /^(?:img\d+\.doubanio\.com|m\.media-amazon\.com|ia\.media-imdb\.com|image\.tmdb\.org|[\w-]+\.music\.126\.net)$/.test(parsed.hostname)
       ? `/api/image?url=${encodeURIComponent(url)}` : url;
   } catch { return url; }
 }

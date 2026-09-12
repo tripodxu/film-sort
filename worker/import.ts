@@ -85,7 +85,41 @@ export async function fetchDoulist(doulistUrl: string): Promise<ImportedWork[]> 
   return works;
 }
 
-/** 登录用户导入路由：/api/import/doulist?url= */
+// ===== 网易云歌单抓取 =====
+
+interface NeteaseTrack { id?: number; name?: string; artists?: Array<{ name?: string }>; album?: { name?: string; picUrl?: string } }
+
+/** 从链接或纯 ID 提取歌单 ID（支持 music.163.com/playlist?id= 与 #/playlist?id= 形式） */
+export function neteasePlaylistId(raw: string): string | null {
+  const trimmed = raw.trim();
+  if (/^\d+$/.test(trimmed)) return trimmed;
+  const match = trimmed.match(/playlist\?id=(\d+)/);
+  return match ? match[1] : null;
+}
+
+/** 调网易云音乐公开接口抓取歌单曲目（公开歌单无需登录 Cookie） */
+export async function fetchNeteasePlaylist(playlistId: string): Promise<ImportedWork[]> {
+  const response = await fetch(`https://music.163.com/api/playlist/detail?id=${encodeURIComponent(playlistId)}`, {
+    headers: {
+      "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36",
+      "referer": "https://music.163.com/",
+      "accept": "application/json",
+    },
+    signal: AbortSignal.timeout(15000),
+  });
+  if (!response.ok) throw new Error(`netease_http_${response.status}`);
+  const data = await response.json() as { code?: number; result?: { tracks?: NeteaseTrack[] } };
+  const tracks = data.result?.tracks ?? [];
+  return tracks.slice(0, 300).map((track) => ({
+    id: `netease-${track.id ?? Math.random().toString(36).slice(2, 10)}`,
+    title: track.name ?? "",
+    creator: (track.artists ?? []).map((a) => a.name).filter(Boolean).join("/") || track.album?.name || undefined,
+    poster_url: track.album?.picUrl,
+    type: "music" as const,
+  })).filter((work) => work.title);
+}
+
+/** 登录用户导入路由：/api/import/doulist?url= 与 /api/import/netease?url= */
 export async function importRoute(request: Request, env: Env): Promise<Response> {
   if (!env.DB) return json({ error: "database_unavailable" }, 503);
   const user = await getUserFromToken(request, env.DB);
@@ -104,6 +138,22 @@ export async function importRoute(request: Request, env: Env): Promise<Response>
     } catch (error) {
       console.error("doulist import failed:", error instanceof Error ? error.message : error);
       return json({ error: "doulist_unavailable", msg: "豆列抓取失败，豆瓣可能限流，请稍后重试" }, 502);
+    }
+  }
+
+  if (url.pathname === "/api/import/netease" && request.method === "GET") {
+    const target = url.searchParams.get("url")?.trim() ?? "";
+    const playlistId = neteasePlaylistId(target);
+    if (!playlistId) {
+      return json({ error: "invalid_playlist_url", msg: "请粘贴网易云歌单链接（含 playlist?id=）或纯歌单 ID" }, 400);
+    }
+    try {
+      const works = await fetchNeteasePlaylist(playlistId);
+      if (!works.length) return json({ error: "playlist_empty", msg: "该歌单为空或为私有歌单，请确认链接后重试" }, 502);
+      return json({ works, total: works.length });
+    } catch (error) {
+      console.error("netease import failed:", error instanceof Error ? error.message : error);
+      return json({ error: "netease_unavailable", msg: "歌单抓取失败，网易接口可能限流，请稍后重试" }, 502);
     }
   }
 

@@ -930,7 +930,7 @@ export function allowedImage(raw: string): URL | null {
   try {
     const url = new URL(raw);
     if (url.protocol !== "https:" || url.username || url.password || (url.port && url.port !== "443")) return null;
-    return /^(?:img\d+\.doubanio\.com|m\.media-amazon\.com|ia\.media-imdb\.com|image\.tmdb\.org)$/.test(url.hostname) ? url : null;
+    return /^(?:img\d+\.doubanio\.com|m\.media-amazon\.com|ia\.media-imdb\.com|image\.tmdb\.org|[\w-]+\.music\.126\.net)$/.test(url.hostname) ? url : null;
   } catch { return null; }
 }
 
