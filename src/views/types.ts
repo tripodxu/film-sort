@@ -1,4 +1,3 @@
-import type { ReactNode } from "react";
 import type { RankingState } from "../lib/ranking";
 import type { MediaCollection, MediaKind } from "../data/media";
 import type { ArtisticProfile, RankingExport, RankedArtwork } from "../lib/profile";

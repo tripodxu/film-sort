@@ -2,7 +2,6 @@ import { describe, it, expect } from "vitest";
 import {
   createRankingState,
   chooseSide,
-  choosePreferred,
   skipWork,
   deferWork,
   undoLastAction,
@@ -116,7 +115,6 @@ describe("undoLastAction", () => {
 
   it("undo + redo produces same result", () => {
     let state = createRankingState(ids(5), { seed });
-    const comp = getCurrentComparison(state)!;
     const side = "left";
     state = chooseSide(state, side);
     state = undoLastAction(state);

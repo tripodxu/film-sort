@@ -3,7 +3,6 @@ import { RankingDetail } from "../components/RankingDetail";
 import { ExpandableNote } from "../components/ExpandableNote";
 import { heading } from "./helpers";
 import type { ShareViewProps } from "./types";
-import type { MediaKind } from "../data/media";
 
 export function ShareView({ peer, t, label, navigateTo, openCollection, profile, notes, peerNotes, openArtworkDetail, openNoteView }: ShareViewProps) {
   // 对方分享的批注：优先 peerNotes（由 /share/:code 拉取写入），兼容旧的 notes 传参

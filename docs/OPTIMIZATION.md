@@ -283,6 +283,20 @@ async function shareSingleRanking(ranking: RankingExport) {
 
 ## 5. 代码质量
 
+### 5.0 死代码清理 （✅ 已完成）
+
+2026-09 全量审计后的无用代码清理，`tsc --noUnusedLocals`（前端 + Worker）已零告警：
+
+- 删除 `src/App.tsx.bak`（旧版备份文件）与未跟踪的 `wrangler.log`
+- `App.tsx`：移除 12 个未使用的 lucide 图标导入、未使用的 `NoteScope` 类型导入、无调用方的 `encode()`（fflate 压缩编码，分享已全面改走服务端短码，`decode` 保留用于兼容旧链接）、从未被读取的 `accountEnabled` 状态及其 `/api/auth/config` 请求
+- `ExpandableNote`：移除从未传入的 `onExpand` 分支与 `onExpand ? "查看全文" : "查看全文"` 恒同三元
+- `lib/notes.ts`：移除零引用的 `getNote` / `countNotes`
+- 测试文件：移除未使用的 `compareDimensions` / `choosePreferred` 导入与 `comp` 变量
+- 视图层：移除 `CompareView` 的 `allNotes` 残留计算与 `MediaKind` 导入、`ShareView`/`types.ts` 未用导入、`HomeView` 未用 `ReactNode`、`ProfileView` 拖拽悬停中未使用的 `rect`/`midY` 计算
+- `worker/media.ts`：移除未使用的 `extractText` 函数
+
+> 说明：`/api/auth/config` Worker 端点保留（docs 中为文档化 API），仅移除前端无消费方的调用。
+
 ### 5.1 测试覆盖
 
 **现状**：仅有 `content-intro.test.ts` 一个测试文件。

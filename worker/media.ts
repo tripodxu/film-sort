@@ -784,15 +784,6 @@ async function fetchDetailPage(url: string): Promise<{ html: string; debug: Reco
   return { html, debug };
 }
 
-function extractText(html: string, startMarker: string, endMarker: string): string {
-  const idx = html.indexOf(startMarker);
-  if (idx === -1) return "";
-  const start = idx + startMarker.length;
-  const end = html.indexOf(endMarker, start);
-  if (end === -1) return html.substring(start, start + 500);
-  return html.substring(start, end);
-}
-
 function extractBetween(html: string, after: string, before: string, from = 0): string {
   const a = html.indexOf(after, from);
   if (a === -1) return "";

@@ -1,4 +1,4 @@
-import { lazy, Suspense, useMemo, type ReactNode } from "react";
+import { lazy, Suspense, useMemo } from "react";
 import { ArrowRight, BookOpen, Film, Library, Music2, Play, UserRound, Users } from "lucide-react";
 import { getCollectionsByKind, mediaLabels, type MediaKind } from "../data/media";
 import { Poster } from "../components/Poster";

@@ -6,7 +6,6 @@ import {
   deleteRanking,
   mergeProfiles,
   compareRankings,
-  compareDimensions,
   mergeDimensionRankings,
   normalizeTitle,
   profileText,

@@ -14,10 +14,6 @@ export function writeNotes(notes: Record<string, string>) {
   try { localStorage.setItem(NOTES_KEY, JSON.stringify(notes)); } catch { /* quota */ }
 }
 
-export function getNote(notes: Record<string, string>, key: string): string {
-  return notes[key]?.trim() ?? "";
-}
-
 export function setNote(notes: Record<string, string>, key: string, text: string): Record<string, string> {
   const next = { ...notes };
   if (text.trim()) next[key] = text.trim();
@@ -27,8 +23,4 @@ export function setNote(notes: Record<string, string>, key: string, text: string
 
 export function hasNote(notes: Record<string, string>, key: string): boolean {
   return !!notes[key]?.trim();
-}
-
-export function countNotes(notes: Record<string, string>): number {
-  return Object.values(notes).filter((v) => v?.trim()).length;
 }

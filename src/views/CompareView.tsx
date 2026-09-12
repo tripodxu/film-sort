@@ -3,11 +3,8 @@ import { ArrowLeftRight, ArrowRight, Link, Play, Plus, Share2, Sparkles, X } fro
 import { Poster } from "../components/Poster";
 import { heading, fileInput } from "./helpers";
 import type { CompareViewProps } from "./types";
-import type { MediaKind } from "../data/media";
 
 export function CompareView({ kinds, profile, peer, compareActiveKind, setCompareActiveKind, compareMode, setCompareMode, manualOwnSelections, setManualOwnSelections, manualPeerSelections, setManualPeerSelections, compareRankings, mergeDimensionRankings, compareDimensions, compareProfiles, navigateTo, setPeer, setAiInsight, label, t, setCompareSortBy, compareSortBy, setCompareRankDetail, shareSingleRanking, exportProfile, setFormat, busy, namedProfile, setNotice, requestInsight, aiBusy, aiInsight, createFromPeer, setPeerRankPickOpen, openArtworkDetail, peerUrl, setPeerUrl, peerUrlBusy, importPeerFromUrl, importProfile, setActiveKind, notes, peerNotes, generateShareLink }: CompareViewProps) {
-  // For peer-side notes in compare detail modal, prefer peerNotes, fallback to notes
-  const allNotes = { ...(notes ?? {}), ...(peerNotes ?? {}) };
   const sharedKinds = kinds.filter((item) => profile?.rankings.some((entry) => entry.kind === item) && peer?.rankings.some((entry) => entry.kind === item));
   const compareKind = sharedKinds.includes(compareActiveKind) ? compareActiveKind : sharedKinds[0];
   const ownRankings = profile?.rankings.filter((entry) => entry.kind === compareKind) ?? [];

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { ArrowLeft, ArrowRight, CloudDownload, CloudUpload, Download, Github, Languages, Link, Pause, Play, Plus, Share2, Sparkles, StickyNote, Undo2, Upload, UserRound, Users, X } from "lucide-react";
+import { ArrowLeft, CloudDownload, CloudUpload, Github, Languages, UserRound, X } from "lucide-react";
 
 import { createRankingState, chooseSide, deferWork, deserializeRankingState, getCurrentComparison, getRankingProgress, getRankingResult, serializeRankingState, skipWork, undoLastAction, type RankingState } from "./lib/ranking";
 import { getCollectionsByKind, mediaLabels, type MediaCollection, type MediaKind } from "./data/media";
@@ -7,7 +7,7 @@ import { compareDimensions, compareProfiles, compareRankings, LIBRARY_KEY, MAX_P
 import { importCollection } from "./lib/collections";
 import { FocusTrap } from "./components/FocusTrap";
 import { ErrorBoundary } from "./components/ErrorBoundary";
-import { readNotes, writeNotes, setNote, type NoteScope } from "./lib/notes";
+import { readNotes, writeNotes, setNote } from "./lib/notes";
 import { Poster } from "./components/Poster";
 import { RankingDetail } from "./components/RankingDetail";
 import { ArtworkDetail, type ArtworkDetailInfo } from "./components/ArtworkDetail";
@@ -50,10 +50,6 @@ function track(event: string, payload: Record<string, string | number>) {
     localStorage.setItem("art-rank:session:v1", id);
     void fetch("/api/events", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ event_name: event, session_id: id, payload }) }).catch(() => undefined);
   } catch { /* Local privacy settings must not interrupt sorting. */ }
-}
-async function encode(profile: ArtisticProfile) {
-  const { compressSync, strToU8 } = await import("fflate");
-  return btoa(Array.from(compressSync(strToU8(JSON.stringify(profile))), (byte) => String.fromCharCode(byte)).join("")).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
 }
 async function decode(payload: string) {
   const { decompressSync, strFromU8 } = await import("fflate");
@@ -115,7 +111,6 @@ export default function App() {
   const [shareUrl, setShareUrl] = useState("");
   const [qrUrl, setQrUrl] = useState("");
   const [accountOpen, setAccountOpen] = useState(new URLSearchParams(location.search).has("account"));
-  const [accountEnabled, setAccountEnabled] = useState(false);
   const [accountEmail, setAccountEmail] = useState("");
   const [accountNickname, setAccountNickname] = useState("");
   const [accountToken, setAccountToken] = useState(() => { try { return localStorage.getItem("art-rank:account-token") ?? ""; } catch { return ""; } });
@@ -210,8 +205,6 @@ export default function App() {
         decode(payload).then(acceptPeer).catch(() => setNotice(t("比较链接无效或过大，请导入 JSON 文件。", "Invalid or oversized link. Import the JSON file instead.")));
       }
     }
-    void fetch("/api/auth/config").then((response) => response.json()).then((data: { enabled?: boolean }) => setAccountEnabled(Boolean(data.enabled))).catch(() => undefined);
-
     // Handle OAuth callback — the worker hands us a one-time exchange code; the session
     // token itself never appears in the URL or browser history.
     const params = new URLSearchParams(location.search);

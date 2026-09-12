@@ -158,8 +158,6 @@ function ReorderList({ items, kind, t, moveItem, onSave, onCancel, notes, openNo
   function handleDragOver(e: React.DragEvent, idx: number) {
     e.preventDefault();
     e.dataTransfer.dropEffect = "move";
-    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
-    const midY = rect.top + rect.height / 2;
     const target = idx <= (dragIndex.current ?? -1) ? idx : idx + 1;
     setDropIdx(target);
   }
