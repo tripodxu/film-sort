@@ -1,5 +1,6 @@
-import { Download, Globe, GripVertical, ArrowDown, ArrowUp, Link, Plus, Share2, StickyNote, Undo2, Users } from "lucide-react";
+import { Download, Globe, GripVertical, ArrowDown, ArrowUp, Link, Plus, Share2, StickyNote, Undo2, Users, X } from "lucide-react";
 import { Poster } from "../components/Poster";
+import { IconButton } from "./IconButton";
 import { heading } from "./helpers";
 import { undoLastAction } from "../lib/ranking";
 import { noteKey, hasNote } from "../lib/notes";
@@ -104,22 +105,25 @@ export function ProfileView({ profile, activeRanking, locale, t, label, format, 
     {/* Publish to Plaza Modal */}
     {showPublishModal && (
       <div className="modal-backdrop" onClick={() => setShowPublishModal(false)}>
-        <section className="note-modal" role="dialog" aria-modal="true" onClick={(event) => event.stopPropagation()} onKeyDown={(event) => { if (event.key === "Escape") setShowPublishModal(false); }}>
-          <div className="note-modal-content">
-            <span className="eyebrow">PLAZA</span>
-            <h2>{t("发布到广场", "Publish to Plaza")}</h2>
-            <p style={{ fontSize: 13, color: "var(--muted)", marginBottom: 12, lineHeight: 1.7 }}>
-              {t(`将「${activeRanking.collectionTitle}」发布到文化广场，其他用户可以看到、点赞、留言和使用你的榜单排序。`, `Publish "${activeRanking.collectionTitle}" to the Culture Plaza. Others can see, like, comment, and sort with your ranking.`)}
-            </p>
-            <textarea className="note-textarea" value={publishDesc} onChange={(e) => setPublishDesc(e.target.value)} placeholder={t("添加描述，让其他人了解你的榜单…（可选）\n\n例如：这是我看过的最好的华语电影 Top 10", "Add a description to help others understand your ranking… (optional)\n\nFor example: My top 10 Chinese films of all time")} rows={5} autoFocus />
-            <div className="guide-modal-footer">
-              <button className="button secondary" onClick={() => { setShowPublishModal(false); setPublishDesc(""); }}>{t("取消", "Cancel")}</button>
-              <button className="button primary" onClick={handlePublish} style={{ position: "relative" }}>
-                <Globe size={14} style={{ marginRight: 4 }} />
-                {t("发布", "Publish")}
-                {publishBurst && <span className="publish-burst">{Array.from({ length: 12 }).map((_, i) => { const colors = ["var(--accent)", "#4ade80", "#818cf8", "#f472b6", "#facc15"]; return <span key={i} className="publish-particle" style={{ "--angle": i * 30 + "deg", "--delay": i * 0.03 + "s", "--color": colors[i % 5] } as any} />; })}</span>}
-              </button>
+        <section className="account-dialog publish-modal" role="dialog" aria-modal="true" aria-labelledby="publish-heading" onClick={(event) => event.stopPropagation()} onKeyDown={(event) => { if (event.key === "Escape") setShowPublishModal(false); }}>
+          <div className="section-heading">
+            <div>
+              <span className="eyebrow">PLAZA</span>
+              <h2 id="publish-heading">{t("发布到广场", "Publish to Plaza")}</h2>
             </div>
+            <IconButton title={t("关闭", "Close")} onClick={() => setShowPublishModal(false)}><X size={18} /></IconButton>
+          </div>
+          <p style={{ fontSize: 13, color: "var(--muted)", lineHeight: 1.7 }}>
+            {t(`将「${activeRanking.collectionTitle}」发布到文化广场，其他用户可以看到、点赞、留言和使用你的榜单排序。`, `Publish "${activeRanking.collectionTitle}" to the Culture Plaza. Others can see, like, comment, and sort with your ranking.`)}
+          </p>
+          <textarea className="note-textarea" value={publishDesc} onChange={(e) => setPublishDesc(e.target.value)} placeholder={t("添加描述，让其他人了解你的榜单…（可选）\n\n例如：这是我看过的最好的华语电影 Top 10", "Add a description to help others understand your ranking… (optional)\n\nFor example: My top 10 Chinese films of all time")} rows={5} autoFocus />
+          <div className="guide-modal-footer">
+            <button className="button secondary" onClick={() => { setShowPublishModal(false); setPublishDesc(""); }}>{t("取消", "Cancel")}</button>
+            <button className="button primary" onClick={handlePublish} style={{ position: "relative" }}>
+              <Globe size={14} style={{ marginRight: 4 }} />
+              {t("发布", "Publish")}
+              {publishBurst && <span className="publish-burst">{Array.from({ length: 12 }).map((_, i) => { const colors = ["var(--accent)", "#4ade80", "#818cf8", "#f472b6", "#facc15"]; return <span key={i} className="publish-particle" style={{ "--angle": i * 30 + "deg", "--delay": i * 0.03 + "s", "--color": colors[i % 5] } as any} />; })}</span>}
+            </button>
           </div>
         </section>
       </div>
