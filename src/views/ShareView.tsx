@@ -112,6 +112,16 @@ export function ShareView({ peer, t, label, navigateTo, openCollection, profile,
         >
           {t("与我比较", "Compare with me")}
         </button>
+        <button
+          className="button secondary"
+          onClick={async () => {
+            try { await navigator.clipboard.writeText(location.href); } catch { /* selection fallback below */ }
+          }}
+          title={t("复制当前分享链接，方便转发给其他人", "Copy this share link to forward it")}
+        >
+          <Share2 size={15} />
+          {t("复制分享链接", "Copy share link")}
+        </button>
       </div>
 
       {/* How to create your own share link */}
