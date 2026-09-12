@@ -126,6 +126,8 @@ export interface ProfileViewProps {
   busy: boolean;
   publishToPlaza: (ranking: RankingExport, description?: string) => void;
   publishProfileToPlaza: (description?: string) => void;
+  updateRankingWorks: (rankingIdx: number, works: RankedArtwork[]) => void;
+  syncPlazaPost: (postId: number, rankingIdx: number) => void;
   reorderMode: number | null;
   reorderItems: RankedArtwork[];
   startReorder: (idx: number) => void;

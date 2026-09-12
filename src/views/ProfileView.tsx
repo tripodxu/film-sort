@@ -8,7 +8,7 @@ import type { ProfileViewProps } from "./types";
 import type { RankedArtwork } from "../lib/profile";
 import { useRef, useState } from "react";
 
-export function ProfileView({ profile, activeRanking, locale, t, label, format, setFormat, exportLayout, setExportLayout, exportProfile, share, shareUrl, qrUrl, profileName, setProfileName, namedProfile, persist, navigateTo, peer, editingRankIdx, setEditingRankIdx, editingRankTitle, setEditingRankTitle, renameRank, openCollection, shareSingleRanking, openShareModal, setActiveKind, ranking, setRanking, collection, notes, openNoteModal, openArtworkDetail, accountToken, publishToPlaza, publishProfileToPlaza, reorderMode, reorderItems, startReorder, saveReorder, cancelReorder, moveItem, busy }: ProfileViewProps) {
+export function ProfileView({ profile, activeRanking, locale, t, label, format, setFormat, exportLayout, setExportLayout, exportProfile, share, shareUrl, qrUrl, profileName, setProfileName, namedProfile, persist, navigateTo, peer, editingRankIdx, setEditingRankIdx, editingRankTitle, setEditingRankTitle, renameRank, openCollection, shareSingleRanking, openShareModal, setActiveKind, ranking, setRanking, collection, notes, openNoteModal, openArtworkDetail, accountToken, publishToPlaza, publishProfileToPlaza, updateRankingWorks, syncPlazaPost, reorderMode, reorderItems, startReorder, saveReorder, cancelReorder, moveItem, busy }: ProfileViewProps) {
   const profileRankIdx = profile.rankings.indexOf(activeRanking);
   const isRenamingProfile = editingRankIdx === profileRankIdx;
   const isReordering = reorderMode === profileRankIdx;
@@ -17,6 +17,8 @@ export function ProfileView({ profile, activeRanking, locale, t, label, format, 
   const [publishTarget, setPublishTarget] = useState<"ranking" | "profile">("ranking");
   const [publishBurst, setPublishBurst] = useState(false);
   const [exporting, setExporting] = useState(false);
+  const [editWorksOpen, setEditWorksOpen] = useState(false);
+  const [plazaSyncPostId, setPlazaSyncPostId] = useState<number | null>(null);
 
   function handlePublish() {
     if (publishTarget === "profile") publishProfileToPlaza(publishDesc);
@@ -25,6 +27,20 @@ export function ProfileView({ profile, activeRanking, locale, t, label, format, 
     setPublishDesc("");
     setPublishBurst(true);
     setTimeout(() => setPublishBurst(false), 1200);
+  }
+
+  function plazaLinkId() {
+    try {
+      const links = JSON.parse(localStorage.getItem("art-rank:plaza-links") ?? "{}");
+      return links[`${activeRanking.kind}|${activeRanking.collectionTitle}`] ?? null;
+    } catch { return null; }
+  }
+
+  function handleSaveWorks(items: RankedArtwork[]) {
+    updateRankingWorks(profileRankIdx, items);
+    setEditWorksOpen(false);
+    const postId = plazaLinkId();
+    if (postId) setPlazaSyncPostId(Number(postId));
   }
 
   return <>
@@ -58,11 +74,27 @@ export function ProfileView({ profile, activeRanking, locale, t, label, format, 
             <button className="text-button" onClick={() => void shareSingleRanking(activeRanking)} style={{ fontSize: 12, color: "var(--accent)" }}>{t("比较链接", "Compare link")}</button>
             <button className="text-button" onClick={() => openShareModal(activeRanking)} style={{ fontSize: 12, color: "var(--accent)" }}>{t("分享链接", "Share link")}</button>
             {accountToken && <button className="text-button" onClick={() => { setPublishTarget("ranking"); setShowPublishModal(true); }} style={{ fontSize: 12, color: "var(--accent)", position: "relative" }}><Globe size={12} style={{ verticalAlign: "middle", marginRight: 3 }} />{t("发布到广场", "Publish to plaza")}{publishBurst && <span className="publish-burst">{Array.from({ length: 12 }).map((_, i) => { const colors = ["var(--accent)", "#4ade80", "#818cf8", "#f472b6", "#facc15"]; return <span key={i} className="publish-particle" style={{ "--angle": i * 30 + "deg", "--delay": i * 0.03 + "s", "--color": colors[i % 5] } as any} />; })}</span>}</button>}
-            {!isReordering && <button className="text-button" onClick={() => startReorder(profileRankIdx)} style={{ fontSize: 12, color: "var(--accent)" }}>{t("手动调整", "Manual order")}</button>}
+            {!isReordering && <button className="text-button" onClick={() => setEditWorksOpen(true)} style={{ fontSize: 12, color: "var(--accent)" }}>{t("编辑作品", "Edit works")}</button>}
+            {!isReordering && !editWorksOpen && <button className="text-button" onClick={() => startReorder(profileRankIdx)} style={{ fontSize: 12, color: "var(--accent)" }}>{t("手动调整", "Manual order")}</button>}
           </div>
         </div>
 
-        {isReordering ? (
+        {plazaSyncPostId !== null && !editWorksOpen && (
+          <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 14px", marginBottom: 14, borderRadius: 10, background: "rgba(216,248,106,.06)", border: "1px solid rgba(216,248,106,.25)", fontSize: 12, color: "var(--muted)" }}>
+            <span>{t("该榜单已发布到广场，作品变更后可同步更新广场帖子。", "This list is on the Plaza. Sync your changes to the post.")}</span>
+            <button className="text-button" disabled={busy} onClick={() => { syncPlazaPost(plazaSyncPostId, profileRankIdx); setPlazaSyncPostId(null); }} style={{ fontSize: 12, flexShrink: 0 }}>{t("同步到广场", "Sync to plaza")}</button>
+            <button className="text-button" onClick={() => setPlazaSyncPostId(null)} style={{ fontSize: 12, color: "var(--muted)", flexShrink: 0 }}>{t("暂不", "Later")}</button>
+          </div>
+        )}
+
+        {editWorksOpen ? (
+          <WorkEditor
+            ranking={activeRanking}
+            t={t}
+            onCancel={() => setEditWorksOpen(false)}
+            onSave={handleSaveWorks}
+          />
+        ) : isReordering ? (
           <ReorderList
             items={reorderItems}
             kind={activeRanking.kind}
@@ -206,6 +238,106 @@ function ReorderList({ items, kind, t, moveItem, onSave, onCancel, notes, openNo
       <div style={{ display: "flex", gap: 8, marginTop: 16, justifyContent: "flex-end" }}>
         <button className="button secondary" onClick={onCancel}>{t("取消", "Cancel")}</button>
         <button className="button primary" onClick={onSave}>{t("保存", "Save")}</button>
+      </div>
+    </div>
+  );
+}
+
+function WorkEditor({ ranking, t, onCancel, onSave }: {
+  ranking: { kind: import("../data/media").MediaKind; items: RankedArtwork[] };
+  t: (zh: string, en: string) => string;
+  onCancel: () => void;
+  onSave: (items: RankedArtwork[]) => void;
+}) {
+  const [items, setItems] = useState<RankedArtwork[]>([...ranking.items]);
+  const [manual, setManual] = useState("");
+  const [searchKey, setSearchKey] = useState("");
+  const [results, setResults] = useState<Array<{ title: string; creator?: string; year?: string; rating?: string }>>([]);
+  const [searching, setSearching] = useState(false);
+  const kind = ranking.kind;
+
+  function addWork(title: string, creator?: string, year?: number) {
+    const clean = title.trim();
+    if (!clean) return;
+    if (items.some((w) => w.title === clean)) return;
+    setItems((cur) => [...cur, { id: `edit-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`, title: clean, rank: cur.length + 1, ...(creator ? { creator } : {}), ...(year ? { year } : {}) }]);
+  }
+
+  function parseManual() {
+    manual.split(/\n+/).forEach((line) => {
+      let s = line.trim();
+      if (!s) return;
+      let creator: string | undefined;
+      let year: number | undefined;
+      const yearMatch = s.match(/[（(](\d{4})[）)]\s*$/);
+      if (yearMatch && yearMatch.index !== undefined) { year = Number(yearMatch[1]); s = s.slice(0, yearMatch.index).trim(); }
+      const dashIdx = s.indexOf(" - ");
+      if (dashIdx > 0) { creator = s.slice(dashIdx + 3).trim(); s = s.slice(0, dashIdx).trim(); }
+      addWork(s, creator, year);
+    });
+    setManual("");
+  }
+
+  async function runSearch() {
+    const key = searchKey.trim();
+    if (!key || kind === "other") return;
+    setSearching(true);
+    try {
+      const apiType = kind === "film" ? "movie" : kind;
+      const response = await fetch(`/api/${apiType}/list?key=${encodeURIComponent(key)}&page=1`, { signal: AbortSignal.timeout(20000) });
+      const data = await response.json() as { data?: Array<{ title?: string; year?: string; rating?: string; author?: string; artist?: string; actors?: string[] }> };
+      setResults((data.data ?? []).slice(0, 8).map((item) => ({
+        title: item.title ?? "",
+        year: item.year,
+        rating: item.rating,
+        creator: item.author || item.artist || (Array.isArray(item.actors) ? item.actors[0] : undefined),
+      })).filter((item) => item.title));
+    } catch { setResults([]); }
+    finally { setSearching(false); }
+  }
+
+  return (
+    <div>
+      <div className="section-heading"><h2>{t("编辑作品", "Edit works")}</h2><span>{t(`${items.length} 件`, `${items.length} works`)}</span></div>
+      <ol className="ranking-list">
+        {items.map((work, idx) => (
+          <li key={work.id}>
+            <span className="row-number">{String(idx + 1).padStart(2, "0")}</span>
+            <Poster work={work} kind={kind} />
+            <div><strong>{work.title}</strong><small>{work.creator} {work.year}</small></div>
+            <button className="icon-button" title={t("移除", "Remove")} disabled={items.length <= 1} onClick={() => setItems((cur) => cur.filter((_, i) => i !== idx))} style={{ width: 28, height: 28, marginLeft: "auto", color: "var(--red)", opacity: items.length <= 1 ? 0.3 : 1 }}><X size={14} /></button>
+          </li>
+        ))}
+      </ol>
+      <div style={{ display: "grid", gap: 14, marginTop: 18, padding: 16, border: "1px solid var(--line)", borderRadius: 12 }}>
+        <div>
+          <label style={{ fontSize: 12, color: "var(--muted)", display: "block", marginBottom: 6 }}>{t("手动添加（每行一件，支持「标题 - 创作者（年份）」格式）", "Add manually (one per line: Title - Creator (Year))")}</label>
+          <textarea value={manual} onChange={(e) => setManual(e.target.value)} rows={3} placeholder={t("花样年华 - 王家卫（2000）", "In the Mood for Love - Wong Kar-wai (2000)")} style={{ minHeight: 70, fontSize: 13 }} />
+          <button className="button secondary" onClick={parseManual} style={{ marginTop: 8, minHeight: 34 }}><Plus size={14} />{t("加入榜单", "Add to list")}</button>
+        </div>
+        {kind !== "other" && (
+          <div>
+            <label style={{ fontSize: 12, color: "var(--muted)", display: "block", marginBottom: 6 }}>{t("豆瓣搜索添加", "Search Douban to add")}</label>
+            <div style={{ display: "flex", gap: 8 }}>
+              <input value={searchKey} onChange={(e) => setSearchKey(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") void runSearch(); }} placeholder={t("输入关键词搜索", "Type keywords to search")} style={{ flex: 1 }} />
+              <button className="button secondary" disabled={searching || !searchKey.trim()} onClick={() => void runSearch()} style={{ minHeight: 34, flexShrink: 0 }}>{searching ? t("搜索中…", "Searching…") : t("搜索", "Search")}</button>
+            </div>
+            {results.length > 0 && (
+              <div style={{ marginTop: 10, display: "grid", gap: 6 }}>
+                {results.map((item) => (
+                  <div key={item.title + (item.year ?? "")} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 10px", border: "1px solid var(--line)", borderRadius: 8, fontSize: 13 }}>
+                    <div style={{ flex: 1, minWidth: 0 }}><strong>{item.title}</strong> {item.rating && <small>★{item.rating}</small>}<div className="mini-note">{item.creator} {item.year}</div></div>
+                    <button className="text-button" onClick={() => { addWork(item.title, item.creator, item.year ? Number(item.year) : undefined); setResults((cur) => cur.filter((r) => r.title !== item.title)); }} style={{ fontSize: 12, flexShrink: 0 }}><Plus size={12} />{t("添加", "Add")}</button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+      <div style={{ display: "flex", gap: 8, marginTop: 16, justifyContent: "flex-end" }}>
+        <button className="button secondary" onClick={onCancel}>{t("取消", "Cancel")}</button>
+        <button className="button primary" onClick={() => onSave(items)}>{t("保存", "Save")}</button>
       </div>
     </div>
   );
