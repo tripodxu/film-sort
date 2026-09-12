@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ChevronRight, Globe, Heart, MessageCircle, PenLine, Play, Search, Send } from "lucide-react";
 import { Poster } from "../components/Poster";
 import type { PlazaViewProps, PlazaPost } from "./types";
@@ -82,6 +82,19 @@ export function PlazaView({ t, label, navigateTo, accountToken, openCollection, 
   }
 
   const hasMore = posts.length < total;
+  const sentinelRef = useRef<HTMLDivElement | null>(null);
+
+  // 无限滚动：哨兵进入视口自动加载下一页（保留「加载更多」按钮兜底）
+  useEffect(() => {
+    if (!hasMore || loading || initialLoading) return;
+    const el = sentinelRef.current;
+    if (!el) return;
+    const observer = new IntersectionObserver((entries) => {
+      if (entries[0].isIntersecting && !loading) void loadPosts(page + 1, kindFilter, sort, search, true);
+    }, { rootMargin: "400px" });
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [hasMore, loading, initialLoading, page, kindFilter, sort, search]);
 
   function formatPlazaTime(value: string): string {
     const diff = Date.now() - new Date(value).getTime();
@@ -242,13 +255,16 @@ export function PlazaView({ t, label, navigateTo, accountToken, openCollection, 
         </div>
       )}
 
+      {/* Infinite scroll sentinel (auto load next page) */}
+      {hasMore && !error && <div ref={sentinelRef} aria-hidden="true" style={{ height: 1 }} />}
+
       {/* Load more */}
       {hasMore && !error && (
         <div style={{ textAlign: "center", margin: "24px 0" }}>
           <button
             className="button secondary"
             disabled={loading}
-            onClick={() => void loadPosts(page + 1, kindFilter)}
+            onClick={() => void loadPosts(page + 1, kindFilter, sort, search, true)}
             style={{ minWidth: 160, borderRadius: 999, paddingInline: 28 }}
           >
             {loading ? t("加载中…", "Loading…") : t("加载更多", "Load more")}
