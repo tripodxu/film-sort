@@ -393,6 +393,7 @@ film-sort3/
 ## 安全
 
 - Content-Security-Policy、X-Frame-Options、Referrer-Policy、Permissions-Policy 全开。
+- 管理后台（/admin）所有动态内容（用户邮箱/昵称、海报标题、API 路径、事件 payload 等）渲染前统一 HTML 转义，防止存储型 XSS。
 - 图片代理仅允许 `doubanio.com`、`media-amazon.com`、`media-imdb.com`、`tmdb.org` 四类 host。
 - 分析事件仅收集产品元数据，不含作品标题或用户信息。
 - 分享链接包含排名作品，请确认后传播。
