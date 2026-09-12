@@ -48,6 +48,9 @@ export async function plazaRoute(request: Request, env: Env): Promise<Response> 
 
     const total = await env.DB.prepare(`SELECT COUNT(*) AS total FROM plaza_posts p LEFT JOIN user_accounts u ON p.user_id = u.id${whereSql}`).bind(...params).first<{ total: number }>();
 
+    // 可选登录态：为每行标记当前用户是否为作者（卡片「管理」入口用）
+    const viewer = await getUserFromToken(request, env.DB);
+
     return json({
       posts: (rows.results ?? []).map((row) => {
         const r = row as Record<string, unknown>;
@@ -59,7 +62,7 @@ export async function plazaRoute(request: Request, env: Env): Promise<Response> 
           ? pieces.map(parse).map((ranking) => ranking?.items?.[0])
           : pieces.map(parse)
         ).filter(Boolean);
-        return { ...rest, top_items: topItems };
+        return { ...rest, top_items: topItems, is_author: !!viewer && viewer.id === r.user_id };
       }),
       page,
       limit,
@@ -67,12 +70,14 @@ export async function plazaRoute(request: Request, env: Env): Promise<Response> 
     });
   }
 
-  // GET /api/plaza/posts/:id — single post with comments
+  // GET /api/plaza/posts/:id — single post with comments (+ is_author / liked_by_me for the current token)
   const postDetailMatch = path.match(/^\/api\/plaza\/posts\/(\d+)$/);
   if (postDetailMatch && method === "GET") {
     const postId = Number(postDetailMatch[1]);
     const post = await env.DB.prepare(
-      `SELECT p.id, p.user_id, p.post_type, p.kind, p.collection_title, p.description, p.items, p.notes, p.item_count, p.like_count, p.comment_count, p.is_public, p.created_at, p.updated_at, u.nickname
+      `SELECT p.id, p.user_id, p.post_type, p.kind, p.collection_title, p.description, p.items, p.notes, p.item_count, p.like_count, p.comment_count, p.is_public, p.created_at, p.updated_at, u.nickname,
+        (SELECT COUNT(*) FROM plaza_post_edits e WHERE e.post_id = p.id) AS edit_count,
+        (SELECT MAX(e.created_at) FROM plaza_post_edits e WHERE e.post_id = p.id) AS last_edited_at
        FROM plaza_posts p LEFT JOIN user_accounts u ON p.user_id = u.id WHERE p.id = ?`
     ).bind(postId).first<Record<string, unknown>>();
     if (!post) return json({ error: "post_not_found" }, 404);
@@ -82,8 +87,16 @@ export async function plazaRoute(request: Request, env: Env): Promise<Response> 
        FROM plaza_comments c LEFT JOIN user_accounts u ON c.user_id = u.id WHERE c.post_id = ? ORDER BY c.created_at ASC LIMIT 200`
     ).bind(postId).all();
 
+    // 可选登录态：返回当前用户是否为作者、是否已点赞（替代不可靠的昵称判断）
+    const viewer = await getUserFromToken(request, env.DB);
+    let likedByMe = false;
+    if (viewer) {
+      const like = await env.DB.prepare("SELECT id FROM plaza_likes WHERE post_id = ? AND user_id = ?").bind(postId, viewer.id).first();
+      likedByMe = !!like;
+    }
+
     return json({
-      post: { ...post, items: JSON.parse(String(post.items ?? "[]")) },
+      post: { ...post, items: JSON.parse(String(post.items ?? "[]")), is_author: !!viewer && viewer.id === post.user_id, liked_by_me: likedByMe },
       comments: comments.results ?? [],
     });
   }

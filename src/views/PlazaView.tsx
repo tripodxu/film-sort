@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { ChevronRight, Globe, Heart, MessageCircle, Play, Search, Send } from "lucide-react";
+import { ChevronRight, Globe, Heart, MessageCircle, PenLine, Play, Search, Send } from "lucide-react";
 import { Poster } from "../components/Poster";
 import type { PlazaViewProps, PlazaPost } from "./types";
 import type { MediaKind } from "../data/media";
@@ -231,6 +231,9 @@ export function PlazaView({ t, label, navigateTo, accountToken, openCollection, 
                 </div>
               </div>
               <div className="plaza-sticker-actions">
+                {post.is_author && (
+                  <button className="plaza-sticker-btn" onClick={(e) => { e.stopPropagation(); navigateTo(`plazaPost:${post.id}`); }} title={t("管理我的帖子", "Manage my post")}><PenLine size={14} /></button>
+                )}
                 <button className="plaza-sticker-btn" onClick={(e) => { e.stopPropagation(); useForSorting(post); }} title={t("用此榜单排序", "Sort with this")}><Play size={14} /></button>
                 <ChevronRight size={16} className="plaza-sticker-arrow" />
               </div>

@@ -45,6 +45,7 @@ export function PlazaPostView({ postId, t, label, navigateTo, accountToken, acco
       setPost(data.post);
       setComments(data.comments);
       setLikeCount(data.post.like_count);
+      setLiked(!!data.post.liked_by_me);
     } catch {
       setError(t("无法加载帖子详情。", "Failed to load post details."));
     } finally {
@@ -207,7 +208,8 @@ export function PlazaPostView({ postId, t, label, navigateTo, accountToken, acco
 
   const isProfilePost = post.post_type === "profile";
   const profileRankings = isProfilePost ? ((post.items ?? []) as unknown as ArtisticProfile["rankings"]) : [];
-  const isAuthor = accountToken && profile && post.nickname === accountNickname;
+  // 服务端按 token 判定作者身份；旧数据兜底用昵称比对
+  const isAuthor = !!(accountToken && (post.is_author || (profile && !post.is_author && post.nickname === accountNickname && post.is_author === undefined)));
 
   function openCollectionFromRanking(kind: MediaKind, title: string, works: RankedArtwork[], key: string) {
     openCollection({
