@@ -297,7 +297,7 @@ interface Scored { intro: string; source: string; score: number }
 
 // 首句声明检测：「是一部…电影/小说/专辑」式开头直接暴露条目真实类型
 function declareType(text: string): "movie" | "book" | "music" | null {
-  const head = text.slice(0, 90);
+  const head = text.slice(0, 160);
   if (/(电影|影片|剧情片|纪录片|动画片|驚悚片|惊悚片|喜剧片|爱情片|科幻片|恐怖片|悬疑片|电视剧)/.test(head) || /片[，。、]/.test(head)) return "movie";
   if (/(小说|长篇|中篇|短篇)/.test(head)) return "book";
   if (/(专辑|唱片|录音室)/.test(head)) return "music";
@@ -306,7 +306,7 @@ function declareType(text: string): "movie" | "book" | "music" | null {
 
 // 打分：消歧义页 = -1（剔除）；首句类型声明 对+3/错-3；类型词 +2；年份 +2；标题含主标题 +1；限定标题 +3；
 // 标题不含主标题且非限定条目 -3（排除「美国偶像」这类内容擦边命中）
-function scoreCandidate(pageTitle: string, extract: string, opts: { mediaType?: "movie" | "book" | "music"; year?: string; baseTitle?: string; qualified?: boolean }): number {
+function scoreCandidate(pageTitle: string, extract: string, opts: { mediaType?: "movie" | "book" | "music"; year?: string; baseTitle?: string; qualified?: boolean; exact?: boolean }): number {
   if (DISAMBIG_RE.test(extract)) return -1;
   let score = 0;
   const title = pageTitle ?? "";
@@ -318,8 +318,10 @@ function scoreCandidate(pageTitle: string, extract: string, opts: { mediaType?: 
     const base = opts.baseTitle.toLowerCase();
     const t = title.toLowerCase();
     if (t.includes(base)) score += 1;
-    else if (!opts.qualified && !/(^|\s)[a-z]/i.test(base)) score -= 3;
+    // 相关性惩罚仅针对搜索噪声；精确标题查询命中（含简繁重定向，如 龙猫→龍貓）豁免并加分
+    else if (!opts.qualified && !opts.exact && !/(^|\s)[a-z]/i.test(base)) score -= 3;
   }
+  if (opts.exact) score += 3;
   if (opts.qualified) score += 6;
   return score;
 }
@@ -342,7 +344,7 @@ async function collectExtracts(titles: string[], lang: "zh" | "en", timeoutMs: n
     for (const p of Object.values(pages)) {
       if (!p.title || p.missing || !p.extract || p.extract.length <= 30) continue;
       const isQualified = qualifiedSet.has(p.title.toLowerCase()) && p.title.toLowerCase() !== (opts.baseTitle ?? "").toLowerCase();
-      const score = scoreCandidate(p.title, p.extract, { ...opts, qualified: isQualified });
+      const score = scoreCandidate(p.title, p.extract, { ...opts, qualified: isQualified, exact: true });
       if (score >= 0) out.push({ intro: p.extract, source: `${lang}wiki`, score });
     }
     return out;

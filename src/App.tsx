@@ -586,7 +586,11 @@ export default function App() {
     if (detailKind === "other") { setDetailWork({ work, kind: detailKind, data: null, loading: false }); return; }
     try {
       const apiType = detailKind === "film" ? "movie" : detailKind;
-      const response = await fetch(`/api/${apiType}/detail?name=${encodeURIComponent(work.title)}`, { signal: AbortSignal.timeout(20000) });
+      const extra = new URLSearchParams();
+      if (work.year) extra.set("year", String(work.year));
+      if (work.creator) extra.set("creator", work.creator.split("/")[0].trim());
+      const qs = extra.size ? `&${extra}` : "";
+      const response = await fetch(`/api/${apiType}/detail?name=${encodeURIComponent(work.title)}${qs}`, { signal: AbortSignal.timeout(20000) });
       const payload = await response.json() as { data?: Record<string, unknown> | null };
       setDetailWork({ work, kind: detailKind, data: payload.data ?? null, loading: false });
     } catch { setDetailWork({ work, kind: detailKind, data: null, loading: false }); }

@@ -1440,8 +1440,19 @@ async function route(request: Request, env: Env): Promise<Response> {
       const bookId = detailUrl?.match(/subject\/(\d+)/)?.[1];
       try {
         const search = await doubanSearch("book", bookTitle || bookId!, 1);
+        const wantYear = url.searchParams.get("year")?.trim() ?? "";
+        const wantCreator = url.searchParams.get("creator")?.trim() ?? "";
+        const scoreHit = (i: typeof search.data[number]) => {
+          let sc = 0;
+          const hay = `${i.title ?? ""} ${i.author ?? ""} ${i.date ?? ""}`;
+          if (wantYear && String(i.date ?? "").includes(wantYear)) sc += 4;
+          if (wantCreator && hay.includes(wantCreator)) sc += 3;
+          if ((i.title ?? "").startsWith(bookTitle)) sc += 1;
+          return sc;
+        };
         const found = bookId
           ? search.data.find(i => i.cover_link?.includes(`/subject/${bookId}/`)) ?? search.data[0]
+          : (wantYear || wantCreator) ? [...search.data].sort((a, b) => scoreHit(b) - scoreHit(a))[0]
           : search.data[0];
         if (found) {
           bookTitle = found.title || bookTitle;
@@ -1497,8 +1508,19 @@ async function route(request: Request, env: Env): Promise<Response> {
     if (movieTitle || movieId) {
       try {
         const search = await doubanSearch("movie", movieTitle || movieId!, 1);
+        const wantYear = url.searchParams.get("year")?.trim() ?? "";
+        const wantCreator = url.searchParams.get("creator")?.trim() ?? "";
+        const scoreHit = (i: typeof search.data[number]) => {
+          let sc = 0;
+          const hay = `${i.title ?? ""} ${Array.isArray(i.actors) ? i.actors.join(" ") : ""} ${i.year ?? ""}`;
+          if (wantYear && String(i.year ?? "").includes(wantYear)) sc += 4;
+          if (wantCreator && hay.includes(wantCreator)) sc += 3;
+          if ((i.title ?? "").startsWith(movieTitle)) sc += 1;
+          return sc;
+        };
         const found = movieId
           ? search.data.find(i => i.cover_link?.includes(`/subject/${movieId}/`)) ?? search.data[0]
+          : (wantYear || wantCreator) ? [...search.data].sort((a, b) => scoreHit(b) - scoreHit(a))[0]
           : search.data[0];
         if (found) {
           movieTitle = found.title || movieTitle;
@@ -1554,8 +1576,19 @@ async function route(request: Request, env: Env): Promise<Response> {
       const musicId = detailUrl?.match(/subject\/(\d+)/)?.[1];
       try {
         const search = await doubanSearch("music", musicTitle || musicId!, 1);
+        const wantYear = url.searchParams.get("year")?.trim() ?? "";
+        const wantCreator = url.searchParams.get("creator")?.trim() ?? "";
+        const scoreHit = (i: typeof search.data[number]) => {
+          let sc = 0;
+          const hay = `${i.title ?? ""} ${i.artist ?? ""} ${i.date ?? ""}`;
+          if (wantYear && String(i.date ?? "").includes(wantYear)) sc += 4;
+          if (wantCreator && hay.includes(wantCreator)) sc += 3;
+          if ((i.title ?? "").startsWith(musicTitle)) sc += 1;
+          return sc;
+        };
         const found = musicId
           ? search.data.find(i => i.cover_link?.includes(`/subject/${musicId}/`)) ?? search.data[0]
+          : (wantYear || wantCreator) ? [...search.data].sort((a, b) => scoreHit(b) - scoreHit(a))[0]
           : search.data[0];
         if (found) {
           musicTitle = found.title || musicTitle;
