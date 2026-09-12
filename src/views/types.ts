@@ -162,6 +162,8 @@ export interface PlazaPost {
   created_at: string;
   updated_at: string;
   nickname: string;
+  liked_by_me?: boolean;
+  is_author?: boolean;
 }
 
 export interface PlazaComment {
@@ -181,6 +183,7 @@ export interface PlazaViewProps {
   accountToken: string;
   openCollection: (collection: MediaCollection) => void;
   profile: ArtisticProfile | null;
+  setNotice: (notice: string) => void;
 }
 
 export interface PlazaPostViewProps {

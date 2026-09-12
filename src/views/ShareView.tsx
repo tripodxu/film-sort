@@ -1,12 +1,28 @@
-import { ArrowLeft, Play, Share2 } from "lucide-react";
+import { useState } from "react";
+import { Play, Share2, X } from "lucide-react";
 import { Poster } from "../components/Poster";
 import { ExpandableNote } from "../components/ExpandableNote";
+import { IconButton } from "./IconButton";
 import { heading } from "./helpers";
 import type { ShareViewProps } from "./types";
 import type { MediaKind } from "../data/media";
+import type { RankingExport } from "../lib/profile";
 
 export function ShareView({ peer, t, label, navigateTo, openCollection, profile, notes, peerNotes, openArtworkDetail, openNoteView }: ShareViewProps) {
   const viewNotes = peerNotes && Object.keys(peerNotes).length > 0 ? peerNotes : notes;
+  const [pickOpen, setPickOpen] = useState(false);
+
+  function openRanking(entry: RankingExport, idx: number) {
+    openCollection({
+      id: `peer-${entry.profileId}-${idx}`,
+      kind: entry.kind,
+      source: "custom",
+      title: entry.collectionTitle,
+      description: "",
+      topN: entry.items.length,
+      works: entry.items,
+    });
+  }
   return (
     <>
       {heading(
@@ -84,19 +100,8 @@ export function ShareView({ peer, t, label, navigateTo, openCollection, profile,
         <button
           className="button primary"
           onClick={() => {
-            // Use this ranking to sort: pick the first ranking entry and open it as a collection
-            const entry = peer.rankings[0];
-            if (entry) {
-              openCollection({
-                id: `peer-${entry.profileId}`,
-                kind: entry.kind,
-                source: "custom",
-                title: entry.collectionTitle,
-                description: "",
-                topN: entry.items.length,
-                works: entry.items,
-              });
-            }
+            if (peer.rankings.length === 1) openRanking(peer.rankings[0], 0);
+            else setPickOpen(true);
           }}
         >
           <Play size={15} />
@@ -114,6 +119,28 @@ export function ShareView({ peer, t, label, navigateTo, openCollection, profile,
         </button>
       </div>
 
+      {/* Ranking picker for multi-list shares */}
+      {pickOpen && (
+        <div className="modal-backdrop" onClick={() => setPickOpen(false)}>
+          <section className="account-dialog" role="dialog" aria-modal="true" aria-labelledby="share-pick-heading" onClick={(event) => event.stopPropagation()} onKeyDown={(event) => { if (event.key === "Escape") setPickOpen(false); }}>
+            <div className="section-heading">
+              <h2 id="share-pick-heading">{t("选择榜单", "Pick a ranking")}</h2>
+              <IconButton title={t("关闭", "Close")} onClick={() => setPickOpen(false)}><X size={18} /></IconButton>
+            </div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              {peer.rankings.map((entry, idx) => (
+                <button key={`${entry.kind}-${idx}`} className="button secondary" style={{ justifyContent: "flex-start", gap: 12 }} onClick={() => { setPickOpen(false); openRanking(entry, idx); }}>
+                  <span style={{ color: "var(--accent)", fontSize: 11, fontWeight: 600, width: 28, flexShrink: 0 }}>{label(entry.kind)}</span>
+                  {entry.items[0] && <Poster work={entry.items[0]} kind={entry.kind} />}
+                  <span style={{ flex: 1, textAlign: "left", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{entry.collectionTitle}</span>
+                  <small style={{ color: "var(--muted)", flexShrink: 0 }}>TOP {entry.items.length}</small>
+                </button>
+              ))}
+            </div>
+          </section>
+        </div>
+      )}
+
       {/* How to create your own share link */}
       {!profile && (
         <div style={{ margin: "24px 0", padding: "20px 24px", borderRadius: 14, border: "1px solid var(--line)", background: "rgba(20,27,25,.4)" }}>
@@ -130,13 +157,6 @@ export function ShareView({ peer, t, label, navigateTo, openCollection, profile,
         </div>
       )}
 
-      {/* Back button */}
-      <div style={{ marginTop: 16 }}>
-        <button className="button secondary" onClick={() => navigateTo("home")} style={{ minHeight: 34 }}>
-          <ArrowLeft size={15} />
-          {t("返回首页", "Back home")}
-        </button>
-      </div>
     </>
   );
 }
