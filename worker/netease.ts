@@ -55,8 +55,9 @@ export async function weapiPost(path: string, data: Record<string, unknown>, coo
     method: "POST",
     headers: {
       "content-type": "application/x-www-form-urlencoded",
-      "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36",
+      "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
       "referer": "https://music.163.com/",
+      "origin": "https://music.163.com",
       ...(cookie ? { cookie } : {}),
     },
     body: new URLSearchParams({ params, encSecKey }).toString(),
@@ -137,18 +138,51 @@ export async function hasProviderCookie(env: Env, userId: number, provider: stri
 
 // ===== 扫码登录三接口与「我的歌单」 =====
 
-export async function neteaseQrIssue(): Promise<{ unikey: string }> {
-  const { json } = await weapiPost("/weapi/login/qrcode/unikey", { type: 1 });
+/** 扫码会话 Cookie 罐：unikey → (cookieName → value)。模拟浏览器/urllib 的 Set-Cookie 自动携带。 */
+const qrCookieJar = new Map<string, Map<string, string>>();
+const JAR_TTL_MS = 5 * 60_000;
+const jarTimestamps = new Map<string, number>();
+
+function jarAbsorb(unikey: string, setCookies: string[]) {
+  let jar = qrCookieJar.get(unikey);
+  if (!jar) { jar = new Map(); qrCookieJar.set(unikey, jar); }
+  for (const raw of setCookies) {
+    const [pair] = raw.split(";");
+    const eq = pair.indexOf("=");
+    if (eq > 0) jar.set(pair.slice(0, eq).trim(), pair.slice(eq + 1).trim());
+  }
+  jarTimestamps.set(unikey, Date.now());
+  // 简单上限：超过 500 个会话时清最旧的
+  if (qrCookieJar.size > 500) {
+    const oldest = [...jarTimestamps.entries()].sort((a, b) => a[1] - b[1]).slice(0, 100);
+    for (const [k] of oldest) { qrCookieJar.delete(k); jarTimestamps.delete(k); }
+  }
+}
+
+function jarHeader(unikey: string): string | null {
+  const jar = qrCookieJar.get(unikey);
+  if (!jar || !jar.size) return null;
+  const touched = jarTimestamps.get(unikey) ?? 0;
+  if (Date.now() - touched > JAR_TTL_MS) { qrCookieJar.delete(unikey); jarTimestamps.delete(unikey); return null; }
+  return [...jar.entries()].map(([k, v]) => `${k}=${v}`).join("; ");
+}
+
+export async function neteaseQrIssue(): Promise<{ unikey: string; qrValue: string }> {
+  const { json, cookies } = await weapiPost("/weapi/login/qrcode/unikey", { type: 1 });
   const unikey = typeof json.unikey === "string" ? json.unikey : null;
   if (!unikey) throw new Error("qr_issue_failed");
-  return { unikey };
+  jarAbsorb(unikey, cookies);
+  // 与参考实现一致：优先采用网易云返回的 qrurl，缺失时回退官方登录域名拼接
+  const qrValue = typeof json.qrurl === "string" && json.qrurl.startsWith("https://music.163.com/") ? json.qrurl : `https://music.163.com/login?codekey=${unikey}`;
+  return { unikey, qrValue };
 }
 
 export async function neteaseQrPoll(unikey: string, env: Env, userId: number): Promise<{ state: "waiting" | "scanned" | "confirmed" | "expired"; error?: string }> {
-  const { json, cookies } = await weapiPost("/weapi/login/qrcode/client/login", { key: unikey, type: 1 });
+  const { json, cookies } = await weapiPost("/weapi/login/qrcode/client/login", { key: unikey, type: 1 }, jarHeader(unikey));
+  jarAbsorb(unikey, cookies);
   const code = Number(json.code);
-  console.log(`[netease-qr-debug] poll code=${code} jsonKeys=${JSON.stringify(Object.keys(json))} setCookieNames=${JSON.stringify(cookies.map((c) => `${c.split("=")[0]}@${c.length}`))}`);
   if (code === 803) {
+    qrCookieJar.delete(unikey); jarTimestamps.delete(unikey);
     const cookie = extractNeteaseLoginCookie([typeof json.cookie === "string" ? json.cookie : null, ...cookies]);
     if (!cookie) {
       console.error("netease qr confirmed but no MUSIC_U in response (json.cookie absent, set-cookie had none)");
@@ -158,9 +192,10 @@ export async function neteaseQrPoll(unikey: string, env: Env, userId: number): P
     return { state: "confirmed" };
   }
   if (code === 802) return { state: "scanned" };
-  if (code === 800) return { state: "expired" };
+  if (code === 800) { qrCookieJar.delete(unikey); jarTimestamps.delete(unikey); return { state: "expired" }; }
   // 网易云风控等异常码（如 8821「请切换其他登录方式或升级新版本再试」）：显式报错，不再伪装成等待扫码
   if (code !== 801) {
+    qrCookieJar.delete(unikey); jarTimestamps.delete(unikey);
     const msg = typeof json.message === "string" ? json.message : "";
     return { state: "expired", error: `网易云拒绝了本次登录（${code}${msg ? `：${msg}` : ""}）。多为本网络环境风控或今日扫码次数过多，请稍后再试或更换网络` };
   }

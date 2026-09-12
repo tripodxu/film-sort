@@ -1658,8 +1658,8 @@ async function route(request: Request, env: Env): Promise<Response> {
     if (!allowUpstreamRequest(request, "netease", 120)) return json({ error: "rate_limited" }, 429, { "retry-after": "60" });
     try {
       if (url.pathname === "/api/netease/qr/issue" && request.method === "GET") {
-        const { unikey } = await neteaseQrIssue();
-        return json({ unikey, qr_value: `https://music.163.com/login?codekey=${unikey}` });
+        const { unikey, qrValue } = await neteaseQrIssue();
+        return json({ unikey, qr_value: qrValue });
       }
       if (url.pathname === "/api/netease/qr/poll" && request.method === "GET") {
         const unikey = url.searchParams.get("unikey")?.trim() ?? "";
