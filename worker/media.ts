@@ -359,7 +359,12 @@ async function collectSearch(query: string, lang: "zh" | "en", timeoutMs: number
     const out: Scored[] = [];
     for (const p of Object.values(d.query?.pages ?? {})) {
       if (!p.extract || p.missing || p.extract.length <= 30) continue;
-      const score = scoreCandidate(p.title ?? "", p.extract, opts);
+      const title = p.title ?? "";
+      // 相关性门槛：标题含主标题，或首句声明与目标类型一致；否则视为搜索噪声
+      const relevant = (opts.baseTitle && title.toLowerCase().includes(opts.baseTitle.toLowerCase()))
+        || (opts.mediaType && declareType(p.extract) === opts.mediaType);
+      if (!relevant) continue;
+      const score = scoreCandidate(title, p.extract, opts);
       if (score >= 0) out.push({ intro: p.extract, source: `${lang}wiki`, score });
     }
     return out;
