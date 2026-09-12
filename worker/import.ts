@@ -19,31 +19,58 @@ export interface ImportedWork {
 
 interface DoulistItem { title: string; url: string; poster?: string; pub?: string; rating?: string }
 
-/** 解析豆列一页（25条）。豆列条目链接指向 movie/book/music.douban.com/subject/<id> */
+/**
+ * 解析豆列一页（25条）。豆瓣现行版式为 div.doulist-item（title/post/rating/abstract 子块），
+ * 同时保留旧版 table.olt 解析以防个别页面仍是老模板。
+ */
 async function doulistPage(url: string): Promise<DoulistItem[]> {
   const response = await upstream(url);
   const items: DoulistItem[] = [];
   let current: DoulistItem | null = null;
+  const finish = () => {
+    if (!current) return;
+    const title = current.title.trim();
+    const link = current.url.trim();
+    if (title && link) items.push({ ...current, title, url: link });
+    current = null;
+  };
   const rewritten = new HTMLRewriter()
-    .on("table.olt tr.item", { element() { current = { title: "", url: "" }; } })
-    .on("table.olt tr.item .pl2 a", {
-      element(el) { if (current) current.url = el.getAttribute("href") ?? ""; },
+    // ===== 新版式 =====
+    .on("div.doulist-item", { element() { finish(); current = { title: "", url: "" }; } })
+    .on("div.doulist-item .title a", {
+      element(el) { if (current && !current.url) current.url = el.getAttribute("href") ?? ""; },
       text(chunk) { if (current) current.title += chunk.text; },
     })
-    .on("table.olt tr.item td:nth-child(2) img", { element(el) { if (current) current.poster = el.getAttribute("src") ?? undefined; } })
+    .on("div.doulist-item .post img", {
+      element(el) { if (current && !current.poster) current.poster = (el.getAttribute("src") || el.getAttribute("data-src")) ?? undefined; },
+    })
+    .on("div.doulist-item .abstract", { text(chunk) { if (current) current.pub = (current.pub ?? "") + chunk.text; } })
+    .on("div.doulist-item .abstract br", { element() { if (current) current.pub = (current.pub ?? "") + "\n"; } })
+    .on("div.doulist-item .rating_nums", { text(chunk) { if (current) current.rating = (current.rating ?? "") + chunk.text; } })
+    // ===== 旧版式（兜底） =====
+    .on("table.olt tr.item", { element() { finish(); current = { title: "", url: "" }; } })
+    .on("table.olt tr.item .pl2 a", {
+      element(el) { if (current && !current.url) current.url = el.getAttribute("href") ?? ""; },
+      text(chunk) { if (current) current.title += chunk.text; },
+    })
+    .on("table.olt tr.item td:nth-child(2) img", { element(el) { if (current && !current.poster) current.poster = el.getAttribute("src") ?? undefined; } })
     .on("table.olt tr.item td:nth-child(3)", { text(chunk) { if (current) current.pub = (current.pub ?? "") + chunk.text; } })
     .on("table.olt tr.item .rating_nums", { text(chunk) { if (current) current.rating = (current.rating ?? "") + chunk.text; } })
-    .on("table.olt tr.item", { element(el) {
-      el.onEndTag(() => {
-        if (!current) return;
-        const title = current.title.trim();
-        if (title && current.url) items.push({ ...current, title });
-        current = null;
-      });
-    } })
+    .on("div.doulist-item", { element(el) { el.onEndTag(finish); } })
+    .on("table.olt tr.item", { element(el) { el.onEndTag(finish); } })
     .transform(response);
   await rewritten.text();
   return items;
+}
+
+/** 从 abstract 多行文本提取创作者：取第一个「作者:/导演:/歌手:」等标签行的值 */
+function doulistCreator(pub: string): string | undefined {
+  const lines = pub.split(/[\n/]/).map((line) => line.trim()).filter(Boolean);
+  for (const line of lines) {
+    const match = line.match(/^(?:作者|原著|原作|著者|译者|导演|编剧|歌手|演员|主演|演唱者|艺术家|艺人|乐队|组合|作曲家)\s*[:：]\s*(.+)$/);
+    if (match && match[1].trim()) return match[1].trim();
+  }
+  return undefined;
 }
 
 function subjectType(url: string): ImportedWork["type"] | undefined {
@@ -69,12 +96,15 @@ export async function fetchDoulist(doulistUrl: string): Promise<ImportedWork[]> 
       const subjectId = item.url.match(/subject\/(\d+)/)?.[1];
       if (!subjectId) continue;
       const year = item.pub?.match(/\b(?:18|19|20)\d{2}\b/)?.[0];
-      // 豆列条目发布行形如「[作者] / 出版社 / 2000-1」或「导演 / 1994」：取首个「/」前为创作者
-      const pubParts = (item.pub ?? "").split("/").map((s) => s.trim()).filter(Boolean);
+      // 先按「作者: X」「导演: X」等标签行提取创作者；旧版式无标签时退回首段
+      const creator = doulistCreator(item.pub ?? "") ?? (() => {
+        const pubParts = (item.pub ?? "").split("/").map((s) => s.trim()).filter(Boolean);
+        return pubParts.length > 0 ? pubParts[0] : undefined;
+      })();
       works.push({
         id: `doulist-${subjectId}`,
         title: item.title,
-        creator: pubParts.length > 0 ? pubParts[0] : undefined,
+        creator,
         year: year ? Number(year) : undefined,
         rating: item.rating?.trim() || undefined,
         poster_url: item.poster,
