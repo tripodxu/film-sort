@@ -32,6 +32,7 @@ export interface HomeViewProps {
 }
 
 export interface SourceViewProps {
+  setAccountOpen?: (open: boolean) => void;
   kind: MediaKind;
   t: (zh: string, en: string) => string;
   label: (kind: MediaKind) => string;

@@ -177,7 +177,7 @@ export async function neteaseQrIssue(): Promise<{ unikey: string; qrValue: strin
   return { unikey, qrValue };
 }
 
-export async function neteaseQrPoll(unikey: string, env: Env, userId: number): Promise<{ state: "waiting" | "scanned" | "confirmed" | "expired"; error?: string }> {
+export async function neteaseQrPoll(unikey: string, env: Env, userId: number): Promise<{ state: "waiting" | "scanned" | "confirmed" | "expired" | "risk"; error?: string }> {
   const { json, cookies } = await weapiPost("/weapi/login/qrcode/client/login", { key: unikey, type: 1 }, jarHeader(unikey));
   jarAbsorb(unikey, cookies);
   const code = Number(json.code);
@@ -193,11 +193,10 @@ export async function neteaseQrPoll(unikey: string, env: Env, userId: number): P
   }
   if (code === 802) return { state: "scanned" };
   if (code === 800) { qrCookieJar.delete(unikey); jarTimestamps.delete(unikey); return { state: "expired" }; }
-  // 网易云风控等异常码（如 8821「请切换其他登录方式或升级新版本再试」）：显式报错，不再伪装成等待扫码
+  // 风控类异常码（8821 安全环境 / -462 验证等）：独立 risk 状态交由前端做连续容忍，jar 保留以便瞬时误判后重试成功
   if (code !== 801) {
-    qrCookieJar.delete(unikey); jarTimestamps.delete(unikey);
     const msg = typeof json.message === "string" ? json.message : "";
-    return { state: "expired", error: `网易云拒绝了本次登录（${code}${msg ? `：${msg}` : ""}）。多为本网络环境风控或今日扫码次数过多，请稍后再试或更换网络` };
+    return { state: "risk", error: `网易云暂时拒绝了本次校验（${code}${msg ? `：${msg}` : ""}）。多为本网络环境风控或扫码次数过多` };
   }
   return { state: "waiting" };
 }
