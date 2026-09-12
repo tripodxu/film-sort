@@ -23,8 +23,8 @@ interface DoulistItem { title: string; url: string; poster?: string; pub?: strin
  * 解析豆列一页（25条）。豆瓣现行版式为 div.doulist-item（title/post/rating/abstract 子块），
  * 同时保留旧版 table.olt 解析以防个别页面仍是老模板。
  */
-async function doulistPage(url: string): Promise<DoulistItem[]> {
-  const response = await upstream(url);
+async function doulistPage(url: string, cookie?: string | null): Promise<DoulistItem[]> {
+  const response = await upstream(url, 2, cookie);
   const items: DoulistItem[] = [];
   let current: DoulistItem | null = null;
   const finish = () => {
@@ -81,14 +81,14 @@ function subjectType(url: string): ImportedWork["type"] | undefined {
 }
 
 /** 抓取完整豆列（分页，最多 300 条）并转为标准作品 */
-export async function fetchDoulist(doulistUrl: string): Promise<ImportedWork[]> {
+export async function fetchDoulist(doulistUrl: string, cookie?: string | null): Promise<ImportedWork[]> {
   const match = doulistUrl.match(/doulist\/(\d+)/);
   if (!match) throw new Error("invalid_doulist");
   const id = match[1];
   const works: ImportedWork[] = [];
   const seen = new Set<string>();
   for (let start = 0; start < 300 && start <= 11 * 25; start += 25) {
-    const items = await doulistPage(`https://www.douban.com/doulist/${id}/?start=${start}&sort=seq`).catch(() => []);
+    const items = await doulistPage(`https://www.douban.com/doulist/${id}/?start=${start}&sort=seq`, cookie).catch(() => []);
     if (!items.length) break;
     for (const item of items) {
       if (seen.has(item.url)) continue;
@@ -163,7 +163,7 @@ export async function importRoute(request: Request, env: Env): Promise<Response>
       return json({ error: "invalid_doulist_url", msg: "请粘贴豆瓣豆列链接，如 https://www.douban.com/doulist/12345/" }, 400);
     }
     try {
-      const works = await fetchDoulist(target);
+      const works = await fetchDoulist(target, await loadProviderCookie(env, user.id, "douban"));
       if (!works.length) return json({ error: "doulist_empty", msg: "该豆列为空或抓取被拦截，请稍后重试" }, 502);
       return json({ works, total: works.length });
     } catch (error) {

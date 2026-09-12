@@ -4,6 +4,7 @@ import { getUserFromToken } from "./account";
 import { adminPlazaRoute, plazaRoute } from "./plaza";
 import { importRoute } from "./import";
 import { neteaseQrIssue, neteaseQrPoll, hasProviderCookie, deleteProviderCookie, saveProviderCookie, neteaseUserId, neteaseAccountInfo } from "./netease";
+import { doubanQrIssue, doubanQrPoll, extractDoubanLoginCookie, doubanUserId, doubanAccountInfo } from "./douban";
 import { recordAudit } from "./audit";
 
 export interface Env {
@@ -84,7 +85,7 @@ const MAX_CHALLENGE_ITEMS = 300;
 const MUSIC_API_ORIGIN = "https://music-api.gdstudio.xyz";
 const upstreamWindows = new Map<string, { startedAt: number; count: number }>();
 
-function allowUpstreamRequest(request: Request, bucket: "ai" | "music" | "auth" | "share" | "import" | "netease", limit: number): boolean {
+function allowUpstreamRequest(request: Request, bucket: "ai" | "music" | "auth" | "share" | "import" | "netease" | "douban", limit: number): boolean {
   const client = request.headers.get("cf-connecting-ip") ?? "anonymous";
   const key = `${bucket}:${client}`;
   const now = Date.now();
@@ -1694,6 +1695,50 @@ async function route(request: Request, env: Env): Promise<Response> {
     } catch (error) {
       console.error("netease qr failed:", error instanceof Error ? error.message : error);
       return json({ error: "netease_unavailable", msg: "网易云接口暂时不可用，请稍后重试" }, 502);
+    }
+    return json({ error: "not_found" }, 404);
+  }
+  if (url.pathname.startsWith("/api/douban/")) {
+    if (!env.DB) return json({ error: "database_unavailable" }, 503);
+    const user = await getUserFromToken(request, env.DB);
+    if (!user) return json({ error: "authentication_required" }, 401);
+    if (!allowUpstreamRequest(request, "douban", 120)) return json({ error: "rate_limited" }, 429, { "retry-after": "60" });
+    try {
+      if (url.pathname === "/api/douban/qr/issue" && request.method === "GET") {
+        const { code, qrImage, ttl } = await doubanQrIssue();
+        return json({ code, qr_image: qrImage, ttl });
+      }
+      if (url.pathname === "/api/douban/qr/poll" && request.method === "GET") {
+        const code = url.searchParams.get("code")?.trim() ?? "";
+        if (!code || code.length > 128) return json({ error: "invalid_key" }, 400);
+        return json(await doubanQrPoll(code, env, user.id));
+      }
+      if (url.pathname === "/api/douban/status" && request.method === "GET") {
+        const connected = await hasProviderCookie(env, user.id, "douban");
+        const account = connected ? await doubanAccountInfo(env, user.id) : null;
+        return json({ connected, account });
+      }
+      // 手动粘贴 Cookie 连接：校验 dbcl2 真实可用后才入保险库
+      if (url.pathname === "/api/douban/cookie" && request.method === "POST") {
+        const body = await request.json().catch(() => null) as { cookie?: unknown } | null;
+        const raw = typeof body?.cookie === "string" ? body.cookie.trim() : "";
+        if (!raw || raw.length > 4096) return json({ error: "invalid_cookie", msg: "请粘贴包含 dbcl2 的完整 Cookie（或纯 dbcl2 值）" }, 400);
+        const normalized = extractDoubanLoginCookie(raw);
+        if (!normalized) return json({ error: "missing_dbcl2", msg: "粘贴的内容里没有 dbcl2，请确认已登录 douban.com" }, 400);
+        const uid = await doubanUserId(normalized);
+        if (!uid) return json({ error: "cookie_invalid", msg: "该 Cookie 无法通过豆瓣校验（可能已失效），请重新复制" }, 400);
+        await saveProviderCookie(env, user.id, "douban", normalized);
+        await recordAudit(env, "douban:cookie", `用户 #${user.id} 手动连接豆瓣 (uid=${uid})`, request);
+        return json({ ok: true });
+      }
+      if (url.pathname === "/api/douban/disconnect" && request.method === "POST") {
+        await deleteProviderCookie(env, user.id, "douban");
+        await recordAudit(env, "douban:disconnect", `用户 #${user.id} 断开豆瓣连接`, request);
+        return json({ ok: true });
+      }
+    } catch (error) {
+      console.error("douban qr failed:", error instanceof Error ? error.message : error);
+      return json({ error: "douban_unavailable", msg: "豆瓣接口暂时不可用，请稍后重试" }, 502);
     }
     return json({ error: "not_found" }, 404);
   }

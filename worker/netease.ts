@@ -302,7 +302,7 @@ export async function neteaseAccountInfo(env: Env, userId: number): Promise<{ ni
   } catch { return null; }
 }
 
-export interface NeteasePlaylistInfo { id: number; name: string; track_count: number; cover?: string; special?: boolean }
+export interface NeteasePlaylistInfo { id: number; name: string; track_count: number; cover?: string; special?: boolean; subscribed?: boolean }
 
 export async function neteaseUserId(cookie: string): Promise<number | null> {
   try {
@@ -315,15 +315,27 @@ export async function neteaseUserId(cookie: string): Promise<number | null> {
   }
 }
 
+/**
+ * 获取用户全部歌单（含收藏的），开放接口 GET api/user/playlist?uid=&limit=1000。
+ * subscribed=true 表示「我收藏的」（他人歌单）；specialType=5 为「我喜欢的音乐」。
+ */
 export async function neteaseUserPlaylists(cookie: string, uid: number): Promise<NeteasePlaylistInfo[]> {
-  const { json } = await weapiPost("/weapi/user/playlist", { offset: 0, limit: 100, total: true, uid }, cookie);
-  const list = (json.playlist ?? []) as Array<{ id?: number; name?: string; trackCount?: number; coverImgUrl?: string; specialType?: number }>;
-  return list.filter((p) => p.id && p.name).map((p) => ({
+  const response = await fetch(`https://music.163.com/api/user/playlist?uid=${encodeURIComponent(uid)}&limit=1000`, {
+    headers: {
+      "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+      "referer": "https://music.163.com/",
+      cookie,
+    },
+    signal: AbortSignal.timeout(15000),
+  });
+  if (!response.ok) throw new Error("netease_playlist_failed");
+  const data = await response.json() as { playlist?: Array<{ id?: number; name?: string; trackCount?: number; coverImgUrl?: string; specialType?: number; subscribed?: boolean }> };
+  return (data.playlist ?? []).filter((p) => p.id && p.name).map((p) => ({
     id: p.id as number,
     name: p.name as string,
     track_count: p.trackCount ?? 0,
     cover: p.coverImgUrl,
-    // specialType 5 = 我喜欢的音乐
     special: p.specialType === 5,
+    subscribed: p.subscribed === true,
   }));
 }

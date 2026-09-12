@@ -38,7 +38,7 @@ async function throttle(domain: string): Promise<void> {
 }
 
 // Request headers per domain type
-function buildHeaders(url: string, isImage: boolean): Record<string, string> {
+function buildHeaders(url: string, isImage: boolean, cookie?: string | null): Record<string, string> {
   const ua = nextUA();
   const parsed = new URL(url);
   const host = parsed.hostname;
@@ -61,15 +61,15 @@ function buildHeaders(url: string, isImage: boolean): Record<string, string> {
     "sec-fetch-site": "same-origin",
     "sec-fetch-user": "?1",
     "upgrade-insecure-requests": "1",
-    "cookie": `bid=${Math.random().toString(36).slice(2, 13)}`,
+    "cookie": cookie && cookie.trim() ? cookie : `bid=${Math.random().toString(36).slice(2, 13)}`,
   };
 }
 
-export async function upstream(url: string, retries = 2): Promise<Response> {
+export async function upstream(url: string, retries = 2, cookie?: string | null): Promise<Response> {
   const domain = getDomain(url);
   const isDouban = domain.endsWith("douban.com") || domain.endsWith("doubanio.com");
   const isImage = /\.(jpg|jpeg|png|webp|avif)$/i.test(new URL(url).pathname);
-  const requestHeaders = isDouban ? buildHeaders(url, isImage) : { "user-agent": nextUA(), "accept": "*/*" };
+  const requestHeaders = isDouban ? buildHeaders(url, isImage, cookie) : { "user-agent": nextUA(), "accept": "*/*" };
 
   for (let attempt = 0; attempt <= retries; attempt++) {
     if (isDouban) await throttle(domain);
