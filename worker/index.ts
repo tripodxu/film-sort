@@ -304,6 +304,7 @@ function switchTab(name) {
   var tabButtons = document.querySelectorAll('.dash-tab');
   for (var i = 0; i < tabButtons.length; i++) tabButtons[i].classList.toggle('active', tabButtons[i].getAttribute('data-tab') === name);
   if (name === 'plaza' && !plazaState.loaded) loadPlaza();
+  if (name === 'data') loadAudit();
 }
 function refreshCurrent(){ if (CURRENT_TAB === 'plaza') loadPlaza(); else load(); }
 
@@ -473,9 +474,12 @@ async function openUserDetail(id){
 }
 
 function renderData(d) {
+  lastDashData = d;
   var storageRows = (d.storage||[]).concat(d.storage_extended||[]).map(function(s) {
     return '<tr><td>'+esc(s.tbl)+'</td><td style="text-align:right;font-variant-numeric:tabular-nums">'+Number(s.cnt).toLocaleString()+' 行</td></tr>';
   }).join('');
+  var sessionCount = storageCount(d, 'user_sessions');
+  var linkCount = storageCount(d, 'shared_links');
   document.getElementById('data-app').innerHTML = '<div class="grid grid-2">'+
     '<div class="card"><h3 style="margin-bottom:12px">D1 存储统计</h3><table><tbody>'+storageRows+'</tbody></table>'+
       '<div style="margin-top:12px;padding-top:10px;border-top:1px solid var(--border)"><h3 style="margin-bottom:6px">缓存策略</h3><table><tbody>'+
@@ -485,6 +489,12 @@ function renderData(d) {
         '<tr><td>详情页</td><td style="color:var(--muted)">Edge Cache 24h</td></tr>'+
         '<tr><td>API日志</td><td style="color:var(--muted)">D1 持久化</td></tr>'+
       '</tbody></table></div></div>'+
+    '<div>'+
+    '<div class="card" style="margin-bottom:16px"><h3 style="margin-bottom:12px">会话与链接管理</h3>'+
+      '<div class="reset-card"><div>用户活跃会话<div class="sub">'+sessionCount+' 个在线会话</div></div><button class="table-action warn" onclick="revokeAllSessions()">强制下线全部用户</button></div>'+
+      '<div class="reset-card"><div>分享短链<div class="sub">'+linkCount+' 条（含未过期）</div></div><button class="table-action" onclick="cleanExpiredLinks()">清理过期链接</button></div>'+
+      '<div class="reset-card"><div>管理后台密码<div class="sub">DB 密码模式可在此修改；环境变量密码需到 Cloudflare 设置</div></div><button class="table-action" onclick="changeAdminPassword()">修改密码</button></div>'+
+    '</div>'+
     '<div class="card"><h3 style="margin-bottom:12px">日志清理</h3>'+
       '<div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px">'+
         '<button onclick="cleanLogs(&apos;all&apos;,&apos;delete_all&apos;)" class="table-action danger">清空全部日志</button>'+
@@ -501,7 +511,94 @@ function renderData(d) {
         '<button onclick="cleanLogs(&apos;poster_errors&apos;,&apos;delete_all&apos;)" class="table-action">清空海报错误</button>'+
       '</div>'+
       '<div id="cleanResult" style="font-size:12px;color:var(--muted);margin-top:6px"></div>'+
-    '</div></div>';
+    '</div></div>'+
+    '<div class="danger-zone"><h3>⚠ 危险区 · 分级数据重置（不可恢复）</h3>'+
+      ['analytics','plaza','shares','accounts'].map(function(scope){
+        var meta = RESET_META[scope];
+        return '<div class="reset-card"><div><strong>'+meta.label+'</strong><div class="sub">'+meta.desc+'</div></div><button class="table-action '+(scope==='accounts'?'danger':'warn')+'" onclick="openResetConfirm(&apos;'+scope+'&apos;)">一键重置</button></div>';
+      }).join('')+
+      '<p class="mini-note">执行需输入确认短语 RESET 并重新验证管理员密码；所有重置操作都会写入审计日志。建议重置前先用 wrangler d1 export 导出备份。</p>'+
+    '</div>'+
+    '<div class="card" style="margin-top:16px"><h3 style="margin-bottom:12px">管理操作审计日志</h3><div id="audit-app" class="loading">加载中...</div></div>';
+}
+function storageCount(d, tbl){
+  var rows = (d.storage||[]).concat(d.storage_extended||[]);
+  for (var i = 0; i < rows.length; i++) { if (rows[i].tbl === tbl) return Number(rows[i].cnt); }
+  return 0;
+}
+
+// ===== 分级重置 / 审计 / 会话管理 =====
+var lastDashData = null;
+var RESET_META = {
+  analytics: { label: '清空运行数据', desc: '删除全部分析事件、API 日志与海报错误记录，不影响用户数据。', tables: ['analytics_events','api_logs','poster_errors'] },
+  plaza: { label: '清空广场内容', desc: '删除全部广场帖子、点赞与评论，用户账户不受影响。', tables: ['plaza_posts','plaza_likes','plaza_comments'] },
+  shares: { label: '清空分享短链', desc: '删除全部分享链接，已发出的链接将立即失效。', tables: ['shared_links'] },
+  accounts: { label: '删除全部用户账户（最高危）', desc: '删除全部用户账户及级联数据：画像、云端清单、会话、OAuth 绑定、广场内容、分享链接。不可恢复。', tables: ['user_accounts','user_profiles_v2','user_collections','user_sessions','user_oauth','plaza_posts','plaza_likes','plaza_comments','shared_links'] }
+};
+function openResetConfirm(scope){
+  var meta = RESET_META[scope];
+  if (!meta) return;
+  var countRows = meta.tables.map(function(t){
+    return '<tr><td>'+esc(t)+'</td><td style="text-align:right">'+storageCount(lastDashData, t).toLocaleString()+' 行</td></tr>';
+  }).join('');
+  var root = document.getElementById('dash-modal-root');
+  root.innerHTML = '<div class="dash-modal-backdrop" onclick="if(event.target===this)closeDashModal()"><div class="dash-modal">'+
+    '<button class="close-x" onclick="closeDashModal()">✕</button>'+
+    '<h3>确认重置：'+esc(meta.label)+'</h3>'+
+    '<p style="font-size:13px;color:var(--muted);line-height:1.7">'+esc(meta.desc)+'</p>'+
+    '<table style="margin:10px 0"><tbody>'+countRows+'</tbody></table>'+
+    '<div class="dash-confirm-row">'+
+      '<label class="mini-note">输入 <strong style="color:var(--red)">RESET</strong> 确认（区分大小写）</label><input id="resetConfirmInput" autocomplete="off" placeholder="RESET">'+
+      '<label class="mini-note">管理员密码</label><input id="resetPasswordInput" type="password" autocomplete="off" placeholder="管理员密码">'+
+      '<button class="table-action danger" style="padding:9px" onclick="executeReset(&apos;'+scope+'&apos;)">执行重置（不可恢复）</button>'+
+    '</div></div></div>';
+  document.getElementById('resetConfirmInput').focus();
+}
+async function executeReset(scope){
+  var confirmText = (document.getElementById('resetConfirmInput').value||'').trim();
+  var password = (document.getElementById('resetPasswordInput').value||'');
+  if (confirmText !== 'RESET') { alert('确认短语不正确，需精确输入 RESET'); return; }
+  if (!password) { alert('请输入管理员密码'); return; }
+  if (!confirm('最后确认：此操作不可恢复，确定执行？')) return;
+  var r = await fetch('/api/admin/reset',{method:'POST',headers:{'Authorization':'Bearer '+getToken(),'Content-Type':'application/json'},body:JSON.stringify({scope:scope,confirm:confirmText,password:password})});
+  var d = await r.json().catch(function(){ return {}; });
+  if (r.ok) { alert('重置完成：'+scope); closeDashModal(); load(); }
+  else alert('重置失败：'+(d.msg||d.error||('HTTP '+r.status)));
+}
+async function revokeAllSessions(){
+  if (!confirm('强制下线全部用户？所有登录用户的本地 token 将失效。')) return;
+  var r = await fetch('/api/admin/sessions/revoke-all',{method:'POST',headers:{'Authorization':'Bearer '+getToken()}});
+  var d = await r.json().catch(function(){ return {}; });
+  if (r.ok) { alert('已清除 '+d.revoked+' 个会话'); load(); } else alert('操作失败');
+}
+async function cleanExpiredLinks(){
+  var r = await fetch('/api/admin/links/clean-expired',{method:'POST',headers:{'Authorization':'Bearer '+getToken()}});
+  var d = await r.json().catch(function(){ return {}; });
+  if (r.ok) { alert('已清理 '+d.deleted+' 条过期链接'); load(); } else alert('操作失败');
+}
+async function changeAdminPassword(){
+  var oldPwd = prompt('输入旧的管理密码');
+  if (!oldPwd) return;
+  var newPwd = prompt('输入新密码（至少6位）');
+  if (!newPwd || newPwd.length < 6) { if (newPwd !== null) alert('密码至少6位'); return; }
+  var r = await fetch('/api/admin/change-password',{method:'POST',headers:{'Authorization':'Bearer '+getToken(),'Content-Type':'application/json'},body:JSON.stringify({old_password:oldPwd,new_password:newPwd})});
+  var d = await r.json().catch(function(){ return {}; });
+  if (r.ok) alert('管理密码已更新'); else alert('修改失败：'+(d.msg||d.error||('HTTP '+r.status)));
+}
+async function loadAudit(){
+  var el = document.getElementById('audit-app');
+  if (!el) return;
+  try {
+    var r = await fetch('/api/admin/audit?limit=100',{headers:{'Authorization':'Bearer '+getToken()}});
+    var d = await r.json();
+    if (!r.ok) throw new Error(d.error||'加载失败');
+    var entries = d.entries||[];
+    el.classList.remove('loading');
+    el.innerHTML = entries.length ? '<table><thead><tr><th>时间</th><th>操作</th><th>详情</th><th>来源IP</th></tr></thead><tbody>'+entries.map(function(e){
+      var time = new Date(e.created_at).toLocaleString('zh-CN',{month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit'});
+      return '<tr class="audit-row"><td style="color:var(--muted);white-space:nowrap">'+esc(time)+'</td><td><span class="badge badge-visit">'+esc(e.action)+'</span></td><td>'+esc(e.detail||'')+'</td><td style="color:var(--muted)">'+esc(e.ip||'-')+'</td></tr>';
+    }).join('')+'</tbody></table>' : '<p style="color:var(--muted);font-size:13px">暂无审计记录</p>';
+  } catch(e){ el.innerHTML = '<p style="color:var(--red);font-size:13px">审计日志加载失败</p>'; }
 }
 
 // ===== 广场管理 =====
@@ -816,11 +913,24 @@ async function getStats(env: Env): Promise<Response> {
   }
 }
 
+/** 逐表行数统计：D1 对复合 SELECT 项数有限制，禁止用大 UNION ALL（经 db.batch 单次往返执行） */
+const STORAGE_CORE_TABLES = ["analytics_events", "api_logs", "user_accounts", "user_sessions", "user_profiles_v2", "challenge_sets", "user_collections"];
+const STORAGE_EXTENDED_TABLES = ["plaza_posts", "plaza_comments", "plaza_likes", "shared_links", "poster_errors", "admin_sessions", "admin_audit", "oauth_exchanges", "user_oauth"];
+async function countTables(db: D1Database, tables: string[]): Promise<Array<{ tbl: string; cnt: number }>> {
+  try {
+    const results = await db.batch(tables.map((t) => db.prepare(`SELECT COUNT(*) AS cnt FROM ${t}`)));
+    return tables.map((t, i) => ({ tbl: t, cnt: Number((results[i]?.results?.[0] as { cnt?: number } | undefined)?.cnt ?? 0) }));
+  } catch (error) {
+    console.error("dashboard query failed:", error instanceof Error ? error.message : error);
+    return [];
+  }
+}
+
 async function getDashboard(env: Env): Promise<Response> {
   if (!env.DB) return json({ available: false }, 200, { "cache-control": "public, max-age=60" });
   try {
-    const safe = <T>(p: Promise<T>, fallback: T): Promise<T> => p.catch(() => fallback);
-    const safeAll = (p: Promise<{results?: unknown[]}>) => p.catch(() => ({ results: [] }));
+    const safe = <T>(p: Promise<T>, fallback: T): Promise<T> => p.catch((err) => { console.error("dashboard query failed:", err instanceof Error ? err.message : err); return fallback; });
+    const safeAll = (p: Promise<{results?: unknown[]}>) => p.catch((err) => { console.error("dashboard query failed:", err instanceof Error ? err.message : err); return ({ results: [] }); });
 
     const [overview, daily, modes, recentEvents, apiLogs, apiErrors, accounts, storageInfo, storageExtended, posterErrors, posterErrorSummary] = await Promise.all([
       safe(env.DB.prepare(`SELECT
@@ -846,9 +956,9 @@ async function getDashboard(env: Env): Promise<Response> {
       safeAll(env.DB.prepare(`SELECT id, path, method, status, duration_ms, source, error, created_at FROM api_logs ORDER BY created_at DESC LIMIT 30`).all()),
       safeAll(env.DB.prepare(`SELECT id, path, method, status, duration_ms, source, error, created_at FROM api_logs WHERE status >= 400 ORDER BY created_at DESC LIMIT 20`).all()),
       safeAll(env.DB.prepare(`SELECT id, email, nickname, disabled_at, created_at FROM user_accounts ORDER BY created_at DESC LIMIT 50`).all()),
-      safe(env.DB.prepare(`SELECT 'analytics_events' AS tbl, COUNT(*) AS cnt FROM analytics_events UNION ALL SELECT 'api_logs', COUNT(*) FROM api_logs UNION ALL SELECT 'user_accounts', COUNT(*) FROM user_accounts UNION ALL SELECT 'user_sessions', COUNT(*) FROM user_sessions UNION ALL SELECT 'user_profiles_v2', COUNT(*) FROM user_profiles_v2 UNION ALL SELECT 'challenge_sets', COUNT(*) FROM challenge_sets UNION ALL SELECT 'user_collections', COUNT(*) FROM user_collections`).all().then((r) => r.results ?? []), []),
+      safe(countTables(env.DB, STORAGE_CORE_TABLES), []),
       // 扩展表单独一组：迁移未全部应用时不影响核心统计
-      safeAll(env.DB.prepare(`SELECT 'plaza_posts' AS tbl, COUNT(*) AS cnt FROM plaza_posts UNION ALL SELECT 'plaza_comments', COUNT(*) FROM plaza_comments UNION ALL SELECT 'plaza_likes', COUNT(*) FROM plaza_likes UNION ALL SELECT 'shared_links', COUNT(*) FROM shared_links UNION ALL SELECT 'poster_errors', COUNT(*) FROM poster_errors UNION ALL SELECT 'admin_sessions', COUNT(*) FROM admin_sessions UNION ALL SELECT 'admin_audit', COUNT(*) FROM admin_audit UNION ALL SELECT 'oauth_exchanges', COUNT(*) FROM oauth_exchanges UNION ALL SELECT 'user_oauth', COUNT(*) FROM user_oauth`).all()),
+      safe(countTables(env.DB, STORAGE_EXTENDED_TABLES), []),
       // Poster errors - last 7 days
       safeAll(env.DB.prepare("SELECT id, title, media_type, error, source, created_at FROM poster_errors WHERE created_at >= datetime('now', '-7 days') ORDER BY created_at DESC LIMIT 50").all()),
       safeAll(env.DB.prepare("SELECT media_type, source, error, COUNT(*) AS count FROM poster_errors WHERE created_at >= datetime('now', '-30 days') GROUP BY media_type, source, error ORDER BY count DESC LIMIT 30").all()),
