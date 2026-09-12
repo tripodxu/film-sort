@@ -1,6 +1,7 @@
 import { doubanTop250, doubanSuggest, doubanBookTop250, doubanBookSuggest, doubanMusicTop250, doubanSearch, doubanBookDetail, doubanMovieDetail, doubanMusicDetail, fetchContentIntro, proxyImage, resolvePosters } from "./media";
 import { accountRoute, hashPasswordStrong, needsPasswordUpgrade, timingSafeEqual, verifyPassword } from "./account";
-import { plazaRoute } from "./plaza";
+import { adminPlazaRoute, plazaRoute } from "./plaza";
+import { recordAudit } from "./audit";
 
 export interface Env {
   DB?: D1Database;
@@ -80,7 +81,7 @@ const MAX_CHALLENGE_ITEMS = 300;
 const MUSIC_API_ORIGIN = "https://music-api.gdstudio.xyz";
 const upstreamWindows = new Map<string, { startedAt: number; count: number }>();
 
-function allowUpstreamRequest(request: Request, bucket: "ai" | "music", limit: number): boolean {
+function allowUpstreamRequest(request: Request, bucket: "ai" | "music" | "auth" | "share", limit: number): boolean {
   const client = request.headers.get("cf-connecting-ip") ?? "anonymous";
   const key = `${bucket}:${client}`;
   const now = Date.now();
@@ -660,7 +661,7 @@ async function getDashboard(env: Env): Promise<Response> {
     const safe = <T>(p: Promise<T>, fallback: T): Promise<T> => p.catch(() => fallback);
     const safeAll = (p: Promise<{results?: unknown[]}>) => p.catch(() => ({ results: [] }));
 
-    const [overview, daily, modes, recentEvents, apiLogs, apiErrors, accounts, storageInfo, posterErrors, posterErrorSummary] = await Promise.all([
+    const [overview, daily, modes, recentEvents, apiLogs, apiErrors, accounts, storageInfo, storageExtended, posterErrors, posterErrorSummary] = await Promise.all([
       safe(env.DB.prepare(`SELECT
         COUNT(CASE WHEN event_name = 'visit' THEN 1 END) AS total_visits,
         COUNT(CASE WHEN event_name = 'visit' AND created_at >= datetime('now', '-7 days') THEN 1 END) AS visits_7d,
@@ -685,6 +686,8 @@ async function getDashboard(env: Env): Promise<Response> {
       safeAll(env.DB.prepare(`SELECT id, path, method, status, duration_ms, source, error, created_at FROM api_logs WHERE status >= 400 ORDER BY created_at DESC LIMIT 20`).all()),
       safeAll(env.DB.prepare(`SELECT id, email, nickname, disabled_at, created_at FROM user_accounts ORDER BY created_at DESC LIMIT 50`).all()),
       safe(env.DB.prepare(`SELECT 'analytics_events' AS tbl, COUNT(*) AS cnt FROM analytics_events UNION ALL SELECT 'api_logs', COUNT(*) FROM api_logs UNION ALL SELECT 'user_accounts', COUNT(*) FROM user_accounts UNION ALL SELECT 'user_sessions', COUNT(*) FROM user_sessions UNION ALL SELECT 'user_profiles_v2', COUNT(*) FROM user_profiles_v2 UNION ALL SELECT 'challenge_sets', COUNT(*) FROM challenge_sets UNION ALL SELECT 'user_collections', COUNT(*) FROM user_collections`).all().then((r) => r.results ?? []), []),
+      // 扩展表单独一组：迁移未全部应用时不影响核心统计
+      safeAll(env.DB.prepare(`SELECT 'plaza_posts' AS tbl, COUNT(*) AS cnt FROM plaza_posts UNION ALL SELECT 'plaza_comments', COUNT(*) FROM plaza_comments UNION ALL SELECT 'plaza_likes', COUNT(*) FROM plaza_likes UNION ALL SELECT 'shared_links', COUNT(*) FROM shared_links UNION ALL SELECT 'poster_errors', COUNT(*) FROM poster_errors UNION ALL SELECT 'admin_sessions', COUNT(*) FROM admin_sessions UNION ALL SELECT 'admin_audit', COUNT(*) FROM admin_audit UNION ALL SELECT 'oauth_exchanges', COUNT(*) FROM oauth_exchanges UNION ALL SELECT 'user_oauth', COUNT(*) FROM user_oauth`).all()),
       // Poster errors - last 7 days
       safeAll(env.DB.prepare("SELECT id, title, media_type, error, source, created_at FROM poster_errors WHERE created_at >= datetime('now', '-7 days') ORDER BY created_at DESC LIMIT 50").all()),
       safeAll(env.DB.prepare("SELECT media_type, source, error, COUNT(*) AS count FROM poster_errors WHERE created_at >= datetime('now', '-30 days') GROUP BY media_type, source, error ORDER BY count DESC LIMIT 30").all()),
@@ -714,6 +717,7 @@ async function getDashboard(env: Env): Promise<Response> {
       api_errors: (apiErrors as { results?: unknown[] }).results ?? [],
       accounts: (accounts as { results?: unknown[] }).results ?? [],
       storage: Array.isArray(storageInfo) ? storageInfo : [],
+      storage_extended: ((storageExtended as { results?: unknown[] })?.results ?? []),
       poster_errors: (posterErrors as { results?: unknown[] }).results ?? [],
       poster_error_summary: (posterErrorSummary as { results?: unknown[] }).results ?? [],
     }, 200, { "cache-control": "public, max-age=30" });
@@ -764,6 +768,82 @@ async function handleAdminLogout(request: Request, env: Env): Promise<Response> 
 async function handleAdminCheck(request: Request, env: Env): Promise<Response> {
   const authed = await adminAuth(request, env);
   return json({ authenticated: authed });
+}
+
+// ===== Admin: 分级数据重置 / 审计 / 改密 / 会话管理 =====
+
+/** 各重置范围对应的清空语句（ accounts 为最高危：全部账户及用户生成内容） */
+const RESET_SCOPES: Record<string, { label: string; tables: string[]; statements: string[] }> = {
+  analytics: { label: "运行数据（分析事件/API日志/海报错误）", tables: ["analytics_events", "api_logs", "poster_errors"], statements: ["DELETE FROM analytics_events", "DELETE FROM api_logs", "DELETE FROM poster_errors"] },
+  plaza: { label: "广场内容（帖子/点赞/评论）", tables: ["plaza_posts", "plaza_likes", "plaza_comments"], statements: ["DELETE FROM plaza_comments", "DELETE FROM plaza_likes", "DELETE FROM plaza_posts"] },
+  shares: { label: "分享短链", tables: ["shared_links"], statements: ["DELETE FROM shared_links"] },
+  accounts: {
+    label: "全部用户账户及用户内容（画像/清单/会话/OAuth/广场/分享）",
+    tables: ["user_accounts", "user_profiles_v2", "user_collections", "user_sessions", "user_oauth", "plaza_posts", "plaza_likes", "plaza_comments", "shared_links"],
+    statements: ["DELETE FROM user_sessions", "DELETE FROM user_oauth", "DELETE FROM user_profiles_v2", "DELETE FROM user_collections", "DELETE FROM plaza_comments", "DELETE FROM plaza_likes", "DELETE FROM plaza_posts", "DELETE FROM shared_links", "DELETE FROM user_accounts"],
+  },
+};
+
+/** 重置类操作的管理员密码重验：环境变量密码或 DB 密码均可 */
+async function reverifyAdminPassword(env: Env, password: string): Promise<boolean> {
+  if (env.ADMIN_PASSWORD) return timingSafeEqual(password, env.ADMIN_PASSWORD);
+  if (!env.DB) return false;
+  const stored = await env.DB.prepare("SELECT value FROM admin_config WHERE key = 'password_hash'").first<{ value: string }>();
+  return stored?.value ? verifyPassword(password, stored.value) : false;
+}
+
+async function handleAdminReset(request: Request, env: Env): Promise<Response> {
+  if (!env.DB) return json({ error: "database_unavailable" }, 503);
+  const body = await readJson(request);
+  const scope = cleanOptionalString(body.scope, "scope", 20) ?? "";
+  const confirm = cleanOptionalString(body.confirm, "confirm", 20) ?? "";
+  const password = cleanOptionalString(body.password, "password", 128) ?? "";
+  const config = RESET_SCOPES[scope];
+  if (!config) return json({ error: "invalid_scope" }, 400);
+  if (confirm !== "RESET") return json({ error: "confirm_required", msg: "请输入确认短语 RESET" }, 400);
+  if (!password || !await reverifyAdminPassword(env, password)) return json({ error: "password_required", msg: "管理员密码验证失败" }, 401);
+
+  const db = env.DB;
+  await db.batch(config.statements.map((sql) => db.prepare(sql)));
+  await recordAudit(env, `reset:${scope}`, `一键重置 [${scope}] ${config.label}`, request);
+  return json({ ok: true, scope, cleared: config.tables });
+}
+
+async function handleAdminChangePassword(request: Request, env: Env): Promise<Response> {
+  if (env.ADMIN_PASSWORD) return json({ error: "env_password_immutable", msg: "当前使用环境变量密码，请在 Cloudflare 设置中修改" }, 400);
+  if (!env.DB) return json({ error: "database_unavailable" }, 503);
+  const body = await readJson(request);
+  const oldPassword = cleanOptionalString(body.old_password, "old_password", 128) ?? "";
+  const newPassword = cleanOptionalString(body.new_password, "new_password", 128) ?? "";
+  if (!newPassword || newPassword.length < 6) return json({ error: "invalid_password", msg: "新密码至少6位" }, 400);
+  const stored = await env.DB.prepare("SELECT value FROM admin_config WHERE key = 'password_hash'").first<{ value: string }>();
+  if (!stored?.value) return json({ error: "no_password_configured" }, 503);
+  if (!oldPassword || !await verifyPassword(oldPassword, stored.value)) return json({ error: "invalid_credentials", msg: "旧密码错误" }, 401);
+  await env.DB.prepare("UPDATE admin_config SET value = ? WHERE key = 'password_hash'").bind(await hashPasswordStrong(newPassword)).run();
+  await recordAudit(env, "admin:change_password", "修改管理后台密码", request);
+  return json({ ok: true });
+}
+
+async function handleAdminAuditList(request: Request, env: Env): Promise<Response> {
+  if (!env.DB) return json({ error: "database_unavailable" }, 503);
+  const url = new URL(request.url);
+  const limit = Math.min(500, Math.max(1, Number(url.searchParams.get("limit") ?? "100") || 100));
+  const rows = await env.DB.prepare("SELECT id, action, detail, ip, created_at FROM admin_audit ORDER BY created_at DESC, id DESC LIMIT ?").bind(limit).all();
+  return json({ entries: rows.results ?? [] });
+}
+
+async function handleAdminRevokeSessions(request: Request, env: Env): Promise<Response> {
+  if (!env.DB) return json({ error: "database_unavailable" }, 503);
+  const result = await env.DB.prepare("DELETE FROM user_sessions").run();
+  await recordAudit(env, "sessions:revoke_all", `强制下线全部用户（清除 ${result.meta?.changes ?? 0} 个会话）`, request);
+  return json({ ok: true, revoked: result.meta?.changes ?? 0 });
+}
+
+async function handleAdminCleanExpiredLinks(request: Request, env: Env): Promise<Response> {
+  if (!env.DB) return json({ error: "database_unavailable" }, 503);
+  const result = await env.DB.prepare("DELETE FROM shared_links WHERE expires_at < datetime('now')").run();
+  await recordAudit(env, "links:clean_expired", `清理过期分享链接 ${result.meta?.changes ?? 0} 条`, request);
+  return json({ ok: true, deleted: result.meta?.changes ?? 0 });
 }
 
 interface ChallengeRow {
@@ -931,6 +1011,30 @@ async function route(request: Request, env: Env): Promise<Response> {
   }
   if (url.pathname === "/api/admin/check" && request.method === "GET") {
     return handleAdminCheck(request, env);
+  }
+  if (url.pathname.startsWith("/api/admin/plaza")) {
+    return withSecurityHeaders(await adminPlazaRoute(request, env));
+  }
+  if (url.pathname === "/api/admin/reset" && request.method === "POST") {
+    if (!allowUpstreamRequest(request, "auth", 30)) return json({ error: "rate_limited" }, 429, { "retry-after": "300" });
+    return handleAdminReset(request, env);
+  }
+  if (url.pathname === "/api/admin/audit" && request.method === "GET") {
+    if (!env.DB || !await adminAuth(request, env)) return json({ error: "auth_required" }, 401);
+    return handleAdminAuditList(request, env);
+  }
+  if (url.pathname === "/api/admin/change-password" && request.method === "POST") {
+    if (!allowUpstreamRequest(request, "auth", 30)) return json({ error: "rate_limited" }, 429, { "retry-after": "300" });
+    return handleAdminChangePassword(request, env);
+  }
+  if (url.pathname === "/api/admin/sessions/revoke-all" && request.method === "POST") {
+    if (!env.DB || !await adminAuth(request, env)) return json({ error: "auth_required" }, 401);
+    if (!allowUpstreamRequest(request, "auth", 30)) return json({ error: "rate_limited" }, 429, { "retry-after": "300" });
+    return handleAdminRevokeSessions(request, env);
+  }
+  if (url.pathname === "/api/admin/links/clean-expired" && request.method === "POST") {
+    if (!env.DB || !await adminAuth(request, env)) return json({ error: "auth_required" }, 401);
+    return handleAdminCleanExpiredLinks(request, env);
   }
   if (url.pathname === "/api/admin/accounts" || url.pathname.startsWith("/api/admin/accounts/")) {
     return withSecurityHeaders(await accountRoute(request, env));

@@ -370,6 +370,17 @@ film-sort3/
 | GET | `/api/admin/poster-errors?days=7` | 海报错误查询 |
 | GET | `/api/admin/poster-errors/export?days=30` | 海报错误 CSV 导出 |
 | POST | `/api/admin/logs/clean` | 日志清理 |
+| GET | `/api/admin/plaza/posts` | 广场帖子管理列表（含隐藏帖、可筛选搜索） |
+| GET | `/api/admin/plaza/posts/:id` | 帖子完整详情（含全部评论与作者邮箱） |
+| DELETE | `/api/admin/plaza/posts/:id` | 删除任意帖子（原子清理评论与点赞） |
+| POST | `/api/admin/plaza/posts/:id/visibility` | 隐藏/恢复帖子 |
+| DELETE | `/api/admin/plaza/comments/:id` | 删除任意评论（含其回复并修正计数） |
+| GET | `/api/admin/accounts/:id/detail` | 用户完整数据（画像/批注/清单/会话/OAuth） |
+| POST | `/api/admin/reset` | 分级数据重置（需确认短语 RESET + 管理员密码重验） |
+| GET | `/api/admin/audit` | 管理操作审计日志 |
+| POST | `/api/admin/change-password` | 修改管理后台密码（仅 DB 密码模式） |
+| POST | `/api/admin/sessions/revoke-all` | 强制下线全部用户 |
+| POST | `/api/admin/links/clean-expired` | 清理过期分享链接 |
 
 ---
 

@@ -1,10 +1,11 @@
 import type { Env } from "./index";
+import { recordAudit } from "./audit";
 
 const encoder = new TextEncoder();
 const json = (data: unknown, status = 200) => new Response(JSON.stringify(data), { status, headers: { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" } });
 const redirect = (url: string) => new Response(null, { status: 302, headers: { location: url } });
 
-async function adminAuthLocal(request: Request, db: D1Database): Promise<boolean> {
+export async function adminAuthLocal(request: Request, db: D1Database): Promise<boolean> {
   const auth = request.headers.get("authorization");
   const token = auth?.startsWith("Bearer ") ? auth.slice(7) : new URL(request.url).searchParams.get("token");
   if (!token || token.length < 32) return false;
@@ -401,6 +402,36 @@ export async function accountRoute(request: Request, env: Env): Promise<Response
     return json({ ok: true });
   }
 
+  // GET /api/admin/accounts/:id/detail — 用户完整数据（画像/批注/清单/会话/OAuth），供后台画像查看
+  const detailMatch = path.match(/^\/api\/admin\/accounts\/(\d+)\/detail$/);
+  if (detailMatch && request.method === "GET") {
+    if (!env.DB || !await adminAuthLocal(request, env.DB)) return json({ error: "auth_required" }, 401);
+    const userId = Number(detailMatch[1]);
+    const account = await env.DB.prepare("SELECT id, email, nickname, disabled_at, created_at FROM user_accounts WHERE id = ?").bind(userId).first<{ id: number; email: string; nickname: string | null; disabled_at: string | null; created_at: string }>();
+    if (!account) return json({ error: "account_not_found" }, 404);
+    const [sessions, oauth, profileRow, collections, plazaCount] = await Promise.all([
+      env.DB.prepare("SELECT COUNT(*) AS c FROM user_sessions WHERE user_id = ? AND expires_at > datetime('now')").bind(userId).first<{ c: number }>(),
+      env.DB.prepare("SELECT provider FROM user_oauth WHERE user_id = ?").bind(userId).all(),
+      env.DB.prepare("SELECT profile, notes, updated_at FROM user_profiles_v2 WHERE user_id = ?").bind(userId).first<{ profile: string; notes: string | null; updated_at: string }>(),
+      env.DB.prepare("SELECT id, kind, title, description, item_count, created_at, updated_at FROM user_collections WHERE user_id = ? ORDER BY updated_at DESC").bind(userId).all(),
+      env.DB.prepare("SELECT COUNT(*) AS c FROM plaza_posts WHERE user_id = ?").bind(userId).first<{ c: number }>(),
+    ]);
+    let profile: unknown = null;
+    if (profileRow?.profile) { try { profile = JSON.parse(profileRow.profile); } catch { profile = null; } }
+    let notes: Record<string, string> = {};
+    if (profileRow?.notes) { try { notes = JSON.parse(profileRow.notes) ?? {}; } catch { notes = {}; } }
+    return json({
+      account,
+      active_sessions: sessions?.c ?? 0,
+      oauth_providers: (oauth.results ?? []).map((r) => (r as { provider: string }).provider),
+      profile,
+      profile_updated_at: profileRow?.updated_at ?? null,
+      notes,
+      collections: collections.results ?? [],
+      plaza_post_count: plazaCount?.c ?? 0,
+    });
+  }
+
   // GET /api/admin/accounts — list all accounts (admin only)
   if (path === "/api/admin/accounts" && request.method === "GET") {
     if (!env.DB || !await adminAuthLocal(request, env.DB)) return json({ error: "auth_required" }, 401);
@@ -413,11 +444,14 @@ export async function accountRoute(request: Request, env: Env): Promise<Response
   if (deleteMatch && request.method === "DELETE") {
     if (!env.DB || !await adminAuthLocal(request, env.DB)) return json({ error: "auth_required" }, 401);
     const userId = Number(deleteMatch[1]);
-    await env.DB.prepare("DELETE FROM user_sessions WHERE user_id = ?").bind(userId).run();
-    await env.DB.prepare("DELETE FROM user_oauth WHERE user_id = ?").bind(userId).run();
-    await env.DB.prepare("DELETE FROM user_profiles_v2 WHERE user_id = ?").bind(userId).run();
-    await env.DB.prepare("DELETE FROM user_collections WHERE user_id = ?").bind(userId).run();
-    await env.DB.prepare("DELETE FROM user_accounts WHERE id = ?").bind(userId).run();
+    await env.DB.batch([
+      env.DB.prepare("DELETE FROM user_sessions WHERE user_id = ?").bind(userId),
+      env.DB.prepare("DELETE FROM user_oauth WHERE user_id = ?").bind(userId),
+      env.DB.prepare("DELETE FROM user_profiles_v2 WHERE user_id = ?").bind(userId),
+      env.DB.prepare("DELETE FROM user_collections WHERE user_id = ?").bind(userId),
+      env.DB.prepare("DELETE FROM user_accounts WHERE id = ?").bind(userId),
+    ]);
+    await recordAudit(env, "account:delete", `删除账户 #${userId}`, request);
     return json({ ok: true });
   }
 
@@ -426,11 +460,14 @@ export async function accountRoute(request: Request, env: Env): Promise<Response
     if (!env.DB || !await adminAuthLocal(request, env.DB)) return json({ error: "auth_required" }, 401);
     const userId = Number(disableMatch[1]);
     if (disableMatch[2] === "disable") {
-      await env.DB.prepare("UPDATE user_accounts SET disabled_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ?").bind(userId).run();
-      await env.DB.prepare("DELETE FROM user_sessions WHERE user_id = ?").bind(userId).run();
+      await env.DB.batch([
+        env.DB.prepare("UPDATE user_accounts SET disabled_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ?").bind(userId),
+        env.DB.prepare("DELETE FROM user_sessions WHERE user_id = ?").bind(userId),
+      ]);
     } else {
       await env.DB.prepare("UPDATE user_accounts SET disabled_at = NULL WHERE id = ?").bind(userId).run();
     }
+    await recordAudit(env, `account:${disableMatch[2]}`, `${disableMatch[2] === "disable" ? "禁用" : "恢复"}账户 #${userId}`, request);
     return json({ ok: true, disabled: disableMatch[2] === "disable" });
   }
 
@@ -440,6 +477,7 @@ export async function accountRoute(request: Request, env: Env): Promise<Response
     const userId = Number(profileDeleteMatch[1]);
     const table = profileDeleteMatch[2] === "profile" ? "user_profiles_v2" : "user_collections";
     await env.DB.prepare(`DELETE FROM ${table} WHERE user_id = ?`).bind(userId).run();
+    await recordAudit(env, `account:delete_${profileDeleteMatch[2]}`, `删除账户 #${userId} 的${profileDeleteMatch[2] === "profile" ? "画像" : "云端清单"}`, request);
     return json({ ok: true });
   }
 
@@ -452,8 +490,11 @@ export async function accountRoute(request: Request, env: Env): Promise<Response
     const newPassword = cleanString(body?.password, 128);
     if (!newPassword || newPassword.length < 6) return json({ error: "invalid_password", msg: "密码至少6位" }, 400);
     const hash = await hashPasswordStrong(newPassword);
-    await env.DB.prepare("UPDATE user_accounts SET password_hash = ? WHERE id = ?").bind(hash, userId).run();
-    await env.DB.prepare("DELETE FROM user_sessions WHERE user_id = ?").bind(userId).run();
+    await env.DB.batch([
+      env.DB.prepare("UPDATE user_accounts SET password_hash = ? WHERE id = ?").bind(hash, userId),
+      env.DB.prepare("DELETE FROM user_sessions WHERE user_id = ?").bind(userId),
+    ]);
+    await recordAudit(env, "account:reset_password", `重置账户 #${userId} 的密码并强制下线`, request);
     return json({ ok: true });
   }
 

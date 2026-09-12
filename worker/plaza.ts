@@ -1,5 +1,6 @@
 import type { Env } from "./index";
-import { getUserFromToken } from "./account";
+import { getUserFromToken, adminAuthLocal } from "./account";
+import { recordAudit } from "./audit";
 
 const json = (data: unknown, status = 200) => new Response(JSON.stringify(data), { status, headers: { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" } });
 
@@ -234,6 +235,119 @@ export async function plazaRoute(request: Request, env: Env): Promise<Response> 
     await env.DB.prepare("UPDATE plaza_posts SET comment_count = MAX(0, comment_count - 1) WHERE id = ?").bind(existing.post_id).run();
 
     return json({ ok: true });
+  }
+
+  return json({ error: "not_found" }, 404);
+}
+
+/**
+ * 管理员广场管理路由（/api/admin/plaza/*）：
+ * 查看全部帖子（含隐藏）、查看完整详情、删除任意帖子/评论、隐藏/恢复帖子。
+ * 所有操作写入 admin_audit 审计日志。
+ */
+export async function adminPlazaRoute(request: Request, env: Env): Promise<Response> {
+  if (!env.DB) return json({ error: "database_unavailable" }, 503);
+  if (!await adminAuthLocal(request, env.DB)) return json({ error: "auth_required" }, 401);
+  const url = new URL(request.url);
+  const path = url.pathname;
+  const method = request.method;
+
+  // GET /api/admin/plaza/posts — 全量帖子列表（含隐藏帖，可筛选/搜索/分页）
+  if (path === "/api/admin/plaza/posts" && method === "GET") {
+    const page = Math.max(1, Number(url.searchParams.get("page") ?? "1") || 1);
+    const limit = Math.min(50, Math.max(1, Number(url.searchParams.get("limit") ?? "20") || 20));
+    const kind = url.searchParams.get("kind")?.trim() || null;
+    const q = url.searchParams.get("q")?.trim() || null;
+    const offset = (page - 1) * limit;
+
+    const where: string[] = [];
+    const params: unknown[] = [];
+    if (kind) { where.push("p.kind = ?"); params.push(kind); }
+    if (q) { where.push("(p.collection_title LIKE ? OR u.nickname LIKE ? OR u.email LIKE ?)"); params.push(`%${q}%`, `%${q}%`, `%${q}%`); }
+    const whereSql = where.length ? ` WHERE ${where.join(" AND ")}` : "";
+
+    const rows = await env.DB.prepare(
+      `SELECT p.id, p.user_id, p.post_type, p.kind, p.collection_title, p.description, p.item_count, p.like_count, p.comment_count, p.is_public, p.created_at, p.updated_at, u.nickname, u.email,
+        (SELECT COUNT(*) FROM plaza_comments c2 WHERE c2.post_id = p.id) AS live_comment_count
+      FROM plaza_posts p LEFT JOIN user_accounts u ON p.user_id = u.id${whereSql}
+      ORDER BY p.created_at DESC LIMIT ? OFFSET ?`
+    ).bind(...params, limit, offset).all();
+    const total = await env.DB.prepare(`SELECT COUNT(*) AS total FROM plaza_posts p LEFT JOIN user_accounts u ON p.user_id = u.id${whereSql}`).bind(...params).first<{ total: number }>();
+
+    return json({
+      // 管理列表刻意不返回 items 大 JSON（详情接口按需拉取），live_comment_count 用于校正可能漂移的计数
+      posts: rows.results ?? [],
+      page,
+      limit,
+      total: total?.total ?? 0,
+    });
+  }
+
+  // GET /api/admin/plaza/posts/:id — 帖子完整详情（含全部评论与作者邮箱）
+  const adminDetailMatch = path.match(/^\/api\/admin\/plaza\/posts\/(\d+)$/);
+  if (adminDetailMatch && method === "GET") {
+    const postId = Number(adminDetailMatch[1]);
+    const post = await env.DB.prepare(
+      `SELECT p.*, u.nickname, u.email FROM plaza_posts p LEFT JOIN user_accounts u ON p.user_id = u.id WHERE p.id = ?`
+    ).bind(postId).first<Record<string, unknown>>();
+    if (!post) return json({ error: "post_not_found" }, 404);
+
+    const comments = await env.DB.prepare(
+      `SELECT c.id, c.post_id, c.user_id, c.content, c.parent_id, c.created_at, u.nickname, u.email
+       FROM plaza_comments c LEFT JOIN user_accounts u ON c.user_id = u.id WHERE c.post_id = ? ORDER BY c.created_at ASC LIMIT 500`
+    ).bind(postId).all();
+
+    return json({
+      post: { ...post, items: JSON.parse(String(post.items ?? "[]")) },
+      comments: comments.results ?? [],
+    });
+  }
+
+  // DELETE /api/admin/plaza/posts/:id — 删除任意帖子（batch 原子清理评论与点赞）
+  const adminPostDeleteMatch = path.match(/^\/api\/admin\/plaza\/posts\/(\d+)$/);
+  if (adminPostDeleteMatch && method === "DELETE") {
+    const postId = Number(adminPostDeleteMatch[1]);
+    const existing = await env.DB.prepare("SELECT id, collection_title, user_id FROM plaza_posts WHERE id = ?").bind(postId).first<{ id: number; collection_title: string; user_id: number }>();
+    if (!existing) return json({ error: "post_not_found" }, 404);
+    await env.DB.batch([
+      env.DB.prepare("DELETE FROM plaza_comments WHERE post_id = ?").bind(postId),
+      env.DB.prepare("DELETE FROM plaza_likes WHERE post_id = ?").bind(postId),
+      env.DB.prepare("DELETE FROM plaza_posts WHERE id = ?").bind(postId),
+    ]);
+    await recordAudit(env, "plaza:delete_post", `删除帖子 #${postId}「${existing.collection_title}」（作者 #${existing.user_id}）`, request);
+    return json({ ok: true });
+  }
+
+  // POST /api/admin/plaza/posts/:id/visibility — 隐藏/恢复帖子
+  const visibilityMatch = path.match(/^\/api\/admin\/plaza\/posts\/(\d+)\/visibility$/);
+  if (visibilityMatch && method === "POST") {
+    const postId = Number(visibilityMatch[1]);
+    const body = await request.json().catch(() => null) as Record<string, unknown> | null;
+    const isPublic = body?.is_public ? 1 : 0;
+    const existing = await env.DB.prepare("SELECT id, collection_title FROM plaza_posts WHERE id = ?").bind(postId).first<{ id: number; collection_title: string }>();
+    if (!existing) return json({ error: "post_not_found" }, 404);
+    await env.DB.prepare("UPDATE plaza_posts SET is_public = ?, updated_at = datetime('now') WHERE id = ?").bind(isPublic, postId).run();
+    await recordAudit(env, `plaza:${isPublic ? "restore" : "hide"}_post`, `${isPublic ? "恢复" : "隐藏"}帖子 #${postId}「${existing.collection_title}」`, request);
+    return json({ ok: true, is_public: isPublic });
+  }
+
+  // DELETE /api/admin/plaza/comments/:id — 删除任意评论（连同其直接回复，计数按实际删除数修正）
+  const adminCommentDeleteMatch = path.match(/^\/api\/admin\/plaza\/comments\/(\d+)$/);
+  if (adminCommentDeleteMatch && method === "DELETE") {
+    const commentId = Number(adminCommentDeleteMatch[1]);
+    const existing = await env.DB.prepare("SELECT id, post_id, user_id, content FROM plaza_comments WHERE id = ?").bind(commentId).first<{ id: number; post_id: number; user_id: number; content: string }>();
+    if (!existing) return json({ error: "comment_not_found" }, 404);
+    const replies = await env.DB.prepare("SELECT id FROM plaza_comments WHERE parent_id = ?").bind(commentId).all<{ id: number }>();
+    const replyIds = (replies.results ?? []).map((r) => r.id);
+    const removed = 1 + replyIds.length;
+    const db = env.DB;
+    await db.batch([
+      ...replyIds.map((id) => db.prepare("DELETE FROM plaza_comments WHERE id = ?").bind(id)),
+      db.prepare("DELETE FROM plaza_comments WHERE id = ?").bind(commentId),
+      db.prepare("UPDATE plaza_posts SET comment_count = MAX(0, comment_count - ?) WHERE id = ?").bind(removed, existing.post_id),
+    ]);
+    await recordAudit(env, "plaza:delete_comment", `删除帖子 #${existing.post_id} 的评论 #${commentId}（含 ${replyIds.length} 条回复）`, request);
+    return json({ ok: true, removed });
   }
 
   return json({ error: "not_found" }, 404);
