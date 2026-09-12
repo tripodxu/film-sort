@@ -10,3 +10,4 @@ dist/
 .npm-cache/
 .mimocode/plans/
 docs/old/
+plaza.json
