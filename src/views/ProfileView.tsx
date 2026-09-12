@@ -73,8 +73,6 @@ export function ProfileView({ profile, activeRanking, locale, t, label, format, 
             <span className="rank-date"><CalendarDays size={12} />{new Date(activeRanking.createdAt).toLocaleDateString(locale === "zh" ? "zh-CN" : "en-US")}</span>
             {!isReordering && !editWorksOpen && <button className="rank-pill" onClick={() => startReorder(profileRankIdx)}><SquarePen size={13} />{t("手动调整", "Reorder")}</button>}
             {!isReordering && <button className="rank-pill" onClick={() => setEditWorksOpen(true)}><Pencil size={13} />{t("编辑作品", "Edit works")}</button>}
-            <button className="rank-pill" onClick={() => openShareModal(activeRanking)}><Share2 size={13} />{t("分享", "Share")}</button>
-            <button className="rank-pill" onClick={() => void shareSingleRanking(activeRanking)}><Link size={13} />{t("比较", "Compare")}</button>
             {accountToken && <button className="rank-pill accent" onClick={() => { setPublishTarget("ranking"); setShowPublishModal(true); }} style={{ position: "relative" }}><Globe size={13} />{t("发布", "Publish")}{publishBurst && <span className="publish-burst">{Array.from({ length: 12 }).map((_, i) => { const colors = ["var(--accent)", "#4ade80", "#818cf8", "#f472b6", "#facc15"]; return <span key={i} className="publish-particle" style={{ "--angle": i * 30 + "deg", "--delay": i * 0.03 + "s", "--color": colors[i % 5] } as any} />; })}</span>}</button>}
             <div className="rank-menu-wrap">
               <button className="rank-pill icon-only" aria-haspopup="menu" aria-expanded={menuOpen} title={t("更多操作", "More")} onClick={() => setMenuOpen(!menuOpen)}><MoreHorizontal size={15} /></button>
@@ -83,6 +81,9 @@ export function ProfileView({ profile, activeRanking, locale, t, label, format, 
                 <div className="rank-menu" role="menu">
                   <button role="menuitem" onClick={() => { setMenuOpen(false); setEditingRankIdx(profileRankIdx); setEditingRankTitle(activeRanking.collectionTitle); }}><Pencil size={13} />{t("改名", "Rename")}</button>
                   <button role="menuitem" onClick={() => { setMenuOpen(false); const works = activeRanking.items.map(item => ({ id: item.id, title: item.title, subtitle: item.subtitle, creator: item.creator, year: item.year, posterUrls: item.posterUrls })); openCollection({ id: `rerank-${activeRanking.profileId}`, kind: activeRanking.kind, source: "custom", title: activeRanking.collectionTitle, description: "", topN: activeRanking.items.length, works }); }}><RefreshCw size={13} />{t("重新排序", "Re-rank")}</button>
+                  <button role="menuitem" onClick={() => { setMenuOpen(false); openShareModal(activeRanking); }}><Share2 size={13} />{t("分享链接", "Share link")}</button>
+                  <button role="menuitem" onClick={() => { setMenuOpen(false); void shareSingleRanking(activeRanking); }}><Link size={13} />{t("比较链接", "Compare link")}</button>
+                  {!isReordering && !editWorksOpen && <div className="rank-menu-sep" />}
                   {!isReordering && !editWorksOpen && <button role="menuitem" className="danger" onClick={() => { setMenuOpen(false); setConfirmDelete(true); }}><Trash2 size={13} />{t("删除榜单", "Delete list")}</button>}
                 </div>
               </>}

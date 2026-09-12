@@ -430,7 +430,10 @@ kbd{display:inline-flex;align-items:center;justify-content:center;min-width:22px
 .rank-menu{position:absolute;top:calc(100% + 6px);right:0;z-index:40;min-width:168px;display:grid;gap:2px;padding:6px;background:rgba(20,27,24,.97);border:1px solid rgba(216,248,106,.28);border-radius:12px;box-shadow:0 16px 44px rgba(0,0,0,.5);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px)}
 .rank-menu button{display:flex;align-items:center;gap:9px;min-height:38px;padding:0 12px;border-radius:8px;background:none;border:0;color:#d7dfd3;font-size:13px;text-align:left;transition:background .14s,color .14s}
 .rank-menu button:hover{background:rgba(216,248,106,.1);color:var(--accent)}
+.rank-menu-sep{height:1px;margin:4px 8px;background:rgba(218,238,211,.12)}
 .rank-menu button.danger{color:#fca5a5}
 .rank-menu button.danger:hover{background:rgba(248,113,113,.12);color:var(--red)}
+.db-quick{display:grid;gap:6px;padding:10px 12px;border:1px dashed rgba(216,248,106,.25);border-radius:10px;background:rgba(216,248,106,.03)}
+.db-quick .eyebrow{font-size:10px}
 .rank-delete-bar{display:flex;align-items:center;gap:12px;margin:2px 0 16px;padding:12px 16px;border:1px solid rgba(248,113,113,.4);border-radius:12px;background:rgba(248,113,113,.07);font-size:13px;color:#f0d5d5;line-height:1.5}
 @media(max-width:600px){.rank-actions{gap:6px}.rank-pill{padding:0 11px;font-size:11px}.rank-date{display:none}}

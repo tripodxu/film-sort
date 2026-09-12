@@ -2,6 +2,7 @@ import type { Env } from "./index";
 import { getUserFromToken } from "./account";
 import { upstream } from "./media";
 import { loadProviderCookie, neteaseUserId, neteaseUserPlaylists } from "./netease";
+import { classifyDoubanList, fetchDoubanList } from "./doubanlist";
 
 const json = (data: unknown, status = 200) => new Response(JSON.stringify(data), { status, headers: { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" } });
 
@@ -169,6 +170,28 @@ export async function importRoute(request: Request, env: Env): Promise<Response>
     } catch (error) {
       console.error("doulist import failed:", error instanceof Error ? error.message : error);
       return json({ error: "doulist_unavailable", msg: "豆列抓取失败，豆瓣可能限流，请稍后重试" }, 502);
+    }
+  }
+
+  if (url.pathname === "/api/import/douban-list" && request.method === "GET") {
+    const target = url.searchParams.get("url")?.trim() ?? "";
+    const classified = classifyDoubanList(target);
+    if (classified.kind === "unknown") {
+      return json({ error: "invalid_url", msg: "请粘贴豆瓣豆列（doulist/123）、我的书影音（mine?status=wish/collect）或清单（subject_collection/XXX）链接" }, 400);
+    }
+    try {
+      const cookie = await loadProviderCookie(env, user.id, "douban");
+      const works = classified.kind === "doulist"
+        ? await fetchDoulist(target, cookie)
+        : (await fetchDoubanList(classified, cookie)).works;
+      if (!works.length) {
+        const reason = classified.kind === "mine" && !cookie ? "请先在上方连接豆瓣（扫码或粘贴 Cookie），再导入想看/已看清单" : "该清单为空或抓取被拦截，请稍后重试";
+        return json({ error: "list_empty", msg: reason }, 502);
+      }
+      return json({ works, total: works.length, kind: classified.kind });
+    } catch (error) {
+      console.error("douban-list import failed:", error instanceof Error ? error.message : error);
+      return json({ error: "douban_list_unavailable", msg: "豆瓣清单抓取失败，可能限流，请稍后重试" }, 502);
     }
   }
 

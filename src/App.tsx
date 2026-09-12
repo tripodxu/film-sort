@@ -409,11 +409,12 @@ export default function App() {
     if (!target) return;
     setBusy(true);
     try {
-      const response = await fetch(`/api/import/doulist?url=${encodeURIComponent(target)}`, { headers: { authorization: `Bearer ${accountToken}` }, signal: AbortSignal.timeout(120000) });
+      const response = await fetch(`/api/import/douban-list?url=${encodeURIComponent(target)}`, { headers: { authorization: `Bearer ${accountToken}` }, signal: AbortSignal.timeout(120000) });
       const data = await response.json() as { works?: Array<Artwork & { type?: string; poster_url?: string }>; msg?: string; error?: string };
-      if (!response.ok || !data.works) { setNotice(t("豆列导入失败：" + (data.msg ?? data.error ?? "未知错误"), "Doulist import failed: " + (data.msg ?? data.error ?? ""))); return; }
+      if (!response.ok || !data.works) { setNotice(t("豆瓣导入失败：" + (data.msg ?? data.error ?? "未知错误"), "Douban import failed: " + (data.msg ?? data.error ?? ""))); return; }
       applyImportedWorks(data.works);
-    } catch { setNotice(t("豆列导入失败，豆瓣可能限流，请稍后重试。", "Doulist import failed (Douban may be rate limiting). Please retry.")); }
+      setNotice(t(`已导入 ${data.works.length} 件作品。`, `Imported ${data.works.length} works.`));
+    } catch { setNotice(t("豆瓣导入失败，可能限流，请稍后重试。", "Douban import failed (may be rate limited). Please retry.")); }
     finally { setBusy(false); }
   }
   async function importNeteasePlaylist(rawUrl: string) {
