@@ -121,6 +121,8 @@ export interface ProfileViewProps {
   editingRankTitle: string;
   setEditingRankTitle: (title: string) => void;
   renameRank: (idx: number) => void;
+  deleteRank: (idx: number) => void;
+  setNotice: (notice: string) => void;
   openCollection: (collection: MediaCollection) => void;
   shareSingleRanking: (ranking: RankingExport) => void;
   openShareModal: (ranking?: RankingExport) => void;

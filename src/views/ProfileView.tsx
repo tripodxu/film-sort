@@ -1,4 +1,4 @@
-import { Download, Globe, GripVertical, ArrowDown, ArrowUp, Link, Plus, Share2, StickyNote, Undo2, Users, X } from "lucide-react";
+import { Download, Globe, GripVertical, ArrowDown, ArrowUp, Link, Plus, Share2, StickyNote, Trash2, Undo2, Users, X } from "lucide-react";
 import { Poster } from "../components/Poster";
 import { IconButton } from "./IconButton";
 import { heading } from "./helpers";
@@ -8,7 +8,7 @@ import type { ProfileViewProps } from "./types";
 import type { RankedArtwork } from "../lib/profile";
 import { useRef, useState } from "react";
 
-export function ProfileView({ profile, activeRanking, locale, t, label, format, setFormat, exportLayout, setExportLayout, exportProfile, share, shareUrl, qrUrl, profileName, setProfileName, namedProfile, persist, navigateTo, peer, editingRankIdx, setEditingRankIdx, editingRankTitle, setEditingRankTitle, renameRank, openCollection, shareSingleRanking, openShareModal, setActiveKind, ranking, setRanking, collection, notes, openNoteModal, openArtworkDetail, accountToken, publishToPlaza, publishProfileToPlaza, updateRankingWorks, syncPlazaPost, reorderMode, reorderItems, startReorder, saveReorder, cancelReorder, moveItem, busy }: ProfileViewProps) {
+export function ProfileView({ profile, activeRanking, locale, t, label, format, setFormat, exportLayout, setExportLayout, exportProfile, share, shareUrl, qrUrl, profileName, setProfileName, namedProfile, persist, navigateTo, peer, editingRankIdx, setEditingRankIdx, editingRankTitle, setEditingRankTitle, renameRank, deleteRank, setNotice, openCollection, shareSingleRanking, openShareModal, setActiveKind, ranking, setRanking, collection, notes, openNoteModal, openArtworkDetail, accountToken, publishToPlaza, publishProfileToPlaza, updateRankingWorks, syncPlazaPost, reorderMode, reorderItems, startReorder, saveReorder, cancelReorder, moveItem, busy }: ProfileViewProps) {
   const profileRankIdx = profile.rankings.indexOf(activeRanking);
   const isRenamingProfile = editingRankIdx === profileRankIdx;
   const isReordering = reorderMode === profileRankIdx;
@@ -19,6 +19,7 @@ export function ProfileView({ profile, activeRanking, locale, t, label, format, 
   const [exporting, setExporting] = useState(false);
   const [editWorksOpen, setEditWorksOpen] = useState(false);
   const [plazaSyncPostId, setPlazaSyncPostId] = useState<number | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState(false);
 
   function handlePublish() {
     if (publishTarget === "profile") publishProfileToPlaza(publishDesc);
@@ -76,6 +77,13 @@ export function ProfileView({ profile, activeRanking, locale, t, label, format, 
             {accountToken && <button className="text-button" onClick={() => { setPublishTarget("ranking"); setShowPublishModal(true); }} style={{ fontSize: 12, color: "var(--accent)", position: "relative" }}><Globe size={12} style={{ verticalAlign: "middle", marginRight: 3 }} />{t("发布到广场", "Publish to plaza")}{publishBurst && <span className="publish-burst">{Array.from({ length: 12 }).map((_, i) => { const colors = ["var(--accent)", "#4ade80", "#818cf8", "#f472b6", "#facc15"]; return <span key={i} className="publish-particle" style={{ "--angle": i * 30 + "deg", "--delay": i * 0.03 + "s", "--color": colors[i % 5] } as any} />; })}</span>}</button>}
             {!isReordering && <button className="text-button" onClick={() => setEditWorksOpen(true)} style={{ fontSize: 12, color: "var(--accent)" }}>{t("编辑作品", "Edit works")}</button>}
             {!isReordering && !editWorksOpen && <button className="text-button" onClick={() => startReorder(profileRankIdx)} style={{ fontSize: 12, color: "var(--accent)" }}>{t("手动调整", "Manual order")}</button>}
+            {!isReordering && !editWorksOpen && (confirmDelete
+              ? <span style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12 }}>
+                  <span style={{ color: "var(--red)" }}>{t(`确认删除「${activeRanking.collectionTitle}」？`, `Delete "${activeRanking.collectionTitle}"?`)}</span>
+                  <button className="text-button" style={{ color: "var(--red)" }} onClick={() => { deleteRank(profileRankIdx); setConfirmDelete(false); setNotice(t("榜单已删除。", "List deleted.")); }}>{t("删除", "Delete")}</button>
+                  <button className="text-button" style={{ color: "var(--muted)" }} onClick={() => setConfirmDelete(false)}>{t("取消", "Cancel")}</button>
+                </span>
+              : <button className="text-button" onClick={() => setConfirmDelete(true)} style={{ fontSize: 12, color: "var(--muted)" }}><Trash2 size={12} style={{ verticalAlign: "middle", marginRight: 3 }} />{t("删除榜单", "Delete list")}</button>)}
           </div>
         </div>
 
@@ -114,7 +122,6 @@ export function ProfileView({ profile, activeRanking, locale, t, label, format, 
                   <Poster work={work} kind={activeRanking.kind} />
                 </div>
                 <div><strong>{work.title}</strong><small>{work.creator} {work.year}</small></div>
-                {work.rank <= 3 && <span style={{ fontSize: work.rank === 1 ? 20 : 16 }}>{work.rank === 1 ? "🥇" : work.rank === 2 ? "🥈" : "🥉"}</span>}
                 <button className="icon-button" title={t("批注", "Note")} onClick={(e) => { e.stopPropagation(); openNoteModal(noteKey("work", activeRanking.kind, work.id), work.title, activeRanking.kind, work.posterUrls); }} style={{ width: 28, height: 28, marginLeft: "auto", color: hasNote(notes, noteKey("work", activeRanking.kind, work.id)) ? "var(--accent)" : "var(--muted)", opacity: hasNote(notes, noteKey("work", activeRanking.kind, work.id)) ? 1 : 0.4 }}><StickyNote size={14} /></button>
               </li>
             ))}

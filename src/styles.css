@@ -401,3 +401,16 @@ kbd{display:inline-flex;align-items:center;justify-content:center;min-width:22px
 .help-steps{margin:0;padding-left:22px;display:grid;gap:14px}
 .help-steps li{color:#bbc8ae;font-size:13px;line-height:1.8}
 .help-steps strong{display:block;color:var(--accent);font-weight:500;margin-bottom:2px}
+
+/* ===== 榜单行对齐 / 大量榜单横向滚动 / 导入已添加海报卡片 ===== */
+.ranking-list .row-number{width:36px;min-width:36px;display:inline-flex;align-items:center;justify-content:center;font-size:16px}
+.profile-dimensions{display:flex;gap:10px;overflow-x:auto;padding-bottom:10px;scrollbar-width:thin}
+.profile-dimensions>.profile-dimension{flex:0 0 200px;min-width:200px}
+.import-form{max-width:920px}
+.custom-added-grid{grid-template-columns:repeat(auto-fill,minmax(128px,1fr));gap:12px}
+.custom-added-item{display:flex;flex-direction:column;align-items:stretch;gap:7px;padding:9px;position:relative}
+.custom-added-item .poster-small{width:100%;height:auto;aspect-ratio:2/3;border-radius:6px}
+.custom-added-item .poster-small img{width:100%;height:100%;object-fit:cover}
+.custom-added-item>span{font-size:13px;line-height:1.4;white-space:normal;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;text-align:center}
+.custom-added-item .icon-button{position:absolute;top:6px;right:6px;width:24px;height:24px;background:rgba(0,0,0,.6);border-radius:50%}
+@media(max-width:600px){.custom-added-grid{grid-template-columns:repeat(auto-fill,minmax(104px,1fr))}.profile-dimensions>.profile-dimension{flex-basis:168px;min-width:168px}}
