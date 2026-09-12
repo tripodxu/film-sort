@@ -285,7 +285,7 @@ const TYPE_HINTS: Record<string, { zh: string[]; en: string[] }> = {
 };
 
 // 消歧义页特征：「也可以指 / 可指以下 / 是以下条目」等枚举句式，这类摘要不是作品介绍
-const DISAMBIG_RE = /(也可以指|也可指|可以指|可指以下|是以下|為以下|为以下|指以下|以下.*同名|消歧义|消歧義)/;
+const DISAMBIG_RE = /(也可以指|也可指|可以指|可指[：:]|可指以下|是以下|為以下|为以下|指以下|以下.*同名|消歧义|消歧義)/;
 // 类型词：命中则加分（不硬拒，避免误杀正确条目）
 const TYPE_WORDS: Record<string, RegExp> = {
   movie: /(电影|影片|剧情片|纪录片|动画片|导演|制片|上映|票房|film|movie|directed)/i,
@@ -320,7 +320,7 @@ function scoreCandidate(pageTitle: string, extract: string, opts: { mediaType?: 
     if (t.includes(base)) score += 1;
     else if (!opts.qualified && !/(^|\s)[a-z]/i.test(base)) score -= 3;
   }
-  if (opts.qualified) score += 3;
+  if (opts.qualified) score += 6;
   return score;
 }
 
