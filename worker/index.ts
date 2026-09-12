@@ -3,7 +3,7 @@ import { accountRoute, hashPasswordStrong, needsPasswordUpgrade, timingSafeEqual
 import { getUserFromToken } from "./account";
 import { adminPlazaRoute, plazaRoute } from "./plaza";
 import { importRoute } from "./import";
-import { neteaseQrIssue, neteaseQrPoll, hasProviderCookie, deleteProviderCookie } from "./netease";
+import { neteaseQrIssue, neteaseQrPoll, hasProviderCookie, deleteProviderCookie, saveProviderCookie, neteaseUserId } from "./netease";
 import { recordAudit } from "./audit";
 
 export interface Env {
@@ -1668,6 +1668,21 @@ async function route(request: Request, env: Env): Promise<Response> {
       }
       if (url.pathname === "/api/netease/status" && request.method === "GET") {
         return json({ connected: await hasProviderCookie(env, user.id, "netease") });
+      }
+      // 手动粘贴 Cookie 连接（扫码被风控时的替代入口）：校验 MUSIC_U 真实可用后才入保险库
+      if (url.pathname === "/api/netease/cookie" && request.method === "POST") {
+        const body = await request.json().catch(() => null) as { cookie?: unknown } | null;
+        const raw = typeof body?.cookie === "string" ? body.cookie.trim() : "";
+        if (!raw || raw.length > 4096) return json({ error: "invalid_cookie", msg: "请粘贴包含 MUSIC_U 的完整 Cookie（或纯 MUSIC_U 值）" }, 400);
+        const musicU = raw.match(/MUSIC_U=([^;,\s]+)/)?.[1];
+        if (!musicU) return json({ error: "missing_music_u", msg: "粘贴的内容里没有 MUSIC_U，请确认已登录 music.163.com" }, 400);
+        const csrf = raw.match(/__csrf=([^;,\s]+)/)?.[1];
+        const normalized = csrf ? `MUSIC_U=${musicU}; __csrf=${csrf}` : `MUSIC_U=${musicU}`;
+        const uid = await neteaseUserId(normalized);
+        if (!uid) return json({ error: "cookie_invalid", msg: "该 Cookie 无法通过网易云校验（可能已失效），请重新复制" }, 400);
+        await saveProviderCookie(env, user.id, "netease", normalized);
+        await recordAudit(env, "netease:cookie", `用户 #${user.id} 手动连接网易云 (uid=${uid})`, request);
+        return json({ ok: true, nickname: null });
       }
       if (url.pathname === "/api/netease/disconnect" && request.method === "POST") {
         await deleteProviderCookie(env, user.id, "netease");
