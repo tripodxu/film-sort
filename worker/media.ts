@@ -278,14 +278,35 @@ export async function doubanTop250(limit: number): Promise<DoubanWork[]> {
 
 // ===== Wikipedia & Baidu Baike for content_intro =====
 
-const TYPE_HINTS: Record<string, string[]> = {
-  movie: ["电影", "film", "影片"],
-  book: ["小说", "novel", "书籍"],
-  music: ["专辑", "album", "音乐专辑"],
+const TYPE_HINTS: Record<string, { zh: string[]; en: string[] }> = {
+  movie: { zh: ["电影"], en: ["film"] },
+  book: { zh: ["小说"], en: ["novel"] },
+  music: { zh: ["专辑"], en: ["album"] },
 };
 
-// 从 titles 列表取摘要，返回第一个有效结果
-async function fetchExtracts(titles: string[], lang: "zh" | "en", timeoutMs: number): Promise<{ intro: string; source: string } | null> {
+// 消歧义页特征：「也可以指 / 可指以下 / 是以下条目」等枚举句式，这类摘要不是作品介绍
+const DISAMBIG_RE = /(也可以指|也可指|可以指|可指以下|是以下|為以下|为以下|指以下|以下.*同名|消歧义|消歧義|同名的?作品|同名字)/;
+
+function yearOk(extract: string, pageTitle: string, year?: string): boolean {
+  if (!year) return true;
+  return pageTitle.includes(year) || extract.includes(year);
+}
+
+// 按请求 titles 的顺序挑第一个通过守卫的摘要
+function pickExtract(order: string[], pages: Record<string, { title?: string; extract?: string; missing?: boolean }>, lang: "zh" | "en", year?: string, relaxed = false): { intro: string; source: string } | null {
+  const byTitle = new Map<string, { title?: string; extract?: string; missing?: boolean }>();
+  for (const p of Object.values(pages)) if (p.title) byTitle.set(p.title.toLowerCase(), p);
+  for (const want of order) {
+    const p = byTitle.get(want.toLowerCase());
+    if (!p || p.missing || !p.extract || p.extract.length <= 30) continue;
+    if (DISAMBIG_RE.test(p.extract)) continue;
+    if (!relaxed && !yearOk(p.extract, p.title ?? "", year)) continue;
+    return { intro: p.extract, source: `${lang}wiki` };
+  }
+  return null;
+}
+
+async function fetchExtracts(titles: string[], lang: "zh" | "en", timeoutMs: number, year?: string, relaxed = false): Promise<{ intro: string; source: string } | null> {
   const params = new URLSearchParams({
     action: "query", titles: titles.join("|"),
     prop: "extracts", exintro: "true", explaintext: "true", exlimit: "5", redirects: "1", format: "json",
@@ -295,42 +316,13 @@ async function fetchExtracts(titles: string[], lang: "zh" | "en", timeoutMs: num
     signal: AbortSignal.timeout(timeoutMs),
   });
   if (!r.ok) return null;
-  const d = await r.json() as { query?: { pages?: Record<string, { extract?: string; missing?: boolean }> } };
+  const d = await r.json() as { query?: { pages?: Record<string, { title?: string; extract?: string; missing?: boolean }> } };
   if (!d.query?.pages) return null;
-  for (const p of Object.values(d.query.pages)) {
-    if (p.extract && !p.missing && p.extract.length > 30) return { intro: p.extract, source: `${lang}wiki` };
-  }
-  return null;
+  return pickExtract(titles, d.query.pages, lang, year, relaxed);
 }
 
-async function fetchWikipedia(titles: string[], lang: "zh" | "en" = "zh", timeoutMs = 8000, mediaType?: "movie" | "book" | "music", direct = false): Promise<{ intro: string; source: string } | null> {
-  try {
-    const hint = mediaType ? TYPE_HINTS[mediaType]?.[0] : undefined;
-
-    if (!direct) {
-      // Phase 1: titles 直查（仅单词标题，多词标题跳过避免重定向误命中）
-      if (titles[0].length <= 10 && !titles[0].includes(" ")) {
-        const r1 = await fetchExtracts(titles, lang, timeoutMs);
-        if (r1) return r1;
-      }
-
-      // Phase 2: "标题 类型限定词" 搜索（如 "龙猫 电影"）
-      if (hint) {
-        const st = await searchAndExtract(titles[0] + " " + hint, lang, timeoutMs);
-        if (st) return st;
-      }
-    }
-
-    // Phase 3: 全文搜索标题
-    return await searchAndExtract(titles[0], lang, timeoutMs);
-  } catch {
-    return null;
-  }
-}
-
-// 搜索页面并获取摘要（一步到位），多词搜索时过滤标题相关性
-async function searchAndExtract(query: string, lang: "zh" | "en", timeoutMs: number): Promise<{ intro: string; source: string } | null> {
-  const words = query.split(/\s+/).filter(Boolean);
+// 搜索页面并获取摘要；要求页面标题包含主标题、非消歧义、（严格模式）含年份
+async function searchAndExtract(query: string, lang: "zh" | "en", timeoutMs: number, baseTitle?: string, year?: string): Promise<{ intro: string; source: string } | null> {
   const params = new URLSearchParams({
     action: "query", generator: "search", gsrsearch: query,
     gsrnamespace: "0", gsrlimit: "5", redirects: "1",
@@ -343,16 +335,19 @@ async function searchAndExtract(query: string, lang: "zh" | "en", timeoutMs: num
   if (!r.ok) return null;
   const d = await r.json() as { query?: { pages?: Record<string, { title?: string; extract?: string; missing?: boolean }> } };
   if (!d.query?.pages) return null;
-  const valid = Object.values(d.query.pages).filter((p) => {
-    if (!p.extract || p.missing || p.extract.length <= 30) return false;
-    // 多词搜索时，标题必须包含至少一个搜索词
-    if (words.length > 1) {
+  const pages = Object.values(d.query.pages);
+  const pass = (strict: boolean) => {
+    for (const p of pages) {
+      if (!p.extract || p.missing || p.extract.length <= 30) continue;
+      if (DISAMBIG_RE.test(p.extract)) continue;
       const t = (p.title ?? "").toLowerCase();
-      if (!words.some((w) => t.includes(w.toLowerCase()))) return false;
+      if (baseTitle && !t.includes(baseTitle.toLowerCase())) continue;
+      if (strict && !yearOk(p.extract, p.title ?? "", year)) continue;
+      return { intro: p.extract, source: `${lang}wiki` };
     }
-    return true;
-  });
-  return valid.length > 0 ? { intro: valid[0].extract!, source: `${lang}wiki` } : null;
+    return null;
+  };
+  return pass(true) ?? (year ? pass(false) : null);
 }
 
 async function fetchBaiduBaike(query: string): Promise<{ intro: string; source: string } | null> {
@@ -373,41 +368,91 @@ async function fetchBaiduBaike(query: string): Promise<{ intro: string; source: 
   }
 }
 
-export async function fetchContentIntro(title: string, mediaType?: "movie" | "book" | "music", creator?: string): Promise<{ intro: string; source: string } | null> {
-  // 构建候选标题列表（含消歧义提示）
-  const candidates = [title];
-  if (mediaType === "book") candidates.push(`${title} (小说)`, `${title} (书籍)`);
-  if (mediaType === "music") candidates.push(`${title} (专辑)`, `${title} (专辑名)`);
+/** 从 "2017-06"、"2008-1"、"1997" 之类的出版/上映信息提取 4 位年份 */
+function extractYear(raw: unknown): string | undefined {
+  if (typeof raw !== "string" && typeof raw !== "number") return undefined;
+  return String(raw).match(/\b(19|20)\d{2}\b/)?.[0];
+}
 
-  // 并行请求中英文维基，传入类型限定词减少歧义
-  const [zhResult, enResult] = await Promise.allSettled([
-    fetchWikipedia(candidates, "zh", 8000, mediaType),
-    fetchWikipedia(candidates, "en", 6000, mediaType),
+/**
+ * 消歧核心：优先命中「标题 (年份+媒介限定词)」形式的维基条目
+ * （如 泰坦尼克号 (1997年电影) / Joker (2019 film)），避免落到
+ * 裸标题的重定向目标（法国市镇、物理学家、Joker 词条等）。
+ */
+function qualifiedTitles(title: string, mediaType: "movie" | "book" | "music" | undefined, year: string | undefined, lang: "zh" | "en"): string[] {
+  if (!mediaType) return [];
+  const hints = TYPE_HINTS[mediaType]?.[lang] ?? [];
+  const out: string[] = [];
+  for (const hint of hints) {
+    if (year) out.push(lang === "zh" ? `${title} (${year}年${hint})` : `${title} (${year} ${hint})`);
+    out.push(lang === "zh" ? `${title} (${hint})` : `${title} (${hint})`);
+  }
+  if (mediaType === "music") out.push(lang === "zh" ? `${title} (专辑名)` : `${title} (album name)`);
+  return out;
+}
+
+export async function fetchContentIntro(title: string, mediaType?: "movie" | "book" | "music", creator?: string, yearRaw?: unknown): Promise<{ intro: string; source: string } | null> {
+  const year = extractYear(yearRaw);
+
+  // Phase 0：年份限定/类型限定的精确标题直查（消歧最强信号，优先于裸标题）
+  const [zhQualified, enQualified] = await Promise.allSettled([
+    (async () => {
+      const q = qualifiedTitles(title, mediaType, year, "zh");
+      return q.length ? await fetchExtracts(q, "zh", 8000, year) : null;
+    })(),
+    (async () => {
+      const q = qualifiedTitles(title, mediaType, year, "en");
+      return q.length ? await fetchExtracts(q, "en", 6000, year) : null;
+    })(),
   ]);
+  const zhQ = zhQualified.status === "fulfilled" ? zhQualified.value : null;
+  const enQ = enQualified.status === "fulfilled" ? enQualified.value : null;
+  if (zhQ) return zhQ;
+  if (enQ) return enQ;
 
+  // Phase 1：裸标题 + 泛型限定标题直查（消歧页/年份不符的会被拒绝）
+  const candidates = [title, ...qualifiedTitles(title, mediaType, undefined, "zh").slice(0, 1)];
+  const [zhResult, enResult] = await Promise.allSettled([
+    fetchExtracts(candidates, "zh", 8000, year),
+    fetchExtracts(candidates, "en", 6000, year),
+  ]);
   const zh = zhResult.status === "fulfilled" ? zhResult.value : null;
   const en = enResult.status === "fulfilled" ? enResult.value : null;
-
-  // 优先中文
   if (zh) return zh;
   if (en) return en;
 
-  // 创作者 + 标题组合搜索（如 "三体 刘慈欣"、"范特西 周杰伦"）
-  if (creator) {
-    const creatorCandidates = [`${title} ${creator}`];
-    const [zh2, en2] = await Promise.allSettled([
-      fetchWikipedia(creatorCandidates, "zh", 8000, mediaType, true),
-      fetchWikipedia(creatorCandidates, "en", 6000, mediaType, true),
+  // Phase 2：搜索「标题 + 类型词 (+年份)」（如 "敦刻尔克 电影 2017"）
+  const hint = mediaType ? TYPE_HINTS[mediaType]?.zh[0] : undefined;
+  const searchQueries = hint ? [year ? `${title} ${hint} ${year}` : `${title} ${hint}`, title] : [title];
+  for (const q of searchQueries) {
+    const [zhS, enS] = await Promise.allSettled([
+      searchAndExtract(q, "zh", 8000, title, year),
+      searchAndExtract(q, "en", 6000, title, year),
     ]);
-    const zhR = zh2.status === "fulfilled" ? zh2.value : null;
-    const enR = en2.status === "fulfilled" ? en2.value : null;
+    const zhR = zhS.status === "fulfilled" ? zhS.value : null;
+    const enR = enS.status === "fulfilled" ? enS.value : null;
     if (zhR) return zhR;
     if (enR) return enR;
   }
 
+  // Phase 3：创作者 + 标题组合搜索（如 "三体 刘慈欣"、"范特西 周杰伦"）
+  if (creator) {
+    const cleanCreator = creator.replace(/^\[[^\]]*\]\s*/, "").trim();
+    if (cleanCreator) {
+      const [zh2, en2] = await Promise.allSettled([
+        searchAndExtract(`${title} ${cleanCreator}`, "zh", 8000),
+        searchAndExtract(`${title} ${cleanCreator}`, "en", 6000),
+      ]);
+      const zhR = zh2.status === "fulfilled" ? zh2.value : null;
+      const enR = en2.status === "fulfilled" ? en2.value : null;
+      if (zhR) return zhR;
+      if (enR) return enR;
+    }
+  }
+
   // 百度百科兜底
   try {
-    const baike = await fetchBaiduBaike(title);
+    const baike = await fetchBaiduBaike(hint ? `${title} ${hint}` : title);
     if (baike) return baike;
   } catch (e) {
     console.error(`baike failed for "${title}":`, e instanceof Error ? e.message : e);
