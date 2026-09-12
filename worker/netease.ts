@@ -49,7 +49,7 @@ export async function weapiPayload(text: string): Promise<{ params: string; encS
   return { params, encSecKey };
 }
 
-export async function weapiPost(path: string, data: Record<string, unknown>): Promise<{ json: Record<string, unknown>; setCookie: string | null }> {
+export async function weapiPost(path: string, data: Record<string, unknown>, cookie?: string | null): Promise<{ json: Record<string, unknown>; cookies: string[] }> {
   const { params, encSecKey } = await weapiPayload(JSON.stringify(data));
   const response = await fetch(`https://music.163.com${path}`, {
     method: "POST",
@@ -57,6 +57,7 @@ export async function weapiPost(path: string, data: Record<string, unknown>): Pr
       "content-type": "application/x-www-form-urlencoded",
       "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36",
       "referer": "https://music.163.com/",
+      ...(cookie ? { cookie } : {}),
     },
     body: new URLSearchParams({ params, encSecKey }).toString(),
     signal: AbortSignal.timeout(15000),
@@ -64,8 +65,18 @@ export async function weapiPost(path: string, data: Record<string, unknown>): Pr
   const text = await response.text();
   let json: Record<string, unknown>;
   try { json = JSON.parse(text) as Record<string, unknown>; } catch { throw new Error("netease_bad_json"); }
-  const setCookie = response.headers.get("set-cookie");
-  return { json, setCookie };
+  const cookies = typeof (response.headers as { getSetCookie?: () => string[] }).getSetCookie === "function"
+    ? (response.headers as { getSetCookie: () => string[] }).getSetCookie()
+    : [response.headers.get("set-cookie") ?? ""];
+  return { json, cookies: cookies.filter(Boolean) };
+}
+
+/** 从 803 响应的 JSON cookie 字段与全部 Set-Cookie 头里提取登录凭证；网易通常只经 Set-Cookie 下发。 */
+export function extractNeteaseLoginCookie(sources: Array<string | null | undefined>): string | null {
+  const musicU = sources.map((s) => s?.match(/MUSIC_U=([^;,\s]+)/)?.[1]).find(Boolean);
+  if (!musicU) return null;
+  const csrf = sources.map((s) => s?.match(/__csrf=([^;,\s]+)/)?.[1]).find(Boolean);
+  return csrf ? `MUSIC_U=${musicU}; __csrf=${csrf}` : `MUSIC_U=${musicU}`;
 }
 
 // ===== Cookie 保险库（AES-GCM 加密，密钥存 admin_config，首次自动生成） =====
@@ -133,15 +144,16 @@ export async function neteaseQrIssue(): Promise<{ unikey: string }> {
   return { unikey };
 }
 
-export async function neteaseQrPoll(unikey: string, env: Env, userId: number): Promise<{ state: "waiting" | "scanned" | "confirmed" | "expired" }> {
-  const { json } = await weapiPost("/weapi/login/qrcode/client/login", { key: unikey });
+export async function neteaseQrPoll(unikey: string, env: Env, userId: number): Promise<{ state: "waiting" | "scanned" | "confirmed" | "expired"; error?: string }> {
+  const { json, cookies } = await weapiPost("/weapi/login/qrcode/client/login", { key: unikey });
   const code = Number(json.code);
   if (code === 803) {
-    const cookie = typeof json.cookie === "string" ? json.cookie : null;
-    if (cookie) {
-      const musicU = cookie.match(/MUSIC_U=([^;]+)/)?.[1];
-      if (musicU) await saveProviderCookie(env, userId, "netease", `MUSIC_U=${musicU}`);
+    const cookie = extractNeteaseLoginCookie([typeof json.cookie === "string" ? json.cookie : null, ...cookies]);
+    if (!cookie) {
+      console.error("netease qr confirmed but no MUSIC_U in response (json.cookie absent, set-cookie had none)");
+      return { state: "expired", error: "登录已确认但未能获取凭证，请重新扫码" };
     }
+    await saveProviderCookie(env, userId, "netease", cookie);
     return { state: "confirmed" };
   }
   if (code === 802) return { state: "scanned" };
@@ -152,23 +164,20 @@ export async function neteaseQrPoll(unikey: string, env: Env, userId: number): P
 export interface NeteasePlaylistInfo { id: number; name: string; track_count: number; cover?: string; special?: boolean }
 
 export async function neteaseUserId(cookie: string): Promise<number | null> {
-  const response = await fetch("https://music.163.com/api/nuser/account/get", {
-    headers: { "user-agent": "Mozilla/5.0", "referer": "https://music.163.com/", "cookie": cookie },
-    signal: AbortSignal.timeout(15000),
-  });
-  if (!response.ok) return null;
-  const data = await response.json() as { code?: number; profile?: { userId?: number }; account?: { id?: number } };
-  return data.profile?.userId ?? data.account?.id ?? null;
+  try {
+    const { json } = await weapiPost("/weapi/nuser/account/get", {}, cookie);
+    const data = json as { profile?: { userId?: number }; account?: { id?: number } };
+    return data.profile?.userId ?? data.account?.id ?? null;
+  } catch (error) {
+    console.error("netease user id failed:", error instanceof Error ? error.message : error);
+    return null;
+  }
 }
 
 export async function neteaseUserPlaylists(cookie: string, uid: number): Promise<NeteasePlaylistInfo[]> {
-  const response = await fetch(`https://music.163.com/api/user/playlist?uid=${uid}&limit=50&offset=0`, {
-    headers: { "user-agent": "Mozilla/5.0", "referer": "https://music.163.com/", "cookie": cookie },
-    signal: AbortSignal.timeout(15000),
-  });
-  if (!response.ok) throw new Error("netease_playlist_failed");
-  const data = await response.json() as { code?: number; playlist?: Array<{ id?: number; name?: string; trackCount?: number; coverImgUrl?: string; specialType?: number; userId?: number }> };
-  return (data.playlist ?? []).filter((p) => p.id && p.name).map((p) => ({
+  const { json } = await weapiPost("/weapi/user/playlist", { offset: 0, limit: 100, total: true, uid }, cookie);
+  const list = (json.playlist ?? []) as Array<{ id?: number; name?: string; trackCount?: number; coverImgUrl?: string; specialType?: number }>;
+  return list.filter((p) => p.id && p.name).map((p) => ({
     id: p.id as number,
     name: p.name as string,
     track_count: p.trackCount ?? 0,

@@ -44,7 +44,8 @@ export function SourceView({ kind, t, label, source, setSource, setNotice, searc
     const timer = setInterval(async () => {
       try {
         const response = await fetch(`/api/netease/qr/poll?unikey=${encodeURIComponent(qrUnikey)}`, { headers: AUTH(accountToken) });
-        const data = await response.json() as { state?: QrState };
+        const data = await response.json() as { state?: QrState; error?: string };
+        if (data.error) setNotice(data.error);
         if (data.state) setQrState(data.state);
         if (data.state === "confirmed") {
           setNeteaseConnected(true);
