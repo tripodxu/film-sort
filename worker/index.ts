@@ -1,7 +1,9 @@
 import { doubanTop250, doubanSuggest, doubanBookTop250, doubanBookSuggest, doubanMusicTop250, doubanSearch, doubanBookDetail, doubanMovieDetail, doubanMusicDetail, fetchContentIntro, proxyImage, resolvePosters } from "./media";
 import { accountRoute, hashPasswordStrong, needsPasswordUpgrade, timingSafeEqual, verifyPassword } from "./account";
+import { getUserFromToken } from "./account";
 import { adminPlazaRoute, plazaRoute } from "./plaza";
 import { importRoute } from "./import";
+import { neteaseQrIssue, neteaseQrPoll, hasProviderCookie, deleteProviderCookie } from "./netease";
 import { recordAudit } from "./audit";
 
 export interface Env {
@@ -82,7 +84,7 @@ const MAX_CHALLENGE_ITEMS = 300;
 const MUSIC_API_ORIGIN = "https://music-api.gdstudio.xyz";
 const upstreamWindows = new Map<string, { startedAt: number; count: number }>();
 
-function allowUpstreamRequest(request: Request, bucket: "ai" | "music" | "auth" | "share" | "import", limit: number): boolean {
+function allowUpstreamRequest(request: Request, bucket: "ai" | "music" | "auth" | "share" | "import" | "netease", limit: number): boolean {
   const client = request.headers.get("cf-connecting-ip") ?? "anonymous";
   const key = `${bucket}:${client}`;
   const now = Date.now();
@@ -1648,6 +1650,36 @@ async function route(request: Request, env: Env): Promise<Response> {
   }
 
   if (url.pathname === "/api/auth/config") return json({ enabled: Boolean(env.DB) });
+  // 网易云扫码登录（weapi 协议）与连接状态管理
+  if (url.pathname.startsWith("/api/netease/")) {
+    if (!env.DB) return json({ error: "database_unavailable" }, 503);
+    const user = await getUserFromToken(request, env.DB);
+    if (!user) return json({ error: "authentication_required" }, 401);
+    if (!allowUpstreamRequest(request, "netease", 120)) return json({ error: "rate_limited" }, 429, { "retry-after": "60" });
+    try {
+      if (url.pathname === "/api/netease/qr/issue" && request.method === "GET") {
+        const { unikey } = await neteaseQrIssue();
+        return json({ unikey, qr_value: `https://music.163.com/login?codekey=${unikey}` });
+      }
+      if (url.pathname === "/api/netease/qr/poll" && request.method === "GET") {
+        const unikey = url.searchParams.get("unikey")?.trim() ?? "";
+        if (!unikey || unikey.length > 64) return json({ error: "invalid_key" }, 400);
+        return json(await neteaseQrPoll(unikey, env, user.id));
+      }
+      if (url.pathname === "/api/netease/status" && request.method === "GET") {
+        return json({ connected: await hasProviderCookie(env, user.id, "netease") });
+      }
+      if (url.pathname === "/api/netease/disconnect" && request.method === "POST") {
+        await deleteProviderCookie(env, user.id, "netease");
+        await recordAudit(env, "netease:disconnect", `用户 #${user.id} 断开网易云连接`, request);
+        return json({ ok: true });
+      }
+    } catch (error) {
+      console.error("netease qr failed:", error instanceof Error ? error.message : error);
+      return json({ error: "netease_unavailable", msg: "网易云接口暂时不可用，请稍后重试" }, 502);
+    }
+    return json({ error: "not_found" }, 404);
+  }
   if (url.pathname.startsWith("/api/import/")) {
     if (!allowUpstreamRequest(request, "import", 8)) return json({ error: "rate_limited", msg: "导入过于频繁，请稍后再试" }, 429, { "retry-after": "600" });
     return withSecurityHeaders(await importRoute(request, env));

@@ -1,6 +1,7 @@
 import type { Env } from "./index";
 import { getUserFromToken } from "./account";
 import { upstream } from "./media";
+import { loadProviderCookie, neteaseUserId, neteaseUserPlaylists } from "./netease";
 
 const json = (data: unknown, status = 200) => new Response(JSON.stringify(data), { status, headers: { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" } });
 
@@ -97,13 +98,13 @@ export function neteasePlaylistId(raw: string): string | null {
   return match ? match[1] : null;
 }
 
-/** 调网易云音乐公开接口抓取歌单曲目（公开歌单无需登录 Cookie） */
-export async function fetchNeteasePlaylist(playlistId: string): Promise<ImportedWork[]> {
+/** 调网易云音乐公开接口抓取歌单曲目（带连接 Cookie 时私有歌单也可导入） */
+export async function fetchNeteasePlaylist(playlistId: string, cookie?: string | null): Promise<ImportedWork[]> {
   const response = await fetch(`https://music.163.com/api/playlist/detail?id=${encodeURIComponent(playlistId)}`, {
     headers: {
       "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36",
       "referer": "https://music.163.com/",
-      "accept": "application/json",
+      ...(cookie ? { cookie } : {}),
     },
     signal: AbortSignal.timeout(15000),
   });
@@ -148,13 +149,24 @@ export async function importRoute(request: Request, env: Env): Promise<Response>
       return json({ error: "invalid_playlist_url", msg: "请粘贴网易云歌单链接（含 playlist?id=）或纯歌单 ID" }, 400);
     }
     try {
-      const works = await fetchNeteasePlaylist(playlistId);
-      if (!works.length) return json({ error: "playlist_empty", msg: "该歌单为空或为私有歌单，请确认链接后重试" }, 502);
+      const cookie = await loadProviderCookie(env, user.id, "netease");
+      const works = await fetchNeteasePlaylist(playlistId, cookie);
+      if (!works.length) return json({ error: "playlist_empty", msg: "该歌单为空，请确认链接后重试" }, 502);
       return json({ works, total: works.length });
     } catch (error) {
       console.error("netease import failed:", error instanceof Error ? error.message : error);
       return json({ error: "netease_unavailable", msg: "歌单抓取失败，网易接口可能限流，请稍后重试" }, 502);
     }
+  }
+
+  // 我的网易云歌单列表（需已扫码连接）：用于一键导入
+  if (url.pathname === "/api/import/netease/mine" && request.method === "GET") {
+    const cookie = await loadProviderCookie(env, user.id, "netease");
+    if (!cookie) return json({ error: "not_connected", msg: "尚未连接网易云账号，请先扫码登录" }, 400);
+    const uid = await neteaseUserId(cookie);
+    if (!uid) return json({ error: "connection_expired", msg: "网易云连接已过期，请重新扫码登录" }, 401);
+    const playlists = await neteaseUserPlaylists(cookie, uid);
+    return json({ playlists });
   }
 
   return json({ error: "not_found" }, 404);
