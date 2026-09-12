@@ -1,12 +1,14 @@
 import { ArrowLeft, Play, Share2 } from "lucide-react";
-import { Poster } from "../components/Poster";
+import { RankingDetail } from "../components/RankingDetail";
 import { ExpandableNote } from "../components/ExpandableNote";
 import { heading } from "./helpers";
 import type { ShareViewProps } from "./types";
 import type { MediaKind } from "../data/media";
 
 export function ShareView({ peer, t, label, navigateTo, openCollection, profile, notes, peerNotes, openArtworkDetail, openNoteView }: ShareViewProps) {
-  const viewNotes = peerNotes && Object.keys(peerNotes).length > 0 ? peerNotes : notes;
+  // 对方分享的批注：优先 peerNotes（由 /share/:code 拉取写入），兼容旧的 notes 传参
+  const viewNotes = peerNotes && Object.keys(peerNotes).length > 0 ? peerNotes : (notes ?? {});
+  const multiRanking = peer.rankings.length > 1;
   return (
     <>
       {heading(
@@ -15,62 +17,42 @@ export function ShareView({ peer, t, label, navigateTo, openCollection, profile,
         `${peer.rankings.length} ${t("个领域", "media")} / ${peer.rankings.reduce((c, e) => c + e.items.length, 0)} ${t("件作品", "works")}`,
       )}
 
-      {peer.rankings.map((entry, idx) => {
-        const noteKey = `ranking:${entry.kind}:${entry.collectionTitle}`;
-        const profileNoteKey = `profile:${peer.profileId}`;
-        return (
-          <section key={`${entry.kind}-${idx}`} className="share-section" style={{ marginBottom: 40 }}>
-            {/* Poster grid for top items */}
-            <div className="profile-layout">
-              <div>
-                <div className="section-heading">
-                  <h2 style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                    <span style={{ color: "var(--accent)", fontSize: 12, fontWeight: 600 }}>{label(entry.kind)}</span>
-                    {entry.collectionTitle}
-                  </h2>
-                  <span style={{ fontSize: 12, color: "var(--muted)" }}>
-                    TOP {entry.items.length}
-                  </span>
-                </div>
-
-                {/* Notes */}
-                {viewNotes[noteKey] && <ExpandableNote text={viewNotes[noteKey]} maxLength={30} onView={openNoteView ? (text) => openNoteView(entry.collectionTitle, text) : undefined} style={{ marginBottom: 8 }} />}
-
-                {/* Ranking list */}
-                <ol className="ranking-list">
-                  {entry.items.map((work) => {
-                    const workNote = viewNotes[`work:${entry.kind}:${work.id}`];
-                    return (
-                      <li key={work.id}>
-                        <span className="row-number">
-                          {work.rank <= 3
-                            ? work.rank === 1 ? "🥇" : work.rank === 2 ? "🥈" : "🥉"
-                            : String(work.rank).padStart(2, "0")}
-                        </span>
-                        <div
-                          className="ranking-card-poster"
-                          style={{ cursor: "pointer" }}
-                          onClick={() => openArtworkDetail(work, entry.kind)}
-                          role="button"
-                          tabIndex={0}
-                          onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); openArtworkDetail(work, entry.kind); } }}
-                        >
-                          <Poster work={work} kind={entry.kind} />
-                        </div>
-                        <div>
-                          <strong>{work.title}</strong>
-                          <small>{work.creator} {work.year}</small>
-                          {workNote && <ExpandableNote text={workNote} maxLength={30} onView={openNoteView ? (text) => openNoteView(work.title, text, work.posterUrls) : undefined} />}
-                        </div>
-                      </li>
-                    );
-                  })}
-                </ol>
-              </div>
+      {peer.rankings.map((entry, idx) => (
+        <section key={`${entry.kind}-${idx}`} className="share-section" style={{ marginBottom: 40 }}>
+          <div className="profile-layout">
+            <div>
+              <RankingDetail
+                kind={entry.kind}
+                collectionTitle={entry.collectionTitle}
+                items={entry.items}
+                notes={viewNotes}
+                kindLabel={label}
+                onNoteView={openNoteView}
+                onArtworkClick={openArtworkDetail}
+                headerExtra={
+                  multiRanking && (
+                    <button
+                      className="text-button"
+                      onClick={() => openCollection({
+                        id: `peer-${entry.profileId}-${entry.kind}-${idx}`,
+                        kind: entry.kind,
+                        source: "custom",
+                        title: entry.collectionTitle,
+                        description: "",
+                        topN: entry.items.length,
+                        works: entry.items,
+                      })}
+                      style={{ fontSize: 12, color: "var(--accent)", flexShrink: 0 }}
+                    >
+                      <Play size={12} />{t("用此榜单排序", "Sort with this")}
+                    </button>
+                  )
+                }
+              />
             </div>
-          </section>
-        );
-      })}
+          </div>
+        </section>
+      ))}
 
       {/* Profile-level notes */}
       {viewNotes[`profile:${peer.profileId}`] && (
@@ -81,27 +63,29 @@ export function ShareView({ peer, t, label, navigateTo, openCollection, profile,
 
       {/* Action buttons */}
       <div style={{ display: "flex", gap: 12, flexWrap: "wrap", margin: "24px 0" }}>
-        <button
-          className="button primary"
-          onClick={() => {
-            // Use this ranking to sort: pick the first ranking entry and open it as a collection
-            const entry = peer.rankings[0];
-            if (entry) {
-              openCollection({
-                id: `peer-${entry.profileId}`,
-                kind: entry.kind,
-                source: "custom",
-                title: entry.collectionTitle,
-                description: "",
-                topN: entry.items.length,
-                works: entry.items,
-              });
-            }
-          }}
-        >
-          <Play size={15} />
-          {t("用此榜单排序", "Sort with this ranking")}
-        </button>
+        {!multiRanking && (
+          <button
+            className="button primary"
+            onClick={() => {
+              // Use this ranking to sort: pick the first ranking entry and open it as a collection
+              const entry = peer.rankings[0];
+              if (entry) {
+                openCollection({
+                  id: `peer-${entry.profileId}`,
+                  kind: entry.kind,
+                  source: "custom",
+                  title: entry.collectionTitle,
+                  description: "",
+                  topN: entry.items.length,
+                  works: entry.items,
+                });
+              }
+            }}
+          >
+            <Play size={15} />
+            {t("用此榜单排序", "Sort with this ranking")}
+          </button>
+        )}
         <button
           className="button secondary"
           onClick={() => {

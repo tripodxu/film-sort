@@ -67,6 +67,10 @@ src/
 ├── styles.css            # 全局样式 + 响应式
 ├── components/
 │   ├── Poster.tsx         # 海报组件
+│   ├── RankingDetail.tsx  # 统一榜单详情组件（分享页/比较详情弹窗/广场帖子详情共用）
+│   ├── ExpandableNote.tsx # 长批注截断 + 展开查看
+│   ├── FocusTrap.tsx      # 弹窗焦点陷阱
+│   ├── ErrorBoundary.tsx  # 错误边界
 │   └── OrbScene.tsx       # 3D 光球场景
 ├── data/
 │   ├── media.ts           # 媒介定义 + 内置榜单

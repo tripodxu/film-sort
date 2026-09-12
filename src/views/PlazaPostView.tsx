@@ -1,11 +1,10 @@
 import { useEffect, useState } from "react";
 import { ArrowLeft, Heart, MessageCircle, Play, Trash2, Send } from "lucide-react";
-import { Poster } from "../components/Poster";
-import { ExpandableNote } from "../components/ExpandableNote";
+import { RankingDetail } from "../components/RankingDetail";
 import { heading } from "./helpers";
 import type { PlazaPostViewProps, PlazaPost, PlazaComment } from "./types";
 import type { MediaKind } from "../data/media";
-import type { ArtisticProfile, RankedArtwork } from "../lib/profile";
+import type { ArtisticProfile } from "../lib/profile";
 
 export function PlazaPostView({ postId, t, label, navigateTo, accountToken, accountNickname, openCollection, profile, setNotice, setPeer, openArtworkDetail, openNoteView }: PlazaPostViewProps) {
   const [post, setPost] = useState<PlazaPost | null>(null);
@@ -26,8 +25,6 @@ export function PlazaPostView({ postId, t, label, navigateTo, accountToken, acco
       return raw && typeof raw === "object" ? raw : {};
     } catch { return {}; }
   })();
-  const rankingNoteKey = post ? `ranking:${post.kind}:${post.collection_title}` : "";
-  const hasNotes = Object.keys(parsedNotes).length > 0;
   const [replyTo, setReplyTo] = useState<number | null>(null);
   const [replyText, setReplyText] = useState("");
 
@@ -196,42 +193,18 @@ export function PlazaPostView({ postId, t, label, navigateTo, accountToken, acco
       )}
       {post.description && <p style={{ fontSize: 14, color: "var(--muted)", marginBottom: 16, lineHeight: 1.7 }}>{post.description}</p>}
 
-      {/* Full ranking list */}
+      {/* Unified ranking detail (same component as share page & compare detail) */}
       <div className="plaza-post-detail">
-        <ol className="ranking-list">
-          {post.items.map((work: RankedArtwork, idx: number) => (
-            <li key={work.id}>
-              <span className="row-number">
-                {idx < 3
-                  ? idx === 0 ? "🥇" : idx === 1 ? "🥈" : "🥉"
-                  : String(idx + 1).padStart(2, "0")}
-              </span>
-              <div
-                className="ranking-card-poster"
-                style={{ cursor: "pointer" }}
-                onClick={() => openArtworkDetail(work, post.kind as MediaKind)}
-                role="button"
-                tabIndex={0}
-                onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); openArtworkDetail(work, post.kind as MediaKind); } }}
-              >
-                <Poster work={work} kind={post.kind as MediaKind} />
-              </div>
-              <div>
-                <strong>{work.title}</strong>
-                <small>{work.creator} {work.year}</small>
-                {parsedNotes[`work:${post.kind}:${work.id}`] && <ExpandableNote text={parsedNotes[`work:${post.kind}:${work.id}`]} onView={openNoteView ? (text) => openNoteView(work.title, text, work.posterUrls) : undefined} />}
-              </div>
-            </li>
-          ))}
-        </ol>
+        <RankingDetail
+          kind={post.kind as MediaKind}
+          collectionTitle={post.collection_title}
+          items={post.items}
+          notes={parsedNotes}
+          kindLabel={label}
+          onNoteView={openNoteView}
+          onArtworkClick={openArtworkDetail}
+        />
       </div>
-
-      {/* Ranking-level note */}
-      {parsedNotes[rankingNoteKey] && (
-        <div style={{ margin: "16px 0", padding: "12px 16px", borderRadius: 10, background: "rgba(121,217,174,.05)", borderLeft: "2px solid rgba(216,248,106,.2)" }}>
-          <ExpandableNote text={parsedNotes[rankingNoteKey]} onView={openNoteView ? (text) => openNoteView(post!.collection_title, text) : undefined} style={{ margin: 0 }} />
-        </div>
-      )}
 
       {/* Actions */}
       <div style={{ display: "flex", gap: 12, flexWrap: "wrap", margin: "24px 0" }}>
