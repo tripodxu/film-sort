@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
-import { ArrowLeft, Heart, MessageCircle, Play, Trash2, Send } from "lucide-react";
+import { ArrowDown, ArrowLeft, ArrowUp, GripVertical, Heart, MessageCircle, PenLine, Play, Plus, Trash2, Send } from "lucide-react";
+import { Poster } from "../components/Poster";
 import { RankingDetail } from "../components/RankingDetail";
 import { ExpandableNote } from "../components/ExpandableNote";
 import { heading } from "./helpers";
@@ -17,6 +18,9 @@ export function PlazaPostView({ postId, t, label, navigateTo, accountToken, acco
   const [commentText, setCommentText] = useState("");
   const [commentBusy, setCommentBusy] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState(false);
+  const [editItems, setEditItems] = useState<RankedArtwork[] | null>(null);
+  const [editManual, setEditManual] = useState("");
+  const [editHistory, setEditHistory] = useState<Array<{ id: number; action: string; detail: string | null; created_at: string }> | null>(null);
 
   // Parse notes from post
   const parsedNotes: Record<string, string> = (() => {
@@ -217,6 +221,68 @@ export function PlazaPostView({ postId, t, label, navigateTo, accountToken, acco
     });
   }
 
+  function startEdit() {
+    if (!post) return;
+    setEditItems((post.items ?? []).map((w) => ({ ...w })));
+    setEditManual("");
+  }
+  function moveEditItem(from: number, to: number) {
+    setEditItems((cur) => {
+      if (!cur || to < 0 || to >= cur.length || from === to) return cur;
+      const next = [...cur];
+      const [moved] = next.splice(from, 1);
+      next.splice(to, 0, moved);
+      return next;
+    });
+  }
+  function addEditWork(title: string, creator?: string, year?: number) {
+    const clean = title.trim();
+    if (!clean) return;
+    setEditItems((cur) => {
+      if (!cur || cur.some((w) => w.title === clean)) return cur;
+      return [...cur, { id: `pe-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`, title: clean, rank: cur.length + 1, ...(creator ? { creator } : {}), ...(year ? { year } : {}) }];
+    });
+  }
+  function parseEditManual() {
+    editManual.split(/\n+/).forEach((line) => {
+      let s = line.trim();
+      if (!s) return;
+      let creator: string | undefined;
+      let year: number | undefined;
+      const yearMatch = s.match(/[（(](\d{4})[）)]\s*$/);
+      if (yearMatch && yearMatch.index !== undefined) { year = Number(yearMatch[1]); s = s.slice(0, yearMatch.index).trim(); }
+      const dashIdx = s.indexOf(" - ");
+      if (dashIdx > 0) { creator = s.slice(dashIdx + 3).trim(); s = s.slice(0, dashIdx).trim(); }
+      addEditWork(s, creator, year);
+    });
+    setEditManual("");
+  }
+  async function saveEdit() {
+    if (!post || !editItems || !editItems.length) return;
+    setCommentBusy(true);
+    try {
+      const before = (post.items ?? []).map((w) => w.title);
+      const after = editItems.map((w) => w.title);
+      const edits: Array<{ action: string; detail: string }> = [];
+      for (const title of before) if (!after.includes(title)) edits.push({ action: "remove", detail: title });
+      for (const title of after) if (!before.includes(title)) edits.push({ action: "add", detail: title });
+      if (!edits.length && JSON.stringify(before) !== JSON.stringify(after)) edits.push({ action: "reorder", detail: t("调整作品顺序", "Reordered works") });
+      const response = await fetch(`/api/plaza/posts/${postId}`, { method: "PUT", headers: { "content-type": "application/json", authorization: `Bearer ${accountToken}` }, body: JSON.stringify({ items: editItems, item_count: editItems.length, edits }) });
+      if (!response.ok) throw new Error();
+      setEditItems(null);
+      setNotice(t("帖子已更新。", "Post updated."));
+      await loadPost();
+    } catch { setNotice(t("保存失败，请重试。", "Failed to save. Please retry.")); }
+    finally { setCommentBusy(false); }
+  }
+  async function openEditHistory() {
+    try {
+      const response = await fetch(`/api/plaza/posts/${postId}/edits`, { headers: { authorization: `Bearer ${accountToken}` } });
+      const data = await response.json() as { edits?: Array<{ id: number; action: string; detail: string | null; created_at: string }> };
+      if (response.ok) setEditHistory(data.edits ?? []);
+    } catch { setNotice(t("编辑历史加载失败。", "Failed to load edit history.")); }
+  }
+
   return (
     <>
       {heading(
@@ -226,8 +292,60 @@ export function PlazaPostView({ postId, t, label, navigateTo, accountToken, acco
       )}
       {post.description && <p style={{ fontSize: 14, color: "var(--muted)", marginBottom: 16, lineHeight: 1.7 }}>{post.description}</p>}
 
+      {/* Edit timestamp marker (public); full history is author-only */}
+      {(post.edit_count ?? 0) > 0 && (
+        <p className="mini-note" style={{ fontSize: 12, color: "var(--muted)", margin: "-8px 0 14px", display: "flex", gap: 10, alignItems: "center" }}>
+          <span>✏️ {t("最后编辑于", "Last edited")} {post.last_edited_at ? new Date(post.last_edited_at).toLocaleString() : "-"}（{(post.edit_count ?? 0)} {t("次", "times")}）</span>
+          {isAuthor && (
+            <button className="text-button" onClick={() => { setEditHistory(editHistory ? null : []); void openEditHistory(); }} style={{ fontSize: 12 }}>
+              {editHistory ? t("收起历史", "Hide history") : t("编辑历史", "Edit history")}
+            </button>
+          )}
+        </p>
+      )}
+      {editHistory && isAuthor && (
+        <div style={{ margin: "0 0 16px", padding: "12px 16px", border: "1px solid var(--line)", borderRadius: 10, fontSize: 12 }}>
+          {editHistory.length ? editHistory.map((e) => (
+            <div key={e.id} style={{ display: "flex", gap: 10, padding: "5px 0", borderBottom: "1px solid var(--line)" }}>
+              <span className="badge badge-visit" style={{ flexShrink: 0 }}>{e.action}</span>
+              <span style={{ flex: 1, minWidth: 0, overflowWrap: "anywhere" }}>{e.detail}</span>
+              <span style={{ color: "var(--muted)", flexShrink: 0, whiteSpace: "nowrap" }}>{new Date(e.created_at).toLocaleString()}</span>
+            </div>
+          )) : <p style={{ color: "var(--muted)", margin: 0 }}>…</p>}
+        </div>
+      )}
+
       {/* Unified ranking detail (same component as share page & compare detail) */}
-      {isProfilePost ? (
+      {editItems !== null && isAuthor && !isProfilePost ? (
+        <div className="plaza-post-detail">
+          <div className="section-heading"><h2>{t("编辑榜单作品", "Edit works")}</h2><span>{t(`${editItems.length} 件`, `${editItems.length} works`)}</span></div>
+          <ol className="ranking-list reorder-list">
+            {editItems.map((work, idx) => (
+              <li key={work.id} className="reorder-item">
+                <span className="reorder-handle"><GripVertical size={16} /></span>
+                <span className="row-number">{String(idx + 1).padStart(2, "0")}</span>
+                <Poster work={work} kind={post.kind as MediaKind} />
+                <div><strong>{work.title}</strong><small>{work.creator} {work.year}</small></div>
+                <div style={{ display: "flex", gap: 2, marginLeft: "auto", flexShrink: 0 }}>
+                  <button className="icon-button" title={t("上移", "Move up")} disabled={idx === 0} onClick={() => moveEditItem(idx, idx - 1)} style={{ width: 28, height: 28 }}><ArrowUp size={14} /></button>
+                  <button className="icon-button" title={t("下移", "Move down")} disabled={idx === editItems.length - 1} onClick={() => moveEditItem(idx, idx + 1)} style={{ width: 28, height: 28 }}><ArrowDown size={14} /></button>
+                  <button className="icon-button" title={t("移除", "Remove")} disabled={editItems.length <= 1} onClick={() => setEditItems((cur) => (cur ?? []).filter((_, i) => i !== idx))} style={{ width: 28, height: 28, color: "var(--red)", opacity: editItems.length <= 1 ? 0.3 : 1 }}><Trash2 size={14} /></button>
+                </div>
+              </li>
+            ))}
+          </ol>
+          <div style={{ display: "grid", gap: 10, marginTop: 16, padding: 16, border: "1px solid var(--line)", borderRadius: 12 }}>
+            <label style={{ fontSize: 12, color: "var(--muted)" }}>{t("添加作品（每行一件，支持「标题 - 创作者（年份）」）", "Add works (one per line: Title - Creator (Year))")}</label>
+            <textarea value={editManual} onChange={(e) => setEditManual(e.target.value)} rows={3} style={{ minHeight: 70, fontSize: 13 }} />
+            <div style={{ display: "flex", gap: 8 }}>
+              <button className="button secondary" onClick={parseEditManual} style={{ minHeight: 34 }}><Plus size={14} />{t("加入榜单", "Add to list")}</button>
+              <div style={{ flex: 1 }} />
+              <button className="button secondary" onClick={() => { setEditItems(null); setEditHistory(null); }} style={{ minHeight: 34 }}>{t("取消", "Cancel")}</button>
+              <button className="button primary" disabled={commentBusy} onClick={() => void saveEdit()} style={{ minHeight: 34 }}>{commentBusy ? t("保存中…", "Saving…") : t("保存", "Save")}</button>
+            </div>
+          </div>
+        </div>
+      ) : isProfilePost ? (
         <div className="plaza-post-detail">
           {profileRankings.map((entry, idx) => (
             <section key={`${entry.kind}-${idx}`} style={{ marginBottom: 36 }}>
@@ -283,8 +401,14 @@ export function PlazaPostView({ postId, t, label, navigateTo, accountToken, acco
           </button>
         )}
         <button className="button secondary" onClick={compareWithMe} style={{ minHeight: 38, fontSize: 13 }}>
-          {t("与我比较", "Compare with me")}
+          {isAuthor ? t("与曾经的我比较", "Compare with my past self") : t("与我比较", "Compare with me")}
         </button>
+        {isAuthor && !isProfilePost && editItems === null && (
+          <button className="button secondary" onClick={startEdit} style={{ minHeight: 38, fontSize: 13 }}>
+            <PenLine size={15} />
+            {t("编辑榜单", "Edit works")}
+          </button>
+        )}
       </div>
 
       {/* Profile-level note (profile posts) */}

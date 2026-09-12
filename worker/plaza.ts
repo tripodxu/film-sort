@@ -129,7 +129,7 @@ export async function plazaRoute(request: Request, env: Env): Promise<Response> 
     return json({ id: result.meta.last_row_id, stored: true }, 201);
   }
 
-  // PUT /api/plaza/posts/:id — edit own post
+  // PUT /api/plaza/posts/:id — edit own post (items/description/metadata) + record edit history
   const postEditMatch = path.match(/^\/api\/plaza\/posts\/(\d+)$/);
   if (postEditMatch && method === "PUT") {
     const user = await getUserFromToken(request, env.DB);
@@ -141,6 +141,7 @@ export async function plazaRoute(request: Request, env: Env): Promise<Response> 
     if (existing.user_id !== user.id) return json({ error: "forbidden" }, 403);
 
     const raw = await request.text();
+    if (raw.length > 512 * 1024) return json({ error: "payload_too_large" }, 413);
     let body: Record<string, unknown>;
     try { body = JSON.parse(raw); } catch { return json({ error: "invalid_json" }, 400); }
 
@@ -154,7 +155,7 @@ export async function plazaRoute(request: Request, env: Env): Promise<Response> 
     let itemsJson: string | undefined;
     let itemCount: number | undefined;
     if (Array.isArray(body.items)) {
-      if (body.items.length < 1) return json({ error: "invalid_items" }, 400);
+      if (body.items.length < 1 || body.items.length > 300) return json({ error: "invalid_items" }, 400);
       itemsJson = JSON.stringify(body.items);
       itemCount = body.items.length;
     }
@@ -163,7 +164,30 @@ export async function plazaRoute(request: Request, env: Env): Promise<Response> 
       `UPDATE plaza_posts SET post_type = COALESCE(?, post_type), kind = COALESCE(?, kind), collection_title = COALESCE(?, collection_title), description = COALESCE(?, description), items = COALESCE(?, items), notes = COALESCE(?, notes), item_count = COALESCE(?, item_count), is_public = COALESCE(?, is_public), updated_at = datetime('now') WHERE id = ?`
     ).bind(postType, kind, collectionTitle, description, itemsJson, notes, itemCount, isPublic, postId).run();
 
+    // 记录本次编辑的操作明细（客户端从差异生成，服务端写入权威时间戳）
+    if (Array.isArray(body.edits) && body.edits.length) {
+      const editStmt = env.DB.prepare("INSERT INTO plaza_post_edits (post_id, action, detail) VALUES (?, ?, ?)");
+      const editRows = body.edits.slice(0, 50)
+        .map((edit) => (edit && typeof edit === "object" ? edit as Record<string, unknown> : null))
+        .filter((edit): edit is Record<string, unknown> => !!edit && typeof edit.action === "string" && edit.action.length <= 40)
+        .map((edit) => editStmt.bind(postId, cleanString(edit.action, 40), cleanString(edit.detail, 300)));
+      if (editRows.length) await env.DB.batch(editRows);
+    }
+
     return json({ ok: true });
+  }
+
+  // GET /api/plaza/posts/:id/edits — 编辑历史（仅作者可见）
+  const postEditsMatch = path.match(/^\/api\/plaza\/posts\/(\d+)\/edits$/);
+  if (postEditsMatch && method === "GET") {
+    const user = await getUserFromToken(request, env.DB);
+    if (!user) return json({ error: "authentication_required" }, 401);
+    const postId = Number(postEditsMatch[1]);
+    const existing = await env.DB.prepare("SELECT user_id FROM plaza_posts WHERE id = ?").bind(postId).first<{ user_id: number }>();
+    if (!existing) return json({ error: "post_not_found" }, 404);
+    if (existing.user_id !== user.id) return json({ error: "forbidden" }, 403);
+    const rows = await env.DB.prepare("SELECT id, action, detail, created_at FROM plaza_post_edits WHERE post_id = ? ORDER BY created_at DESC, id DESC LIMIT 200").bind(postId).all();
+    return json({ edits: rows.results ?? [] });
   }
 
   // DELETE /api/plaza/posts/:id — delete own post
@@ -313,7 +337,10 @@ export async function adminPlazaRoute(request: Request, env: Env): Promise<Respo
   if (adminDetailMatch && method === "GET") {
     const postId = Number(adminDetailMatch[1]);
     const post = await env.DB.prepare(
-      `SELECT p.*, u.nickname, u.email FROM plaza_posts p LEFT JOIN user_accounts u ON p.user_id = u.id WHERE p.id = ?`
+      `SELECT p.*, u.nickname, u.email,
+        (SELECT COUNT(*) FROM plaza_post_edits e WHERE e.post_id = p.id) AS edit_count,
+        (SELECT MAX(e.created_at) FROM plaza_post_edits e WHERE e.post_id = p.id) AS last_edited_at
+       FROM plaza_posts p LEFT JOIN user_accounts u ON p.user_id = u.id WHERE p.id = ?`
     ).bind(postId).first<Record<string, unknown>>();
     if (!post) return json({ error: "post_not_found" }, 404);
 
