@@ -65,7 +65,7 @@ function buildHeaders(url: string, isImage: boolean): Record<string, string> {
   };
 }
 
-async function upstream(url: string, retries = 2): Promise<Response> {
+export async function upstream(url: string, retries = 2): Promise<Response> {
   const domain = getDomain(url);
   const isDouban = domain.endsWith("douban.com") || domain.endsWith("doubanio.com");
   const isImage = /\.(jpg|jpeg|png|webp|avif)$/i.test(new URL(url).pathname);

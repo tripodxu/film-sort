@@ -375,3 +375,5 @@ kbd{display:inline-flex;align-items:center;justify-content:center;min-width:22px
 .advanced-import summary:hover{color:var(--accent)}
 .advanced-import-body{display:grid;gap:12px;padding:0 14px 14px}
 @media(max-width:600px){.custom-added-grid{grid-template-columns:1fr}}
+.external-import{display:grid;gap:10px;padding:14px;border:1px solid rgba(216,248,106,.2);border-radius:12px;background:rgba(216,248,106,.04)}
+.external-import .inline-input{margin:0}

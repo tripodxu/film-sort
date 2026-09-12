@@ -1,6 +1,7 @@
 import { doubanTop250, doubanSuggest, doubanBookTop250, doubanBookSuggest, doubanMusicTop250, doubanSearch, doubanBookDetail, doubanMovieDetail, doubanMusicDetail, fetchContentIntro, proxyImage, resolvePosters } from "./media";
 import { accountRoute, hashPasswordStrong, needsPasswordUpgrade, timingSafeEqual, verifyPassword } from "./account";
 import { adminPlazaRoute, plazaRoute } from "./plaza";
+import { importRoute } from "./import";
 import { recordAudit } from "./audit";
 
 export interface Env {
@@ -81,7 +82,7 @@ const MAX_CHALLENGE_ITEMS = 300;
 const MUSIC_API_ORIGIN = "https://music-api.gdstudio.xyz";
 const upstreamWindows = new Map<string, { startedAt: number; count: number }>();
 
-function allowUpstreamRequest(request: Request, bucket: "ai" | "music" | "auth" | "share", limit: number): boolean {
+function allowUpstreamRequest(request: Request, bucket: "ai" | "music" | "auth" | "share" | "import", limit: number): boolean {
   const client = request.headers.get("cf-connecting-ip") ?? "anonymous";
   const key = `${bucket}:${client}`;
   const now = Date.now();
@@ -1647,6 +1648,10 @@ async function route(request: Request, env: Env): Promise<Response> {
   }
 
   if (url.pathname === "/api/auth/config") return json({ enabled: Boolean(env.DB) });
+  if (url.pathname.startsWith("/api/import/")) {
+    if (!allowUpstreamRequest(request, "import", 8)) return json({ error: "rate_limited", msg: "导入过于频繁，请稍后再试" }, 429, { "retry-after": "600" });
+    return withSecurityHeaders(await importRoute(request, env));
+  }
   if (url.pathname.startsWith("/api/plaza/") || url.pathname.startsWith("/api/comments/")) {
     return withSecurityHeaders(await plazaRoute(request, env));
   }

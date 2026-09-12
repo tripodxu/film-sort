@@ -390,6 +390,45 @@ export default function App() {
     openCollection(next);
     void saveCollectionCloud(next);
   }
+  // 外部导入（豆列/歌单）：按当前媒介筛选加入已添加区，其余媒介提示切换后重导
+  function applyImportedWorks(works: Array<Artwork & { type?: string; poster_url?: string }>) {
+    const normalized = works.map((w) => ({ id: w.id || `imp-${Math.random().toString(36).slice(2, 10)}`, title: w.title, creator: w.creator, year: w.year, posterUrls: w.posterUrls ?? (w.poster_url ? [w.poster_url] : undefined) })) as Array<Artwork & { type?: string }>;
+    const matching = normalized.filter((w) => !w.type || w.type === kind);
+    const others = normalized.length - matching.length;
+    setCustomWorks((cur) => {
+      const seen = new Set(cur.map((w) => w.title));
+      return [...cur, ...matching.filter((w) => !seen.has(w.title))];
+    });
+    setNotice(others > 0
+      ? t(`已加入 ${matching.length} 件${label(kind)}作品；另有 ${others} 件其他媒介，切换媒介后可重新导入。`, `Added ${matching.length} ${label(kind)} works; ${others} other media — switch and re-import.`)
+      : t(`已加入 ${matching.length} 件作品。`, `Added ${matching.length} works.`));
+  }
+  async function importDoulist(rawUrl: string) {
+    if (!accountToken) { setNotice(t("请先登录后再导入。", "Sign in to import.")); return; }
+    const target = rawUrl.trim();
+    if (!target) return;
+    setBusy(true);
+    try {
+      const response = await fetch(`/api/import/doulist?url=${encodeURIComponent(target)}`, { headers: { authorization: `Bearer ${accountToken}` }, signal: AbortSignal.timeout(120000) });
+      const data = await response.json() as { works?: Array<Artwork & { type?: string; poster_url?: string }>; msg?: string; error?: string };
+      if (!response.ok || !data.works) { setNotice(t("豆列导入失败：" + (data.msg ?? data.error ?? "未知错误"), "Doulist import failed: " + (data.msg ?? data.error ?? ""))); return; }
+      applyImportedWorks(data.works);
+    } catch { setNotice(t("豆列导入失败，豆瓣可能限流，请稍后重试。", "Doulist import failed (Douban may be rate limiting). Please retry.")); }
+    finally { setBusy(false); }
+  }
+  async function importNeteasePlaylist(rawUrl: string) {
+    if (!accountToken) { setNotice(t("请先登录后再导入。", "Sign in to import.")); return; }
+    const target = rawUrl.trim();
+    if (!target) return;
+    setBusy(true);
+    try {
+      const response = await fetch(`/api/import/netease?url=${encodeURIComponent(target)}`, { headers: { authorization: `Bearer ${accountToken}` }, signal: AbortSignal.timeout(60000) });
+      const data = await response.json() as { works?: Array<Artwork & { poster_url?: string }>; msg?: string; error?: string };
+      if (!response.ok || !data.works) { setNotice(t("歌单导入失败：" + (data.msg ?? data.error ?? "未知错误"), "Playlist import failed: " + (data.msg ?? data.error ?? ""))); return; }
+      applyImportedWorks(data.works.map((w) => ({ ...w, type: "music" })));
+    } catch { setNotice(t("歌单导入失败，请稍后重试。", "Playlist import failed. Please retry.")); }
+    finally { setBusy(false); }
+  }
   async function saveCollectionCloud(collectionToSave: MediaCollection) {
     if (!accountToken) return;
     try {
@@ -890,7 +929,7 @@ export default function App() {
 
   let content: ReactNode;
   if (view === "home") content = <HomeView locale={locale} t={t} accountEmail={accountEmail} setAccountOpen={setAccountOpen} setShowGuide={setShowGuide} kind={kind} chooseKind={chooseKind} navigateTo={navigateTo} draft={draft} resume={resume} profile={profile} label={label} setRingsLayout={setRingsLayout} ringsLayout={ringsLayout} clearAllData={clearAllData} editingRankIdx={editingRankIdx} setEditingRankIdx={setEditingRankIdx} editingRankTitle={editingRankTitle} setEditingRankTitle={setEditingRankTitle} renameRank={renameRank} deleteRank={deleteRank} setActiveKind={setActiveKind} openCollection={openCollection} importProfile={importProfile} />;
-  else if (view === "source") content = <SourceView kind={kind} t={t} label={label} source={source} setSource={setSource} setNotice={setNotice} search={search} setSearch={setSearch} colCount={colCount} changeCols={changeCols} collections={collections} openCollection={openCollection} customItem={customItem} setCustomItem={setCustomItem} customWorks={customWorks} searchWorks={searchWorks} addCustomWork={addCustomWork} removeCustomWork={removeCustomWork} clearCustomWorks={() => setCustomWorks([])} loadCustomWorks={loadCustomWorks} customText={customText} setCustomText={setCustomText} importCollection={importCollection} saveCollectionCloud={saveCollectionCloud} cloudCollections={cloudCollections} loadCloudCollections={loadCloudCollections} deleteCloudCollection={deleteCloudCollection} doubanLimit={doubanLimit} setDoubanLimit={setDoubanLimit} busy={busy} loadDouban={loadDouban} />;
+  else if (view === "source") content = <SourceView kind={kind} t={t} label={label} source={source} setSource={setSource} setNotice={setNotice} search={search} setSearch={setSearch} colCount={colCount} changeCols={changeCols} collections={collections} openCollection={openCollection} customItem={customItem} setCustomItem={setCustomItem} customWorks={customWorks} searchWorks={searchWorks} addCustomWork={addCustomWork} removeCustomWork={removeCustomWork} clearCustomWorks={() => setCustomWorks([])} loadCustomWorks={loadCustomWorks} accountToken={accountToken} importDoulist={importDoulist} importNeteasePlaylist={importNeteasePlaylist} customText={customText} setCustomText={setCustomText} importCollection={importCollection} saveCollectionCloud={saveCollectionCloud} cloudCollections={cloudCollections} loadCloudCollections={loadCloudCollections} deleteCloudCollection={deleteCloudCollection} doubanLimit={doubanLimit} setDoubanLimit={setDoubanLimit} busy={busy} loadDouban={loadDouban} />;
   else if (view === "setup" && collection) content = <SetupView collection={collection} kind={kind} t={t} label={label} selected={selected} setSelected={setSelected} topN={topN} setTopN={setTopN} seed={seed} setSeed={setSeed} setCollection={setCollection} startRanking={startRanking} />;
   else if (view === "sorting" && collection && ranking && comparison && progress) content = <SortingView collection={collection} ranking={ranking} comparison={comparison} progress={progress} label={label} kind={kind} t={t} worksById={worksById} act={act} />;
   else if (view === "profile" && profile && activeRanking) content = <ProfileView profile={profile} activeRanking={activeRanking} locale={locale} t={t} label={label} format={format} setFormat={setFormat} exportLayout={exportLayout} setExportLayout={setExportLayout} exportProfile={exportProfile} share={share} shareUrl={shareUrl} qrUrl={qrUrl} profileName={profileName} setProfileName={setProfileName} namedProfile={namedProfile} persist={persist} navigateTo={navigateTo} peer={peer} editingRankIdx={editingRankIdx} setEditingRankIdx={setEditingRankIdx} editingRankTitle={editingRankTitle} setEditingRankTitle={setEditingRankTitle} renameRank={renameRank} openCollection={openCollection} shareSingleRanking={shareSingleRanking} openShareModal={openShareModal} setActiveKind={setActiveKind} ranking={ranking} setRanking={setRanking} collection={collection} notes={notes} openNoteModal={openNoteModal} openArtworkDetail={openArtworkDetail} accountToken={accountToken} publishToPlaza={publishToPlaza} publishProfileToPlaza={publishProfileToPlaza} updateRankingWorks={updateRankingWorks} syncPlazaPost={syncPlazaPost} reorderMode={reorderMode} reorderItems={reorderItems} startReorder={startReorder} saveReorder={saveReorder} cancelReorder={cancelReorder} moveItem={moveItem} busy={busy} />;

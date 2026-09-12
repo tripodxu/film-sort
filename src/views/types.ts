@@ -52,6 +52,9 @@ export interface SourceViewProps {
   removeCustomWork: (id: string) => void;
   clearCustomWorks: () => void;
   loadCustomWorks: () => void;
+  accountToken: string;
+  importDoulist: (url: string) => void;
+  importNeteasePlaylist: (url: string) => void;
   customText: string;
   setCustomText: (text: string) => void;
   importCollection: (kind: MediaKind, text: string) => MediaCollection;
