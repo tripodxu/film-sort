@@ -212,38 +212,40 @@ export default function App() {
     }
     void fetch("/api/auth/config").then((response) => response.json()).then((data: { enabled?: boolean }) => setAccountEnabled(Boolean(data.enabled))).catch(() => undefined);
 
-    // Handle OAuth callback
+    // Handle OAuth callback — the worker hands us a one-time exchange code; the session
+    // token itself never appears in the URL or browser history.
     const params = new URLSearchParams(location.search);
-    const oauthToken = params.get("oauth_token");
-    const oauthEmail = params.get("oauth_email");
-    const oauthName = params.get("oauth_name");
+    const oauthCode = params.get("oauth_code");
     const oauthError = params.get("account");
-    if (oauthToken && oauthEmail) {
-      setAccountToken(oauthToken);
-      setAccountEmail(decodeURIComponent(oauthEmail));
-      const name = oauthName ? decodeURIComponent(oauthName) : "";
-      setAccountNickname(name);
-      try { localStorage.setItem("art-rank:account-token", oauthToken); } catch {}
+    if (oauthCode) {
       history.replaceState(null, "", location.pathname);
-      if (!name || name === decodeURIComponent(oauthEmail).split("@")[0]) {
-        setNeedNickname(true);
-        setAccountOpen(true);
-      }
-      setNotice(t("登录成功！", "Signed in!"));
-      // Restore notes from cloud after OAuth login
-      setTimeout(async () => {
-        try {
-          const r = await fetch("/api/account/profile", { headers: { authorization: `Bearer ${oauthToken}` } });
-          if (!r.ok) return;
-          const d = await r.json() as { notes?: Record<string, string> };
-          if (d.notes && typeof d.notes === "object") {
-            const localNotes = readNotes();
-            const merged = { ...localNotes, ...d.notes };
-            setNotes(merged);
-            writeNotes(merged);
+      void fetch("/api/account/oauth/exchange", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ code: oauthCode }) })
+        .then(async (response) => {
+          if (!response.ok) throw new Error();
+          const data = await response.json() as { token: string; email: string; nickname?: string };
+          setAccountToken(data.token);
+          setAccountEmail(data.email);
+          setAccountNickname(data.nickname ?? "");
+          try { localStorage.setItem("art-rank:account-token", data.token); } catch {}
+          const name = data.nickname ?? "";
+          if (!name || name === data.email.split("@")[0]) {
+            setNeedNickname(true);
+            setAccountOpen(true);
           }
-        } catch {}
-      }, 100);
+          setNotice(t("登录成功！", "Signed in!"));
+          // Restore notes from cloud after OAuth login
+          try {
+            const r = await fetch("/api/account/profile", { headers: { authorization: `Bearer ${data.token}` } });
+            if (!r.ok) return;
+            const d = await r.json() as { notes?: Record<string, string> };
+            if (d.notes && typeof d.notes === "object") {
+              const merged = { ...readNotes(), ...d.notes };
+              setNotes(merged);
+              writeNotes(merged);
+            }
+          } catch {}
+        })
+        .catch(() => setNotice(t("登录失败，请重试。", "Sign-in failed. Please retry.")));
     } else if (oauthError === "error") {
       setNotice(t("登录失败：" + (params.get("msg") ?? "未知错误"), "Sign in failed: " + (params.get("msg") ?? "Unknown error")));
       history.replaceState(null, "", location.pathname);
@@ -284,7 +286,7 @@ export default function App() {
     }
 
     // Restore session
-    const savedToken = oauthToken || accountToken;
+    const savedToken = accountToken;
     if (savedToken) {
       void fetch("/api/account/profile", { headers: { authorization: `Bearer ${savedToken}` } })
         .then((r) => r.ok ? r.json() : null)
@@ -300,7 +302,7 @@ export default function App() {
               writeNotes(merged);
             }
           }
-          else if (!oauthToken) { setAccountToken(""); try { localStorage.removeItem("art-rank:account-token"); } catch {} }
+          else { setAccountToken(""); try { localStorage.removeItem("art-rank:account-token"); } catch {} }
         }).catch(() => {});
     }
   }, []);

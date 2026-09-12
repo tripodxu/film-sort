@@ -195,7 +195,7 @@ npx wrangler login
 npx wrangler d1 create film-sort
 # 记下 database_id，填入 wrangler.jsonc
 
-# 应用数据库迁移
+# 应用数据库迁移（含 0015_oauth_exchange，OAuth 一次性 code 交换所需）
 npx wrangler d1 migrations apply film-sort --remote
 
 # 部署
@@ -398,7 +398,7 @@ film-sort3/
 - 图片代理仅允许 `doubanio.com`、`media-amazon.com`、`media-imdb.com`、`tmdb.org` 四类 host。
 - 分析事件仅收集产品元数据，不含作品标题或用户信息。
 - 分享链接包含排名作品，请确认后传播。
-- OAuth state 参数使用 HttpOnly Cookie。
+- OAuth 回调强制校验发起时写入的 HttpOnly Cookie state（CSRF 防护）；登录成功后通过一次性 code（5 分钟有效、用后即焚，存于 `oauth_exchanges` 表）交换会话 token，30 天 token 不再出现在重定向 URL 和浏览器历史。
 
 ---
 

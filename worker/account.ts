@@ -227,13 +227,28 @@ export async function accountRoute(request: Request, env: Env): Promise<Response
     return json({ providers });
   }
 
+  // POST /api/account/oauth/exchange — trade a one-time code (from the OAuth redirect) for the session token
+  if (path === "/api/account/oauth/exchange" && request.method === "POST") {
+    if (!env.DB) return json({ error: "database_unavailable" }, 503);
+    const body = await request.json().catch(() => null) as Record<string, unknown> | null;
+    const exchangeCode = cleanString(body?.code, 80);
+    if (!exchangeCode) return json({ error: "invalid_code" }, 400);
+    const row = await env.DB.prepare("SELECT token, email, nickname FROM oauth_exchanges WHERE code = ? AND expires_at > datetime('now')")
+      .bind(exchangeCode).first<{ token: string; email: string; nickname: string | null }>();
+    if (!row) return json({ error: "invalid_code" }, 404);
+    await env.DB.prepare("DELETE FROM oauth_exchanges WHERE code = ?").bind(exchangeCode).run();
+    return json({ token: row.token, email: row.email, nickname: row.nickname ?? undefined });
+  }
+
   // GET /api/account/oauth/callback — OAuth callback (must be before provider route)
   if (path === "/api/account/oauth/callback" && request.method === "GET") {
     const code = url.searchParams.get("code");
     const state = url.searchParams.get("state");
+    const cookieState = request.headers.get("cookie")?.match(/(?:^|;\s*)oauth_state=([^;]*)/)?.[1];
 
-    if (!code || !state) {
-      return redirect(`/?account=error&msg=${encodeURIComponent("Missing OAuth parameters")}`);
+    // The state must match the HttpOnly cookie set when the flow started (CSRF protection).
+    if (!code || !state || !cookieState || cookieState !== state) {
+      return redirect(`/?account=error&msg=${encodeURIComponent("Invalid OAuth state")}`);
     }
 
     const [providerKey] = state.split(":");
@@ -285,8 +300,11 @@ export async function accountRoute(request: Request, env: Env): Promise<Response
       const userId = await findOrCreateOAuthUser(env.DB, providerKey, parsed.id, parsed.email, nickname);
       const session = await createSession(env.DB, userId);
 
-      // Redirect back to frontend with token
-      return redirect(`/?oauth_token=${session.token}&oauth_email=${encodeURIComponent(parsed.email)}&oauth_name=${encodeURIComponent(nickname)}`);
+      // Hand the session to the frontend via a one-time exchange code so the token never lands in the URL.
+      const exchangeCode = generateToken();
+      await env.DB.prepare("INSERT INTO oauth_exchanges (code, token, email, nickname, expires_at) VALUES (?, ?, ?, ?, ?)")
+        .bind(exchangeCode, session.token, parsed.email, nickname, new Date(Date.now() + 5 * 60 * 1000).toISOString()).run();
+      return redirect(`/?oauth_code=${exchangeCode}`);
     } catch (error) {
       console.error(`OAuth ${providerKey} failed:`, error);
       return redirect(`/?account=error&msg=${encodeURIComponent(error instanceof Error ? error.message : "OAuth failed")}`);

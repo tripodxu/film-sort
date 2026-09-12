@@ -1371,6 +1371,7 @@ export default {
         env.DB.prepare("DELETE FROM poster_errors WHERE created_at < datetime('now', '-180 days')"),
         env.DB.prepare("DELETE FROM admin_sessions WHERE expires_at < datetime('now')"),
         env.DB.prepare("DELETE FROM user_sessions WHERE expires_at < datetime('now')"),
+        env.DB.prepare("DELETE FROM oauth_exchanges WHERE expires_at < datetime('now')"),
       ]);
     } catch (error) {
       console.error("scheduled cleanup failed", error instanceof Error ? error.message : error);
