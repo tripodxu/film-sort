@@ -330,7 +330,7 @@ function scoreCandidate(pageTitle: string, extract: string, opts: { mediaType?: 
 async function collectExtracts(titles: string[], lang: "zh" | "en", timeoutMs: number, opts: { mediaType?: "movie" | "book" | "music"; year?: string; baseTitle?: string }): Promise<Scored[]> {
   if (!titles.length) return [];
   const exlimit = String(Math.min(20, Math.max(5, titles.length)));
-  const params = new URLSearchParams({ action: "query", titles: titles.join("|"), prop: "extracts", exintro: "true", explaintext: "true", exlimit, redirects: "1", format: "json" });
+  const params = new URLSearchParams({ action: "query", titles: titles.join("|"), prop: "extracts", exintro: "true", explaintext: "true", exlimit, redirects: "1", converttitles: "1", format: "json" });
   try {
     const r = await fetch(`https://${lang}.wikipedia.org/w/api.php?${params}`, { headers: { "user-agent": USER_AGENTS[0], "accept": "application/json" }, signal: AbortSignal.timeout(timeoutMs) });
     if (!r.ok) return [];
@@ -339,6 +339,8 @@ async function collectExtracts(titles: string[], lang: "zh" | "en", timeoutMs: n
     if (!pages) return [];
     const resolve = new Map<string, string>();
     for (const rg of d.query?.redirects ?? []) if (rg.from && rg.to) resolve.set(rg.from.toLowerCase(), rg.to.toLowerCase());
+    // converttitles：请求标题(简) → 转换后标题(繁)，补进解析表，使 pages 按原始请求标题可查
+    for (const cv of (d.query as { converted?: Array<{ from?: string; to?: string }> })?.converted ?? []) if (cv.from && cv.to) resolve.set(cv.from.toLowerCase(), cv.to.toLowerCase());
     const qualifiedSet = new Set(titles.filter((t) => t.includes("(") || t.includes("（")).map((t) => resolve.get(t.toLowerCase()) ?? t.toLowerCase()));
     const out: Scored[] = [];
     for (const p of Object.values(pages)) {
@@ -423,14 +425,14 @@ function qualifiedTitles(title: string, mediaType: "movie" | "book" | "music" | 
 
 export async function fetchContentIntro(title: string, mediaType?: "movie" | "book" | "music", creator?: string, yearRaw?: unknown): Promise<{ intro: string; source: string } | null> {
   const year = extractYear(yearRaw);
-  const opts = { mediaType, year, baseTitle: title };
+  // 年份仅用于「精确限定标题」猜测（不存在的标题自然落空，安全）；不进入打分/搜索（避免 2023 等噪声命中无关页面）
+  const opts = { mediaType, baseTitle: title };
   const hint = mediaType ? TYPE_HINTS[mediaType]?.zh[0] : undefined;
 
-  // 并行收集所有来源候选，最后统一打分择优（消歧页已在收集时剔除，绝不为空的弱兜底在最后）
   const zhQualified = qualifiedTitles(title, mediaType, year, "zh");
   const enQualified = qualifiedTitles(title, mediaType, year, "en");
   const searchQueries = [
-    year && hint ? `${title} ${hint} ${year}` : hint ? `${title} ${hint}` : null,
+    hint ? `${title} ${hint}` : null,
     title,
     creator ? `${title} ${creator.replace(/^\[[^\]]*\]\s*/, "").trim()}` : null,
   ].filter((q): q is string => !!q);
@@ -442,8 +444,10 @@ export async function fetchContentIntro(title: string, mediaType?: "movie" | "bo
     collectExtracts([title, ...qualifiedTitles(title, mediaType, undefined, "en").slice(0, 2)], "en", 6000, opts),
     ...searchQueries.flatMap((q) => [collectSearch(q, "zh", 8000, opts), collectSearch(q, "en", 6000, opts)]),
   ]);
+  // 精确限定标题命中（qualified）优先于其它候选；其余按分数择优
   const all = groups.flat();
-  const best = bestOf(all);
+  const qualifiedHit = all.find((c) => c.score >= 6);
+  const best = qualifiedHit ?? bestOf(all);
   if (best) return { intro: best.intro, source: best.source };
 
   // 百度百科兜底
