@@ -13,7 +13,8 @@
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
     <script>
-      if ('serviceWorker' in navigator) {
+      // Service Worker 仅在生产域名注册：开发环境（localhost）不注册，避免 cache-first 缓存住未带 hash 的源码模块
+      if ('serviceWorker' in navigator && !['localhost', '127.0.0.1'].includes(location.hostname)) {
         window.addEventListener('load', () => {
           navigator.serviceWorker.register('/sw.js').catch(() => {});
         });

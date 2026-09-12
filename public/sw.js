@@ -1,4 +1,4 @@
-const CACHE_NAME = "art-rank-v1";
+const CACHE_NAME = "art-rank-v2";
 const STATIC_ASSETS = ["/", "/index.html"];
 
 self.addEventListener("install", (event) => {
@@ -17,10 +17,24 @@ self.addEventListener("activate", (event) => {
 
 self.addEventListener("fetch", (event) => {
   const { request } = event;
-  // Only cache GET requests for same-origin static assets
+  // Only handle GET requests for same-origin resources
   if (request.method !== "GET" || !request.url.startsWith(self.location.origin)) return;
   // Skip API calls
   if (request.url.includes("/api/")) return;
+  // 页面导航请求 network-first：部署新版本后立即生效，离线时回退到缓存的 index.html
+  if (request.mode === "navigate") {
+    event.respondWith(
+      fetch(request).then((response) => {
+        if (response && response.status === 200 && response.type === "basic") {
+          const clone = response.clone();
+          caches.open(CACHE_NAME).then((cache) => cache.put(request, clone));
+        }
+        return response;
+      }).catch(() => caches.match(request).then((cached) => cached || caches.match("/index.html")))
+    );
+    return;
+  }
+  // 静态资源 cache-first（构建产物文件名带 hash，内容不可变）
   event.respondWith(
     caches.match(request).then((cached) => {
       if (cached) return cached;
@@ -29,11 +43,7 @@ self.addEventListener("fetch", (event) => {
         const clone = response.clone();
         caches.open(CACHE_NAME).then((cache) => cache.put(request, clone));
         return response;
-      }).catch(() => {
-        // Offline fallback: serve index.html for navigation requests
-        if (request.mode === "navigate") return caches.match("/index.html");
-        return new Response("", { status: 503 });
-      });
+      }).catch(() => new Response("", { status: 503 }));
     })
   );
 });

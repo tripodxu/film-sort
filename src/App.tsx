@@ -601,10 +601,12 @@ export default function App() {
     setBusy(true);
     try {
       const response = await fetch("/api/share", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(shareData) });
-      const data = await response.json() as { url?: string; error?: string };
-      if (response.ok && data.url) {
-        try { await navigator.clipboard.writeText(data.url); setNotice(t("榜单链接已复制。", "Ranking link copied.")); }
-        catch { setNotice(t("链接已生成：" + data.url, "Link ready: " + data.url)); }
+      const data = await response.json() as { url?: string; compareUrl?: string; error?: string };
+      // 「比较链接」必须复制 /encounter?payload=<code>；compareUrl 缺失时用 code 兜底拼接
+      const link = data.compareUrl ?? (data.url ? data.url.replace(/\/share\/([0-9a-f]{8})$/, "/encounter?payload=$1") : undefined);
+      if (response.ok && link) {
+        try { await navigator.clipboard.writeText(link); setNotice(t("比较链接已复制，对方打开即可进入比较。", "Compare link copied.")); }
+        catch { setNotice(t("链接已生成：" + link, "Link ready: " + link)); }
       } else { setNotice(t("生成链接失败，请导出 JSON 分享。", "Failed to create link. Export the JSON instead.")); }
     } catch { setNotice(t("生成链接失败，请导出 JSON 分享。", "Failed to create link. Export the JSON instead.")); }
     finally { setBusy(false); }
