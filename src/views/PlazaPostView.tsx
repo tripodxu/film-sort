@@ -1,10 +1,11 @@
 import { useEffect, useState } from "react";
 import { ArrowLeft, Heart, MessageCircle, Play, Trash2, Send } from "lucide-react";
 import { RankingDetail } from "../components/RankingDetail";
+import { ExpandableNote } from "../components/ExpandableNote";
 import { heading } from "./helpers";
 import type { PlazaPostViewProps, PlazaPost, PlazaComment } from "./types";
 import type { MediaKind } from "../data/media";
-import type { ArtisticProfile } from "../lib/profile";
+import type { ArtisticProfile, RankedArtwork } from "../lib/profile";
 
 export function PlazaPostView({ postId, t, label, navigateTo, accountToken, accountNickname, openCollection, profile, setNotice, setPeer, openArtworkDetail, openNoteView }: PlazaPostViewProps) {
   const [post, setPost] = useState<PlazaPost | null>(null);
@@ -144,8 +145,23 @@ export function PlazaPostView({ postId, t, label, navigateTo, accountToken, acco
   }
 
   function compareWithMe() {
-    const works = post?.items ?? [];
-    if (!post || !works.length) return;
+    if (!post) return;
+    if (isProfilePost) {
+      if (!profileRankings.length) return;
+      const profilePeer: ArtisticProfile = {
+        version: 2,
+        profileId: crypto.randomUUID(),
+        profileName: post.nickname || t("匿名用户", "Anonymous"),
+        updatedAt: post.updated_at,
+        rankings: profileRankings.map((entry) => ({ ...entry, profileId: entry.profileId || crypto.randomUUID() })),
+      };
+      setPeer(profilePeer);
+      try { localStorage.setItem("art-rank:peer:v2", JSON.stringify(profilePeer)); } catch {}
+      navigateTo("compare");
+      return;
+    }
+    const works = post.items ?? [];
+    if (!works.length) return;
     const ranking: ArtisticProfile = {
       version: 2,
       profileId: crypto.randomUUID(),
@@ -185,29 +201,70 @@ export function PlazaPostView({ postId, t, label, navigateTo, accountToken, acco
     );
   }
 
+  const isProfilePost = post.post_type === "profile";
+  const profileRankings = isProfilePost ? ((post.items ?? []) as unknown as ArtisticProfile["rankings"]) : [];
   const isAuthor = accountToken && profile && post.nickname === accountNickname;
+
+  function openCollectionFromRanking(kind: MediaKind, title: string, works: RankedArtwork[], key: string) {
+    openCollection({
+      id: `plaza-${post!.id}-${key}`,
+      kind,
+      source: "custom",
+      title,
+      description: "",
+      topN: works.length,
+      works,
+    });
+  }
 
   return (
     <>
       {heading(
         t("帖子详情", "POST DETAIL"),
         post.collection_title,
-        `${post.nickname || t("匿名用户", "Anonymous")} / ${label(post.kind as MediaKind)} / ${post.item_count} ${t("件作品", "works")}`,
+        `${post.nickname || t("匿名用户", "Anonymous")} / ${isProfilePost ? t("画像", "Profile") : label(post.kind as MediaKind)} / ${post.item_count} ${t("件作品", "works")}`,
       )}
       {post.description && <p style={{ fontSize: 14, color: "var(--muted)", marginBottom: 16, lineHeight: 1.7 }}>{post.description}</p>}
 
       {/* Unified ranking detail (same component as share page & compare detail) */}
-      <div className="plaza-post-detail">
-        <RankingDetail
-          kind={post.kind as MediaKind}
-          collectionTitle={post.collection_title}
-          items={post.items ?? []}
-          notes={parsedNotes}
-          kindLabel={label}
-          onNoteView={openNoteView}
-          onArtworkClick={openArtworkDetail}
-        />
-      </div>
+      {isProfilePost ? (
+        <div className="plaza-post-detail">
+          {profileRankings.map((entry, idx) => (
+            <section key={`${entry.kind}-${idx}`} style={{ marginBottom: 36 }}>
+              <RankingDetail
+                kind={entry.kind}
+                collectionTitle={entry.collectionTitle}
+                items={entry.items}
+                notes={parsedNotes}
+                kindLabel={label}
+                onNoteView={openNoteView}
+                onArtworkClick={openArtworkDetail}
+                headerExtra={(
+                  <button
+                    className="text-button"
+                    onClick={() => openCollectionFromRanking(entry.kind, entry.collectionTitle, entry.items, `${entry.kind}-${idx}`)}
+                    style={{ fontSize: 12, color: "var(--accent)", flexShrink: 0 }}
+                  >
+                    <Play size={12} />{t("用此榜单排序", "Sort with this")}
+                  </button>
+                )}
+              />
+            </section>
+          ))}
+        </div>
+      ) : (
+        <div className="plaza-post-detail">
+          <RankingDetail
+            kind={post.kind as MediaKind}
+            collectionTitle={post.collection_title}
+            items={post.items ?? []}
+            notes={parsedNotes}
+            kindLabel={label}
+            onNoteView={openNoteView}
+            onArtworkClick={openArtworkDetail}
+          />
+        </div>
+      )}
 
       {/* Actions */}
       <div style={{ display: "flex", gap: 12, flexWrap: "wrap", margin: "24px 0" }}>
@@ -219,14 +276,23 @@ export function PlazaPostView({ postId, t, label, navigateTo, accountToken, acco
           <Heart size={15} fill={liked ? "currentColor" : "none"} />
           {t("赞", "Like")} ({likeCount})
         </button>
-        <button className="button primary" onClick={useForSorting} style={{ minHeight: 38, fontSize: 13 }}>
-          <Play size={15} />
-          {t("用此榜单排序", "Sort with this")}
-        </button>
+        {!isProfilePost && (
+          <button className="button primary" onClick={useForSorting} style={{ minHeight: 38, fontSize: 13 }}>
+            <Play size={15} />
+            {t("用此榜单排序", "Sort with this")}
+          </button>
+        )}
         <button className="button secondary" onClick={compareWithMe} style={{ minHeight: 38, fontSize: 13 }}>
           {t("与我比较", "Compare with me")}
         </button>
       </div>
+
+      {/* Profile-level note (profile posts) */}
+      {isProfilePost && Object.entries(parsedNotes).filter(([key]) => key.startsWith("profile:")).map(([key, text]) => (
+        <div key={key} style={{ margin: "0 0 16px", padding: "12px 16px", borderRadius: 10, background: "rgba(121,217,174,.05)", borderLeft: "2px solid rgba(216,248,106,.2)" }}>
+          <ExpandableNote text={text} onView={openNoteView ? (t2) => openNoteView(post.collection_title, t2) : undefined} style={{ margin: 0 }} />
+        </div>
+      ))}
 
       {/* Author actions */}
       {isAuthor && (

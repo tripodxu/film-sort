@@ -50,8 +50,15 @@ export async function plazaRoute(request: Request, env: Env): Promise<Response> 
 
     return json({
       posts: (rows.results ?? []).map((row) => {
-        const { item0, item1, item2, ...rest } = row as Record<string, unknown>;
-        const topItems = [item0, item1, item2].filter(Boolean).map((s) => { try { return JSON.parse(String(s)); } catch { return null; } }).filter(Boolean);
+        const r = row as Record<string, unknown>;
+        const { item0, item1, item2, ...rest } = r;
+        const parse = (s: unknown) => { try { return JSON.parse(String(s)); } catch { return null; } };
+        const pieces = [item0, item1, item2].filter(Boolean);
+        // ranking 帖的前三名就是作品；profile 帖的前三名取各榜单的第一件作品
+        const topItems = (r.post_type === "profile"
+          ? pieces.map(parse).map((ranking) => ranking?.items?.[0])
+          : pieces.map(parse)
+        ).filter(Boolean);
         return { ...rest, top_items: topItems };
       }),
       page,
@@ -87,11 +94,12 @@ export async function plazaRoute(request: Request, env: Env): Promise<Response> 
     if (!user) return json({ error: "authentication_required" }, 401);
 
     const raw = await request.text();
+    if (raw.length > 512 * 1024) return json({ error: "payload_too_large" }, 413);
     let body: Record<string, unknown>;
     try { body = JSON.parse(raw); } catch { return json({ error: "invalid_json" }, 400); }
 
     const postType = cleanString(body.post_type, 40);
-    if (!postType) return json({ error: "invalid_post_type" }, 400);
+    if (postType !== "ranking" && postType !== "profile") return json({ error: "invalid_post_type" }, 400);
     const kind = cleanString(body.kind, 20);
     const collectionTitle = cleanString(body.collection_title, 200);
     if (!collectionTitle) return json({ error: "invalid_collection_title" }, 400);
@@ -102,9 +110,17 @@ export async function plazaRoute(request: Request, env: Env): Promise<Response> 
       : typeof notesRaw === "string" ? cleanString(notesRaw, 50000) : null;
     const isPublic = body.is_public === undefined || body.is_public === null ? 1 : (body.is_public ? 1 : 0);
 
-    if (!Array.isArray(body.items) || body.items.length < 1) return json({ error: "invalid_items" }, 400);
+    // ranking 帖 items 为作品数组；profile 帖 items 为 RankingExport 数组（各维度榜单整体）
+    if (!Array.isArray(body.items) || body.items.length < 1 || body.items.length > 20) return json({ error: "invalid_items" }, 400);
+    if (postType === "ranking" && body.items.length > 300) return json({ error: "invalid_items" }, 400);
+    if (postType === "profile" && body.items.some((item) => typeof item !== "object" || item === null || !Array.isArray((item as Record<string, unknown>).items))) {
+      return json({ error: "invalid_items" }, 400);
+    }
+    const itemCount = postType === "profile"
+      ? body.items.reduce((sum, r) => sum + (Array.isArray((r as Record<string, unknown>).items) ? (r as { items: unknown[] }).items.length : 0), 0)
+      : body.items.length;
+    if (itemCount < 1 || itemCount > 300) return json({ error: "invalid_items" }, 400);
     const itemsJson = JSON.stringify(body.items);
-    const itemCount = body.items.length;
 
     const result = await env.DB.prepare(
       `INSERT INTO plaza_posts (user_id, post_type, kind, collection_title, description, items, notes, item_count, is_public) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`

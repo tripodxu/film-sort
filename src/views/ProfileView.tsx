@@ -8,17 +8,19 @@ import type { ProfileViewProps } from "./types";
 import type { RankedArtwork } from "../lib/profile";
 import { useRef, useState } from "react";
 
-export function ProfileView({ profile, activeRanking, locale, t, label, format, setFormat, exportLayout, setExportLayout, exportProfile, share, shareUrl, qrUrl, profileName, setProfileName, namedProfile, persist, navigateTo, peer, editingRankIdx, setEditingRankIdx, editingRankTitle, setEditingRankTitle, renameRank, openCollection, shareSingleRanking, openShareModal, setActiveKind, ranking, setRanking, collection, notes, openNoteModal, openArtworkDetail, accountToken, publishToPlaza, reorderMode, reorderItems, startReorder, saveReorder, cancelReorder, moveItem, busy }: ProfileViewProps) {
+export function ProfileView({ profile, activeRanking, locale, t, label, format, setFormat, exportLayout, setExportLayout, exportProfile, share, shareUrl, qrUrl, profileName, setProfileName, namedProfile, persist, navigateTo, peer, editingRankIdx, setEditingRankIdx, editingRankTitle, setEditingRankTitle, renameRank, openCollection, shareSingleRanking, openShareModal, setActiveKind, ranking, setRanking, collection, notes, openNoteModal, openArtworkDetail, accountToken, publishToPlaza, publishProfileToPlaza, reorderMode, reorderItems, startReorder, saveReorder, cancelReorder, moveItem, busy }: ProfileViewProps) {
   const profileRankIdx = profile.rankings.indexOf(activeRanking);
   const isRenamingProfile = editingRankIdx === profileRankIdx;
   const isReordering = reorderMode === profileRankIdx;
   const [publishDesc, setPublishDesc] = useState("");
   const [showPublishModal, setShowPublishModal] = useState(false);
+  const [publishTarget, setPublishTarget] = useState<"ranking" | "profile">("ranking");
   const [publishBurst, setPublishBurst] = useState(false);
   const [exporting, setExporting] = useState(false);
 
   function handlePublish() {
-    publishToPlaza(activeRanking, publishDesc);
+    if (publishTarget === "profile") publishProfileToPlaza(publishDesc);
+    else publishToPlaza(activeRanking, publishDesc);
     setShowPublishModal(false);
     setPublishDesc("");
     setPublishBurst(true);
@@ -30,6 +32,7 @@ export function ProfileView({ profile, activeRanking, locale, t, label, format, 
     <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 8, gap: 8, alignItems: "center" }}>
       <button className="button secondary" title={t("批注此画像", "Annotate this profile")} onClick={() => openNoteModal(noteKey("profile", profile.profileId), profile.profileName, "film")} style={{ fontSize: 12, gap: 5, padding: "5px 12px", borderRadius: 999, color: hasNote(notes, noteKey("profile", profile.profileId)) ? "var(--accent)" : "var(--muted)", borderColor: hasNote(notes, noteKey("profile", profile.profileId)) ? "var(--accent)" : "var(--line)" }}><StickyNote size={14} />{hasNote(notes, noteKey("profile", profile.profileId)) ? t("画像批注", "Profile note") : t("添加画像批注", "Add profile note")}</button>
       <button className="button secondary" title={t("分享链接", "Share link")} disabled={busy} onClick={() => openShareModal()} style={{ fontSize: 12, gap: 5, padding: "5px 12px", borderRadius: 999 }}><Share2 size={14} />{busy ? t("生成中…", "Generating…") : t("分享链接", "Share link")}</button>
+      {accountToken && <button className="button secondary" title={t("将完整画像发布到广场", "Publish profile to plaza")} disabled={busy} onClick={() => { setPublishTarget("profile"); setShowPublishModal(true); }} style={{ fontSize: 12, gap: 5, padding: "5px 12px", borderRadius: 999 }}><Globe size={14} />{t("发布画像到广场", "Publish profile")}</button>}
     </div>
     {format === "png" && <div className="export-layout-switch"><span>{t("PNG 版式", "PNG layout")}</span><div className="segmented"><button className={exportLayout === "editorial" ? "active" : ""} onClick={() => setExportLayout("editorial")}>{t("编辑", "Editorial")}</button><button className={exportLayout === "collage" ? "active" : ""} onClick={() => setExportLayout("collage")}>{t("拼贴", "Collage")}</button><button className={exportLayout === "minimal" ? "active" : ""} onClick={() => setExportLayout("minimal")}>{t("极简", "Minimal")}</button></div></div>}
     <div className="profile-dimensions">{profile.rankings.map((entry, idx) => { const key = `${entry.kind}-${idx}`; return <button className={`profile-dimension medium-${entry.kind} ${activeRanking === entry ? "active" : ""}`} key={key} onClick={() => setActiveKind(key)}><Poster work={entry.items[0]} kind={entry.kind} /><span>{label(entry.kind)}</span><strong>{entry.collectionTitle}</strong><small>TOP {entry.items.length}</small></button>; })}</div>
@@ -54,7 +57,7 @@ export function ProfileView({ profile, activeRanking, locale, t, label, format, 
             <button className="text-button" onClick={() => { const works = activeRanking.items.map(item => ({ id: item.id, title: item.title, subtitle: item.subtitle, creator: item.creator, year: item.year, posterUrls: item.posterUrls })); openCollection({ id: `rerank-${activeRanking.profileId}`, kind: activeRanking.kind, source: "custom", title: activeRanking.collectionTitle, description: "", topN: activeRanking.items.length, works }); }} style={{ fontSize: 12, color: "var(--accent)" }}>{t("重新排序", "Re-rank")}</button>
             <button className="text-button" onClick={() => void shareSingleRanking(activeRanking)} style={{ fontSize: 12, color: "var(--accent)" }}>{t("比较链接", "Compare link")}</button>
             <button className="text-button" onClick={() => openShareModal(activeRanking)} style={{ fontSize: 12, color: "var(--accent)" }}>{t("分享链接", "Share link")}</button>
-            {accountToken && <button className="text-button" onClick={() => setShowPublishModal(true)} style={{ fontSize: 12, color: "var(--accent)", position: "relative" }}><Globe size={12} style={{ verticalAlign: "middle", marginRight: 3 }} />{t("发布到广场", "Publish to plaza")}{publishBurst && <span className="publish-burst">{Array.from({ length: 12 }).map((_, i) => { const colors = ["var(--accent)", "#4ade80", "#818cf8", "#f472b6", "#facc15"]; return <span key={i} className="publish-particle" style={{ "--angle": i * 30 + "deg", "--delay": i * 0.03 + "s", "--color": colors[i % 5] } as any} />; })}</span>}</button>}
+            {accountToken && <button className="text-button" onClick={() => { setPublishTarget("ranking"); setShowPublishModal(true); }} style={{ fontSize: 12, color: "var(--accent)", position: "relative" }}><Globe size={12} style={{ verticalAlign: "middle", marginRight: 3 }} />{t("发布到广场", "Publish to plaza")}{publishBurst && <span className="publish-burst">{Array.from({ length: 12 }).map((_, i) => { const colors = ["var(--accent)", "#4ade80", "#818cf8", "#f472b6", "#facc15"]; return <span key={i} className="publish-particle" style={{ "--angle": i * 30 + "deg", "--delay": i * 0.03 + "s", "--color": colors[i % 5] } as any} />; })}</span>}</button>}
             {!isReordering && <button className="text-button" onClick={() => startReorder(profileRankIdx)} style={{ fontSize: 12, color: "var(--accent)" }}>{t("手动调整", "Manual order")}</button>}
           </div>
         </div>
@@ -114,7 +117,7 @@ export function ProfileView({ profile, activeRanking, locale, t, label, format, 
             <IconButton title={t("关闭", "Close")} onClick={() => setShowPublishModal(false)}><X size={18} /></IconButton>
           </div>
           <p style={{ fontSize: 13, color: "var(--muted)", lineHeight: 1.7 }}>
-            {t(`将「${activeRanking.collectionTitle}」发布到文化广场，其他用户可以看到、点赞、留言和使用你的榜单排序。`, `Publish "${activeRanking.collectionTitle}" to the Culture Plaza. Others can see, like, comment, and sort with your ranking.`)}
+            {publishTarget === "profile" ? t(`将画像「${profile.profileName}」（${profile.rankings.length} 个榜单）发布到文化广场，其他用户可以看到、点赞、留言和使用其中的榜单排序。`, `Publish profile "${profile.profileName}" (${profile.rankings.length} lists) to the Culture Plaza.`) : t(`将「${activeRanking.collectionTitle}」发布到文化广场，其他用户可以看到、点赞、留言和使用你的榜单排序。`, `Publish "${activeRanking.collectionTitle}" to the Culture Plaza. Others can see, like, comment, and sort with your ranking.`)}
           </p>
           <textarea className="note-textarea" value={publishDesc} onChange={(e) => setPublishDesc(e.target.value)} placeholder={t("添加描述，让其他人了解你的榜单…（可选）\n\n例如：这是我看过的最好的华语电影 Top 10", "Add a description to help others understand your ranking… (optional)\n\nFor example: My top 10 Chinese films of all time")} rows={5} autoFocus />
           <div className="guide-modal-footer">

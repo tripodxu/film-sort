@@ -627,8 +627,32 @@ export default function App() {
     try {
       const response = await fetch("/api/plaza/posts", { method: "POST", headers: { "content-type": "application/json", authorization: `Bearer ${accountToken}` }, body: JSON.stringify({ post_type: "ranking", kind: ranking.kind, collection_title: ranking.collectionTitle, description: description?.trim() || null, items: ranking.items, notes: hasNotes ? rankingNotes : null, item_count: ranking.items.length }) });
       const data = await response.json() as { id?: number; error?: string };
-      if (response.ok && data.id) setNotice(t("已发布到广场！", "Published to plaza!"));
-      else setNotice(t("发布失败。", "Publish failed."));
+      if (response.ok && data.id) {
+        try {
+          const links = JSON.parse(localStorage.getItem("art-rank:plaza-links") ?? "{}");
+          links[`${ranking.kind}|${ranking.collectionTitle}`] = data.id;
+          localStorage.setItem("art-rank:plaza-links", JSON.stringify(links));
+        } catch { /* 关联记录失败不影响发布 */ }
+        setNotice(t("已发布到广场！", "Published to plaza!"));
+      } else setNotice(t("发布失败。", "Publish failed."));
+    } catch { setNotice(t("发布失败，请重试。", "Publish failed, please retry.")); }
+    finally { setBusy(false); }
+  }
+  async function publishProfileToPlaza(description?: string) {
+    if (!accountToken) { setNotice(t("请先登录。", "Please sign in first.")); return; }
+    const next = namedProfile(); if (!next) return;
+    setBusy(true);
+    try {
+      const response = await fetch("/api/plaza/posts", { method: "POST", headers: { "content-type": "application/json", authorization: `Bearer ${accountToken}` }, body: JSON.stringify({ post_type: "profile", kind: null, collection_title: next.profileName, description: description?.trim() || null, items: next.rankings, notes: Object.keys(notes).length > 0 ? notes : null, item_count: next.rankings.reduce((sum, r) => sum + r.items.length, 0) }) });
+      const data = await response.json() as { id?: number; error?: string };
+      if (response.ok && data.id) {
+        try {
+          const links = JSON.parse(localStorage.getItem("art-rank:plaza-links") ?? "{}");
+          links[`profile|${next.profileId}`] = data.id;
+          localStorage.setItem("art-rank:plaza-links", JSON.stringify(links));
+        } catch { /* 关联记录失败不影响发布 */ }
+        setNotice(t("画像已发布到广场！", "Profile published to plaza!"));
+      } else setNotice(t("发布失败。", "Publish failed."));
     } catch { setNotice(t("发布失败，请重试。", "Publish failed, please retry.")); }
     finally { setBusy(false); }
   }
@@ -823,7 +847,7 @@ export default function App() {
   else if (view === "source") content = <SourceView kind={kind} t={t} label={label} source={source} setSource={setSource} setNotice={setNotice} search={search} setSearch={setSearch} colCount={colCount} changeCols={changeCols} collections={collections} openCollection={openCollection} customItem={customItem} setCustomItem={setCustomItem} addCustomItem={addCustomItem} customText={customText} setCustomText={setCustomText} importCollection={importCollection} saveCollectionCloud={saveCollectionCloud} cloudCollections={cloudCollections} loadCloudCollections={loadCloudCollections} deleteCloudCollection={deleteCloudCollection} doubanLimit={doubanLimit} setDoubanLimit={setDoubanLimit} busy={busy} loadDouban={loadDouban} />;
   else if (view === "setup" && collection) content = <SetupView collection={collection} kind={kind} t={t} label={label} selected={selected} setSelected={setSelected} topN={topN} setTopN={setTopN} seed={seed} setSeed={setSeed} setCollection={setCollection} startRanking={startRanking} />;
   else if (view === "sorting" && collection && ranking && comparison && progress) content = <SortingView collection={collection} ranking={ranking} comparison={comparison} progress={progress} label={label} kind={kind} t={t} worksById={worksById} act={act} />;
-  else if (view === "profile" && profile && activeRanking) content = <ProfileView profile={profile} activeRanking={activeRanking} locale={locale} t={t} label={label} format={format} setFormat={setFormat} exportLayout={exportLayout} setExportLayout={setExportLayout} exportProfile={exportProfile} share={share} shareUrl={shareUrl} qrUrl={qrUrl} profileName={profileName} setProfileName={setProfileName} namedProfile={namedProfile} persist={persist} navigateTo={navigateTo} peer={peer} editingRankIdx={editingRankIdx} setEditingRankIdx={setEditingRankIdx} editingRankTitle={editingRankTitle} setEditingRankTitle={setEditingRankTitle} renameRank={renameRank} openCollection={openCollection} shareSingleRanking={shareSingleRanking} openShareModal={openShareModal} setActiveKind={setActiveKind} ranking={ranking} setRanking={setRanking} collection={collection} notes={notes} openNoteModal={openNoteModal} openArtworkDetail={openArtworkDetail} accountToken={accountToken} publishToPlaza={publishToPlaza} reorderMode={reorderMode} reorderItems={reorderItems} startReorder={startReorder} saveReorder={saveReorder} cancelReorder={cancelReorder} moveItem={moveItem} busy={busy} />;
+  else if (view === "profile" && profile && activeRanking) content = <ProfileView profile={profile} activeRanking={activeRanking} locale={locale} t={t} label={label} format={format} setFormat={setFormat} exportLayout={exportLayout} setExportLayout={setExportLayout} exportProfile={exportProfile} share={share} shareUrl={shareUrl} qrUrl={qrUrl} profileName={profileName} setProfileName={setProfileName} namedProfile={namedProfile} persist={persist} navigateTo={navigateTo} peer={peer} editingRankIdx={editingRankIdx} setEditingRankIdx={setEditingRankIdx} editingRankTitle={editingRankTitle} setEditingRankTitle={setEditingRankTitle} renameRank={renameRank} openCollection={openCollection} shareSingleRanking={shareSingleRanking} openShareModal={openShareModal} setActiveKind={setActiveKind} ranking={ranking} setRanking={setRanking} collection={collection} notes={notes} openNoteModal={openNoteModal} openArtworkDetail={openArtworkDetail} accountToken={accountToken} publishToPlaza={publishToPlaza} publishProfileToPlaza={publishProfileToPlaza} reorderMode={reorderMode} reorderItems={reorderItems} startReorder={startReorder} saveReorder={saveReorder} cancelReorder={cancelReorder} moveItem={moveItem} busy={busy} />;
   else if (view === "compare") content = <CompareView kinds={kinds} profile={profile} peer={peer} compareActiveKind={compareActiveKind} setCompareActiveKind={setCompareActiveKind} compareMode={compareMode} setCompareMode={setCompareMode} manualOwnSelections={manualOwnSelections} setManualOwnSelections={setManualOwnSelections} manualPeerSelections={manualPeerSelections} setManualPeerSelections={setManualPeerSelections} compareRankings={compareRankings} mergeDimensionRankings={mergeDimensionRankings} compareDimensions={compareDimensions} compareProfiles={compareProfiles} navigateTo={navigateTo} setPeer={setPeer} setAiInsight={setAiInsight} label={label} t={t} setCompareSortBy={setCompareSortBy} compareSortBy={compareSortBy} setCompareRankDetail={setCompareRankDetail} shareSingleRanking={shareSingleRanking} exportProfile={exportProfile} setFormat={setFormat} busy={busy} namedProfile={namedProfile} setNotice={setNotice} requestInsight={requestInsight} aiBusy={aiBusy} aiInsight={aiInsight} createFromPeer={createFromPeer} setPeerRankPickOpen={setPeerRankPickOpen} openArtworkDetail={openArtworkDetail} peerUrl={peerUrl} setPeerUrl={setPeerUrl} peerUrlBusy={peerUrlBusy} importPeerFromUrl={importPeerFromUrl} importProfile={importProfile} setActiveKind={setActiveKind} notes={notes} peerNotes={peerNotes} openShareModal={openShareModal} />;
   else if (view === "share" && sharePeer) content = <ShareView peer={sharePeer} t={t} label={label} navigateTo={(v) => { if (v === "compare") { acceptPeer(sharePeer); } else { navigateTo(v as View); setPeerNotes({}); } }} openCollection={openCollection} profile={profile} notes={peerNotes} expiresAt={shareExpires} openArtworkDetail={openArtworkDetail} openNoteView={openNoteView} />;
   else if (view === "share" && !sharePeer) content = <div className="empty-state"><p style={{ marginBottom: 12 }}>{t("正在加载分享内容…", "Loading shared content…")}</p><button className="button secondary" onClick={() => navigateTo("home")}>{t("返回首页", "Back home")}</button></div>;

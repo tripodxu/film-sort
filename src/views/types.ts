@@ -125,6 +125,7 @@ export interface ProfileViewProps {
   accountToken: string;
   busy: boolean;
   publishToPlaza: (ranking: RankingExport, description?: string) => void;
+  publishProfileToPlaza: (description?: string) => void;
   reorderMode: number | null;
   reorderItems: RankedArtwork[];
   startReorder: (idx: number) => void;
