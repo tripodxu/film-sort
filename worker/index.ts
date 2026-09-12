@@ -1433,6 +1433,7 @@ async function route(request: Request, env: Env): Promise<Response> {
 
     let bookTitle = title ?? "";
     const data: Record<string, unknown> = {};
+    let subjectUrl = detailUrl ?? "";
 
     // Step 1: Get basic info from search.douban.com
     if (bookTitle || detailUrl) {
@@ -1450,32 +1451,31 @@ async function route(request: Request, env: Env): Promise<Response> {
           data.author = found.author ?? "";
           data.press = found.press ?? "";
           data.date = found.date ?? "";
+          if (!subjectUrl && typeof found.cover_link === "string") subjectUrl = found.cover_link;
         }
       } catch {}
     }
 
-    // Step 2: Try Wikipedia first for content_intro
+    // Step 2: 豆瓣官方详情页简介优先（零歧义；失败静默降级维基）
+    if (subjectUrl.includes("book.douban.com/subject/")) {
+      try {
+        const detail = await doubanBookDetail(subjectUrl);
+        if (detail.status && detail.data) {
+          if (detail.data.content_intro) { data.content_intro = detail.data.content_intro; data.content_source = "douban"; }
+          if (detail.data.author_intro) data.author_intro = detail.data.author_intro;
+          if (detail.data.tags) data.tags = detail.data.tags;
+          for (const [k, v] of Object.entries(detail.data)) { if (v && !data[k]) data[k] = v; }
+        }
+      } catch {}
+    }
+
+    // Step 3: 维基兜底
     if (!data.content_intro && bookTitle) {
       const intro = await fetchContentIntro(bookTitle, "book", typeof data.author === "string" ? data.author.split("/")[0] : undefined, data.date);
       if (intro) {
         data.content_intro = intro.intro;
         data.content_source = intro.source;
       }
-    }
-
-    // Step 3: Try douban detail page
-    if (detailUrl?.includes("book.douban.com/subject/")) {
-      try {
-        const detail = await doubanBookDetail(detailUrl);
-        if (detail.status && detail.data) {
-          if (!data.content_intro && detail.data.content_intro) data.content_intro = detail.data.content_intro;
-          if (detail.data.author_intro) data.author_intro = detail.data.author_intro;
-          if (detail.data.tags) data.tags = detail.data.tags;
-          for (const [k, v] of Object.entries(detail.data)) {
-            if (v && !data[k]) data[k] = v;
-          }
-        }
-      } catch {}
     }
 
     if (data.title) {
@@ -1491,6 +1491,7 @@ async function route(request: Request, env: Env): Promise<Response> {
     const movieId = detailUrl?.match(/subject\/(\d+)/)?.[1];
     let movieTitle = title ?? "";
     const data: Record<string, unknown> = {};
+    let subjectUrl = detailUrl ?? "";
 
     // Step 1: Get basic info from search.douban.com
     if (movieTitle || movieId) {
@@ -1509,30 +1510,29 @@ async function route(request: Request, env: Env): Promise<Response> {
           data.country = found.country ?? "";
           data.duration = found.duration ?? "";
           data.actors = Array.isArray(found.actors) ? found.actors.join("/") : "";
+          if (!subjectUrl && typeof found.cover_link === "string") subjectUrl = found.cover_link;
         }
       } catch {}
     }
 
-    // Step 2: Try Wikipedia first for content_intro
+    // Step 2: 豆瓣官方详情页简介优先（v:summary，零歧义；失败静默降级维基）
+    if (subjectUrl.includes("movie.douban.com/subject/")) {
+      try {
+        const detail = await doubanMovieDetail(subjectUrl);
+        if (detail.status && detail.data) {
+          if (detail.data.content_intro) { data.content_intro = detail.data.content_intro; data.content_source = "douban"; }
+          for (const [k, v] of Object.entries(detail.data)) { if (v && !data[k]) data[k] = v; }
+        }
+      } catch {}
+    }
+
+    // Step 3: 维基兜底（豆瓣详情未取到简介时）
     if (!data.content_intro && movieTitle) {
       const intro = await fetchContentIntro(movieTitle, "movie", typeof data.actors === "string" ? data.actors.split("/")[0] : undefined, data.year);
       if (intro) {
         data.content_intro = intro.intro;
         data.content_source = intro.source;
       }
-    }
-
-    // Step 3: Try douban detail page
-    if (detailUrl?.includes("movie.douban.com/subject/")) {
-      try {
-        const detail = await doubanMovieDetail(detailUrl);
-        if (detail.status && detail.data) {
-          if (!data.content_intro && detail.data.content_intro) data.content_intro = detail.data.content_intro;
-          for (const [k, v] of Object.entries(detail.data)) {
-            if (v && !data[k]) data[k] = v;
-          }
-        }
-      } catch {}
     }
 
     if (data.title) {
@@ -1547,6 +1547,7 @@ async function route(request: Request, env: Env): Promise<Response> {
 
     let musicTitle = title ?? "";
     const data: Record<string, unknown> = {};
+    let subjectUrl = detailUrl ?? "";
 
     // Step 1: Get basic info from search.douban.com
     if (musicTitle || detailUrl) {
@@ -1566,31 +1567,30 @@ async function route(request: Request, env: Env): Promise<Response> {
           data.album = found.album ?? "";
           data.medium = found.medium ?? "";
           data.schools = found.schools ?? "";
+          if (!subjectUrl && typeof found.cover_link === "string") subjectUrl = found.cover_link;
         }
       } catch {}
     }
 
-    // Step 2: Try Wikipedia first for content_intro
+    // Step 2: 豆瓣官方详情页简介优先（零歧义；失败静默降级维基）
+    if (subjectUrl.includes("music.douban.com/subject/")) {
+      try {
+        const detail = await doubanMusicDetail(subjectUrl);
+        if (detail.status && detail.data) {
+          if (detail.data.content_intro) { data.content_intro = detail.data.content_intro; data.content_source = "douban"; }
+          if (detail.data.songs) data.songs = detail.data.songs;
+          for (const [k, v] of Object.entries(detail.data)) { if (v && !data[k]) data[k] = v; }
+        }
+      } catch {}
+    }
+
+    // Step 3: 维基兜底
     if (!data.content_intro && musicTitle) {
       const intro = await fetchContentIntro(musicTitle, "music", typeof data.artist === "string" ? data.artist.split("/")[0] : undefined, data.date);
       if (intro) {
         data.content_intro = intro.intro;
         data.content_source = intro.source;
       }
-    }
-
-    // Step 3: Try douban detail page
-    if (detailUrl?.includes("music.douban.com/subject/")) {
-      try {
-        const detail = await doubanMusicDetail(detailUrl);
-        if (detail.status && detail.data) {
-          if (!data.content_intro && detail.data.content_intro) data.content_intro = detail.data.content_intro;
-          if (detail.data.songs) data.songs = detail.data.songs;
-          for (const [k, v] of Object.entries(detail.data)) {
-            if (v && !data[k]) data[k] = v;
-          }
-        }
-      } catch {}
     }
 
     if (data.title) {
