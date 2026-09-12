@@ -235,9 +235,13 @@ export async function plazaRoute(request: Request, env: Env): Promise<Response> 
     if (!existing) return json({ error: "post_not_found" }, 404);
     if (existing.user_id !== user.id) return json({ error: "forbidden" }, 403);
 
-    await env.DB.prepare("DELETE FROM plaza_comments WHERE post_id = ?").bind(postId).run();
-    await env.DB.prepare("DELETE FROM plaza_likes WHERE post_id = ?").bind(postId).run();
-    await env.DB.prepare("DELETE FROM plaza_posts WHERE id = ?").bind(postId).run();
+    // 帖子若被编辑/隐藏过，plaza_post_edits 有外键引用，须先删除历史再删帖子
+    await env.DB.batch([
+      env.DB.prepare("DELETE FROM plaza_post_edits WHERE post_id = ?").bind(postId),
+      env.DB.prepare("DELETE FROM plaza_comments WHERE post_id = ?").bind(postId),
+      env.DB.prepare("DELETE FROM plaza_likes WHERE post_id = ?").bind(postId),
+      env.DB.prepare("DELETE FROM plaza_posts WHERE id = ?").bind(postId),
+    ]);
 
     return json({ ok: true });
   }
@@ -389,13 +393,14 @@ export async function adminPlazaRoute(request: Request, env: Env): Promise<Respo
     });
   }
 
-  // DELETE /api/admin/plaza/posts/:id — 删除任意帖子（batch 原子清理评论与点赞）
+  // DELETE /api/admin/plaza/posts/:id — 删除任意帖子（batch 原子清理编辑历史/评论/点赞）
   const adminPostDeleteMatch = path.match(/^\/api\/admin\/plaza\/posts\/(\d+)$/);
   if (adminPostDeleteMatch && method === "DELETE") {
     const postId = Number(adminPostDeleteMatch[1]);
     const existing = await env.DB.prepare("SELECT id, collection_title, user_id FROM plaza_posts WHERE id = ?").bind(postId).first<{ id: number; collection_title: string; user_id: number }>();
     if (!existing) return json({ error: "post_not_found" }, 404);
     await env.DB.batch([
+      env.DB.prepare("DELETE FROM plaza_post_edits WHERE post_id = ?").bind(postId),
       env.DB.prepare("DELETE FROM plaza_comments WHERE post_id = ?").bind(postId),
       env.DB.prepare("DELETE FROM plaza_likes WHERE post_id = ?").bind(postId),
       env.DB.prepare("DELETE FROM plaza_posts WHERE id = ?").bind(postId),

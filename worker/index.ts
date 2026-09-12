@@ -1049,12 +1049,12 @@ async function handleAdminCheck(request: Request, env: Env): Promise<Response> {
 /** 各重置范围对应的清空语句（ accounts 为最高危：全部账户及用户生成内容） */
 const RESET_SCOPES: Record<string, { label: string; tables: string[]; statements: string[] }> = {
   analytics: { label: "运行数据（分析事件/API日志/海报错误）", tables: ["analytics_events", "api_logs", "poster_errors"], statements: ["DELETE FROM analytics_events", "DELETE FROM api_logs", "DELETE FROM poster_errors"] },
-  plaza: { label: "广场内容（帖子/点赞/评论）", tables: ["plaza_posts", "plaza_likes", "plaza_comments"], statements: ["DELETE FROM plaza_comments", "DELETE FROM plaza_likes", "DELETE FROM plaza_posts"] },
+  plaza: { label: "广场内容（帖子/点赞/评论/编辑历史）", tables: ["plaza_post_edits", "plaza_posts", "plaza_likes", "plaza_comments"], statements: ["DELETE FROM plaza_post_edits", "DELETE FROM plaza_comments", "DELETE FROM plaza_likes", "DELETE FROM plaza_posts"] },
   shares: { label: "分享短链", tables: ["shared_links"], statements: ["DELETE FROM shared_links"] },
   accounts: {
     label: "全部用户账户及用户内容（画像/清单/会话/OAuth/广场/分享）",
     tables: ["user_accounts", "user_profiles_v2", "user_collections", "user_sessions", "user_oauth", "plaza_posts", "plaza_likes", "plaza_comments", "shared_links"],
-    statements: ["DELETE FROM user_sessions", "DELETE FROM user_oauth", "DELETE FROM user_profiles_v2", "DELETE FROM user_collections", "DELETE FROM plaza_comments", "DELETE FROM plaza_likes", "DELETE FROM plaza_posts", "DELETE FROM shared_links", "DELETE FROM user_accounts"],
+    statements: ["DELETE FROM user_sessions", "DELETE FROM user_oauth", "DELETE FROM user_cookie_vault", "DELETE FROM user_profiles_v2", "DELETE FROM user_collections", "DELETE FROM plaza_post_edits", "DELETE FROM plaza_comments", "DELETE FROM plaza_likes", "DELETE FROM plaza_posts", "DELETE FROM shared_links", "DELETE FROM user_accounts"],
   },
 };
 

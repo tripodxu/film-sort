@@ -445,6 +445,12 @@ export async function accountRoute(request: Request, env: Env): Promise<Response
     if (!env.DB || !await adminAuthLocal(request, env.DB)) return json({ error: "auth_required" }, 401);
     const userId = Number(deleteMatch[1]);
     await env.DB.batch([
+      // 广场内容引用 user_accounts(id)：须先清该用户的帖子/历史/评论/点赞，再删账户
+      env.DB.prepare("DELETE FROM plaza_post_edits WHERE post_id IN (SELECT id FROM plaza_posts WHERE user_id = ?)").bind(userId),
+      env.DB.prepare("DELETE FROM plaza_likes WHERE user_id = ? OR post_id IN (SELECT id FROM plaza_posts WHERE user_id = ?)").bind(userId, userId),
+      env.DB.prepare("DELETE FROM plaza_comments WHERE user_id = ? OR post_id IN (SELECT id FROM plaza_posts WHERE user_id = ?)").bind(userId, userId),
+      env.DB.prepare("DELETE FROM plaza_posts WHERE user_id = ?").bind(userId),
+      env.DB.prepare("DELETE FROM user_cookie_vault WHERE user_id = ?").bind(userId),
       env.DB.prepare("DELETE FROM user_sessions WHERE user_id = ?").bind(userId),
       env.DB.prepare("DELETE FROM user_oauth WHERE user_id = ?").bind(userId),
       env.DB.prepare("DELETE FROM user_profiles_v2 WHERE user_id = ?").bind(userId),
