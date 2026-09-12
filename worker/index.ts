@@ -426,9 +426,50 @@ function renderUsers(d) {
   var rowsHtml = accounts.map(function(a) {
     var time = new Date(a.created_at).toLocaleString('zh-CN', {year:'2-digit',month:'2-digit',day:'2-digit'});
     var disabled = !!a.disabled_at;
-    return '<tr><td>'+esc(a.email)+'</td><td>'+esc(a.nickname||'-')+'</td><td><span class="badge '+(disabled?'badge-err':'badge-ok')+'">'+(disabled?'已禁用':'正常')+'</span></td><td style="color:var(--muted)">'+time+'</td><td><button onclick="toggleAccount('+a.id+','+disabled+')" class="table-action '+(disabled?'restore':'warn')+'">'+(disabled?'恢复':'禁用')+'</button> <button onclick="clearAccountData('+a.id+',&apos;profile&apos;)" class="table-action">画像</button> <button onclick="clearAccountData('+a.id+',&apos;collections&apos;)" class="table-action">清单</button> <button onclick="deleteAccount('+a.id+')" class="table-action danger">删除</button> <button onclick="resetPassword('+a.id+')" class="table-action warn">重置密码</button></td></tr>';
+    return '<tr><td>'+esc(a.email)+'</td><td>'+esc(a.nickname||'-')+'</td><td><span class="badge '+(disabled?'badge-err':'badge-ok')+'">'+(disabled?'已禁用':'正常')+'</span></td><td style="color:var(--muted)">'+time+'</td><td><button onclick="openUserDetail('+a.id+')" class="table-action">查看</button> <button onclick="toggleAccount('+a.id+','+disabled+')" class="table-action '+(disabled?'restore':'warn')+'">'+(disabled?'恢复':'禁用')+'</button> <button onclick="clearAccountData('+a.id+',&apos;profile&apos;)" class="table-action">画像</button> <button onclick="clearAccountData('+a.id+',&apos;collections&apos;)" class="table-action">清单</button> <button onclick="deleteAccount('+a.id+')" class="table-action danger">删除</button> <button onclick="resetPassword('+a.id+')" class="table-action warn">重置密码</button></td></tr>';
   }).join('');
   document.getElementById('users-app').innerHTML = '<div class="card"><h3 style="margin-bottom:12px">用户账户（'+accounts.length+'）</h3>'+(accounts.length ? '<table><thead><tr><th>邮箱</th><th>昵称</th><th>状态</th><th>注册</th><th>操作</th></tr></thead><tbody>'+rowsHtml+'</tbody></table>' : '<p style="color:var(--muted);font-size:13px">暂无注册用户</p>')+'</div>';
+}
+
+// ===== 用户画像查看 =====
+var KIND_LABELS = { film: '电影', book: '书籍', music: '音乐', other: '其他' };
+async function openUserDetail(id){
+  var root = document.getElementById('dash-modal-root');
+  root.innerHTML = '<div class="dash-modal-backdrop" onclick="if(event.target===this)closeDashModal()"><div class="dash-modal"><div class="loading">加载中...</div></div></div>';
+  try {
+    var r = await fetch('/api/admin/accounts/'+id+'/detail',{headers:{'Authorization':'Bearer '+getToken()}});
+    var d = await r.json();
+    if (!r.ok) throw new Error(d.error||'加载失败');
+    var a = d.account||{};
+    var disabled = !!a.disabled_at;
+    var head = '<div style="display:flex;justify-content:space-between;gap:10px;align-items:flex-start"><div><h3>'+esc(a.nickname||'-')+' <span class="mini-note">#'+a.id+'</span></h3><div class="mini-note">'+esc(a.email||'')+'</div></div><button class="close-x" onclick="closeDashModal()">✕</button></div>';
+    var meta = '<div class="mini-note" style="margin:8px 0 12px">注册 '+(a.created_at?new Date(a.created_at).toLocaleDateString('zh-CN'):'-')+' · <span class="badge '+(disabled?'badge-err':'badge-ok')+'">'+(disabled?'已禁用':'正常')+'</span> · 活跃会话 '+(d.active_sessions||0)+' · OAuth '+(d.oauth_providers&&d.oauth_providers.length?esc(d.oauth_providers.join(' / ')):'无')+' · 广场发帖 '+(d.plaza_post_count||0)+' 篇</div>';
+    var profileHtml = '';
+    var p = d.profile;
+    if (p && p.rankings && p.rankings.length) {
+      profileHtml = '<h3 style="font-size:13px;margin:14px 0 4px">画像「'+esc(p.profileName||'-')+'」（'+p.rankings.length+' 个榜单 / '+p.rankings.reduce(function(s,e){return s+(e.items?e.items.length:0);},0)+' 件作品'+(d.profile_updated_at?' · 更新于 '+new Date(d.profile_updated_at).toLocaleDateString('zh-CN'):'')+'）</h3>';
+      profileHtml += p.rankings.map(function(entry){
+        var items = (entry.items||[]).map(function(w,i){
+          var rank = w.rank || (i+1);
+          var poster = (w.posterUrls&&w.posterUrls[0]) ? '<img src="/api/image?url='+encodeURIComponent(w.posterUrls[0])+'" alt="" style="width:24px;height:34px;object-fit:cover;border-radius:2px;flex-shrink:0" referrerpolicy="no-referrer">' : '';
+          return '<div class="rank-row">'+poster+'<span class="rank-medal">'+(rank<=3?(rank===1?'🥇':rank===2?'🥈':'🥉'):String(rank).padStart(2,'0'))+'</span><div style="min-width:0"><strong>'+esc(w.title)+'</strong><div class="mini-note">'+esc(w.creator||'')+' '+(w.year||'')+'</div></div></div>';
+        }).join('');
+        return '<div style="margin-bottom:14px"><div style="display:flex;gap:8px;align-items:center;margin-bottom:4px"><span class="badge badge-'+esc(entry.kind)+'">'+esc(KIND_LABELS[entry.kind]||entry.kind)+'</span><strong style="font-size:13px">'+esc(entry.collectionTitle)+'</strong><span class="mini-note">TOP '+((entry.items||[]).length)+'</span></div>'+(items||'<p class="mini-note">空榜单</p>')+'</div>';
+      }).join('');
+    } else {
+      profileHtml = '<h3 style="font-size:13px;margin:14px 0 4px">画像</h3><p class="mini-note">该用户尚未创建画像</p>';
+    }
+    var noteEntries = Object.entries(d.notes||{}).filter(function(kv){ return kv[1] && String(kv[1]).trim(); });
+    var notesHtml = '<h3 style="font-size:13px;margin:14px 0 4px">批注（'+noteEntries.length+' 条）</h3>'+(noteEntries.length ? noteEntries.map(function(kv){
+      var scopeLabel = kv[0].indexOf('work:')===0?'作品批注':kv[0].indexOf('ranking:')===0?'榜单批注':'画像批注';
+      return '<div class="comment-row"><div class="mini-note">'+scopeLabel+' · <code>'+esc(kv[0])+'</code></div><div style="margin-top:4px;white-space:pre-wrap;overflow-wrap:anywhere">'+esc(String(kv[1]))+'</div></div>';
+    }).join('') : '<p class="mini-note">无批注</p>');
+    var collections = d.collections||[];
+    var collectionsHtml = '<h3 style="font-size:13px;margin:14px 0 4px">云端清单（'+collections.length+'）</h3>'+(collections.length ? '<table><thead><tr><th>标题</th><th>媒介</th><th>作品数</th><th>更新</th></tr></thead><tbody>'+collections.map(function(c){
+      return '<tr><td>'+esc(c.title)+'</td><td><span class="badge badge-'+esc(c.kind)+'">'+esc(KIND_LABELS[c.kind]||c.kind)+'</span></td><td>'+(c.item_count||0)+'</td><td style="color:var(--muted)">'+(c.updated_at?new Date(c.updated_at).toLocaleDateString('zh-CN'):'-')+'</td></tr>';
+    }).join('')+'</tbody></table>' : '<p class="mini-note">无云端清单</p>');
+    root.innerHTML = '<div class="dash-modal-backdrop" onclick="if(event.target===this)closeDashModal()"><div class="dash-modal">'+head+meta+profileHtml+notesHtml+collectionsHtml+'<div class="mini-note" style="margin-top:14px">删除/禁用/重置密码等操作请在「用户」页签表格中进行</div></div></div>';
+  } catch(e){ root.innerHTML = '<div class="dash-modal-backdrop" onclick="if(event.target===this)closeDashModal()"><div class="dash-modal"><div class="error">加载失败: '+esc(e&&e.message?e.message:e)+'</div></div></div>'; }
 }
 
 function renderData(d) {
