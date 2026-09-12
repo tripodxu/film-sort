@@ -1,4 +1,4 @@
-import { Download, Globe, GripVertical, ArrowDown, ArrowUp, Link, Plus, Share2, StickyNote, Trash2, Undo2, Users, X } from "lucide-react";
+import { CalendarDays, Download, Globe, GripVertical, ArrowDown, ArrowUp, Link, MoreHorizontal, Pencil, Plus, RefreshCw, Share2, SquarePen, StickyNote, Trash2, TriangleAlert, Undo2, Users, X } from "lucide-react";
 import { Poster } from "../components/Poster";
 import { IconButton } from "./IconButton";
 import { heading } from "./helpers";
@@ -20,6 +20,7 @@ export function ProfileView({ profile, activeRanking, locale, t, label, format, 
   const [editWorksOpen, setEditWorksOpen] = useState(false);
   const [plazaSyncPostId, setPlazaSyncPostId] = useState<number | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
 
   function handlePublish() {
     if (publishTarget === "profile") publishProfileToPlaza(publishDesc);
@@ -46,10 +47,10 @@ export function ProfileView({ profile, activeRanking, locale, t, label, format, 
 
   return <>
     {heading(t("我的文化索引", "MY CULTURE INDEX"), profile.profileName, `${profile.rankings.length} ${t("个领域", "media")} / ${profile.rankings.reduce((count, entry) => count + entry.items.length, 0)} ${t("件作品", "works")}`)}
-    <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 8, gap: 8, alignItems: "center" }}>
-      <button className="button secondary" title={t("批注此画像", "Annotate this profile")} onClick={() => openNoteModal(noteKey("profile", profile.profileId), profile.profileName, "film")} style={{ fontSize: 12, gap: 5, padding: "5px 12px", borderRadius: 999, color: hasNote(notes, noteKey("profile", profile.profileId)) ? "var(--accent)" : "var(--muted)", borderColor: hasNote(notes, noteKey("profile", profile.profileId)) ? "var(--accent)" : "var(--line)" }}><StickyNote size={14} />{hasNote(notes, noteKey("profile", profile.profileId)) ? t("画像批注", "Profile note") : t("添加画像批注", "Add profile note")}</button>
-      <button className="button secondary" title={t("分享链接", "Share link")} disabled={busy} onClick={() => openShareModal()} style={{ fontSize: 12, gap: 5, padding: "5px 12px", borderRadius: 999 }}><Share2 size={14} />{busy ? t("生成中…", "Generating…") : t("分享链接", "Share link")}</button>
-      {accountToken && <button className="button secondary" title={t("将完整画像发布到广场", "Publish profile to plaza")} disabled={busy} onClick={() => { setPublishTarget("profile"); setShowPublishModal(true); }} style={{ fontSize: 12, gap: 5, padding: "5px 12px", borderRadius: 999 }}><Globe size={14} />{t("发布画像到广场", "Publish profile")}</button>}
+    <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 12, gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+      <button className="rank-pill" title={t("批注此画像", "Annotate this profile")} onClick={() => openNoteModal(noteKey("profile", profile.profileId), profile.profileName, "film")} style={hasNote(notes, noteKey("profile", profile.profileId)) ? { borderColor: "var(--accent)", color: "var(--accent)" } : undefined}><StickyNote size={13} />{hasNote(notes, noteKey("profile", profile.profileId)) ? t("画像批注", "Profile note") : t("画像批注", "Add profile note")}</button>
+      <button className="rank-pill" title={t("分享链接", "Share link")} disabled={busy} onClick={() => openShareModal()}><Share2 size={13} />{busy ? t("生成中…", "Generating…") : t("分享画像", "Share profile")}</button>
+      {accountToken && <button className="rank-pill accent" title={t("将完整画像发布到广场", "Publish profile to plaza")} disabled={busy} onClick={() => { setPublishTarget("profile"); setShowPublishModal(true); }}><Globe size={13} />{t("发布画像", "Publish profile")}</button>}
     </div>
     {format === "png" && <div className="export-layout-switch"><span>{t("PNG 版式", "PNG layout")}</span><div className="segmented"><button className={exportLayout === "editorial" ? "active" : ""} onClick={() => setExportLayout("editorial")}>{t("编辑", "Editorial")}</button><button className={exportLayout === "collage" ? "active" : ""} onClick={() => setExportLayout("collage")}>{t("拼贴", "Collage")}</button><button className={exportLayout === "minimal" ? "active" : ""} onClick={() => setExportLayout("minimal")}>{t("极简", "Minimal")}</button></div></div>}
     <div className="profile-dimensions">{profile.rankings.map((entry, idx) => { const key = `${entry.kind}-${idx}`; return <button className={`profile-dimension medium-${entry.kind} ${activeRanking === entry ? "active" : ""}`} key={key} onClick={() => setActiveKind(key)}><Poster work={entry.items[0]} kind={entry.kind} /><span>{label(entry.kind)}</span><strong>{entry.collectionTitle}</strong><small>TOP {entry.items.length}</small></button>; })}</div>
@@ -61,31 +62,42 @@ export function ProfileView({ profile, activeRanking, locale, t, label, format, 
                 <input type="text" value={editingRankTitle} onChange={(e) => setEditingRankTitle(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") renameRank(profileRankIdx); if (e.key === "Escape") setEditingRankIdx(null); }} style={{ fontSize: 18, fontWeight: 600, padding: "4px 8px", minHeight: "auto", flex: 1 }} autoFocus />
                 <button className="text-button" onClick={() => renameRank(profileRankIdx)} style={{ color: "var(--accent)", fontSize: 14 }}>✓</button>
               </div>
-            : <h2 style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                {activeRanking.collectionTitle}
-                <button className="button secondary" title={t("批注此榜单", "Annotate this list")} onClick={() => openNoteModal(noteKey("ranking", activeRanking.kind, activeRanking.collectionTitle), activeRanking.collectionTitle, activeRanking.kind, [activeRanking.items[0]?.posterUrls?.[0] ?? ""])} style={{ fontSize: 11, gap: 4, padding: "3px 10px", borderRadius: 999, minHeight: "auto", color: hasNote(notes, noteKey("ranking", activeRanking.kind, activeRanking.collectionTitle)) ? "var(--accent)" : "var(--muted)", borderColor: hasNote(notes, noteKey("ranking", activeRanking.kind, activeRanking.collectionTitle)) ? "var(--accent)" : "var(--line)" }}>
+            : <h2 style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0 }}>
+                <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{activeRanking.collectionTitle}</span>
+                <button className="rank-pill" title={t("批注此榜单", "Annotate this list")} onClick={() => openNoteModal(noteKey("ranking", activeRanking.kind, activeRanking.collectionTitle), activeRanking.collectionTitle, activeRanking.kind, [activeRanking.items[0]?.posterUrls?.[0] ?? ""])} style={{ minHeight: 28, padding: "0 10px", fontSize: 11, ...(hasNote(notes, noteKey("ranking", activeRanking.kind, activeRanking.collectionTitle)) ? { borderColor: "var(--accent)", color: "var(--accent)" } : {}) }}>
                   <StickyNote size={12} />{hasNote(notes, noteKey("ranking", activeRanking.kind, activeRanking.collectionTitle)) ? t("批注", "Note") : t("添加批注", "Add note")}
                 </button>
               </h2>
           }
-          <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-            <span>{new Date(activeRanking.createdAt).toLocaleDateString(locale === "zh" ? "zh-CN" : "en-US")}</span>
-            <button className="text-button" onClick={() => { setEditingRankIdx(profileRankIdx); setEditingRankTitle(activeRanking.collectionTitle); }} style={{ fontSize: 12, color: "var(--muted)" }}>{t("改名", "Rename")}</button>
-            <button className="text-button" onClick={() => { const works = activeRanking.items.map(item => ({ id: item.id, title: item.title, subtitle: item.subtitle, creator: item.creator, year: item.year, posterUrls: item.posterUrls })); openCollection({ id: `rerank-${activeRanking.profileId}`, kind: activeRanking.kind, source: "custom", title: activeRanking.collectionTitle, description: "", topN: activeRanking.items.length, works }); }} style={{ fontSize: 12, color: "var(--accent)" }}>{t("重新排序", "Re-rank")}</button>
-            <button className="text-button" onClick={() => void shareSingleRanking(activeRanking)} style={{ fontSize: 12, color: "var(--accent)" }}>{t("比较链接", "Compare link")}</button>
-            <button className="text-button" onClick={() => openShareModal(activeRanking)} style={{ fontSize: 12, color: "var(--accent)" }}>{t("分享链接", "Share link")}</button>
-            {accountToken && <button className="text-button" onClick={() => { setPublishTarget("ranking"); setShowPublishModal(true); }} style={{ fontSize: 12, color: "var(--accent)", position: "relative" }}><Globe size={12} style={{ verticalAlign: "middle", marginRight: 3 }} />{t("发布到广场", "Publish to plaza")}{publishBurst && <span className="publish-burst">{Array.from({ length: 12 }).map((_, i) => { const colors = ["var(--accent)", "#4ade80", "#818cf8", "#f472b6", "#facc15"]; return <span key={i} className="publish-particle" style={{ "--angle": i * 30 + "deg", "--delay": i * 0.03 + "s", "--color": colors[i % 5] } as any} />; })}</span>}</button>}
-            {!isReordering && <button className="text-button" onClick={() => setEditWorksOpen(true)} style={{ fontSize: 12, color: "var(--accent)" }}>{t("编辑作品", "Edit works")}</button>}
-            {!isReordering && !editWorksOpen && <button className="text-button" onClick={() => startReorder(profileRankIdx)} style={{ fontSize: 12, color: "var(--accent)" }}>{t("手动调整", "Manual order")}</button>}
-            {!isReordering && !editWorksOpen && (confirmDelete
-              ? <span style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12 }}>
-                  <span style={{ color: "var(--red)" }}>{t(`确认删除「${activeRanking.collectionTitle}」？`, `Delete "${activeRanking.collectionTitle}"?`)}</span>
-                  <button className="text-button" style={{ color: "var(--red)" }} onClick={() => { deleteRank(profileRankIdx); setConfirmDelete(false); setNotice(t("榜单已删除。", "List deleted.")); }}>{t("删除", "Delete")}</button>
-                  <button className="text-button" style={{ color: "var(--muted)" }} onClick={() => setConfirmDelete(false)}>{t("取消", "Cancel")}</button>
-                </span>
-              : <button className="text-button" onClick={() => setConfirmDelete(true)} style={{ fontSize: 12, color: "var(--muted)" }}><Trash2 size={12} style={{ verticalAlign: "middle", marginRight: 3 }} />{t("删除榜单", "Delete list")}</button>)}
+          <div className="rank-actions">
+            <span className="rank-date"><CalendarDays size={12} />{new Date(activeRanking.createdAt).toLocaleDateString(locale === "zh" ? "zh-CN" : "en-US")}</span>
+            {!isReordering && !editWorksOpen && <button className="rank-pill" onClick={() => startReorder(profileRankIdx)}><SquarePen size={13} />{t("手动调整", "Reorder")}</button>}
+            {!isReordering && <button className="rank-pill" onClick={() => setEditWorksOpen(true)}><Pencil size={13} />{t("编辑作品", "Edit works")}</button>}
+            <button className="rank-pill" onClick={() => openShareModal(activeRanking)}><Share2 size={13} />{t("分享", "Share")}</button>
+            <button className="rank-pill" onClick={() => void shareSingleRanking(activeRanking)}><Link size={13} />{t("比较", "Compare")}</button>
+            {accountToken && <button className="rank-pill accent" onClick={() => { setPublishTarget("ranking"); setShowPublishModal(true); }} style={{ position: "relative" }}><Globe size={13} />{t("发布", "Publish")}{publishBurst && <span className="publish-burst">{Array.from({ length: 12 }).map((_, i) => { const colors = ["var(--accent)", "#4ade80", "#818cf8", "#f472b6", "#facc15"]; return <span key={i} className="publish-particle" style={{ "--angle": i * 30 + "deg", "--delay": i * 0.03 + "s", "--color": colors[i % 5] } as any} />; })}</span>}</button>}
+            <div className="rank-menu-wrap">
+              <button className="rank-pill icon-only" aria-haspopup="menu" aria-expanded={menuOpen} title={t("更多操作", "More")} onClick={() => setMenuOpen(!menuOpen)}><MoreHorizontal size={15} /></button>
+              {menuOpen && <>
+                <div style={{ position: "fixed", inset: 0, zIndex: 39 }} onClick={() => setMenuOpen(false)} />
+                <div className="rank-menu" role="menu">
+                  <button role="menuitem" onClick={() => { setMenuOpen(false); setEditingRankIdx(profileRankIdx); setEditingRankTitle(activeRanking.collectionTitle); }}><Pencil size={13} />{t("改名", "Rename")}</button>
+                  <button role="menuitem" onClick={() => { setMenuOpen(false); const works = activeRanking.items.map(item => ({ id: item.id, title: item.title, subtitle: item.subtitle, creator: item.creator, year: item.year, posterUrls: item.posterUrls })); openCollection({ id: `rerank-${activeRanking.profileId}`, kind: activeRanking.kind, source: "custom", title: activeRanking.collectionTitle, description: "", topN: activeRanking.items.length, works }); }}><RefreshCw size={13} />{t("重新排序", "Re-rank")}</button>
+                  {!isReordering && !editWorksOpen && <button role="menuitem" className="danger" onClick={() => { setMenuOpen(false); setConfirmDelete(true); }}><Trash2 size={13} />{t("删除榜单", "Delete list")}</button>}
+                </div>
+              </>}
+            </div>
           </div>
         </div>
+
+        {confirmDelete && !isReordering && !editWorksOpen && (
+          <div className="rank-delete-bar">
+            <TriangleAlert size={15} style={{ color: "var(--red)", flexShrink: 0 }} />
+            <span style={{ flex: 1 }}>{t(`确定删除榜单「${activeRanking.collectionTitle}」？此操作不可撤销。`, `Delete "${activeRanking.collectionTitle}"? This cannot be undone.`)}</span>
+            <button className="rank-pill danger-solid" onClick={() => { setConfirmDelete(false); deleteRank(profileRankIdx); setNotice(t("榜单已删除。", "List deleted.")); }}>{t("确认删除", "Delete")}</button>
+            <button className="rank-pill" onClick={() => setConfirmDelete(false)}>{t("取消", "Cancel")}</button>
+          </div>
+        )}
 
         {plazaSyncPostId !== null && !editWorksOpen && (
           <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 14px", marginBottom: 14, borderRadius: 10, background: "rgba(216,248,106,.06)", border: "1px solid rgba(216,248,106,.25)", fontSize: 12, color: "var(--muted)" }}>
