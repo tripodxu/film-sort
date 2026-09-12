@@ -122,6 +122,7 @@ export interface ProfileViewProps {
   collection: MediaCollection | null;
   notes: Record<string, string>;
   openNoteModal: (key: string, title: string, kind: MediaKind, posterUrls?: readonly string[]) => void;
+  openArtworkDetail: (work: RankedArtwork, kind: MediaKind) => void;
   accountToken: string;
   busy: boolean;
   publishToPlaza: (ranking: RankingExport, description?: string) => void;

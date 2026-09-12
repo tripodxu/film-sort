@@ -7,7 +7,7 @@ import type { ProfileViewProps } from "./types";
 import type { RankedArtwork } from "../lib/profile";
 import { useRef, useState } from "react";
 
-export function ProfileView({ profile, activeRanking, locale, t, label, format, setFormat, exportLayout, setExportLayout, exportProfile, share, shareUrl, qrUrl, profileName, setProfileName, namedProfile, persist, navigateTo, peer, editingRankIdx, setEditingRankIdx, editingRankTitle, setEditingRankTitle, renameRank, openCollection, shareSingleRanking, generateShareLink, setActiveKind, ranking, setRanking, collection, notes, openNoteModal, accountToken, publishToPlaza, reorderMode, reorderItems, startReorder, saveReorder, cancelReorder, moveItem, busy }: ProfileViewProps) {
+export function ProfileView({ profile, activeRanking, locale, t, label, format, setFormat, exportLayout, setExportLayout, exportProfile, share, shareUrl, qrUrl, profileName, setProfileName, namedProfile, persist, navigateTo, peer, editingRankIdx, setEditingRankIdx, editingRankTitle, setEditingRankTitle, renameRank, openCollection, shareSingleRanking, generateShareLink, setActiveKind, ranking, setRanking, collection, notes, openNoteModal, openArtworkDetail, accountToken, publishToPlaza, reorderMode, reorderItems, startReorder, saveReorder, cancelReorder, moveItem, busy }: ProfileViewProps) {
   const profileRankIdx = profile.rankings.indexOf(activeRanking);
   const isRenamingProfile = editingRankIdx === profileRankIdx;
   const isReordering = reorderMode === profileRankIdx;
@@ -74,7 +74,9 @@ export function ProfileView({ profile, activeRanking, locale, t, label, format, 
             {activeRanking.items.map((work) => (
               <li key={work.id}>
                 <span className="row-number">{work.rank <= 3 ? (work.rank === 1 ? "🥇" : work.rank === 2 ? "🥈" : "🥉") : String(work.rank).padStart(2, "0")}</span>
-                <Poster work={work} kind={activeRanking.kind} />
+                <div className="ranking-card-poster" style={{ cursor: "pointer" }} onClick={() => openArtworkDetail(work, activeRanking.kind)} role="button" tabIndex={0} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); openArtworkDetail(work, activeRanking.kind); } }}>
+                  <Poster work={work} kind={activeRanking.kind} />
+                </div>
                 <div><strong>{work.title}</strong><small>{work.creator} {work.year}</small></div>
                 {work.rank <= 3 && <span style={{ fontSize: work.rank === 1 ? 20 : 16 }}>{work.rank === 1 ? "🥇" : work.rank === 2 ? "🥈" : "🥉"}</span>}
                 <button className="icon-button" title={t("批注", "Note")} onClick={(e) => { e.stopPropagation(); openNoteModal(noteKey("work", activeRanking.kind, work.id), work.title, activeRanking.kind, work.posterUrls); }} style={{ width: 28, height: 28, marginLeft: "auto", color: hasNote(notes, noteKey("work", activeRanking.kind, work.id)) ? "var(--accent)" : "var(--muted)", opacity: hasNote(notes, noteKey("work", activeRanking.kind, work.id)) ? 1 : 0.4 }}><StickyNote size={14} /></button>

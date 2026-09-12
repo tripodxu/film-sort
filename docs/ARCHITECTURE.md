@@ -68,6 +68,7 @@ src/
 ├── components/
 │   ├── Poster.tsx         # 海报组件
 │   ├── RankingDetail.tsx  # 统一榜单详情组件（分享页/比较详情弹窗/广场帖子详情共用）
+│   ├── ArtworkDetail.tsx  # 统一作品详情弹窗（所有作品海报点击入口共用）
 │   ├── ExpandableNote.tsx # 长批注截断 + 展开查看
 │   ├── FocusTrap.tsx      # 弹窗焦点陷阱
 │   ├── ErrorBoundary.tsx  # 错误边界
