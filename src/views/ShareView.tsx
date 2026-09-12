@@ -4,7 +4,7 @@ import { ExpandableNote } from "../components/ExpandableNote";
 import { heading } from "./helpers";
 import type { ShareViewProps } from "./types";
 
-export function ShareView({ peer, t, label, navigateTo, openCollection, profile, notes, peerNotes, openArtworkDetail, openNoteView }: ShareViewProps) {
+export function ShareView({ peer, t, label, navigateTo, openCollection, profile, notes, peerNotes, expiresAt, openArtworkDetail, openNoteView }: ShareViewProps) {
   // 对方分享的批注：优先 peerNotes（由 /share/:code 拉取写入），兼容旧的 notes 传参
   const viewNotes = peerNotes && Object.keys(peerNotes).length > 0 ? peerNotes : (notes ?? {});
   const multiRanking = peer.rankings.length > 1;
@@ -58,6 +58,12 @@ export function ShareView({ peer, t, label, navigateTo, openCollection, profile,
         <div style={{ margin: "16px 0", padding: "12px 16px", borderRadius: 8, background: "rgba(121,217,174,.06)", border: "1px solid var(--line)" }}>
           <ExpandableNote text={viewNotes[`profile:${peer.profileId}`]} maxLength={30} onView={openNoteView ? (text) => openNoteView(peer.profileName, text) : undefined} style={{ margin: 0 }} />
         </div>
+      )}
+
+      {expiresAt && (
+        <p className="mini-note" style={{ fontSize: 12, color: "var(--muted)", margin: "-8px 0 16px" }}>
+          {t("此分享链接将于", "This share link expires on")} {new Date(expiresAt).toLocaleDateString()} {t("自动失效", "and will stop working then.")}
+        </p>
       )}
 
       {/* Action buttons */}

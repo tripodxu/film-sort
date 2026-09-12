@@ -114,7 +114,7 @@ export interface ProfileViewProps {
   renameRank: (idx: number) => void;
   openCollection: (collection: MediaCollection) => void;
   shareSingleRanking: (ranking: RankingExport) => void;
-  generateShareLink: (ranking?: RankingExport) => void;
+  openShareModal: (ranking?: RankingExport) => void;
   setActiveKind: (kind: string) => void;
   ranking: RankingState | null;
   setRanking: (ranking: RankingState | null) => void;
@@ -142,6 +142,7 @@ export interface ShareViewProps {
   profile: ArtisticProfile | null;
   notes: Record<string, string>;
   peerNotes?: Record<string, string>;
+  expiresAt?: string;
   openArtworkDetail: (work: RankedArtwork, kind: MediaKind) => void;
   openNoteView?: (title: string, text: string, posterUrls?: readonly string[]) => void;
 }
@@ -249,5 +250,5 @@ export interface CompareViewProps {
   setActiveKind: (kind: string) => void;
   notes?: Record<string, string>;
   peerNotes?: Record<string, string>;
-  generateShareLink?: (ranking?: RankingExport) => void;
+  openShareModal?: (ranking?: RankingExport) => void;
 }
