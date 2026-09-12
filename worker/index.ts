@@ -1497,7 +1497,8 @@ async function route(request: Request, env: Env): Promise<Response> {
 
     // Step 3: 维基兜底
     if (!data.content_intro && bookTitle) {
-      const intro = await fetchContentIntro(bookTitle, "book", typeof data.author === "string" ? data.author.split("/")[0] : undefined, data.date);
+      const wikiTitle = title && bookTitle.includes(title) ? title : bookTitle;
+      const intro = await fetchContentIntro(wikiTitle, "book", typeof data.author === "string" ? data.author.split("/")[0] : undefined, data.date);
       if (intro) {
         data.content_intro = intro.intro;
         data.content_source = intro.source;
@@ -1563,7 +1564,8 @@ async function route(request: Request, env: Env): Promise<Response> {
 
     // Step 3: 维基兜底（豆瓣详情未取到简介时）
     if (!data.content_intro && movieTitle) {
-      const intro = await fetchContentIntro(movieTitle, "movie", typeof data.actors === "string" ? data.actors.split("/")[0] : undefined, data.year);
+      const wikiTitle = title && movieTitle.includes(title) ? title : movieTitle;
+      const intro = await fetchContentIntro(wikiTitle, "movie", typeof data.actors === "string" ? data.actors.split("/")[0] : undefined, data.year);
       if (intro) {
         data.content_intro = intro.intro;
         data.content_source = intro.source;
@@ -1630,7 +1632,8 @@ async function route(request: Request, env: Env): Promise<Response> {
 
     // Step 3: 维基兜底
     if (!data.content_intro && musicTitle) {
-      const intro = await fetchContentIntro(musicTitle, "music", typeof data.artist === "string" ? data.artist.split("/")[0] : undefined, data.date);
+      const wikiTitle = title && musicTitle.includes(title) ? title : musicTitle;
+      const intro = await fetchContentIntro(wikiTitle, "music", typeof data.artist === "string" ? data.artist.split("/")[0] : undefined, data.date);
       if (intro) {
         data.content_intro = intro.intro;
         data.content_source = intro.source;
