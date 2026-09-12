@@ -130,19 +130,22 @@ export function PlazaPostView({ postId, t, label, navigateTo, accountToken, acco
 
   function useForSorting() {
     if (!post) return;
+    const works = post.items ?? post.top_items ?? [];
+    if (!works.length) return;
     openCollection({
       id: `plaza-${post.id}`,
       kind: post.kind as MediaKind,
       source: "custom",
       title: post.collection_title,
       description: "",
-      topN: post.items.length,
-      works: post.items,
+      topN: works.length,
+      works,
     });
   }
 
   function compareWithMe() {
-    if (!post || !post.items.length) return;
+    const works = post?.items ?? [];
+    if (!post || !works.length) return;
     const ranking: ArtisticProfile = {
       version: 2,
       profileId: crypto.randomUUID(),
@@ -155,7 +158,7 @@ export function PlazaPostView({ postId, t, label, navigateTo, accountToken, acco
         kind: post.kind as MediaKind,
         collectionTitle: post.collection_title,
         createdAt: post.created_at,
-        items: post.items.map((item, idx) => ({ ...item, rank: idx + 1 })),
+        items: works.map((item, idx) => ({ ...item, rank: item.rank || idx + 1 })),
       }],
     };
     setPeer(ranking);
@@ -198,7 +201,7 @@ export function PlazaPostView({ postId, t, label, navigateTo, accountToken, acco
         <RankingDetail
           kind={post.kind as MediaKind}
           collectionTitle={post.collection_title}
-          items={post.items}
+          items={post.items ?? []}
           notes={parsedNotes}
           kindLabel={label}
           onNoteView={openNoteView}

@@ -153,8 +153,15 @@ export interface PlazaPost {
   kind: MediaKind;
   collection_title: string;
   description?: string;
-  items: RankedArtwork[];
-  notes: string;
+  /** 详情接口返回完整作品；列表接口为瘦身响应，只带 top_items */
+  items?: RankedArtwork[];
+  top_items?: RankedArtwork[];
+  notes?: string | Record<string, string>;
+  note_count?: number;
+  is_author?: boolean;
+  liked_by_me?: boolean;
+  last_edited_at?: string | null;
+  edit_count?: number;
   item_count: number;
   like_count: number;
   comment_count: number;

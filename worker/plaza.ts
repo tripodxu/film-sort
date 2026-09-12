@@ -16,38 +16,47 @@ export async function plazaRoute(request: Request, env: Env): Promise<Response> 
   const path = url.pathname;
   const method = request.method;
 
-  // GET /api/plaza/posts — list posts (paginated, filterable by kind)
+  // GET /api/plaza/posts — list posts (paginated, filterable by kind, searchable, server-side sort)
   if (path === "/api/plaza/posts" && method === "GET") {
     const page = Math.max(1, Number(url.searchParams.get("page") ?? "1") || 1);
     const limit = Math.min(50, Math.max(1, Number(url.searchParams.get("limit") ?? "20") || 20));
     const kind = url.searchParams.get("kind")?.trim() || null;
+    const sort = url.searchParams.get("sort") === "hottest" ? "hottest" : "newest";
+    const q = url.searchParams.get("q")?.trim() || null;
     const offset = (page - 1) * limit;
 
-    let sql = `SELECT p.id, p.user_id, p.post_type, p.kind, p.collection_title, p.description, p.items, p.notes, p.item_count, p.like_count, p.comment_count, p.is_public, p.created_at, p.updated_at, u.nickname
-      FROM plaza_posts p LEFT JOIN user_accounts u ON p.user_id = u.id WHERE p.is_public = 1`;
+    // 列表瘦身：不返回 items/notes 大 JSON，用 json_extract 只取前三名作品与批注数量
+    const where: string[] = ["p.is_public = 1"];
     const params: unknown[] = [];
-    if (kind) {
-      sql += ` AND p.kind = ?`;
-      params.push(kind);
+    if (kind) { where.push("p.kind = ?"); params.push(kind); }
+    if (q) {
+      const like = `%${q.replace(/[\\%_]/g, (m) => `\\${m}`)}%`;
+      where.push("(p.collection_title LIKE ? ESCAPE '\\' OR u.nickname LIKE ? ESCAPE '\\')");
+      params.push(like, like);
     }
-    sql += ` ORDER BY p.created_at DESC LIMIT ? OFFSET ?`;
-    params.push(limit, offset);
+    const whereSql = ` WHERE ${where.join(" AND ")}`;
+    const orderSql = sort === "hottest" ? " ORDER BY p.like_count DESC, p.created_at DESC" : " ORDER BY p.created_at DESC";
 
-    const rows = await env.DB.prepare(sql).bind(...params).all();
+    const rows = await env.DB.prepare(
+      `SELECT p.id, p.user_id, p.post_type, p.kind, p.collection_title, p.description, p.item_count, p.like_count, p.comment_count, p.is_public, p.created_at, p.updated_at, u.nickname,
+        json_extract(p.items, '$[0]') AS item0,
+        json_extract(p.items, '$[1]') AS item1,
+        json_extract(p.items, '$[2]') AS item2,
+        (SELECT COUNT(*) FROM json_each(COALESCE(p.notes, '{}'))) AS note_count
+      FROM plaza_posts p LEFT JOIN user_accounts u ON p.user_id = u.id${whereSql}${orderSql} LIMIT ? OFFSET ?`
+    ).bind(...params, limit, offset).all();
 
-    let countSql = `SELECT COUNT(*) AS total FROM plaza_posts WHERE is_public = 1`;
-    const countParams: unknown[] = [];
-    if (kind) {
-      countSql += ` AND kind = ?`;
-      countParams.push(kind);
-    }
-    const countRow = await env.DB.prepare(countSql).bind(...params.slice(0, kind ? 1 : 0)).first<{ total: number }>();
+    const total = await env.DB.prepare(`SELECT COUNT(*) AS total FROM plaza_posts p LEFT JOIN user_accounts u ON p.user_id = u.id${whereSql}`).bind(...params).first<{ total: number }>();
 
     return json({
-      posts: (rows.results ?? []).map((row) => ({ ...row, items: JSON.parse(String((row as Record<string, unknown>).items ?? "[]")) })),
+      posts: (rows.results ?? []).map((row) => {
+        const { item0, item1, item2, ...rest } = row as Record<string, unknown>;
+        const topItems = [item0, item1, item2].filter(Boolean).map((s) => { try { return JSON.parse(String(s)); } catch { return null; } }).filter(Boolean);
+        return { ...rest, top_items: topItems };
+      }),
       page,
       limit,
-      total: countRow?.total ?? 0,
+      total: total?.total ?? 0,
     });
   }
 
