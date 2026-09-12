@@ -66,7 +66,9 @@ function reportImageFailure(work: Artwork, kind: MediaKind, url: string) {
   }).catch(() => undefined);
 }
 
-export function Poster({ work, kind, large = false }: { work: Artwork; kind: MediaKind; large?: boolean }) {
+export function Poster({ work, kind: rawKind, large = false }: { work: Artwork; kind: MediaKind; large?: boolean }) {
+  // 未知/空媒介（如画像帖整体卡）一律按 other 兜底：图标查表不会得到 undefined
+  const kind = rawKind === "film" || rawKind === "book" || rawKind === "music" ? rawKind : "other";
   const [resolved, setResolved] = useState<string[]>(() => {
     if (kind !== "film" && kind !== "book" && kind !== "music") return [];
     return resolveSync(work, kind) ?? [...(work.posterUrls ?? [])];
@@ -79,8 +81,7 @@ export function Poster({ work, kind, large = false }: { work: Artwork; kind: Med
       void resolve(work, kind).then((urls) => { if (active && urls.length) setResolved(urls); });
     }
     return () => { active = false; };
-  }, [work.id, work.title, kind, large]);
-  const urls = [...new Set([...resolved, ...(work.posterUrls ?? [])])];
+  }, [work.id, work.title, kind, large]);  const urls = [...new Set([...resolved, ...(work.posterUrls ?? [])])];
   const url = urls.find((candidate) => !failed.has(candidate));
   const Icon = { film: Film, book: BookOpen, music: Music2, other: Library }[kind];
   return <div className={`poster ${large ? "poster-large" : "poster-small"} poster-${kind}`}>
