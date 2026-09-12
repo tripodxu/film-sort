@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Heart, MessageCircle, Play, Trash2, Send } from "lucide-react";
+import { ArrowLeft, Heart, MessageCircle, Play, Trash2, Send } from "lucide-react";
 import { Poster } from "../components/Poster";
 import { ExpandableNote } from "../components/ExpandableNote";
 import { heading } from "./helpers";
@@ -43,7 +43,6 @@ export function PlazaPostView({ postId, t, label, navigateTo, accountToken, acco
       setPost(data.post);
       setComments(data.comments);
       setLikeCount(data.post.like_count);
-      setLiked(Boolean(data.post.liked_by_me));
     } catch {
       setError(t("无法加载帖子详情。", "Failed to load post details."));
     } finally {
@@ -186,7 +185,7 @@ export function PlazaPostView({ postId, t, label, navigateTo, accountToken, acco
     );
   }
 
-  const isAuthor = accountToken && (typeof post.is_author === "boolean" ? post.is_author : !!profile && post.nickname === accountNickname);
+  const isAuthor = accountToken && profile && post.nickname === accountNickname;
 
   return (
     <>
@@ -363,6 +362,14 @@ export function PlazaPostView({ postId, t, label, navigateTo, accountToken, acco
           </p>
         )}
       </section>
+
+      {/* Back */}
+      <div style={{ marginTop: 32 }}>
+        <button className="button secondary" onClick={() => navigateTo("plaza")} style={{ minHeight: 34 }}>
+          <ArrowLeft size={15} />
+          {t("返回广场", "Back to plaza")}
+        </button>
+      </div>
     </>
   );
 }

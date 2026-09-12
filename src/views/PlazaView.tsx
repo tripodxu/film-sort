@@ -17,7 +17,7 @@ const SORT_OPTIONS: Array<{ value: string; zh: string; en: string }> = [
   { value: "hottest", zh: "最热", en: "Hottest" },
 ];
 
-export function PlazaView({ t, label, navigateTo, accountToken, openCollection, profile, setNotice }: PlazaViewProps) {
+export function PlazaView({ t, label, navigateTo, accountToken, openCollection, profile }: PlazaViewProps) {
   const [posts, setPosts] = useState<PlazaPost[]>([]);
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
@@ -28,15 +28,14 @@ export function PlazaView({ t, label, navigateTo, accountToken, openCollection, 
   const [sort, setSort] = useState<"newest" | "hottest">("newest");
   const [colCount, setColCount] = useState<number>(() => { try { return Number(localStorage.getItem("art-rank:plaza-cols")) || 2; } catch { return 2; } });
 
-  // Re-fetch from the server whenever the filter or sort changes (sorting happens in SQL).
-  useEffect(() => { void loadPosts(1, kindFilter); }, [kindFilter, sort]);
+  useEffect(() => { void loadPosts(1, kindFilter); }, [kindFilter]);
 
   async function loadPosts(p: number, kind: string) {
     if (p === 1) setInitialLoading(true);
     setLoading(true);
     setError("");
     try {
-      const response = await fetch(`/api/plaza/posts?page=${p}&limit=20&kind=${kind}&sort=${sort}`);
+      const response = await fetch(`/api/plaza/posts?page=${p}&limit=20&kind=${kind}`);
       if (!response.ok) throw new Error();
       const data = await response.json() as { posts: PlazaPost[]; total: number };
       const sorted = sortPosts(data.posts, sort);
@@ -61,8 +60,7 @@ export function PlazaView({ t, label, navigateTo, accountToken, openCollection, 
 
   function handleSortChange(next: "newest" | "hottest") {
     setSort(next);
-    setInitialLoading(true);
-    setPosts([]);
+    setPosts((prev) => sortPosts(prev, next));
   }
 
   function changeCols(n: number) {
@@ -70,25 +68,16 @@ export function PlazaView({ t, label, navigateTo, accountToken, openCollection, 
     try { localStorage.setItem("art-rank:plaza-cols", String(n)); } catch {}
   }
 
-  // The list endpoint only returns the top-3 posters; fetch the full ranking before starting.
-  async function useForSorting(post: PlazaPost) {
-    try {
-      const response = await fetch(`/api/plaza/posts/${post.id}`);
-      if (!response.ok) throw new Error();
-      const data = await response.json() as { post: PlazaPost };
-      const items = Array.isArray(data.post.items) && data.post.items.length > 0 ? data.post.items : post.items;
-      openCollection({
-        id: `plaza-${post.id}`,
-        kind: post.kind as MediaKind,
-        source: "custom",
-        title: post.collection_title,
-        description: "",
-        topN: items.length,
-        works: items,
-      });
-    } catch {
-      setNotice(t("无法读取完整榜单，请进入详情页后再试。", "Could not load the full ranking. Open the post and try there."));
-    }
+  function useForSorting(post: PlazaPost) {
+    openCollection({
+      id: `plaza-${post.id}`,
+      kind: post.kind as MediaKind,
+      source: "custom",
+      title: post.collection_title,
+      description: "",
+      topN: post.items.length,
+      works: post.items,
+    });
   }
 
   const hasMore = posts.length < total;
@@ -218,7 +207,7 @@ export function PlazaView({ t, label, navigateTo, accountToken, openCollection, 
                 </div>
               </div>
               <div className="plaza-sticker-actions">
-                <button className="plaza-sticker-btn" onClick={(e) => { e.stopPropagation(); void useForSorting(post); }} title={t("用此榜单排序", "Sort with this")}><Play size={14} /></button>
+                <button className="plaza-sticker-btn" onClick={(e) => { e.stopPropagation(); useForSorting(post); }} title={t("用此榜单排序", "Sort with this")}><Play size={14} /></button>
                 <ChevronRight size={16} className="plaza-sticker-arrow" />
               </div>
             </div>
@@ -253,6 +242,13 @@ export function PlazaView({ t, label, navigateTo, accountToken, openCollection, 
           </button>
         </div>
       )}
+
+      {/* Back */}
+      <div style={{ marginTop: 8 }}>
+        <button className="button secondary" onClick={() => navigateTo("home")} style={{ minHeight: 34 }}>
+          {t("返回首页", "Back home")}
+        </button>
+      </div>
     </>
   );
 }

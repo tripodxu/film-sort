@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { ArrowLeft, ArrowRight, ArrowUp, CircleHelp, CloudDownload, CloudUpload, Download, Github, Languages, Link, Pause, Play, Plus, Share2, Sparkles, StickyNote, Undo2, Upload, UserRound, Users, X } from "lucide-react";
+import { ArrowLeft, ArrowRight, CloudDownload, CloudUpload, Download, Github, Languages, Link, Pause, Play, Plus, Share2, Sparkles, StickyNote, Undo2, Upload, UserRound, Users, X } from "lucide-react";
 
 import { createRankingState, chooseSide, deferWork, deserializeRankingState, getCurrentComparison, getRankingProgress, getRankingResult, serializeRankingState, skipWork, undoLastAction, type RankingState } from "./lib/ranking";
 import { getCollectionsByKind, mediaLabels, type MediaCollection, type MediaKind } from "./data/media";
@@ -213,39 +213,38 @@ export default function App() {
     }
     void fetch("/api/auth/config").then((response) => response.json()).then((data: { enabled?: boolean }) => setAccountEnabled(Boolean(data.enabled))).catch(() => undefined);
 
-    // Handle OAuth callback — trade the one-time code for a session token (the token never lands in the URL)
+    // Handle OAuth callback
     const params = new URLSearchParams(location.search);
-    const oauthCode = params.get("oauth_code");
+    const oauthToken = params.get("oauth_token");
+    const oauthEmail = params.get("oauth_email");
+    const oauthName = params.get("oauth_name");
     const oauthError = params.get("account");
-    if (oauthCode) {
+    if (oauthToken && oauthEmail) {
+      setAccountToken(oauthToken);
+      setAccountEmail(decodeURIComponent(oauthEmail));
+      const name = oauthName ? decodeURIComponent(oauthName) : "";
+      setAccountNickname(name);
+      try { localStorage.setItem("art-rank:account-token", oauthToken); } catch {}
       history.replaceState(null, "", location.pathname);
-      void fetch("/api/account/oauth/exchange", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ code: oauthCode }) })
-        .then(async (response) => {
-          if (!response.ok) throw new Error();
-          const data = await response.json() as { token: string; email: string; nickname?: string };
-          setAccountToken(data.token);
-          setAccountEmail(data.email);
-          setAccountNickname(data.nickname ?? "");
-          try { localStorage.setItem("art-rank:account-token", data.token); } catch {}
-          const name = data.nickname ?? "";
-          if (!name || name === data.email.split("@")[0]) {
-            setNeedNickname(true);
-            setAccountOpen(true);
+      if (!name || name === decodeURIComponent(oauthEmail).split("@")[0]) {
+        setNeedNickname(true);
+        setAccountOpen(true);
+      }
+      setNotice(t("登录成功！", "Signed in!"));
+      // Restore notes from cloud after OAuth login
+      setTimeout(async () => {
+        try {
+          const r = await fetch("/api/account/profile", { headers: { authorization: `Bearer ${oauthToken}` } });
+          if (!r.ok) return;
+          const d = await r.json() as { notes?: Record<string, string> };
+          if (d.notes && typeof d.notes === "object") {
+            const localNotes = readNotes();
+            const merged = { ...localNotes, ...d.notes };
+            setNotes(merged);
+            writeNotes(merged);
           }
-          setNotice(t("登录成功！", "Signed in!"));
-          // Restore notes from cloud after OAuth login
-          try {
-            const r = await fetch("/api/account/profile", { headers: { authorization: `Bearer ${data.token}` } });
-            if (!r.ok) return;
-            const d = await r.json() as { notes?: Record<string, string> };
-            if (d.notes && typeof d.notes === "object") {
-              const merged = { ...readNotes(), ...d.notes };
-              setNotes(merged);
-              writeNotes(merged);
-            }
-          } catch {}
-        })
-        .catch(() => setNotice(t("登录失败，请重试。", "Sign-in failed. Please retry.")));
+        } catch {}
+      }, 100);
     } else if (oauthError === "error") {
       setNotice(t("登录失败：" + (params.get("msg") ?? "未知错误"), "Sign in failed: " + (params.get("msg") ?? "Unknown error")));
       history.replaceState(null, "", location.pathname);
@@ -261,7 +260,10 @@ export default function App() {
             if (!r.ok) throw new Error();
             const d = await r.json() as { profile: unknown; notes?: Record<string, string> };
             setSharePeer(parseProfile(d.profile));
-            if (d.notes && typeof d.notes === "object") setPeerNotes(d.notes);
+            if (d.notes && typeof d.notes === "object") {
+              const merged = { ...readNotes(), ...d.notes };
+              setNotes(merged);
+            }
             setView("share");
           }).catch(() => setNotice(t("分享链接无效或已过期。", "Share link is invalid or expired.")));
         } else {
@@ -285,7 +287,7 @@ export default function App() {
     }
 
     // Restore session
-    const savedToken = accountToken;
+    const savedToken = oauthToken || accountToken;
     if (savedToken) {
       void fetch("/api/account/profile", { headers: { authorization: `Bearer ${savedToken}` } })
         .then((r) => r.ok ? r.json() : null)
@@ -301,7 +303,7 @@ export default function App() {
               writeNotes(merged);
             }
           }
-          else { setAccountToken(""); try { localStorage.removeItem("art-rank:account-token"); } catch {} }
+          else if (!oauthToken) { setAccountToken(""); try { localStorage.removeItem("art-rank:account-token"); } catch {} }
         }).catch(() => {});
     }
   }, []);
@@ -356,8 +358,6 @@ export default function App() {
       const key = event.key.toLowerCase();
       if (["a", "1", "arrowleft", "d", "2", "arrowright"].includes(key)) {
         event.preventDefault(); act(["a", "1", "arrowleft"].includes(key) ? "left" : "right");
-      } else if ((key === "u" || key === "backspace") && ranking?.decisionLog.length) {
-        event.preventDefault(); act("undo");
       }
     };
     window.addEventListener("keydown", handler);
@@ -828,13 +828,13 @@ export default function App() {
   else if (view === "compare") content = <CompareView kinds={kinds} profile={profile} peer={peer} compareActiveKind={compareActiveKind} setCompareActiveKind={setCompareActiveKind} compareMode={compareMode} setCompareMode={setCompareMode} manualOwnSelections={manualOwnSelections} setManualOwnSelections={setManualOwnSelections} manualPeerSelections={manualPeerSelections} setManualPeerSelections={setManualPeerSelections} compareRankings={compareRankings} mergeDimensionRankings={mergeDimensionRankings} compareDimensions={compareDimensions} compareProfiles={compareProfiles} navigateTo={navigateTo} setPeer={setPeer} setAiInsight={setAiInsight} label={label} t={t} setCompareSortBy={setCompareSortBy} compareSortBy={compareSortBy} setCompareRankDetail={setCompareRankDetail} shareSingleRanking={shareSingleRanking} exportProfile={exportProfile} setFormat={setFormat} busy={busy} namedProfile={namedProfile} setNotice={setNotice} requestInsight={requestInsight} aiBusy={aiBusy} aiInsight={aiInsight} createFromPeer={createFromPeer} setPeerRankPickOpen={setPeerRankPickOpen} openArtworkDetail={openArtworkDetail} peerUrl={peerUrl} setPeerUrl={setPeerUrl} peerUrlBusy={peerUrlBusy} importPeerFromUrl={importPeerFromUrl} importProfile={importProfile} setActiveKind={setActiveKind} notes={notes} peerNotes={peerNotes} generateShareLink={generateShareLink} />;
   else if (view === "share" && sharePeer) content = <ShareView peer={sharePeer} t={t} label={label} navigateTo={(v) => { if (v === "compare") { acceptPeer(sharePeer); } else { navigateTo(v as View); setPeerNotes({}); } }} openCollection={openCollection} profile={profile} notes={peerNotes} openArtworkDetail={openArtworkDetail} openNoteView={openNoteView} />;
   else if (view === "share" && !sharePeer) content = <div className="empty-state"><p style={{ marginBottom: 12 }}>{t("正在加载分享内容…", "Loading shared content…")}</p><button className="button secondary" onClick={() => navigateTo("home")}>{t("返回首页", "Back home")}</button></div>;
-  else if (view === "plaza") content = <PlazaView t={t} label={label} navigateTo={navigateTo} accountToken={accountToken} openCollection={openCollection} profile={profile} setNotice={setNotice} />;
+  else if (view === "plaza") content = <PlazaView t={t} label={label} navigateTo={navigateTo} accountToken={accountToken} openCollection={openCollection} profile={profile} />;
   else if (view === "plazaPost") content = <PlazaPostView postId={plazaPostId} t={t} label={label} navigateTo={navigateTo} accountToken={accountToken} accountNickname={accountNickname} openCollection={openCollection} profile={profile} setNotice={setNotice} setPeer={setPeer} openArtworkDetail={openArtworkDetail} openNoteView={openNoteView} />;
   else content = <div className="empty-state"><button className="button primary" onClick={() => navigateTo("home")}>{t("返回首页", "Back home")}</button></div>;
-  return <div className="app-shell"><header className="topbar"><button className="wordmark" onClick={() => navigateTo("home")}>ART<span>/</span>RANK</button><nav aria-label={t("主导航", "Main navigation")}><button className={view === "home" || view === "source" || view === "setup" || view === "sorting" ? "active" : ""} onClick={() => navigateTo("home")}>{t("清单", "Catalog")}</button><button className={view === "compare" ? "active" : ""} onClick={() => navigateTo("compare")}>{t("相遇", "Encounter")}</button><button className={view === "plaza" || view === "plazaPost" ? "active" : ""} onClick={() => navigateTo("plaza")}>{t("广场", "Plaza")}</button>{profile && <button className={view === "profile" ? "active" : ""} onClick={() => navigateTo("profile")}>{t("我的文化索引", "My Index")}</button>}</nav><div className="header-tools">{view !== "home" && <IconButton title={t("使用说明", "Guide")} onClick={() => setShowGuide(true)}><CircleHelp size={18} /></IconButton>}<IconButton title={locale === "zh" ? "English" : "中文"} onClick={() => { const next = locale === "zh" ? "en" : "zh"; setLocale(next); const url = new URL(location.href); url.searchParams.set("lang", next); history.replaceState(null, "", url); }}><Languages size={18} /></IconButton><a className="icon-button" href="https://github.com/tripodxu/film-sort" target="_blank" rel="noopener noreferrer" title="GitHub"><Github size={18} /><span className="tooltip" role="tooltip">GitHub</span></a><IconButton title={accountEmail ? t("同步 / 退出", "Sync / Sign out") : t("登录 / 同步", "Sign in / Sync")} onClick={() => setAccountOpen(true)}><UserRound size={18} />{accountToken && <span style={{ position: "absolute", top: 4, right: 4, width: 7, height: 7, borderRadius: "50%", background: syncStatus === "saving" ? "var(--yellow)" : syncStatus === "saved" ? "var(--green)" : syncStatus === "error" ? "var(--red)" : "var(--muted)", border: "1.5px solid var(--bg)", zIndex: 1 }} />}</IconButton></div></header>
-    <main className={`main view-${view}`}>{view !== "home" && <button className="back-link" onClick={() => navigateTo(view === "setup" ? "source" : view === "sorting" ? "setup" : view === "plazaPost" ? "plaza" : "home")}><ArrowLeft size={15} />{t("回到上一层", "Back")}</button>}<ErrorBoundary>{content}</ErrorBoundary></main><footer><span>ART/RANK</span><span>{t("偏好没有标准答案", "Preference has no answer key")}</span></footer>
+  return <div className="app-shell"><header className="topbar"><button className="wordmark" onClick={() => navigateTo("home")}>ART<span>/</span>RANK</button><nav aria-label={t("主导航", "Main navigation")}><button className={view === "home" || view === "source" || view === "setup" || view === "sorting" ? "active" : ""} onClick={() => navigateTo("home")}>{t("清单", "Catalog")}</button><button className={view === "compare" ? "active" : ""} onClick={() => navigateTo("compare")}>{t("相遇", "Encounter")}</button><button className={view === "plaza" || view === "plazaPost" ? "active" : ""} onClick={() => navigateTo("plaza")}>{t("广场", "Plaza")}</button>{profile && <button className={view === "profile" ? "active" : ""} onClick={() => navigateTo("profile")}>{t("我的文化索引", "My Index")}</button>}</nav><div className="header-tools"><IconButton title={locale === "zh" ? "English" : "中文"} onClick={() => { const next = locale === "zh" ? "en" : "zh"; setLocale(next); const url = new URL(location.href); url.searchParams.set("lang", next); history.replaceState(null, "", url); }}><Languages size={18} /></IconButton><a className="icon-button" href="https://github.com/tripodxu/film-sort" target="_blank" rel="noopener noreferrer" title="GitHub"><Github size={18} /><span className="tooltip" role="tooltip">GitHub</span></a><IconButton title={accountEmail ? t("同步 / 退出", "Sync / Sign out") : t("登录 / 同步", "Sign in / Sync")} onClick={() => setAccountOpen(true)}><UserRound size={18} />{accountToken && <span style={{ position: "absolute", top: 4, right: 4, width: 7, height: 7, borderRadius: "50%", background: syncStatus === "saving" ? "var(--yellow)" : syncStatus === "saved" ? "var(--green)" : syncStatus === "error" ? "var(--red)" : "var(--muted)", border: "1.5px solid var(--bg)", zIndex: 1 }} />}</IconButton></div></header>
+    <main className={`main view-${view}`}>{view !== "home" && <button className="back-link" onClick={() => navigateTo(view === "setup" ? "source" : "home")}><ArrowLeft size={15} />{t("回到上一层", "Back")}</button>}<ErrorBoundary>{content}</ErrorBoundary></main><footer><span>ART/RANK</span><span>{t("偏好没有标准答案", "Preference has no answer key")}</span></footer>
     {notice && <div className="toast" role="status"><span>{notice}</span><IconButton title={t("关闭提示", "Dismiss")} onClick={() => setNotice("")}><X size={16} /></IconButton></div>}
-    {showScrollTop && <button className="scroll-top visible" onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })} aria-label={t("回到顶部", "Scroll to top")}><ArrowUp size={18} /></button>}
+    {showScrollTop && <button className="scroll-top visible" onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })} aria-label={t("回到顶部", "Scroll to top")}><ArrowLeft size={18} style={{ transform: "rotate(90deg)" }} /></button>}
     {cloudConflict && <div className="modal-backdrop" onClick={() => setCloudConflict(null)}><section className="account-dialog" role="dialog" aria-modal="true" onClick={(event) => event.stopPropagation()} onKeyDown={(event) => { if (event.key === "Escape") setCloudConflict(null); }}><div className="section-heading"><h2>{t("数据冲突", "Data conflict")}</h2><IconButton title={t("关闭", "Close")} onClick={() => setCloudConflict(null)}><X size={18} /></IconButton></div><p style={{ marginBottom: 16, fontSize: 13, color: "var(--muted)", lineHeight: 1.6 }}>{t("本地有游客数据，云端也有数据。请选择如何处理：", "You have local guest data and cloud data. Choose how to proceed:")}</p><div style={{ display: "flex", flexDirection: "column", gap: 8 }}><button className="button primary" onClick={() => { if (profile && cloudConflict) { const merged = mergeProfiles(cloudConflict, profile); persist(merged); setSyncStatus("saving"); fetch("/api/account/profile", { method: "PUT", headers: { "content-type": "application/json", authorization: `Bearer ${accountToken}` }, body: JSON.stringify({ profile: merged }) }).then((r) => { setSyncStatus(r.ok ? "saved" : "error"); if (r.ok) setNotice(t("已增量合并到云端。", "Merged to cloud.")); }).catch(() => setSyncStatus("error")); } setCloudConflict(null); }}><CloudUpload size={16} />{t("增量合并到云端", "Merge to cloud")}</button><button className="button secondary" onClick={() => { persist(cloudConflict); setCloudConflict(null); setNotice(t("已使用云端数据。", "Cloud data applied.")); }}><CloudDownload size={16} />{t("使用云端数据", "Use cloud data")}</button><button className="button quiet" onClick={() => setCloudConflict(null)}>{t("取消，各自保留", "Cancel, keep both")}</button></div></section></div>}
     {detailWork && <ArtworkDetailModal detail={detailWork} label={label} t={t} onClose={() => setDetailWork(null)} />}
     {noteModal && <div className="modal-backdrop" onClick={() => setNoteModal(null)}><section className="note-reader" role="dialog" aria-modal="true" aria-labelledby="note-heading" onClick={(event) => event.stopPropagation()} onKeyDown={(event) => { if (event.key === "Escape") setNoteModal(null); }}><div className="note-reader-bg" style={{ backgroundImage: noteModal.posterUrls?.[0] ? `url(/api/image?url=${encodeURIComponent(noteModal.posterUrls[0])})` : undefined }} /><div className="note-reader-header"><span className="note-reader-eyebrow">NOTE</span><h2 id="note-heading">{noteModal.title}</h2></div><textarea className="note-reader-body" value={noteDraft} onChange={(e) => setNoteDraft(e.target.value)} placeholder={t("写下你对这部作品的看法、感想、回忆…", "Write your thoughts, feelings, memories about this work...")} autoFocus /><div className="note-reader-footer"><button className="note-footer-btn" onClick={() => { const next = setNote(notes, noteModal.key, ""); setNotes(next); writeNotes(next); setNoteDraft(""); setNotice(t("批注已清除。", "Note cleared.")); }}>{t("清除", "Clear")}</button><div style={{ flex: 1 }} /><button className="note-footer-btn" onClick={() => setNoteModal(null)}>{t("取消", "Cancel")}</button><button className="note-footer-btn note-footer-primary" onClick={saveNote}>{t("保存", "Save")}</button></div></section></div>}

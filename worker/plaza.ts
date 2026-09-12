@@ -15,12 +15,11 @@ export async function plazaRoute(request: Request, env: Env): Promise<Response> 
   const path = url.pathname;
   const method = request.method;
 
-  // GET /api/plaza/posts — list posts (paginated, filterable by kind, sortable)
+  // GET /api/plaza/posts — list posts (paginated, filterable by kind)
   if (path === "/api/plaza/posts" && method === "GET") {
     const page = Math.max(1, Number(url.searchParams.get("page") ?? "1") || 1);
     const limit = Math.min(50, Math.max(1, Number(url.searchParams.get("limit") ?? "20") || 20));
     const kind = url.searchParams.get("kind")?.trim() || null;
-    const sort = url.searchParams.get("sort") === "hottest" ? "hottest" : "newest";
     const offset = (page - 1) * limit;
 
     let sql = `SELECT p.id, p.user_id, p.post_type, p.kind, p.collection_title, p.description, p.items, p.notes, p.item_count, p.like_count, p.comment_count, p.is_public, p.created_at, p.updated_at, u.nickname
@@ -30,8 +29,7 @@ export async function plazaRoute(request: Request, env: Env): Promise<Response> 
       sql += ` AND p.kind = ?`;
       params.push(kind);
     }
-    sql += sort === "hottest" ? ` ORDER BY p.like_count DESC, p.created_at DESC` : ` ORDER BY p.created_at DESC`;
-    sql += ` LIMIT ? OFFSET ?`;
+    sql += ` ORDER BY p.created_at DESC LIMIT ? OFFSET ?`;
     params.push(limit, offset);
 
     const rows = await env.DB.prepare(sql).bind(...params).all();
@@ -44,12 +42,8 @@ export async function plazaRoute(request: Request, env: Env): Promise<Response> 
     }
     const countRow = await env.DB.prepare(countSql).bind(...params.slice(0, kind ? 1 : 0)).first<{ total: number }>();
 
-    // List cards only render the top-3 posters; full items are served by the detail endpoint.
     return json({
-      posts: (rows.results ?? []).map((row) => {
-        const items = JSON.parse(String((row as Record<string, unknown>).items ?? "[]")) as unknown[];
-        return { ...row, items: Array.isArray(items) ? items.slice(0, 3) : [] };
-      }),
+      posts: (rows.results ?? []).map((row) => ({ ...row, items: JSON.parse(String((row as Record<string, unknown>).items ?? "[]")) })),
       page,
       limit,
       total: countRow?.total ?? 0,
@@ -66,21 +60,13 @@ export async function plazaRoute(request: Request, env: Env): Promise<Response> 
     ).bind(postId).first<Record<string, unknown>>();
     if (!post) return json({ error: "post_not_found" }, 404);
 
-    // Optional auth: surface like state and ownership so the UI can render them correctly.
-    const viewer = await getUserFromToken(request, env.DB);
-    let likedByMe = false;
-    if (viewer) {
-      const like = await env.DB.prepare("SELECT id FROM plaza_likes WHERE post_id = ? AND user_id = ?").bind(postId, viewer.id).first();
-      likedByMe = !!like;
-    }
-
     const comments = await env.DB.prepare(
       `SELECT c.id, c.post_id, c.user_id, c.content, c.parent_id, c.created_at, u.nickname
        FROM plaza_comments c LEFT JOIN user_accounts u ON c.user_id = u.id WHERE c.post_id = ? ORDER BY c.created_at ASC LIMIT 200`
     ).bind(postId).all();
 
     return json({
-      post: { ...post, items: JSON.parse(String(post.items ?? "[]")), liked_by_me: likedByMe, is_author: !!viewer && post.user_id === viewer.id },
+      post: { ...post, items: JSON.parse(String(post.items ?? "[]")) },
       comments: comments.results ?? [],
     });
   }

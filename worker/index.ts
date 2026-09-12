@@ -1,5 +1,5 @@
 import { doubanTop250, doubanSuggest, doubanBookTop250, doubanBookSuggest, doubanMusicTop250, doubanSearch, doubanBookDetail, doubanMovieDetail, doubanMusicDetail, fetchContentIntro, proxyImage, resolvePosters } from "./media";
-import { accountRoute, verifyPassword, hashPasswordStrong, needsPasswordUpgrade, timingSafeEqual } from "./account";
+import { accountRoute } from "./account";
 import { plazaRoute } from "./plaza";
 
 export interface Env {
@@ -80,7 +80,7 @@ const MAX_CHALLENGE_ITEMS = 300;
 const MUSIC_API_ORIGIN = "https://music-api.gdstudio.xyz";
 const upstreamWindows = new Map<string, { startedAt: number; count: number }>();
 
-function allowUpstreamRequest(request: Request, bucket: "ai" | "music" | "auth" | "share", limit: number): boolean {
+function allowUpstreamRequest(request: Request, bucket: "ai" | "music", limit: number): boolean {
   const client = request.headers.get("cf-connecting-ip") ?? "anonymous";
   const key = `${bucket}:${client}`;
   const now = Date.now();
@@ -194,7 +194,6 @@ var TOKEN_KEY = 'art-rank-admin-token';
 function getToken(){return localStorage.getItem(TOKEN_KEY)||''}
 function setToken(t){localStorage.setItem(TOKEN_KEY,t)}
 function clearToken(){localStorage.removeItem(TOKEN_KEY)}
-function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];});}
 
 async function checkAuth(){
   var r=await fetch('/api/admin/check',{headers:{'Authorization':'Bearer '+getToken()}});
@@ -272,14 +271,14 @@ async function load() {
     (d.api_logs||[]).forEach(function(l){
       var statusCls = l.status >= 400 ? 'badge-err' : 'badge-ok';
       var time = new Date(l.created_at).toLocaleString('zh-CN',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
-      apiLogsHtml += '<tr><td>'+esc(l.path)+'</td><td><span class="badge '+statusCls+'">'+esc(l.status)+'</span></td><td>'+esc(l.duration_ms)+'ms</td><td>'+esc(l.source)+'</td><td style="color:var(--red)">'+esc(l.error||'')+'</td><td style="color:var(--muted)">'+esc(time)+'</td></tr>';
+      apiLogsHtml += '<tr><td>'+l.path+'</td><td><span class="badge '+statusCls+'">'+l.status+'</span></td><td>'+l.duration_ms+'ms</td><td>'+l.source+'</td><td style="color:var(--red)">'+(l.error||'')+'</td><td style="color:var(--muted)">'+time+'</td></tr>';
     });
     apiLogsHtml += '</tbody></table>';
 
     var apiErrorsHtml = '<table><thead><tr><th>路径</th><th>状态</th><th>耗时</th><th>错误信息</th><th>时间</th></tr></thead><tbody>';
     (d.api_errors||[]).forEach(function(l){
       var time = new Date(l.created_at).toLocaleString('zh-CN',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
-      apiErrorsHtml += '<tr><td>'+esc(l.path)+'</td><td><span class="badge badge-err">'+esc(l.status)+'</span></td><td>'+esc(l.duration_ms)+'ms</td><td style="color:var(--red)">'+esc(l.error||'')+'</td><td style="color:var(--muted)">'+esc(time)+'</td></tr>';
+      apiErrorsHtml += '<tr><td>'+l.path+'</td><td><span class="badge badge-err">'+l.status+'</span></td><td>'+l.duration_ms+'ms</td><td style="color:var(--red)">'+(l.error||'')+'</td><td style="color:var(--muted)">'+time+'</td></tr>';
     });
     apiErrorsHtml += '</tbody></table>';
 
@@ -307,13 +306,13 @@ async function load() {
           '<tbody>', filteredAccounts.map(function(a) {
             var time = new Date(a.created_at).toLocaleString('zh-CN', {year:'2-digit',month:'2-digit',day:'2-digit'});
             var disabled = !!a.disabled_at;
-            return '<tr><td>'+esc(a.email)+'</td><td>'+esc(a.nickname||'-')+'</td><td><span class="badge '+(disabled?'badge-err':'badge-ok')+'">'+(disabled?'已禁用':'正常')+'</span></td><td style="color:var(--muted)">'+time+'</td><td><button onclick="toggleAccount('+a.id+','+disabled+')" class="table-action '+(disabled?'restore':'warn')+'">'+(disabled?'恢复':'禁用')+'</button> <button onclick="clearAccountData('+a.id+',&apos;profile&apos;)" class="table-action">画像</button> <button onclick="clearAccountData('+a.id+',&apos;collections&apos;)" class="table-action">清单</button> <button onclick="deleteAccount('+a.id+')" class="table-action danger">删除</button> <button onclick="resetPassword('+a.id+')" class="table-action warn">重置密码</button></td></tr>';
+            return '<tr><td>'+a.email+'</td><td>'+(a.nickname||'-')+'</td><td><span class="badge '+(disabled?'badge-err':'badge-ok')+'">'+(disabled?'已禁用':'正常')+'</span></td><td style="color:var(--muted)">'+time+'</td><td><button onclick="toggleAccount('+a.id+','+disabled+')" class="table-action '+(disabled?'restore':'warn')+'">'+(disabled?'恢复':'禁用')+'</button> <button onclick="clearAccountData('+a.id+',&apos;profile&apos;)" class="table-action">画像</button> <button onclick="clearAccountData('+a.id+',&apos;collections&apos;)" class="table-action">清单</button> <button onclick="deleteAccount('+a.id+')" class="table-action danger">删除</button> <button onclick="resetPassword('+a.id+')" class="table-action warn">重置密码</button></td></tr>';
           }).join(''), '</tbody></table>',
         '</div>',
         '<div class="card section-anchor" id="posters"><h3 style="margin-bottom:12px"><span class="status-dot err"></span>海报获取失败 ('+filteredPosterErrors.length+' / '+((d.poster_errors||[]).length)+')</h3>',
           filteredPosterErrors.length > 0 ? '<table><thead><tr><th>标题</th><th>类型</th><th>来源</th><th>时间</th></tr></thead><tbody>' + filteredPosterErrors.slice(0,20).map(function(e) {
             var time = new Date(e.created_at).toLocaleString('zh-CN', {hour:'2-digit',minute:'2-digit',month:'2-digit',day:'2-digit'});
-            return '<tr><td>'+esc(e.title)+'</td><td><span class="badge badge-'+esc(e.media_type)+'">'+esc(e.media_type)+'</span></td><td style="color:var(--muted)">'+esc(e.source||'resolver')+'</td><td style="color:var(--muted)">'+esc(time)+'</td></tr>';
+            return '<tr><td>'+e.title+'</td><td><span class="badge badge-'+e.media_type+'">'+e.media_type+'</span></td><td style="color:var(--muted)">'+(e.source||'resolver')+'</td><td style="color:var(--muted)">'+time+'</td></tr>';
           }).join('') + '</tbody></table>' : '<p style="color:var(--muted);font-size:13px">暂无错误记录</p>',
           '<div style="margin-top:10px;display:flex;gap:8px">',
             '<button onclick="exportPosterErrors()" style="background:var(--card);border:1px solid var(--border);color:var(--text);padding:4px 10px;border-radius:6px;font-size:11px;cursor:pointer">导出CSV</button>',
@@ -356,17 +355,17 @@ async function load() {
         '</div>',
       '</div>',
       '<div class="card" style="margin-bottom:16px"><h3 style="margin-bottom:12px">海报错误聚合 / 近30天</h3>',
-        (d.poster_error_summary||[]).length ? '<table><thead><tr><th>媒介</th><th>错误类型</th><th>次数</th></tr></thead><tbody>' + (d.poster_error_summary||[]).map(function(e) { return '<tr><td><span class="badge badge-'+esc(e.media_type)+'">'+esc(e.media_type)+'</span></td><td>'+esc(e.error||'unknown')+'</td><td>'+e.count+'</td></tr>'; }).join('') + '</tbody></table>' : '<p style="color:var(--muted);font-size:13px">暂无聚合数据</p>',
+        (d.poster_error_summary||[]).length ? '<table><thead><tr><th>媒介</th><th>错误类型</th><th>次数</th></tr></thead><tbody>' + (d.poster_error_summary||[]).map(function(e) { return '<tr><td><span class="badge badge-'+e.media_type+'">'+e.media_type+'</span></td><td>'+ (e.error||'unknown') +'</td><td>'+e.count+'</td></tr>'; }).join('') + '</tbody></table>' : '<p style="color:var(--muted);font-size:13px">暂无聚合数据</p>',
       '</div>',
       '<div class="grid grid-2">',
         '<div class="card"><h3 style="margin-bottom:12px">最近用户事件</h3>',
           '<table><thead><tr><th>事件</th><th>模式</th><th>详情</th><th>时间</th></tr></thead>',
           '<tbody>', d.recent_events.map(function(e) {
             var badge = 'badge-' + e.event_name;
-            var mode = e.mode ? '<span class="badge badge-' + esc(e.mode) + '">' + esc(e.mode) + '</span>' : '';
+            var mode = e.mode ? '<span class="badge badge-' + e.mode + '">' + e.mode + '</span>' : '';
             var detail = e.item_count ? e.item_count + '件 / ' + (e.comparison_count || '?') + '次' : '';
             var time = new Date(e.created_at).toLocaleString('zh-CN', {hour:'2-digit',minute:'2-digit',month:'2-digit',day:'2-digit'});
-            return '<tr><td><span class="badge ' + badge + '">' + esc(e.event_name) + '</span></td><td>' + mode + '</td><td>' + esc(detail) + '</td><td style="color:var(--muted)">' + esc(time) + '</td></tr>';
+            return '<tr><td><span class="badge ' + badge + '">' + e.event_name + '</span></td><td>' + mode + '</td><td>' + detail + '</td><td style="color:var(--muted)">' + time + '</td></tr>';
           }).join(''), '</tbody></table>',
         '</div>',
         '<div class="card"><h3 style="margin-bottom:12px">系统状态</h3>',
@@ -412,7 +411,7 @@ async function load() {
     });
     }
   } catch (e) {
-    document.getElementById('app').innerHTML = '<div class="error">加载失败: ' + esc(e && e.message ? e.message : e) + '</div>';
+    document.getElementById('app').innerHTML = '<div class="error">加载失败: ' + e.message + '</div>';
   }
 }
 
@@ -468,6 +467,12 @@ async function logApiCall(env: Env | undefined, path: string, method: string, st
 function generateToken(): string {
   const bytes = crypto.getRandomValues(new Uint8Array(32));
   return Array.from(bytes, b => b.toString(16).padStart(2, "0")).join("");
+}
+
+async function hashPassword(password: string): Promise<string> {
+  const data = new TextEncoder().encode(password);
+  const hash = await crypto.subtle.digest("SHA-256", data);
+  return Array.from(new Uint8Array(hash), b => b.toString(16).padStart(2, "0")).join("");
 }
 
 async function adminAuth(request: Request, env: Env): Promise<boolean> {
@@ -731,18 +736,14 @@ async function handleAdminLogin(request: Request, env: Env): Promise<Response> {
 
   // Prefer environment variable password
   if (env.ADMIN_PASSWORD) {
-    if (!timingSafeEqual(password, env.ADMIN_PASSWORD)) return json({ error: "invalid_password" }, 401);
+    if (password !== env.ADMIN_PASSWORD) return json({ error: "invalid_password" }, 401);
   } else {
     // Fallback to DB-stored password
     if (!env.DB) return json({ error: "auth_unavailable" }, 503);
     const stored = await env.DB.prepare("SELECT value FROM admin_config WHERE key = 'password_hash'").first<{ value: string }>();
     if (!stored?.value) return json({ error: "no_password_configured" }, 503);
-    if (!(await verifyPassword(password, stored.value))) return json({ error: "invalid_password" }, 401);
-    // Transparently upgrade legacy SHA-256 admin hashes to PBKDF2.
-    if (needsPasswordUpgrade(stored.value)) {
-      await env.DB.prepare("UPDATE admin_config SET value = ? WHERE key = 'password_hash'")
-        .bind(await hashPasswordStrong(password)).run().catch(() => undefined);
-    }
+    const hash = await hashPassword(password);
+    if (stored.value !== hash) return json({ error: "invalid_password" }, 401);
   }
 
   if (!env.DB) return json({ error: "database_unavailable" }, 503);
@@ -924,7 +925,6 @@ async function route(request: Request, env: Env): Promise<Response> {
     return getDashboard(env);
   }
   if (url.pathname === "/api/admin/login" && request.method === "POST") {
-    if (!allowUpstreamRequest(request, "auth", 30)) return json({ error: "rate_limited" }, 429, { "retry-after": "300" });
     return handleAdminLogin(request, env);
   }
   if (url.pathname === "/api/admin/logout" && request.method === "POST") {
@@ -1278,16 +1278,11 @@ async function route(request: Request, env: Env): Promise<Response> {
   }
   if (url.pathname.startsWith("/api/account/")) {
     if (request.method !== "GET") assertSameOrigin(request);
-    const RATE_LIMITED_PATHS = new Set(["/api/account/login", "/api/account/register", "/api/account/oauth/exchange"]);
-    if (RATE_LIMITED_PATHS.has(url.pathname) && !allowUpstreamRequest(request, "auth", 30)) {
-      return json({ error: "rate_limited" }, 429, { "retry-after": "300" });
-    }
     return withSecurityHeaders(await accountRoute(request, env));
   }
   // Short-link sharing
   if (url.pathname === "/api/share" && request.method === "POST") {
     if (!env.DB) return json({ error: "database_unavailable" }, 503);
-    if (!allowUpstreamRequest(request, "share", 20)) return json({ error: "rate_limited" }, 429, { "retry-after": "300" });
     const body = await readJson(request);
     const profileStr = JSON.stringify(body.profile);
     if (profileStr.length > 512 * 1024) return json({ error: "profile_too_large" }, 400);
@@ -1377,8 +1372,6 @@ export default {
         env.DB.prepare("DELETE FROM poster_errors WHERE created_at < datetime('now', '-180 days')"),
         env.DB.prepare("DELETE FROM admin_sessions WHERE expires_at < datetime('now')"),
         env.DB.prepare("DELETE FROM user_sessions WHERE expires_at < datetime('now')"),
-        env.DB.prepare("DELETE FROM oauth_exchanges WHERE expires_at < datetime('now')"),
-        env.DB.prepare("DELETE FROM shared_links WHERE expires_at < datetime('now')"),
       ]);
     } catch (error) {
       console.error("scheduled cleanup failed", error instanceof Error ? error.message : error);
