@@ -176,9 +176,10 @@ export async function plazaRoute(request: Request, env: Env): Promise<Response> 
       itemCount = body.items.length;
     }
 
+    // D1 bind 不接受 undefined：未提供的字段统一转 null，由 COALESCE 保留原值
     await env.DB.prepare(
       `UPDATE plaza_posts SET post_type = COALESCE(?, post_type), kind = COALESCE(?, kind), collection_title = COALESCE(?, collection_title), description = COALESCE(?, description), items = COALESCE(?, items), notes = COALESCE(?, notes), item_count = COALESCE(?, item_count), is_public = COALESCE(?, is_public), updated_at = datetime('now') WHERE id = ?`
-    ).bind(postType, kind, collectionTitle, description, itemsJson, notes, itemCount, isPublic, postId).run();
+    ).bind(postType ?? null, kind ?? null, collectionTitle ?? null, description ?? null, itemsJson ?? null, notes ?? null, itemCount ?? null, isPublic ?? null, postId).run();
 
     // 记录本次编辑的操作明细（客户端从差异生成，服务端写入权威时间戳）
     if (Array.isArray(body.edits) && body.edits.length) {
