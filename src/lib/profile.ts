@@ -304,12 +304,16 @@ export function compareDimensions(own: MergedDimension, peer: MergedDimension): 
   const onlyOwn = own.items.filter((item) => !matchedOwn.has(item.bestRank));
   const onlyPeer = peer.items.filter((item) => !matchedPeer.has(item.bestRank));
 
-  // 序对一致率
+  // 序对一致率：多榜单合并取最优名次会产生并列（同为第1等），
+  // 含并列的序对无法判定先后，剔除后再计算（否则相同画像会得到 <100% 的一致率）
   let agreements = 0, pairs = 0;
   for (let i = 0; i < shared.length; i++) {
     for (let j = i + 1; j < shared.length; j++) {
+      const rankDiffOwn = shared[i].ownRank - shared[j].ownRank;
+      const rankDiffPeer = shared[i].peerRank - shared[j].peerRank;
+      if (rankDiffOwn === 0 || rankDiffPeer === 0) continue;
       pairs++;
-      if ((shared[i].ownRank - shared[j].ownRank) * (shared[i].peerRank - shared[j].peerRank) > 0) agreements++;
+      if (rankDiffOwn * rankDiffPeer > 0) agreements++;
     }
   }
 

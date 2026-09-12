@@ -6,6 +6,7 @@ import {
   deleteRanking,
   mergeProfiles,
   compareRankings,
+  compareDimensions,
   mergeDimensionRankings,
   normalizeTitle,
   profileText,
@@ -206,6 +207,26 @@ describe("compareRankings", () => {
     const result = compareRankings(own, peer);
     expect(result.sharedCount).toBe(0);
     expect(result.overlap).toBe(0);
+  });
+
+  it("gives 100% order agreement for identical multi-list profiles with merged rank ties", () => {
+    // 两个榜单合并后会出现并列最优名次（两件作品同为第1），
+    // 相同画像的顺序一致率必须仍是 100%（并列序对剔除）
+    const build = () => [
+      makeRanking({ collectionTitle: "榜A", items: [
+        { id: "a", title: "作品A", rank: 1 },
+        { id: "b", title: "作品B", rank: 2 },
+        { id: "c", title: "作品C", rank: 3 },
+      ] }),
+      makeRanking({ collectionTitle: "榜B", items: [
+        { id: "d", title: "作品D", rank: 1 },
+        { id: "e", title: "作品E", rank: 2 },
+      ] }),
+    ];
+    const ownMerged = mergeDimensionRankings(build())!;
+    const peerMerged = mergeDimensionRankings(build())!;
+    const result = compareDimensions(ownMerged, peerMerged);
+    expect(result.orderAgreement).toBe(100);
   });
 });
 
