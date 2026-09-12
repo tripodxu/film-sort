@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { ArrowLeft, CloudDownload, CloudUpload, Github, Languages, UserRound, X } from "lucide-react";
 
 import { createRankingState, chooseSide, deferWork, deserializeRankingState, getCurrentComparison, getRankingProgress, getRankingResult, serializeRankingState, skipWork, undoLastAction, type RankingState } from "./lib/ranking";
-import { getCollectionsByKind, mediaLabels, type MediaCollection, type MediaKind } from "./data/media";
+import { getCollectionsByKind, mediaLabels, type Artwork, type MediaCollection, type MediaKind } from "./data/media";
 import { compareDimensions, compareProfiles, compareRankings, LIBRARY_KEY, MAX_PROFILE_BYTES, mergeDimensionRankings, mergeProfiles, mergeRanking, parseProfile, profileText, readProfile, renameRanking, deleteRanking, reorderRanking, type ArtisticProfile, type RankingExport, type RankedArtwork } from "./lib/profile";
 import { importCollection } from "./lib/collections";
 import { FocusTrap } from "./components/FocusTrap";
@@ -98,6 +98,7 @@ export default function App() {
   const [seed, setSeed] = useState("");
   const [customText, setCustomText] = useState("");
   const [customItem, setCustomItem] = useState("");
+  const [customWorks, setCustomWorks] = useState<Artwork[]>([]);
   const [cloudCollections, setCloudCollections] = useState<Array<MediaCollection & { remoteId: number }>>([]);
   const [aiInsight, setAiInsight] = useState("");
   const [aiBusy, setAiBusy] = useState(false);
@@ -359,10 +360,35 @@ export default function App() {
     return () => window.removeEventListener("keydown", handler);
   }, [view, comparison, accountOpen, act]);
 
-  function chooseKind(next: MediaKind) { setKind(next); setSource("builtin"); setSearch(""); setCustomText(""); navigateTo("source"); }
-  function addCustomItem() {
-    const value = customItem.trim(); if (!value) return;
-    setCustomText((current) => current.trim() ? `${current.trim()}\n${value}` : value); setCustomItem("");
+  function chooseKind(next: MediaKind) { setKind(next); setSource("builtin"); setSearch(""); setCustomText(""); setCustomWorks([]); navigateTo("source"); }
+  // 自行导入：豆瓣搜索候选（电影/书籍/音乐），返回带海报与元数据的完整作品
+  async function searchWorks(query: string): Promise<Artwork[]> {
+    const trimmed = query.trim();
+    if (!trimmed || kind === "other") return [];
+    try {
+      const apiType = kind === "film" ? "movie" : kind;
+      const response = await fetch(`/api/${apiType}/list?key=${encodeURIComponent(trimmed)}&page=1`, { signal: AbortSignal.timeout(15000) });
+      const data = await response.json() as { data?: Array<{ title?: string; year?: string; rating?: string; author?: string; artist?: string; cover?: string; actors?: string[] }> };
+      return (data.data ?? []).slice(0, 6).map((item) => ({
+        id: `search-${Math.random().toString(36).slice(2, 10)}`,
+        title: item.title ?? "",
+        creator: item.author || item.artist || (Array.isArray(item.actors) ? item.actors.slice(0, 2).join("/") : undefined),
+        year: item.year ? Number(item.year) || undefined : undefined,
+        posterUrls: item.cover ? [item.cover] : undefined,
+      })).filter((work) => work.title);
+    } catch { return []; }
+  }
+  function addCustomWork(work: Artwork) {
+    setCustomWorks((cur) => cur.some((w) => w.title === work.title && w.year === work.year) ? cur : [...cur, work]);
+  }
+  function removeCustomWork(id: string) {
+    setCustomWorks((cur) => cur.filter((w) => w.id !== id));
+  }
+  function loadCustomWorks() {
+    if (customWorks.length < 2) { setNotice(t("至少添加 2 件作品再开始。", "Add at least 2 works first.")); return; }
+    const next: MediaCollection = { id: `custom-${kind}-${crypto.randomUUID()}`, kind, source: "custom", title: `我的${mediaLabels[kind].label}清单`, description: "", topN: Math.min(10, customWorks.length), works: customWorks };
+    openCollection(next);
+    void saveCollectionCloud(next);
   }
   async function saveCollectionCloud(collectionToSave: MediaCollection) {
     if (!accountToken) return;
@@ -864,7 +890,7 @@ export default function App() {
 
   let content: ReactNode;
   if (view === "home") content = <HomeView locale={locale} t={t} accountEmail={accountEmail} setAccountOpen={setAccountOpen} setShowGuide={setShowGuide} kind={kind} chooseKind={chooseKind} navigateTo={navigateTo} draft={draft} resume={resume} profile={profile} label={label} setRingsLayout={setRingsLayout} ringsLayout={ringsLayout} clearAllData={clearAllData} editingRankIdx={editingRankIdx} setEditingRankIdx={setEditingRankIdx} editingRankTitle={editingRankTitle} setEditingRankTitle={setEditingRankTitle} renameRank={renameRank} deleteRank={deleteRank} setActiveKind={setActiveKind} openCollection={openCollection} importProfile={importProfile} />;
-  else if (view === "source") content = <SourceView kind={kind} t={t} label={label} source={source} setSource={setSource} setNotice={setNotice} search={search} setSearch={setSearch} colCount={colCount} changeCols={changeCols} collections={collections} openCollection={openCollection} customItem={customItem} setCustomItem={setCustomItem} addCustomItem={addCustomItem} customText={customText} setCustomText={setCustomText} importCollection={importCollection} saveCollectionCloud={saveCollectionCloud} cloudCollections={cloudCollections} loadCloudCollections={loadCloudCollections} deleteCloudCollection={deleteCloudCollection} doubanLimit={doubanLimit} setDoubanLimit={setDoubanLimit} busy={busy} loadDouban={loadDouban} />;
+  else if (view === "source") content = <SourceView kind={kind} t={t} label={label} source={source} setSource={setSource} setNotice={setNotice} search={search} setSearch={setSearch} colCount={colCount} changeCols={changeCols} collections={collections} openCollection={openCollection} customItem={customItem} setCustomItem={setCustomItem} customWorks={customWorks} searchWorks={searchWorks} addCustomWork={addCustomWork} removeCustomWork={removeCustomWork} clearCustomWorks={() => setCustomWorks([])} loadCustomWorks={loadCustomWorks} customText={customText} setCustomText={setCustomText} importCollection={importCollection} saveCollectionCloud={saveCollectionCloud} cloudCollections={cloudCollections} loadCloudCollections={loadCloudCollections} deleteCloudCollection={deleteCloudCollection} doubanLimit={doubanLimit} setDoubanLimit={setDoubanLimit} busy={busy} loadDouban={loadDouban} />;
   else if (view === "setup" && collection) content = <SetupView collection={collection} kind={kind} t={t} label={label} selected={selected} setSelected={setSelected} topN={topN} setTopN={setTopN} seed={seed} setSeed={setSeed} setCollection={setCollection} startRanking={startRanking} />;
   else if (view === "sorting" && collection && ranking && comparison && progress) content = <SortingView collection={collection} ranking={ranking} comparison={comparison} progress={progress} label={label} kind={kind} t={t} worksById={worksById} act={act} />;
   else if (view === "profile" && profile && activeRanking) content = <ProfileView profile={profile} activeRanking={activeRanking} locale={locale} t={t} label={label} format={format} setFormat={setFormat} exportLayout={exportLayout} setExportLayout={setExportLayout} exportProfile={exportProfile} share={share} shareUrl={shareUrl} qrUrl={qrUrl} profileName={profileName} setProfileName={setProfileName} namedProfile={namedProfile} persist={persist} navigateTo={navigateTo} peer={peer} editingRankIdx={editingRankIdx} setEditingRankIdx={setEditingRankIdx} editingRankTitle={editingRankTitle} setEditingRankTitle={setEditingRankTitle} renameRank={renameRank} openCollection={openCollection} shareSingleRanking={shareSingleRanking} openShareModal={openShareModal} setActiveKind={setActiveKind} ranking={ranking} setRanking={setRanking} collection={collection} notes={notes} openNoteModal={openNoteModal} openArtworkDetail={openArtworkDetail} accountToken={accountToken} publishToPlaza={publishToPlaza} publishProfileToPlaza={publishProfileToPlaza} updateRankingWorks={updateRankingWorks} syncPlazaPost={syncPlazaPost} reorderMode={reorderMode} reorderItems={reorderItems} startReorder={startReorder} saveReorder={saveReorder} cancelReorder={cancelReorder} moveItem={moveItem} busy={busy} />;

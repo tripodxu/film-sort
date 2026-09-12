@@ -1,5 +1,5 @@
 import type { RankingState } from "../lib/ranking";
-import type { MediaCollection, MediaKind } from "../data/media";
+import type { MediaCollection, MediaKind, Artwork } from "../data/media";
 import type { ArtisticProfile, RankingExport, RankedArtwork } from "../lib/profile";
 
 export type Locale = "zh" | "en";
@@ -46,7 +46,12 @@ export interface SourceViewProps {
   openCollection: (collection: MediaCollection) => void;
   customItem: string;
   setCustomItem: (item: string) => void;
-  addCustomItem: () => void;
+  customWorks: Artwork[];
+  searchWorks: (query: string) => Promise<Artwork[]>;
+  addCustomWork: (work: Artwork) => void;
+  removeCustomWork: (id: string) => void;
+  clearCustomWorks: () => void;
+  loadCustomWorks: () => void;
   customText: string;
   setCustomText: (text: string) => void;
   importCollection: (kind: MediaKind, text: string) => MediaCollection;
