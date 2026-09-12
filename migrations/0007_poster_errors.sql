@@ -3,6 +3,7 @@ CREATE TABLE IF NOT EXISTS poster_errors (
   title TEXT NOT NULL,
   media_type TEXT NOT NULL DEFAULT 'movie',
   error TEXT,
+  source TEXT,
   created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
 );
 
