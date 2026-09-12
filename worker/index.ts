@@ -1425,23 +1425,6 @@ async function route(request: Request, env: Env): Promise<Response> {
     return json(await doubanSearch("music", key, page), 200, { "cache-control": "public, max-age=3600" });
   }
 
-  // 临时调试：维基 API 透传探针（公共数据，验证后移除）
-  if (url.pathname === "/api/wiki-probe" && request.method === "GET") {
-    const lang = url.searchParams.get("lang") === "en" ? "en" : "zh";
-    const mode = url.searchParams.get("mode") ?? "titles";
-    const q = url.searchParams.get("q") ?? "";
-    if (!q || q.length > 200) return json({ error: "bad q" }, 400);
-    const params = mode === "search"
-      ? new URLSearchParams({ action: "query", generator: "search", gsrsearch: q, gsrnamespace: "0", gsrlimit: "5", redirects: "1", prop: "extracts", exintro: "true", explaintext: "true", exlimit: "5", format: "json" })
-      : new URLSearchParams({ action: "query", titles: q, prop: "extracts", exintro: "true", explaintext: "true", exlimit: "20", redirects: "1", ...(url.searchParams.get("conv") === "1" ? { converttitles: "1" } : {}), format: "json" });
-    try {
-      const r = await fetch(`https://${lang}.wikipedia.org/w/api.php?${params}`, { headers: { "user-agent": "ArtRankBot/1.0", "accept": "application/json" }, signal: AbortSignal.timeout(12000) });
-      const text = await r.text();
-      return new Response(text.slice(0, 20000), { status: 200, headers: { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" } });
-    } catch (e) {
-      return json({ error: String(e).slice(0, 200) }, 502);
-    }
-  }
   // Detail APIs
   if (url.pathname === "/api/book/detail" && request.method === "GET") {
     const detailUrl = url.searchParams.get("url")?.trim();
