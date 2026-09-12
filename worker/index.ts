@@ -1,5 +1,5 @@
 import { doubanTop250, doubanSuggest, doubanBookTop250, doubanBookSuggest, doubanMusicTop250, doubanSearch, doubanBookDetail, doubanMovieDetail, doubanMusicDetail, fetchContentIntro, proxyImage, resolvePosters } from "./media";
-import { accountRoute } from "./account";
+import { accountRoute, hashPasswordStrong, needsPasswordUpgrade, timingSafeEqual, verifyPassword } from "./account";
 import { plazaRoute } from "./plaza";
 
 export interface Env {
@@ -470,12 +470,6 @@ function generateToken(): string {
   return Array.from(bytes, b => b.toString(16).padStart(2, "0")).join("");
 }
 
-async function hashPassword(password: string): Promise<string> {
-  const data = new TextEncoder().encode(password);
-  const hash = await crypto.subtle.digest("SHA-256", data);
-  return Array.from(new Uint8Array(hash), b => b.toString(16).padStart(2, "0")).join("");
-}
-
 async function adminAuth(request: Request, env: Env): Promise<boolean> {
   if (!env.DB) return false;
   const token = getAdminToken(request);
@@ -737,14 +731,18 @@ async function handleAdminLogin(request: Request, env: Env): Promise<Response> {
 
   // Prefer environment variable password
   if (env.ADMIN_PASSWORD) {
-    if (password !== env.ADMIN_PASSWORD) return json({ error: "invalid_password" }, 401);
+    if (!timingSafeEqual(password, env.ADMIN_PASSWORD)) return json({ error: "invalid_password" }, 401);
   } else {
     // Fallback to DB-stored password
     if (!env.DB) return json({ error: "auth_unavailable" }, 503);
     const stored = await env.DB.prepare("SELECT value FROM admin_config WHERE key = 'password_hash'").first<{ value: string }>();
     if (!stored?.value) return json({ error: "no_password_configured" }, 503);
-    const hash = await hashPassword(password);
-    if (stored.value !== hash) return json({ error: "invalid_password" }, 401);
+    if (!(await verifyPassword(password, stored.value))) return json({ error: "invalid_password" }, 401);
+    // Transparently upgrade legacy SHA-256 admin hashes to PBKDF2.
+    if (needsPasswordUpgrade(stored.value)) {
+      await env.DB.prepare("UPDATE admin_config SET value = ? WHERE key = 'password_hash'")
+        .bind(await hashPasswordStrong(password)).run().catch(() => undefined);
+    }
   }
 
   if (!env.DB) return json({ error: "database_unavailable" }, 503);

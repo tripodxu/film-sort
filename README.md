@@ -393,6 +393,7 @@ film-sort3/
 ## 安全
 
 - Content-Security-Policy、X-Frame-Options、Referrer-Policy、Permissions-Policy 全开。
+- 用户与管理后台密码采用 PBKDF2-SHA256 加盐哈希（10 万次迭代，存储格式 `pbkdf2$<iterations>$<salt>$<hash>`），恒定时间比较；旧的无盐 SHA-256 哈希在登录成功时自动透明升级。
 - 管理后台（/admin）所有动态内容（用户邮箱/昵称、海报标题、API 路径、事件 payload 等）渲染前统一 HTML 转义，防止存储型 XSS。
 - 图片代理仅允许 `doubanio.com`、`media-amazon.com`、`media-imdb.com`、`tmdb.org` 四类 host。
 - 分析事件仅收集产品元数据，不含作品标题或用户信息。

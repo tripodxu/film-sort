@@ -12,9 +12,54 @@ async function adminAuthLocal(request: Request, db: D1Database): Promise<boolean
   return !!session;
 }
 
+// ===== Password hashing =====
+// Current scheme: PBKDF2-SHA256 with per-user salt, stored as pbkdf2$<iterations>$<salt>$<hash>.
+// Legacy unsalted SHA-256 hashes are still verified and transparently upgraded on successful login.
+const PBKDF2_ITERATIONS = 100_000;
+
+function toHex(bytes: ArrayBuffer | Uint8Array): string {
+  const view = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
+  return Array.from(view, (b) => b.toString(16).padStart(2, "0")).join("");
+}
+
 async function hashPassword(password: string): Promise<string> {
   const hash = await crypto.subtle.digest("SHA-256", encoder.encode(password));
-  return Array.from(new Uint8Array(hash), b => b.toString(16).padStart(2, "0")).join("");
+  return toHex(hash);
+}
+
+export async function hashPasswordStrong(password: string): Promise<string> {
+  const salt = crypto.getRandomValues(new Uint8Array(16));
+  return `pbkdf2$${PBKDF2_ITERATIONS}$${toHex(salt)}$${await pbkdf2(password, salt, PBKDF2_ITERATIONS)}`;
+}
+
+async function pbkdf2(password: string, salt: Uint8Array, iterations: number): Promise<string> {
+  const key = await crypto.subtle.importKey("raw", encoder.encode(password), "PBKDF2", false, ["deriveBits"]);
+  const bits = await crypto.subtle.deriveBits({ name: "PBKDF2", hash: "SHA-256", salt, iterations }, key, 256);
+  return toHex(bits);
+}
+
+export function timingSafeEqual(a: string, b: string): boolean {
+  if (a.length !== b.length) return false;
+  let diff = 0;
+  for (let i = 0; i < a.length; i += 1) diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  return diff === 0;
+}
+
+export async function verifyPassword(password: string, stored: string | null | undefined): Promise<boolean> {
+  if (!stored) return false;
+  if (stored.startsWith("pbkdf2$")) {
+    const [, iterationText, saltHex, hashHex] = stored.split("$");
+    const iterations = Number(iterationText);
+    if (!Number.isInteger(iterations) || iterations < 1 || iterations > 2_000_000) return false;
+    if (!/^[0-9a-f]+$/.test(saltHex) || saltHex.length % 2 !== 0 || !/^[0-9a-f]{64}$/.test(hashHex)) return false;
+    const salt = Uint8Array.from({ length: saltHex.length / 2 }, (_, i) => Number.parseInt(saltHex.slice(i * 2, i * 2 + 2), 16));
+    return timingSafeEqual(await pbkdf2(password, salt, iterations), hashHex);
+  }
+  return timingSafeEqual(await hashPassword(password), stored);
+}
+
+export function needsPasswordUpgrade(stored: string | null | undefined): boolean {
+  return !!stored && !stored.startsWith("pbkdf2$");
 }
 
 function generateToken(): string {
@@ -143,7 +188,7 @@ export async function accountRoute(request: Request, env: Env): Promise<Response
     if (!nickname || nickname.length < 1) return json({ error: "invalid_nickname", msg: "昵称必填" }, 400);
     const existing = await env.DB.prepare("SELECT id FROM user_accounts WHERE email = ?").bind(email).first();
     if (existing) return json({ error: "email_exists" }, 409);
-    const hash = await hashPassword(password);
+    const hash = await hashPasswordStrong(password);
     const result = await env.DB.prepare("INSERT INTO user_accounts (email, password_hash, nickname) VALUES (?, ?, ?)").bind(email, hash, nickname).run();
     const session = await createSession(env.DB, result.meta.last_row_id as number);
     return json({ ...session, email, nickname });
@@ -157,7 +202,11 @@ export async function accountRoute(request: Request, env: Env): Promise<Response
     if (!email || !password) return json({ error: "missing_fields" }, 400);
     const user = await env.DB.prepare("SELECT id, password_hash, nickname, disabled_at FROM user_accounts WHERE email = ?").bind(email).first<{ id: number; password_hash: string; nickname: string | null; disabled_at: string | null }>();
     if (user?.disabled_at) return json({ error: "account_disabled" }, 403);
-    if (!user || !user.password_hash || user.password_hash !== await hashPassword(password)) return json({ error: "invalid_credentials" }, 401);
+    if (!user || !(await verifyPassword(password, user.password_hash))) return json({ error: "invalid_credentials" }, 401);
+    if (needsPasswordUpgrade(user.password_hash)) {
+      await env.DB.prepare("UPDATE user_accounts SET password_hash = ? WHERE id = ?")
+        .bind(await hashPasswordStrong(password), user.id).run().catch(() => undefined);
+    }
     const session = await createSession(env.DB, user.id);
     return json({ ...session, email, nickname: user.nickname ?? email.split("@")[0] });
   }
@@ -384,7 +433,7 @@ export async function accountRoute(request: Request, env: Env): Promise<Response
     const body = await request.json().catch(() => null) as Record<string, unknown> | null;
     const newPassword = cleanString(body?.password, 128);
     if (!newPassword || newPassword.length < 6) return json({ error: "invalid_password", msg: "密码至少6位" }, 400);
-    const hash = await hashPassword(newPassword);
+    const hash = await hashPasswordStrong(newPassword);
     await env.DB.prepare("UPDATE user_accounts SET password_hash = ? WHERE id = ?").bind(hash, userId).run();
     await env.DB.prepare("DELETE FROM user_sessions WHERE user_id = ?").bind(userId).run();
     return json({ ok: true });
