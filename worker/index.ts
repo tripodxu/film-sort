@@ -3,7 +3,7 @@ import { accountRoute, hashPasswordStrong, needsPasswordUpgrade, timingSafeEqual
 import { getUserFromToken } from "./account";
 import { adminPlazaRoute, plazaRoute } from "./plaza";
 import { importRoute } from "./import";
-import { neteaseQrIssue, neteaseQrPoll, hasProviderCookie, deleteProviderCookie, saveProviderCookie, neteaseUserId } from "./netease";
+import { neteaseQrIssue, neteaseQrPoll, hasProviderCookie, deleteProviderCookie, saveProviderCookie, neteaseUserId, neteaseAccountInfo } from "./netease";
 import { recordAudit } from "./audit";
 
 export interface Env {
@@ -1658,8 +1658,8 @@ async function route(request: Request, env: Env): Promise<Response> {
     if (!allowUpstreamRequest(request, "netease", 120)) return json({ error: "rate_limited" }, 429, { "retry-after": "60" });
     try {
       if (url.pathname === "/api/netease/qr/issue" && request.method === "GET") {
-        const { unikey, qrValue } = await neteaseQrIssue();
-        return json({ unikey, qr_value: qrValue });
+        const { unikey, qrValue, ttl } = await neteaseQrIssue();
+        return json({ unikey, qr_value: qrValue, ttl });
       }
       if (url.pathname === "/api/netease/qr/poll" && request.method === "GET") {
         const unikey = url.searchParams.get("unikey")?.trim() ?? "";
@@ -1667,7 +1667,9 @@ async function route(request: Request, env: Env): Promise<Response> {
         return json(await neteaseQrPoll(unikey, env, user.id));
       }
       if (url.pathname === "/api/netease/status" && request.method === "GET") {
-        return json({ connected: await hasProviderCookie(env, user.id, "netease") });
+        const connected = await hasProviderCookie(env, user.id, "netease");
+        const account = connected ? await neteaseAccountInfo(env, user.id) : null;
+        return json({ connected, account });
       }
       // 手动粘贴 Cookie 连接（扫码被风控时的替代入口）：校验 MUSIC_U 真实可用后才入保险库
       if (url.pathname === "/api/netease/cookie" && request.method === "POST") {

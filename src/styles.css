@@ -382,6 +382,21 @@ kbd{display:inline-flex;align-items:center;justify-content:center;min-width:22px
 .help-dot{width:20px;height:20px;min-height:0;border:1px solid rgba(216,248,106,.35);border-radius:50%;color:var(--accent);font-size:12px;font-weight:700;line-height:1;display:inline-flex;align-items:center;justify-content:center;padding:0;opacity:.75}
 .help-dot:hover{opacity:1;background:rgba(216,248,106,.12)}
 .cookie-connect{display:grid;gap:8px}
+.qr-connect-dialog{width:min(460px,100%)}
+.qr-stage{display:flex;align-items:center;justify-content:center;gap:14px}
+.qr-box{position:relative;flex-shrink:0}
+.qr-mask{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;background:rgba(10,13,11,.86);border-radius:14px;color:var(--accent);font-size:14px;font-weight:600;backdrop-filter:blur(2px)}
+.qr-mask.ok{color:var(--green)}
+.qr-side{display:flex;flex-direction:column;gap:10px;align-items:flex-start;min-width:0}
+.qr-timer{display:inline-flex;align-items:center;gap:6px;font-family:Consolas,monospace;font-size:13px;color:var(--muted)}
+.qr-refresh-dots{display:flex;gap:5px}
+.qr-refresh-dots span{width:7px;height:7px;border-radius:50%;border:1px solid var(--line)}
+.qr-refresh-dots span.on{background:var(--accent);border-color:var(--accent)}
+.qr-scanned-as{display:flex;align-items:center;gap:8px;font-size:12px;color:#d7dfd3;background:rgba(216,248,106,.08);border:1px solid rgba(216,248,106,.25);border-radius:999px;padding:5px 10px 5px 6px;max-width:150px}
+.qr-scanned-as img{width:24px;height:24px;border-radius:50%;object-fit:cover;flex-shrink:0}
+.qr-fallback{display:grid;gap:8px;padding:12px;border:1px solid rgba(248,113,113,.35);border-radius:10px;background:rgba(248,113,113,.06);margin-top:2px}
+.qr-fallback strong{font-size:12px;color:#fca5a5;font-weight:500;line-height:1.6}
+.qr-fallback textarea{min-height:64px;font-size:11px;line-height:1.5;word-break:break-all}
 .cookie-connect textarea{min-height:72px;line-height:1.6;font-size:12px;word-break:break-all}
 .help-steps{margin:0;padding-left:22px;display:grid;gap:14px}
 .help-steps li{color:#bbc8ae;font-size:13px;line-height:1.8}

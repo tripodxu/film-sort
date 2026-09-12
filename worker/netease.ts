@@ -161,44 +161,145 @@ function jarAbsorb(unikey: string, setCookies: string[]) {
 
 function jarHeader(unikey: string): string | null {
   const jar = qrCookieJar.get(unikey);
-  if (!jar || !jar.size) return null;
+  if (!jar) return null;
+  const real = [...jar.entries()].filter(([k]) => k !== "__ch");
+  if (!real.length) return null;
   const touched = jarTimestamps.get(unikey) ?? 0;
   if (Date.now() - touched > JAR_TTL_MS) { qrCookieJar.delete(unikey); jarTimestamps.delete(unikey); return null; }
-  return [...jar.entries()].map(([k, v]) => `${k}=${v}`).join("; ");
+  return real.map(([k, v]) => `${k}=${v}`).join("; ");
 }
 
-export async function neteaseQrIssue(): Promise<{ unikey: string; qrValue: string }> {
+/** 签发通道记账：unikey → "open" | "weapi"（复用 jar 的 __ch 伪条目，同受 TTL/清理约束） */
+function markChannel(unikey: string, channel: "open" | "weapi") {
+  let jar = qrCookieJar.get(unikey);
+  if (!jar) { jar = new Map(); qrCookieJar.set(unikey, jar); }
+  jar.set("__ch", channel);
+  jarTimestamps.set(unikey, Date.now());
+}
+function channelOf(unikey: string): "open" | "weapi" | null {
+  return (qrCookieJar.get(unikey)?.get("__ch") as "open" | "weapi" | undefined) ?? null;
+}
+
+/** 签发二维码：开放接口优先（官网同族、免 cookie），weapi 加密接口兜底。ttl 供前端倒计时。 */
+export async function neteaseQrIssue(): Promise<{ unikey: string; qrValue: string; ttl: number }> {
+  try {
+    const response = await fetch("https://music.163.com/api/login/qrcode/unikey", {
+      method: "POST",
+      headers: {
+        "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "referer": "https://music.163.com/",
+        "origin": "https://music.163.com",
+        "content-type": "application/x-www-form-urlencoded",
+      },
+      body: "type=1",
+      signal: AbortSignal.timeout(15000),
+    });
+    const json = await response.json() as { code?: number; unikey?: string };
+    if (json.code === 200 && typeof json.unikey === "string" && json.unikey) {
+      markChannel(json.unikey, "open");
+      return { unikey: json.unikey, qrValue: `https://music.163.com/login?codekey=${json.unikey}`, ttl: 150 };
+    }
+  } catch (error) {
+    console.error("netease qr open-channel issue failed, falling back to weapi:", error instanceof Error ? error.message : error);
+  }
+  // 兜底通道：weapi 加密接口（对齐参考项目，含 Cookie 罐）
   const { json, cookies } = await weapiPost("/weapi/login/qrcode/unikey", { type: 1 });
   const unikey = typeof json.unikey === "string" ? json.unikey : null;
   if (!unikey) throw new Error("qr_issue_failed");
   jarAbsorb(unikey, cookies);
-  // 与参考实现一致：优先采用网易云返回的 qrurl，缺失时回退官方登录域名拼接
+  markChannel(unikey, "weapi");
   const qrValue = typeof json.qrurl === "string" && json.qrurl.startsWith("https://music.163.com/") ? json.qrurl : `https://music.163.com/login?codekey=${unikey}`;
-  return { unikey, qrValue };
+  return { unikey, qrValue, ttl: 180 };
 }
 
-export async function neteaseQrPoll(unikey: string, env: Env, userId: number): Promise<{ state: "waiting" | "scanned" | "confirmed" | "expired" | "risk"; error?: string }> {
+interface QrPollResult { code: number; cookie?: string | null; nickname?: string; avatarUrl?: string; message?: string }
+
+/** 开放通道轮询：GET 无加密；null = 请求失败（走 weapi 兜底） */
+async function openChannelPoll(unikey: string): Promise<QrPollResult | null> {
+  try {
+    const response = await fetch(`https://music.163.com/api/login/qrcode/client/login?key=${encodeURIComponent(unikey)}&type=1`, {
+      headers: {
+        "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "referer": "https://music.163.com/",
+      },
+      signal: AbortSignal.timeout(15000),
+    });
+    const json = await response.json() as Record<string, unknown>;
+    const code = Number(json.code);
+    if (!Number.isFinite(code)) return null;
+    const cookies = typeof (response.headers as { getSetCookie?: () => string[] }).getSetCookie === "function"
+      ? (response.headers as { getSetCookie: () => string[] }).getSetCookie() : [];
+    return {
+      code,
+      cookie: extractNeteaseLoginCookie(cookies),
+      nickname: typeof json.nickname === "string" ? json.nickname : undefined,
+      avatarUrl: typeof json.avatarUrl === "string" ? json.avatarUrl : undefined,
+      message: typeof json.message === "string" ? json.message : undefined,
+    };
+  } catch { return null; }
+}
+
+/** 扫码状态轮询 + 通道选路。返回 risk 表示风控异常码，由前端做连续容忍。 */
+export async function neteaseQrPoll(unikey: string, env: Env, userId: number): Promise<{ state: "waiting" | "scanned" | "confirmed" | "expired" | "risk"; error?: string; nickname?: string; avatarUrl?: string }> {
+  const clearJar = () => { qrCookieJar.delete(unikey); jarTimestamps.delete(unikey); };
+  const issuedBy = channelOf(unikey);
+
+  // 主通道：开放接口（weapi 签发的 key 跳过，避免跨通道误读）
+  if (issuedBy !== "weapi") {
+    const open = await openChannelPoll(unikey);
+    if (open) {
+      if (open.code === 803) {
+        if (!open.cookie) { clearJar(); return { state: "expired", error: "登录已确认但未能获取凭证，请重新扫码" }; }
+        await saveProviderCookie(env, userId, "netease", open.cookie);
+        clearJar();
+        return { state: "confirmed", nickname: open.nickname, avatarUrl: open.avatarUrl };
+      }
+      if (open.code === 802) return { state: "scanned", nickname: open.nickname, avatarUrl: open.avatarUrl };
+      if (open.code === 801) return { state: "waiting", nickname: open.nickname };
+      if (open.code === 800 && issuedBy === "open") { clearJar(); return { state: "expired" }; }
+      // 未知通道签发但 open 报 800/风控：交给 weapi 复核
+    }
+  }
+
+  // 兜底通道：weapi 轮询（带 Cookie 罐）
   const { json, cookies } = await weapiPost("/weapi/login/qrcode/client/login", { key: unikey, type: 1 }, jarHeader(unikey));
   jarAbsorb(unikey, cookies);
   const code = Number(json.code);
+  const nickname = typeof json.nickname === "string" ? json.nickname : undefined;
+  const avatarUrl = typeof json.avatarUrl === "string" ? json.avatarUrl : undefined;
   if (code === 803) {
-    qrCookieJar.delete(unikey); jarTimestamps.delete(unikey);
     const cookie = extractNeteaseLoginCookie([typeof json.cookie === "string" ? json.cookie : null, ...cookies]);
-    if (!cookie) {
-      console.error("netease qr confirmed but no MUSIC_U in response (json.cookie absent, set-cookie had none)");
-      return { state: "expired", error: "登录已确认但未能获取凭证，请重新扫码" };
-    }
+    if (!cookie) { clearJar(); return { state: "expired", error: "登录已确认但未能获取凭证，请重新扫码" }; }
     await saveProviderCookie(env, userId, "netease", cookie);
-    return { state: "confirmed" };
+    clearJar();
+    return { state: "confirmed", nickname, avatarUrl };
   }
-  if (code === 802) return { state: "scanned" };
-  if (code === 800) { qrCookieJar.delete(unikey); jarTimestamps.delete(unikey); return { state: "expired" }; }
-  // 风控类异常码（8821 安全环境 / -462 验证等）：独立 risk 状态交由前端做连续容忍，jar 保留以便瞬时误判后重试成功
+  if (code === 802) return { state: "scanned", nickname, avatarUrl };
+  if (code === 800) { clearJar(); return { state: "expired" }; }
+  // 风控类异常码（8821/-462 等）：独立 risk 状态交由前端连续容忍，jar 保留以便瞬时误判后恢复
   if (code !== 801) {
     const msg = typeof json.message === "string" ? json.message : "";
     return { state: "risk", error: `网易云暂时拒绝了本次校验（${code}${msg ? `：${msg}` : ""}）。多为本网络环境风控或扫码次数过多` };
   }
   return { state: "waiting" };
+}
+
+/** 已连接账号信息（昵称/头像）：10 分钟内存缓存，失败静默返回 null */
+const accountInfoCache = new Map<number, { nickname: string | null; avatarUrl: string | null; ts: number }>();
+export async function neteaseAccountInfo(env: Env, userId: number): Promise<{ nickname: string | null; avatarUrl: string | null } | null> {
+  const hit = accountInfoCache.get(userId);
+  if (hit && Date.now() - hit.ts < 10 * 60_000) return hit;
+  const cookie = await loadProviderCookie(env, userId, "netease");
+  if (!cookie) return null;
+  try {
+    const { json } = await weapiPost("/weapi/nuser/account/get", {}, cookie);
+    const profile = json.profile as { nickname?: string; avatarUrl?: string } | undefined;
+    const account = json.account as { id?: number } | undefined;
+    if (!profile && !account) return null;
+    const info = { nickname: profile?.nickname ?? null, avatarUrl: profile?.avatarUrl ?? null, ts: Date.now() };
+    accountInfoCache.set(userId, info);
+    return info;
+  } catch { return null; }
 }
 
 export interface NeteasePlaylistInfo { id: number; name: string; track_count: number; cover?: string; special?: boolean }
