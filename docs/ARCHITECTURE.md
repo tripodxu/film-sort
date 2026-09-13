@@ -62,24 +62,29 @@ ART/RANK 采用前后端一体化架构，部署在 Cloudflare Workers 上：
 ```
 src/
 ├── main.tsx              # React 入口，StrictMode 挂载
-├── App.tsx               # 主应用组件（~700行）
+├── App.tsx               # 应用外壳：路由/状态容器/视图编排/弹窗
 ├── types.ts              # 旧版类型定义
-├── styles.css            # 全局样式 + 响应式
+├── styles.css            # 设计令牌 + 六主题变量块 + 组件样式（data-theme 切换）
 ├── components/
-│   ├── Poster.tsx         # 海报组件
-│   ├── RankingDetail.tsx  # 统一榜单详情组件（分享页/比较详情弹窗/广场帖子详情共用）
-│   ├── ArtworkDetail.tsx  # 统一作品详情弹窗（所有作品海报点击入口共用）
+│   ├── Poster.tsx         # 海报组件（解析/代理/失败上报）
+│   ├── RankingDetail.tsx  # 统一榜单详情（分享页/比较详情弹窗/广场帖共用）
+│   ├── ArtworkDetail.tsx  # 统一作品详情弹窗（含音乐试听）
+│   ├── ThemeSwitcher.tsx  # 顶栏主题切换器（六主题下拉）
 │   ├── ExpandableNote.tsx # 长批注截断 + 展开查看
 │   ├── FocusTrap.tsx      # 弹窗焦点陷阱
 │   ├── ErrorBoundary.tsx  # 错误边界
-│   └── OrbScene.tsx       # 3D 光球场景
+│   └── OrbScene.tsx       # 3D 光球场景（reduced-motion 降级）
+├── views/                 # 各视图组件（Home/Source/Setup/Sorting/Profile/Compare/Share/Plaza/PlazaPost + types/helpers/IconButton）
 ├── data/
 │   ├── media.ts           # 媒介定义 + 内置榜单
 │   └── catalog.ts         # 电影目录数据
 └── lib/
-    ├── ranking.ts         # 排序状态机
-    ├── profile.ts         # 画像管理
-    └── collections.ts     # 清单导入
+    ├── ranking.ts         # 排序状态机（二分插入 + 回环检测 + 验证 + 快照撤销）
+    ├── profile.ts         # 画像管理 + 比较算法（15 项指标含 Kendall τ/年代偏好/共识评分）
+    ├── collections.ts     # 清单导入解析
+    ├── exportPng.ts       # PNG 导出：主题感知采样 + 五版式 Canvas 渲染
+    ├── notes.ts           # 三级批注存取
+    └── theme.ts           # 主题清单/持久化/data-theme 应用
 ```
 
 ### 2.3 状态管理
@@ -132,13 +137,14 @@ App.tsx 使用 React useState 管理所有状态，主要状态分组：
 
 ### 2.5 分享链接编码
 
-分享链接使用 fflate 压缩 + Base64URL 编码：
+现行方案为**服务端短码**：`POST /api/share` 将画像 JSON（≤512KB）存入 `shared_links` 表，返回 8 位十六进制码与两个 URL——
 
-```
-JSON → strToU8 → compressSync → Base64URL → /encounter?payload=<encoded>
-```
+- `/share/<code>`：只读分享查看页（ShareView）；
+- `/encounter?payload=<code>`：比较链接，前端按短码拉取后直接进入比较。
 
-解码时限制最大 512 KB，防止恶意链接。短码链接（8位十六进制）通过 D1 存储和检索。
+有效期 7/30/90/365 天可选（默认 30），cron 每周一清理过期行。
+
+历史兼容：`?payload=` 仍支持旧版 fflate 压缩内联编码（`decode()` 解压，上限 512KB 防 zip 炸弹），仅用于读取存量链接，不再用于生成。
 
 ---
 
@@ -280,15 +286,19 @@ interface RankedArtwork {
 - 按评分降序、排名差升序排列
 - 贪心选择不冲突的最优匹配
 
-**比较指标**
+**比较指标**（`profile.ts compareDimensions`，15 项）
+
+主指标：作品重合度、顺序一致率（并列序对剔除，保证相同画像=100%）、加权偏好一致（1/rank）、名次距离、冠军一致、Top 3 共识、Spearman 一致。
+
+扩展指标：
 | 指标 | 计算方式 |
 |------|----------|
-| 作品重合度 | 共同作品数 / 并集作品数 × 100 |
-| 加权偏好一致 | 基于 1/rank 权重的偏好一致性 |
-| 顺序一致率 | 序对一致数 / 总序对数 × 100 |
-| Top 3 共识 | 双方 Top 3 中共同作品数 |
-| 名次距离 | 平均名次差 / 最大名次 × 100 |
-| 冠军一致 | 双方第1名是否相同 |
+| Kendall τ-b | (一致序对-不一致序对)/√((C+D+Ty)(C+D+Tx))，映射 0-100（50=无关） |
+| Top-5 Jaccard | 双方前五名集合的交并比 × 100 |
+| 年代偏好 | 双方完整榜单年代中位数差，每差 1 年 -6 分 |
+| 综合共识评分 | 顺序一致 30% + 重合 20% + 加权偏好 20% + (100-名次距离) 15% + 年代 15% |
+
+比较页 UI：共识评分圆环 hero（conic-gradient，随主题色）+ 判词 + 主指标网格 + 可折叠「更多指标」+ 每指标 ? 悬浮解释。
 
 ---
 
@@ -319,6 +329,21 @@ async function route(request: Request, env: Env): Promise<Response> {
 ```
 
 广场相关路由（`/api/plaza/*`、`/api/comments/*`）由独立模块 `worker/plaza.ts` 处理，通过 `index.ts` 导入并分发。
+
+Worker 模块划分：
+
+| 文件 | 职责 |
+|------|------|
+| `index.ts` | 路由分发、安全头/CSP、限流、cron、管理看板内嵌 HTML、详情三步流程 |
+| `media.ts` | 豆瓣搜索/详情/Top250/suggest、海报解析、图片代理、简介消歧（维基+百科） |
+| `other.ts` | "其他"类别维基搜索/详情（opensearch + pageimages 图片） |
+| `plaza.ts` | 广场帖子 CRUD/点赞/留言/编辑历史/可见性 + 管理端 |
+| `account.ts` | 注册/登录/OAuth/画像云同步/云端清单 + 管理端账户 |
+| `import.ts` | 豆列/网易云歌单导入路由（`/api/import/*`） |
+| `doubanlist.ts` | 统一豆瓣导入：豆列/subject_collection/mine 三类链接识别与抓取 |
+| `netease.ts` | 网易云 weapi 加密、扫码（开放接口+weapi）、Cookie 保险库、歌单 |
+| `douban.ts` | 豆瓣扫码登录（qrlogin）、dbcl2 入库、Cookie 保险库 |
+| `audit.ts` | 管理操作审计写入 |
 
 ### 5.2 数据库 Schema
 
@@ -457,9 +482,46 @@ CREATE TABLE plaza_comments (
   post_id INTEGER NOT NULL REFERENCES plaza_posts(id),
   user_id INTEGER NOT NULL REFERENCES user_accounts(id),
   content TEXT NOT NULL,             -- 最长 500 字符
+  parent_id INTEGER REFERENCES plaza_comments(id),  -- 楼中楼回复（迁移 0014）
   created_at TEXT DEFAULT (datetime('now'))
 );
 ```
+
+**plaza_post_edits** — 广场编辑历史（迁移 0019，作者每次操作留痕，仅作者可见；有外键，删帖须先删此表）
+```sql
+CREATE TABLE plaza_post_edits (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  post_id INTEGER NOT NULL REFERENCES plaza_posts(id),
+  action TEXT NOT NULL,              -- reorder|add|remove|sync|meta|hide|restore
+  detail TEXT,
+  created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+);
+```
+
+**shared_links** — 分享短链（迁移 0009/0013）
+```sql
+CREATE TABLE shared_links (
+  code TEXT PRIMARY KEY,             -- 8 位十六进制
+  profile TEXT NOT NULL,             -- 画像 JSON（≤512KB）
+  notes TEXT,                        -- 批注（迁移 0013）
+  expires_at TEXT NOT NULL
+);
+```
+
+**user_cookie_vault** — 外部平台 Cookie 保险库（迁移 0020，AES-GCM 密文，密钥存 admin_config）
+```sql
+CREATE TABLE user_cookie_vault (
+  user_id INTEGER NOT NULL REFERENCES user_accounts(id),
+  provider TEXT NOT NULL,            -- netease | douban
+  data_encrypted TEXT NOT NULL,      -- hex(密文)|hex(iv)
+  updated_at TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+  PRIMARY KEY (user_id, provider)
+);
+```
+
+**oauth_exchanges** — 一次性 OAuth code→token 交换（迁移 0015，5 分钟有效，阅后即删）
+
+**admin_audit** — 管理操作审计日志（迁移 0016：action/detail/ip/created_at）
 
 ### 5.3 海报解析策略
 
@@ -490,14 +552,14 @@ CREATE TABLE plaza_comments (
 
 ### 5.4 详情获取策略
 
-作品详情（简介、元数据）获取优先级：
+作品详情（简介、元数据）获取优先级（`worker/index.ts` 三个 detail 路由 + `worker/media.ts fetchContentIntro`）：
 
-1. **Wikipedia 中文** — 直查标题 + 类型限定词搜索
-2. **Wikipedia 英文** — 同上
-3. **创作者组合搜索** — 如"三体 刘慈欣"
-4. **百度百科** — 最后兜底
+1. **豆瓣官方详情页 v:summary** — Step 1 搜索结果的 subject 链接直达详情，零歧义（`content_source=douban`）；
+2. **维基百科消歧打分择优** — 并行发起「限定标题精确查询（中/英，如「泰坦尼克号 (1997年电影)」）+ 裸标题 + 搜索」多路；候选按「首句类型声明一致 +3 / 类型词 +2 / 年份 +2 / 标题相关 +1 / 限定命中 +6」打分，消歧义页（"也可以指"等）直接剔除；简繁经 converttitles 归一；
+3. **创作者组合搜索** — 如"三体 刘慈欣"；
+4. **百度百科** — 最后兜底。
 
-元数据（评分、导演、出版社等）从豆瓣详情页或搜索结果解析。
+detail 路由接受 `year`/`creator` 参数辅助消歧（前端传作品已知元数据）。"其他"类别走 `worker/other.ts`（维基 opensearch + pageimages 取图，百科兜底）。
 
 ### 5.5 防限流机制
 
@@ -547,6 +609,9 @@ const SECURITY_HEADERS = {
 - `m.media-amazon.com`
 - `ia.media-imdb.com`
 - `image.tmdb.org`
+- `*.music.126.net`（网易云专辑封面）
+- `upload.wikimedia.org` / `thumb.wikimedia.org`（其他类别维基图片）
+- `bkimg.cdn.bcebos.com`（百度百科配图）
 
 拒绝非 HTTPS、带凭据或其他 host 的请求。
 

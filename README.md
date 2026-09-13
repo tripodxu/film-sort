@@ -32,7 +32,7 @@ ART/RANK 把"从看过、读过、听过的作品里排出自己的 Top N"拆成
 - **电影**：suggest API + Top250 索引 + search.douban.com 搜索 + IMDb 备用。
 - **书籍**：suggest API（`pic` 字段）+ Top250 索引 + search.douban.com 搜索。
 - **音乐**：Top250 索引 + search.douban.com 搜索（无 suggest API）。
-- **详情接口**：优先通过 Wikipedia（中英文）和百度百科获取内容简介；元数据从豆瓣搜索结果和详情页补充。
+- **详情接口**：简介优先取豆瓣官方详情页（零歧义），失败时降级维基百科消歧打分（限定标题/类型声明/年份守卫），百度百科兜底；元数据从豆瓣搜索与详情页补充。「其他」类别走维基（含配图）。
 - **防限流机制**：Edge UA 轮换、请求节流（同域名间隔 800ms）、自动重试（指数退避）、全局冷却期。
 - 海报解析不到或浏览器加载失败都会记录到 `poster_errors` 表，后台可按来源聚合并导出 CSV。
 
@@ -44,9 +44,11 @@ ART/RANK 把"从看过、读过、听过的作品里排出自己的 Top N"拆成
 - **豆瓣豆列**：粘贴 `douban.com/doulist/` 链接，Worker 端分页抓取整份豆列（最多 300 条，含标题/创作者/年份/评分/海报），按条目链接自动识别媒介；非当前媒介的作品会提示切换媒介后重导。
 - **网易云歌单**：音乐媒介粘贴歌单链接或 ID，抓取歌名/歌手/专辑封面（上限 300 首）；专辑封面经图片代理加载（`music.126.net` 已入白名单）。
 
-**网易云扫码连接**：音乐媒介可「扫码连接网易云」——用网易云音乐 App 扫二维码授权后，可浏览并一键导入自己的歌单（含「我喜欢的音乐」）。授权 Cookie 仅提取 `MUSIC_U` 并以 **AES-GCM 加密**存于 D1（绝不落明文，密钥存服务端配置），可随时断开并删除。豆瓣无公开扫码/OAuth 接口且详情页有反爬限制，故不支持豆瓣账号连接，请用豆列链接方式导入。
+**网易云扫码连接**：音乐媒介可「扫码连接网易云」——用网易云音乐 App 扫二维码授权后，可浏览并一键导入自己的歌单（含「我喜欢的音乐」与收藏歌单）。授权 Cookie 仅提取 `MUSIC_U`（+`__csrf`）并以 **AES-GCM 加密**存于 D1（绝不落明文，密钥首次使用自动生成存于 admin_config），可随时断开并删除。扫码被网易云风控拒绝时，弹窗内可直接「粘贴 Cookie 连接」兜底。
 
-- 导入接口仅登录用户可用；`/api/import/*` IP 限流 8 次/10 分钟，扫码轮询独立限流。
+**豆瓣连接**：电影/书籍媒介可「扫码连接豆瓣」（豆瓣 App 扫一扫，凭证 `dbcl2` 同样 AES-GCM 加密入库），连接后可一键导入自己的「想看/已看」「想读/已读」，并解锁需登录的私有豆列抓取；同样支持「粘贴 Cookie 连接」兜底。二维码经服务端代理下发（免跨域），有效期倒计时 + 最多 2 次自动换码。
+
+- 导入接口仅登录用户可用；`/api/import/*` IP 限流 8 次/10 分钟，扫码/连接端点独立限流（netease/douban 各 120 次/10 分钟）。
 
 ### 用户系统
 
@@ -120,7 +122,8 @@ ART/RANK 把"从看过、读过、听过的作品里排出自己的 Top N"拆成
 - **批注数据隔离**：通过 `/share/:code` 打开他人分享时，对方的批注只存入 `peerNotes`（会话级状态），绝不写入本地批注（`art-rank:notes`），也不会被同步到自己的云端画像。从分享页点击「与我比较」后，对方批注会保留并显示在比较详情弹窗中。
 - **批注阅读器（Amado 风格）**：批注编辑/查看弹窗采用 1060×880 大尺寸毛玻璃阅读器面板（backdrop blur 28px + 饱和度增强），等宽字体大写标题 + 衬线正文排版，海报模糊背景，底部悬浮胶囊工具栏，右下角取景框角标，移动端自动全屏。
 - **榜单详情弹窗优化**：共同作品和比较界面点击排名打开的详情弹窗，前三名显示金银铜牌奖牌；每个作品显示批注（📝）；点击海报可打开作品详情。
-- 导出格式：JSON、TXT、Markdown、CSV、PNG（三种布局：Editorial / Collage / Minimal）。
+- 导出格式：JSON、TXT、Markdown、CSV、PNG（五套版式：编辑 Editorial / 领奖台 Podium / 拼贴 Collage / 胶片 Filmstrip / 极简 Minimal；PNG 跟随当前主题配色，2x 高清）。
+- **六套主题**：现代（默认深色玻璃）/ 复古纸感 / 极简 / 简约 / 古典 / 赛博朋克——顶栏调色板切换，选择持久化，全站设计令牌驱动（非简单换色）。
 - 点击作品可查看详情弹窗（海报、评分、元数据）；音乐支持试听。
 
 ### URL 路由
@@ -341,21 +344,31 @@ film-sort3/
 | GET | `/api/book/list?key=&page=` | 书籍搜索 |
 | GET | `/api/movie/list?key=&page=` | 影视搜索 |
 | GET | `/api/music/list?key=&page=` | 音乐搜索 |
-| GET | `/api/book/detail?name=` | 书籍详情（Wikipedia 优先） |
-| GET | `/api/movie/detail?name=` | 影视详情（Wikipedia 优先） |
-| GET | `/api/music/detail?name=` | 音乐详情（Wikipedia 优先） |
+| GET | `/api/book/detail?name=&year=&creator=` | 书籍详情（豆瓣官方简介优先，维基消歧打分兜底） |
+| GET | `/api/movie/detail?name=&year=&creator=` | 影视详情（同上） |
+| GET | `/api/music/detail?name=&year=&creator=` | 音乐详情（同上） |
+| GET | `/api/other/list?key=` | 其他类别搜索（维基百科 opensearch + pageimages 图片） |
+| GET | `/api/other/detail?name=` | 其他类别详情（维基中英双语 + 百度百科兜底） |
+| GET | `/api/artwork/detail?kind=film|book|music|other&q=` | 统一作品详情入口 |
 | POST | `/api/insights` | 生成画像比较解读（需 AI_API_KEY） |
 | GET | `/api/music/play?q=` | 音乐试听地址代理 |
 | POST | `/api/poster-errors/client` | 浏览器端海报加载失败上报 |
 | POST | `/api/share` | 创建分享短链（可选 expires_days：7/30/90/365 天，返回 url/compareUrl/expires_at） |
 | GET | `/api/share/:code` | 获取分享内容（profile + notes + expires_at） |
 | GET | `/api/import/doulist?url=` | 导入豆瓣豆列（登录用户，IP 限流） |
+| GET | `/api/import/douban-list?url=` | 统一豆瓣导入：自动识别豆列 / subject_collection 清单 / mine 想看已看（登录用户） |
 | GET | `/api/import/netease?url=` | 导入网易云歌单（登录用户，支持连接 Cookie 导入私有歌单） |
 | GET | `/api/import/netease/mine` | 我的网易云歌单列表（需扫码连接） |
-| GET | `/api/netease/qr/issue` | 生成网易云扫码登录二维码（登录用户） |
-| GET | `/api/netease/qr/poll?unikey=` | 轮询扫码状态 waiting/scanned/confirmed/expired |
-| GET | `/api/netease/status` | 网易云连接状态 |
+| GET | `/api/netease/qr/issue` | 生成网易云扫码登录二维码（登录用户；开放接口优先/weapi 兜底，返回 ttl） |
+| GET | `/api/netease/qr/poll?unikey=` | 轮询扫码状态 waiting/scanned/confirmed/expired/risk |
+| GET | `/api/netease/status` | 网易云连接状态（含账号昵称头像） |
+| POST | `/api/netease/cookie` | 粘贴 Cookie 连接网易云（校验 MUSIC_U 有效后加密入库） |
 | POST | `/api/netease/disconnect` | 断开网易云连接并删除加密 Cookie |
+| GET | `/api/douban/qr/issue` | 生成豆瓣扫码登录二维码（服务端代理图片，返回 qr_image/ttl） |
+| GET | `/api/douban/qr/poll?code=` | 轮询豆瓣扫码状态 |
+| GET | `/api/douban/status` | 豆瓣连接状态（含昵称头像） |
+| POST | `/api/douban/cookie` | 粘贴 Cookie 连接豆瓣（校验 dbcl2 有效后加密入库） |
+| POST | `/api/douban/disconnect` | 断开豆瓣连接并删除加密 Cookie |
 
 ### 用户接口
 
@@ -383,7 +396,8 @@ film-sort3/
 | POST | `/api/plaza/posts` | 发布帖子到广场（ranking 榜单 / profile 画像，需登录） |
 | PUT | `/api/plaza/posts/:id` | 编辑自己的帖子（标题/描述/批注/排序 + edits 操作明细，需登录 + 所有权） |
 | GET | `/api/plaza/posts/:id/edits` | 获取帖子编辑历史（仅作者） |
-| DELETE | `/api/plaza/posts/:id` | 删除自己的帖子（需登录 + 所有权） |
+| POST | `/api/plaza/posts/:id/visibility` | 作者隐藏/恢复自己的帖子（隐藏后仅自己可见，写入编辑历史） |
+| DELETE | `/api/plaza/posts/:id` | 删除自己的帖子（需登录 + 所有权，级联清理编辑历史/评论/点赞） |
 | POST | `/api/plaza/posts/:id/like` | 点赞/取消点赞（需登录） |
 | GET | `/api/plaza/posts/:id/comments` | 获取留言列表 |
 | POST | `/api/plaza/posts/:id/comments` | 发表留言（需登录） |

@@ -142,7 +142,7 @@ GET /api/book/detail?name={书名}
 | title | string | 否 | 兼容旧参数，等同于 name |
 | url | string | 否 | `book.douban.com/subject/...` 格式 |
 
-优先通过 Wikipedia/Baidu Baike 获取 content_intro，再从豆瓣补充元数据。
+简介优先取豆瓣官方详情页 v:summary（零歧义）；豆瓣失败时降级维基消歧打分（限定标题/类型声明/年份），百度百科兜底。元数据从豆瓣详情页/搜索解析。
 
 **响应示例：**
 ```json
@@ -183,7 +183,7 @@ GET /api/movie/detail?name={电影名}
 | title | string | 否 | 兼容旧参数，等同于 name |
 | url | string | 否 | `movie.douban.com/subject/...` 格式 |
 
-优先通过 Wikipedia/Baidu Baike 获取 content_intro，再从豆瓣搜索补充元数据。
+简介优先取豆瓣官方详情页 v:summary；失败时降级维基消歧打分，百度百科兜底。元数据从豆瓣搜索补充。
 
 **响应示例：**
 ```json
@@ -220,7 +220,7 @@ GET /api/music/detail?name={专辑名}
 | title | string | 否 | 兼容旧参数，等同于 name |
 | url | string | 否 | `music.douban.com/subject/...` 格式 |
 
-优先通过 Wikipedia/Baidu Baike 获取 content_intro，再从豆瓣补充元数据。
+简介优先取豆瓣官方详情页 v:summary（零歧义）；豆瓣失败时降级维基消歧打分（限定标题/类型声明/年份），百度百科兜底。元数据从豆瓣详情页/搜索解析。
 
 **响应示例：**
 ```json
@@ -386,3 +386,26 @@ GET /api/douban/books/suggest?q={关键词}   # 书籍
 - `music.douban.com` 无 suggest API，音乐封面依赖 Top250 索引和搜索
 - `search.douban.com` 可能随时调整反爬策略
 - 所有接口依赖 Cloudflare Worker 环境，本地开发需 `npm run worker:dev`
+
+
+---
+
+## 统一豆瓣导入（/api/import/douban-list）
+
+一个输入框自动识别三类链接（`worker/doubanlist.ts classifyDoubanList`）：
+
+| 链接形态 | 抓取方式 | 是否需要连接豆瓣 |
+|---|---|---|
+| `douban.com/doulist/<id>` | HTML 解析（新版 `.doulist-item` + 旧版 `table.olt` 双兜底，≤300 条） | 公开可抓；私有豆列需连接 |
+| `m.douban.com/subject_collection/<ID>` | rexxar JSON API（`/items?type=S&start=&count=100` 分页） | 否（公开） |
+| `{movie,book}.douban.com/mine?status=wish\|collect\|doing` | HTML 解析 `.item-root` 卡片，分页 ≤300 | **是**（扫码或粘贴 Cookie） |
+
+响应：`{ works: [{ id, title, creator?, year?, rating?, poster_url?, type? }], total, kind }`。
+
+## 豆瓣扫码登录与 Cookie 保险库
+
+- 签发：`GET accounts.douban.com/j/mobile/login/qrlogin_code` → `payload{code, img, login_url}`；Worker 代理下载二维码图转 data URL 下发（免跨域）。
+- 轮询：`qrlogin_status?code=` → `payload.login_status`：`pending → scan → login / expired`。
+- `login` 时登录凭证 **`dbcl2`**（+`ck`）经 Set-Cookie 落入 unikey 级 Cookie 罐，提取后 AES-GCM 加密存入 `user_cookie_vault(provider='douban')`。
+- 兜底通道：`POST /api/douban/cookie` 粘贴浏览器 Cookie——正则提取 `dbcl2`，用 `/mine/` 重定向到 `/people/<uid>/` 校验真实有效后才入库（防存死 Cookie）。
+- 连接后 `GET /api/douban/status` 返回昵称头像（解析个人主页 `<title>`/og:image，10 分钟缓存）。

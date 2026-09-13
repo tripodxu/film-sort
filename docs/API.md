@@ -324,40 +324,66 @@ ART/RANK 后端 API 完整参考。所有接口由 Cloudflare Worker 处理，�
 
 ### GET /api/movie/detail
 
-影视详情。优先通过 Wikipedia 获取简介。
+影视详情。简介来源优先级：**豆瓣官方详情页 v:summary（零歧义）→ 维基百科（限定标题 + 消歧打分择优）→ 百度百科**。
 
 | 参数 | 类型 | 必填 | 说明 |
 |------|------|------|------|
-| name | string | 是 | 电影标题 |
+| name / title | string | 是* | 电影标题（与 url 二选一） |
+| url | string | 否 | 豆瓣 subject 链接，精确定位条目 |
+| year | string | 否 | 年份，用于构造维基限定标题（如「泰坦尼克号 (1997年电影)」）消歧 |
+| creator | string | 否 | 导演/主演，用于在豆瓣搜索多结果中挑选最匹配条目 |
 
 **响应：**
 ```json
 {
   "status": true,
-  "msg": "获取成功",
-  "time": "1.2s",
+  "msg": "ok",
+  "time": "0s",
   "data": {
     "title": "龙猫 となりのトトロ",
     "pic": "https://img9.doubanio.com/...",
     "rating": "9.2",
+    "year": "1988",
     "类型": "动画/奇幻/冒险",
     "制片国家/地区": "日本",
     "片长": "86分钟",
-    "content_intro": "My Neighbor Totoro is a 1988 Japanese animated fantasy film...",
-    "content_source": "enwiki"
+    "content_intro": "《龙猫》（日語：となりのトトロ）是一部由吉卜力工作室…",
+    "content_source": "douban"
   }
 }
 ```
 
-**content_source 取值：** `zhwiki` / `enwiki` / `baike`
+**content_source 取值：** `douban`（豆瓣官方简介，优先） / `zhwiki` / `enwiki` / `baike`
+
+**消歧机制**（`worker/media.ts fetchContentIntro`）：并行发起「限定标题精确查询（中/英）+ 裸标题查询 + 搜索」多路，候选按「首句类型声明一致 +3 / 类型词 +2 / 年份 +2 / 标题相关 +1 / 限定命中 +6，消歧义页 -1 剔除」打分取最优。
 
 ### GET /api/book/detail
 
-书籍详情。参数和响应格式同上，额外字段：`作者`, `出版社`, `出版年`, `页数`, `定价`, `ISBN`, `tags`。
+书籍详情。参数和响应格式同上，额外字段：`作者`, `出版社`, `出版年`, `页数`, `定价`, `ISBN`, `tags`, `author_intro`。
 
 ### GET /api/music/detail
 
 音乐详情。参数和响应格式同上，额外字段：`表演者`, `流派`, `专辑类型`, `介质`, `发行时间`, `songs`。
+
+### GET /api/other/list
+
+「其他」类别搜索（游戏/艺术/建筑等非影书音作品），走维基百科。
+
+| 参数 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| key | string | 是 | 关键词（≤80 字符），先 opensearch 取候选标题再批量取摘要+图片 |
+
+**响应：** `{ "status": true, "data": [{ "id": "wiki-zh-…", "title": "纪念碑谷 (游戏)", "subtitle": "解谜游戏", "year": 2014, "poster_url": "https://upload.wikimedia.org/…", "content_intro": "…", "content_source": "zhwiki" }] }`
+
+中文落空自动降级英文维基。IP 限流 20 次/10 分钟。
+
+### GET /api/other/detail
+
+「其他」类别详情。参数 `name`（≤120 字符）。中文精确标题直查 → 英文 → 百度百科 abstract 兜底。
+
+### GET /api/artwork/detail
+
+统一作品详情入口。`kind` ∈ `film|book|music|other`，`q` 为标题。film/book/music 走豆瓣 subject 详情；other 走维基。
 
 ---
 
@@ -837,3 +863,112 @@ OAuth 回调。自动创建或关联用户，重定向到前端带 token。
 **table 取值：** `all` / `api_logs` / `analytics_events` / `poster_errors`
 
 **action 取值：** `delete_all` / `delete_7d` / `keep_24h` / `delete_24h` / `keep_1h` / `delete_1h`
+
+---
+
+## 补充端点（2026-09 功能簇）
+
+### PUT /api/plaza/posts/:id（编辑扩展）
+
+除标题/描述/批注/排序外，请求体可带 `edits` 数组记录本次操作明细（服务端写入 `plaza_post_edits`，含时间戳）：
+
+```json
+{ "description": "改一下", "items": [ ... ], "item_count": 10,
+  "edits": [{ "action": "reorder", "detail": "把《X》移到第 2 位" }] }
+```
+
+`action` ∈ `reorder|add|remove|sync|meta|hide|restore`（≤40 字符），`detail` ≤300。最多 50 条/次。仅作者；未提供字段用 COALESCE 保留原值。
+
+### GET /api/plaza/posts/:id/edits
+
+获取帖子编辑历史（**仅作者**，≤200 条，倒序）。返回 `{ "edits": [{ "id", "action", "detail", "created_at" }] }`。
+
+### POST /api/plaza/posts/:id/visibility
+
+作者隐藏/恢复自己的帖子。请求体 `{ "is_public": false }`。隐藏后仅作者自己在列表/详情可见，并写入一条 `hide`/`restore` 编辑历史。
+
+### DELETE /api/plaza/posts/:id（删除扩展）
+
+作者删帖时以 batch 原子清理 `plaza_post_edits` → `plaza_comments` → `plaza_likes` → `plaza_posts`（编辑历史有外键，必须先删）。
+
+---
+
+## 分享短链
+
+### POST /api/share
+
+创建分享短链。需同源。请求体：`{ "profile": <ArtisticProfile>, "notes"?: {...}, "expires_days"?: 7|30|90|365 }`（默认 30 天，profile ≤512KB）。
+
+**响应：** `{ "code": "ab12CD34", "url": "https://…/share/ab12CD34", "compareUrl": "…", "expires_at": "…" }`
+
+### GET /api/share/:code
+
+读取分享内容（公开，无需登录）。过期返回 404。响应：`{ "profile", "notes", "expires_at" }`。
+
+> cron 每周一清理过期短链。
+
+---
+
+## 外部数据导入（均需 Bearer Token + IP 限流 8 次/10 分钟）
+
+### GET /api/import/doulist?url=
+
+导入豆瓣豆列（`douban.com/doulist/<id>`）。新旧版式双解析，≤300 条，按标签行提取创作者。已连接豆瓣时携带 Cookie（私有豆列可抓）。
+
+### GET /api/import/douban-list?url=
+
+**统一豆瓣导入入口**，自动识别三类链接：
+- `doulist/<id>` → 豆列
+- `m.douban.com/subject_collection/<ID>` → 豆瓣书影音清单（rexxar JSON，公开无需登录）
+- `{movie|book}.douban.com/mine?status=wish|collect|doing` → 我的想看/已看/在观（需已连接豆瓣，否则提示先连接）
+
+**响应：** `{ "works": [ImportedWork…], "total", "kind": "subject_collection|mine|doulist" }`
+
+### GET /api/import/netease?url=
+
+导入网易云歌单（`playlist?id=` 或纯 ID，公开接口）。已连接时带 Cookie 可导入私有歌单。
+
+### GET /api/import/netease/mine
+
+我的网易云歌单列表（需已扫码/Cookie 连接）。走开放接口 `api/user/playlist?uid=&limit=1000`，含收藏。返回 `{ "playlists": [{ id, name, track_count, cover, special, subscribed }] }`（special=我喜欢的音乐，subscribed=他人歌单收藏）。
+
+---
+
+## 网易云连接（需登录，IP 限流 120 次/10 分钟）
+
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| GET | `/api/netease/qr/issue` | 签发扫码二维码。开放接口优先、weapi 兜底。返回 `{ unikey, qr_value, ttl }`（ttl 秒） |
+| GET | `/api/netease/qr/poll?unikey=` | 轮询状态 `{ state: waiting\|scanned\|confirmed\|expired\|risk, error?, nickname?, avatarUrl? }`。803 成功时从 Set-Cookie 提取 MUSIC_U(+__csrf) 加密入库；风控码返回 risk 由前端连续容忍 |
+| GET | `/api/netease/status` | `{ connected, account: { nickname, avatarUrl } \| null }`（10 分钟内存缓存） |
+| POST | `/api/netease/cookie` | 粘贴 Cookie 连接。体 `{ cookie }`（含 MUSIC_U 或纯值），校验真实可用后入库 |
+| POST | `/api/netease/disconnect` | 断开并删除加密 Cookie |
+
+## 豆瓣连接（需登录，IP 限流 120 次/10 分钟）
+
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| GET | `/api/douban/qr/issue` | 签发二维码。`accounts.douban.com/j/mobile/login/qrlogin_code`，服务端代理下载二维码图转 data URL。返回 `{ code, qr_image, ttl }` |
+| GET | `/api/douban/qr/poll?code=` | 轮询 `qrlogin_status`，`login_status` pending→scan→login→expired；login 时从 Cookie 罐提取 `dbcl2`(+ck) 入库 |
+| GET | `/api/douban/status` | `{ connected, account: { nickname, avatarUrl } \| null }` |
+| POST | `/api/douban/cookie` | 粘贴 Cookie 连接（体 `{ cookie }`，含 dbcl2），`/mine/` 重定向校验有效后入库 |
+| POST | `/api/douban/disconnect` | 断开并删除 |
+
+> Cookie 保险库：`user_cookie_vault(user_id, provider, data_encrypted)`，AES-GCM 加密，密钥首次使用自动生成存 `admin_config('cookie_enc_key')`。provider ∈ `netease|douban`。
+
+---
+
+## 管理接口补充
+
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| GET | `/api/admin/accounts/:id/detail` | 用户完整数据（画像/批注/清单/会话/OAuth/广场数） |
+| GET | `/api/admin/plaza/posts` | 广场帖子管理列表（含隐藏、可筛选搜索、评论数校正） |
+| GET | `/api/admin/plaza/posts/:id` | 帖子完整详情（含全部评论与作者邮箱） |
+| POST | `/api/admin/plaza/posts/:id/visibility` | 管理员隐藏/恢复任意帖子 |
+| DELETE | `/api/admin/plaza/comments/:id` | 管理员删评论（连删直接回复，按实际数修正计数） |
+| POST | `/api/admin/reset` | 分级重置（analytics/plaza/shares/accounts 四档，需 confirm=RESET + 密码重验） |
+| GET | `/api/admin/audit` | 审计日志列表 |
+| POST | `/api/admin/change-password` | 修改管理密码 |
+| POST | `/api/admin/sessions/revoke-all` | 强制所有管理会话下线 |
+| POST | `/api/admin/links/clean-expired` | 立即清理过期短链 |
