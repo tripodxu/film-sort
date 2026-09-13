@@ -252,8 +252,8 @@ export async function importRoute(request: Request, env: Env): Promise<Response>
     if (!cookie) return json({ error: "not_connected", msg: "尚未连接网易云账号，请先扫码登录" }, 400);
     const uid = await neteaseUserId(cookie);
     if (!uid) return json({ error: "connection_expired", msg: "网易云连接已过期，请重新扫码登录" }, 401);
-    const playlists = await neteaseUserPlaylists(cookie, uid);
-    return json({ playlists });
+    const { playlists, blocked } = await neteaseUserPlaylists(cookie, uid);
+    return json({ playlists, blocked, uid });
   }
 
   return json({ error: "not_found" }, 404);

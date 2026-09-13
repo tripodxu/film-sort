@@ -316,27 +316,45 @@ export async function neteaseUserId(cookie: string): Promise<number | null> {
 }
 
 /**
- * 获取用户全部歌单（含收藏的），开放接口 GET api/user/playlist?uid=&limit=1000。
- * subscribed=true 表示「我收藏的」（他人歌单）；specialType=5 为「我喜欢的音乐」。
- * cookie 可选：该接口匿名可用，带 Cookie 时可见私有/收藏歌单。
+ * 获取用户全部歌单（含收藏的）。分层策略：
+ * 1. 开放接口 GET api/user/playlist?uid=&limit=1000（本机/住宅 IP 匿名可用；带 Cookie 更稳）
+ * 2. 空结果时 weapi POST /weapi/user/playlist/ 兜底（Cloudflare 海外出口常被匿名限制）
+ * 收藏歌单识别：匿名响应里 subscribed 恒为 null，需按 creator.userId ≠ 被查 uid 判定。
+ * blocked=true 表示两层都拿不到（网易云对本出口 IP 风控），前端引导用户连接账号。
  */
-export async function neteaseUserPlaylists(cookie: string | null | undefined, uid: number): Promise<NeteasePlaylistInfo[]> {
-  const response = await fetch(`https://music.163.com/api/user/playlist?uid=${encodeURIComponent(uid)}&limit=1000`, {
-    headers: {
-      "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-      "referer": "https://music.163.com/",
-      ...(cookie ? { cookie } : {}),
-    },
-    signal: AbortSignal.timeout(15000),
-  });
-  if (!response.ok) throw new Error("netease_playlist_failed");
-  const data = await response.json() as { playlist?: Array<{ id?: number; name?: string; trackCount?: number; coverImgUrl?: string; specialType?: number; subscribed?: boolean }> };
-  return (data.playlist ?? []).filter((p) => p.id && p.name).map((p) => ({
+export async function neteaseUserPlaylists(cookie: string | null | undefined, uid: number): Promise<{ playlists: NeteasePlaylistInfo[]; blocked: boolean }> {
+  type RawPlaylist = { id?: number; name?: string; trackCount?: number; coverImgUrl?: string; specialType?: number; subscribed?: boolean; creator?: { userId?: number } };
+  const map = (list: RawPlaylist[]): NeteasePlaylistInfo[] => list.filter((p) => p.id && p.name).map((p) => ({
     id: p.id as number,
     name: p.name as string,
     track_count: p.trackCount ?? 0,
     cover: p.coverImgUrl,
     special: p.specialType === 5,
-    subscribed: p.subscribed === true,
+    subscribed: p.subscribed === true || (p.creator?.userId != null && p.creator.userId !== uid),
   }));
+  // 第一层：开放接口
+  try {
+    const response = await fetch(`https://music.163.com/api/user/playlist?uid=${encodeURIComponent(uid)}&limit=1000`, {
+      headers: {
+        "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "referer": "https://music.163.com/",
+        ...(cookie ? { cookie } : {}),
+      },
+      signal: AbortSignal.timeout(15000),
+    });
+    if (response.ok) {
+      const data = await response.json() as { playlist?: RawPlaylist[] };
+      const playlists = map(data.playlist ?? []);
+      if (playlists.length) return { playlists, blocked: false };
+    }
+  } catch { /* fall through to weapi */ }
+  // 第二层：weapi 加密通道
+  try {
+    const { json } = await weapiPost("/weapi/user/playlist/", { uid, offset: 0, limit: 1000, includeVideo: true, appver: "8.9.70" }, cookie ?? null);
+    const playlists = map((json.playlist as RawPlaylist[] | undefined) ?? []);
+    if (playlists.length) return { playlists, blocked: false };
+  } catch (error) {
+    console.error("netease weapi user playlist failed:", error instanceof Error ? error.message : error);
+  }
+  return { playlists: [], blocked: true };
 }

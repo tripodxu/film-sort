@@ -1735,12 +1735,17 @@ async function route(request: Request, env: Env): Promise<Response> {
         const account = connected ? await neteaseAccountInfo(env, user.id) : null;
         return json({ connected, account });
       }
-      // 按 UID 浏览任意用户的公开歌单列表（api/user/playlist?uid= 匿名可用）
+      // 按 UID 浏览任意用户的公开歌单（含收藏）。开放接口优先、weapi 兜底；
+      // 两层都拿不到时 blocked=true（网易云对本出口 IP 匿名风控），前端引导连接账号。
       if (url.pathname === "/api/netease/user-playlists" && request.method === "GET") {
         const uid = Number(url.searchParams.get("uid")?.trim());
         if (!Number.isInteger(uid) || uid <= 0 || uid > 1e12) return json({ error: "invalid_uid", msg: "请输入正确的网易云用户 ID（个人主页 URL 里的纯数字）" }, 400);
-        const playlists = await neteaseUserPlaylists(await loadProviderCookie(env, user.id, "netease"), uid);
-        return json({ playlists, total: playlists.length });
+        const cookie = await loadProviderCookie(env, user.id, "netease");
+        const { playlists, blocked } = await neteaseUserPlaylists(cookie, uid);
+        return json({
+          playlists, total: playlists.length, blocked,
+          msg: blocked && !cookie ? "网易云暂时限制了服务器匿名访问。展开下方「连接我的网易云账号」后重试即可。" : undefined,
+        });
       }
       // 手动粘贴 Cookie 连接（扫码被风控时的替代入口）：校验 MUSIC_U 真实可用后才入保险库
       if (url.pathname === "/api/netease/cookie" && request.method === "POST") {

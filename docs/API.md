@@ -936,11 +936,16 @@ OAuth 回调。自动创建或关联用户，重定向到前端带 token。
 
 ### GET /api/import/netease/mine
 
-我的网易云歌单列表（需已扫码/Cookie 连接）。走开放接口 `api/user/playlist?uid=&limit=1000`，含收藏。返回 `{ "playlists": [{ id, name, track_count, cover, special, subscribed }] }`（special=我喜欢的音乐，subscribed=他人歌单收藏）。
+我的网易云歌单列表（需已扫码/Cookie 连接）。同样走 `neteaseUserPlaylists`（分层降级 + 收藏识别）。返回 `{ "playlists": [{ id, name, track_count, cover, special, subscribed }], "blocked", "uid" }`（special=我喜欢的音乐，subscribed=收藏的他人歌单；uid 供前端预填「按 UID 浏览」框）。
 
 ### GET /api/netease/user-playlists?uid=
 
-按用户 ID 浏览**任意用户**的公开歌单（`api/user/playlist?uid=` 匿名可用；已连接时带 Cookie 可见其私有/收藏）。返回 `{ "playlists": […同上…], "total" }`。`uid` 须为 1–13 位纯数字，否则 400。前端入口在「音乐 → 我的清单 → 输入对方网易云用户 ID 浏览歌单」。
+按用户 ID 浏览**任意用户**的全部歌单（含其收藏的）。分层策略：
+1. 开放接口 `api/user/playlist?uid=&limit=1000`（本机/住宅 IP 匿名可用；已连接时带 Cookie）
+2. 空结果自动降级 weapi `/weapi/user/playlist/`
+3. 两层都拿不到 → `{ playlists: [], blocked: true, msg: "…连接账号后重试" }`（网易云常对 Cloudflare 数据中心出口做匿名限制）
+
+返回 `{ "playlists": [{ id, name, track_count, cover, special, subscribed }], "total", "blocked" }`。收藏歌单识别：匿名响应 `subscribed` 恒为 null，按 `creator.userId ≠ 被查 uid` 判定。`uid` 须为 1–13 位纯数字，否则 400。前端入口：「音乐 → 我的清单 → 输入用户 ID/主页链接 → 浏览全部歌单 → 点选导入」。
 
 ---
 
