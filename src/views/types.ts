@@ -1,6 +1,7 @@
 import type { RankingState } from "../lib/ranking";
 import type { MediaCollection, MediaKind, Artwork } from "../data/media";
 import type { ArtisticProfile, RankingExport, RankedArtwork } from "../lib/profile";
+import type { ExportLayout } from "../lib/exportPng";
 
 export type Locale = "zh" | "en";
 
@@ -104,8 +105,8 @@ export interface ProfileViewProps {
   label: (kind: MediaKind) => string;
   format: "json" | "txt" | "md" | "csv" | "png";
   setFormat: (format: "json" | "txt" | "md" | "csv" | "png") => void;
-  exportLayout: "editorial" | "collage" | "minimal";
-  setExportLayout: (layout: "editorial" | "collage" | "minimal") => void;
+  exportLayout: ExportLayout;
+  setExportLayout: (layout: ExportLayout) => void;
   exportProfile: () => void;
   share: () => void;
   shareUrl: string;

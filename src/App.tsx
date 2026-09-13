@@ -5,6 +5,7 @@ import { createRankingState, chooseSide, deferWork, deserializeRankingState, get
 import { getCollectionsByKind, mediaLabels, type Artwork, type MediaCollection, type MediaKind } from "./data/media";
 import { compareDimensions, compareProfiles, compareRankings, LIBRARY_KEY, MAX_PROFILE_BYTES, mergeDimensionRankings, mergeProfiles, mergeRanking, parseProfile, profileText, readProfile, renameRanking, deleteRanking, reorderRanking, type ArtisticProfile, type RankingExport, type RankedArtwork } from "./lib/profile";
 import { importCollection } from "./lib/collections";
+import { renderProfilePng, pngFileName, type ExportLayout } from "./lib/exportPng";
 import { FocusTrap } from "./components/FocusTrap";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { readNotes, writeNotes, setNote } from "./lib/notes";
@@ -110,7 +111,7 @@ export default function App() {
   const [busy, setBusy] = useState(false);
   const [doubanLimit, setDoubanLimit] = useState(50);
   const [format, setFormat] = useState<"json" | "txt" | "md" | "csv" | "png">("json");
-  const [exportLayout, setExportLayout] = useState<"editorial" | "collage" | "minimal">("editorial");
+  const [exportLayout, setExportLayout] = useState<ExportLayout>("editorial");
   const [shareUrl, setShareUrl] = useState("");
   const [qrUrl, setQrUrl] = useState("");
   const [shareModal, setShareModal] = useState<{ ranking?: RankingExport } | null>(null);
@@ -650,45 +651,13 @@ export default function App() {
     const next = namedProfile(); if (!next) return;
     persist(next);
     if (format === "png") {
-      await exportProfilePng(next);
+      setBusy(true);
+      try {
+        const blob = await renderProfilePng({ profile: next, layout: exportLayout, locale, label, t });
+        saveFile(blob, pngFileName(next.profileName, exportLayout), "image/png");
+      } catch { setNotice(t("导出失败，请重试。", "Export failed, please retry.")); }
+      finally { setBusy(false); }
     } else saveFile(format === "json" ? JSON.stringify({ ...next, notes }, null, 2) : profileText(next, format, notes), `art-profile.${format}`, format === "json" ? "application/json" : "text/plain;charset=utf-8");
-  }
-  async function exportProfilePng(next: ArtisticProfile) {
-    await document.fonts.ready;
-    const canvas = document.createElement("canvas"); const width = 1200; const margin = 72;
-    const imageCache = new Map<string, HTMLImageElement>();
-    const imageUrl = (url: string) => { try { const parsed = new URL(url, location.origin); return parsed.hostname.endsWith("doubanio.com") ? `/api/image?url=${encodeURIComponent(parsed.toString())}` : parsed.toString(); } catch { return url; } };
-    const loadImage = async (work: { posterUrls?: readonly string[] }) => {
-      const source = work.posterUrls?.[0]; if (!source) return null; const cached = imageCache.get(source); if (cached) return cached;
-      return await new Promise<HTMLImageElement | null>((resolve) => { const image = new Image(); image.crossOrigin = "anonymous"; image.onload = () => { imageCache.set(source, image); resolve(image); }; image.onerror = () => resolve(null); image.src = imageUrl(source); });
-    };
-    const allItems = next.rankings.flatMap((entry) => entry.items);
-    await Promise.all(allItems.map((item) => loadImage(item)));
-    const rowHeight = exportLayout === "collage" ? 300 : 84;
-    const contentHeight = exportLayout === "minimal" ? next.rankings.reduce((sum, entry) => sum + 80 + entry.items.length * 44, 0) : next.rankings.reduce((sum, entry) => sum + 100 + Math.ceil(entry.items.length / (exportLayout === "collage" ? 5 : 1)) * rowHeight, 0);
-    canvas.width = width; canvas.height = Math.max(720, 280 + contentHeight);
-    const ctx = canvas.getContext("2d"); if (!ctx) return;
-    ctx.fillStyle = "#050806"; ctx.fillRect(0, 0, width, canvas.height);
-    ctx.fillStyle = "#79d9ae"; ctx.font = "600 24px Arial"; ctx.fillText("ART/RANK", margin, 76);
-    ctx.fillStyle = "#eef4ed"; ctx.font = "600 52px Arial"; ctx.fillText(next.profileName, margin, 150, width - margin * 2);
-    ctx.fillStyle = "#8ca296"; ctx.font = "16px Arial"; ctx.fillText(`${t("个人文化索引", "PERSONAL CULTURE INDEX")}  /  ${new Date().toLocaleDateString(locale === "zh" ? "zh-CN" : "en-US")}`, margin, 192);
-    const drawImage = (image: HTMLImageElement | null, x: number, y: number, w: number, h: number) => { ctx.save(); ctx.beginPath(); ctx.rect(x, y, w, h); ctx.clip(); if (image) { const scale = Math.max(w / image.width, h / image.height); const dw = image.width * scale; const dh = image.height * scale; ctx.drawImage(image, x + (w - dw) / 2, y + (h - dh) / 2, dw, dh); } else { ctx.fillStyle = "#1f3029"; ctx.fillRect(x, y, w, h); ctx.fillStyle = "#79d9ae"; ctx.font = "14px Arial"; ctx.fillText("NO COVER", x + 12, y + h / 2); } ctx.restore(); };
-    let cursor = 250;
-    for (const entry of next.rankings) {
-      ctx.fillStyle = "#79d9ae"; ctx.font = "600 14px Arial"; ctx.fillText(label(entry.kind).toUpperCase(), margin, cursor); ctx.fillStyle = "#d8e2d9"; ctx.font = "22px Arial"; ctx.fillText(entry.collectionTitle, margin + 100, cursor);
-      cursor += 28;
-      if (exportLayout === "minimal") {
-        entry.items.forEach((item) => { ctx.fillStyle = item.rank === 1 ? "#d8f86a" : "#dce7df"; ctx.font = `${item.rank === 1 ? "600" : "400"} 20px Arial`; ctx.fillText(`${String(item.rank).padStart(2, "0")}  ${item.title}`, margin, cursor); cursor += 44; });
-      } else if (exportLayout === "collage") {
-        const tileW = 188; const tileH = 248; const gap = 18;
-        entry.items.forEach((item, index) => { const col = index % 5; const row = Math.floor(index / 5); const x = margin + col * (tileW + gap); const y = cursor + row * (tileH + 50); const image = imageCache.get(item.posterUrls?.[0] ?? "") ?? null; drawImage(image, x, y, tileW, tileH); ctx.fillStyle = "#dce7df"; ctx.font = "14px Arial"; ctx.fillText(`${String(item.rank).padStart(2, "0")}  ${item.title}`.slice(0, 24), x, y + tileH + 24); }); cursor += Math.ceil(entry.items.length / 5) * (tileH + 50) + 28;
-      } else {
-        entry.items.forEach((item) => { const y = cursor; drawImage(imageCache.get(item.posterUrls?.[0] ?? "") ?? null, margin, y - 17, 44, 64); ctx.fillStyle = item.rank === 1 ? "#d8f86a" : "#dce7df"; ctx.font = `${item.rank === 1 ? "600" : "400"} 20px Arial`; ctx.fillText(`${String(item.rank).padStart(2, "0")}  ${item.title}`, margin + 62, y + 18, width - margin * 2 - 62); cursor += 84; }); cursor += 22;
-      }
-    }
-    ctx.fillStyle = "#43584b"; ctx.font = "13px Arial"; ctx.fillText(t("偏好没有标准答案", "PREFERENCE HAS NO ANSWER KEY"), margin, canvas.height - 34);
-    await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
-    canvas.toBlob((blob) => { if (blob) saveFile(blob, `art-profile-${exportLayout}.png`, "image/png"); });
   }
   async function shareSingleRanking(ranking: RankingExport) {
     const name = profileName.trim() || t("我的艺术人格", "My artistic profile");
