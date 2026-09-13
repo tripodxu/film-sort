@@ -928,9 +928,19 @@ OAuth 回调。自动创建或关联用户，重定向到前端带 token。
 
 导入网易云歌单（`playlist?id=` 或纯 ID，公开接口）。已连接时带 Cookie 可导入私有歌单。
 
+> **上游接口（2026-09 起）**：旧 `api/playlist/detail` 已要求登录（匿名返回 `code 20001`），改用两步链：
+> 1. `GET music.163.com/api/v6/playlist/detail?id=&n=1000&s=0` → `playlist.trackIds` 全量曲目 ID（v6 的 `tracks` 仅带前 ~10 首）
+> 2. `POST music.163.com/api/v3/song/detail`（表单 `c=[{"id":1},{"id":2},…]`，每片 ≤100 个）→ 批量补全全部曲目的 `name/ar[].name/al.name/al.picUrl`
+>
+> v3 全部失败时回退 v6 内联 `tracks`（至少前几首）。测试用例：歌单 `5204302550`（我喜欢的音乐，9 首）。
+
 ### GET /api/import/netease/mine
 
 我的网易云歌单列表（需已扫码/Cookie 连接）。走开放接口 `api/user/playlist?uid=&limit=1000`，含收藏。返回 `{ "playlists": [{ id, name, track_count, cover, special, subscribed }] }`（special=我喜欢的音乐，subscribed=他人歌单收藏）。
+
+### GET /api/netease/user-playlists?uid=
+
+按用户 ID 浏览**任意用户**的公开歌单（`api/user/playlist?uid=` 匿名可用；已连接时带 Cookie 可见其私有/收藏）。返回 `{ "playlists": […同上…], "total" }`。`uid` 须为 1–13 位纯数字，否则 400。前端入口在「音乐 → 我的清单 → 输入对方网易云用户 ID 浏览歌单」。
 
 ---
 

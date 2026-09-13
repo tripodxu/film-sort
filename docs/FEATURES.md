@@ -103,8 +103,9 @@
 | 豆瓣豆列导入（新旧版式双解析，≤300 条，创作者标签提取） | Source 粘贴链接 | `/api/import/doulist`、`/api/import/douban-list` |
 | 豆瓣清单导入（m.douban.com/subject_collection/XXX，rexxar JSON） | 同一输入框自动识别 | `/api/import/douban-list` |
 | 我的豆瓣「想看/已看/想读/已读」导入（需连接） | 一键按钮 / mine 链接 | `{movie,book}.douban.com/mine` 解析 |
-| 网易云歌单导入（公开链接即可；私有需连接） | Source 粘贴 | `/api/import/netease` |
+| 网易云歌单导入（公开链接即可；私有需连接；v6 detail + v3 song/detail 两步链，旧 detail 已要求登录） | Source 粘贴 | `/api/import/netease` |
 | 网易云「我的歌单」浏览（含收藏，special=我喜欢的音乐） | 连接后「浏览我的歌单」 | `/api/import/netease/mine` |
+| 按用户 ID 浏览任意用户的公开歌单并选导入（无需连接网易云） | 「输入对方网易云用户 ID → 浏览歌单」 | `/api/netease/user-playlists?uid=` |
 | 网易云扫码连接（开放接口优先 + weapi 兜底 + Cookie 罐 + 倒计时换码≤2 次 + 风控连续 3 次降级） | 「扫码连接网易云」 | `/api/netease/qr/*` |
 | 豆瓣扫码连接（qrlogin_code/status，dbcl2 入库，服务端代理二维码图） | 「扫码连接豆瓣」 | `/api/douban/qr/*` |
 | 粘贴 Cookie 连接（校验凭证真实可用才入库；扫码风控的兜底） | 弹窗内/「粘贴 Cookie 连接」 | `POST /api/netease/cookie`、`/api/douban/cookie` |
@@ -163,7 +164,7 @@
 4. 比较：贴对方链接→共识圆环+全指标+悬浮解释→共同/分歧表→点名次进详情→AI 解读→用对方排序
 5. 分享：短链+有效期、二维码、/share 页、比较链接
 6. 广场：发布→列表(排序/筛选/搜索/滚动)→点赞/评论/回复→作者编辑/历史/隐藏/删除→与曾经的我比较→同步提示
-7. 导入：豆列/subject_collection/mine(连接后一键)/网易云公开+私有/other 维基搜索带海报
+7. 导入：豆列/subject_collection/mine(连接后一键)/网易云公开+私有/网易云按 UID 浏览他人公开歌单/other 维基搜索带海报
 8. 账号：注册/登录/OAuth/同步/冲突弹窗/退出清数据
 9. 主题：六主题切换、刷新持久化、PNG 跟随
 10. /admin 四页签各一操作

@@ -120,6 +120,10 @@ export async function fetchDoulist(doulistUrl: string, cookie?: string | null): 
 // ===== 网易云歌单抓取 =====
 
 interface NeteaseTrack { id?: number; name?: string; artists?: Array<{ name?: string }>; album?: { name?: string; picUrl?: string } }
+/** v3/song/detail 的 c= 格式返回的简化曲结构 */
+interface NeteaseSong { id?: number; name?: string; ar?: Array<{ name?: string }>; al?: { name?: string; picUrl?: string } }
+
+const NETEASE_UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36";
 
 /** 从链接或纯 ID 提取歌单 ID（支持 music.163.com/playlist?id= 与 #/playlist?id= 形式） */
 export function neteasePlaylistId(raw: string): string | null {
@@ -129,20 +133,50 @@ export function neteasePlaylistId(raw: string): string | null {
   return match ? match[1] : null;
 }
 
-/** 调网易云音乐公开接口抓取歌单曲目（带连接 Cookie 时私有歌单也可导入） */
+/**
+ * 抓取歌单曲目。旧接口 api/playlist/detail 已要求登录（返回 code 20001），
+ * 改用两步链（均匿名可用，带 Cookie 时私有歌单也可导入）：
+ * 1. GET  api/v6/playlist/detail?id=&n=1000   → playlist.trackIds 全量 ID + tracks 前若干首
+ * 2. POST api/v3/song/detail (c=[{id},...])   → 批量补全全部曲目（名称/歌手/专辑/封面）
+ */
 export async function fetchNeteasePlaylist(playlistId: string, cookie?: string | null): Promise<ImportedWork[]> {
-  const response = await fetch(`https://music.163.com/api/playlist/detail?id=${encodeURIComponent(playlistId)}`, {
-    headers: {
-      "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36",
-      "referer": "https://music.163.com/",
-      ...(cookie ? { cookie } : {}),
-    },
-    signal: AbortSignal.timeout(15000),
+  const headers: Record<string, string> = { "user-agent": NETEASE_UA, "referer": "https://music.163.com/" };
+  if (cookie) headers.cookie = cookie;
+  const detailResponse = await fetch(`https://music.163.com/api/v6/playlist/detail?id=${encodeURIComponent(playlistId)}&n=1000&s=0`, {
+    headers, signal: AbortSignal.timeout(15000),
   });
-  if (!response.ok) throw new Error(`netease_http_${response.status}`);
-  const data = await response.json() as { code?: number; result?: { tracks?: NeteaseTrack[] } };
-  const tracks = data.result?.tracks ?? [];
-  return tracks.slice(0, 300).map((track) => ({
+  if (!detailResponse.ok) throw new Error(`netease_http_${detailResponse.status}`);
+  const detail = await detailResponse.json() as { code?: number; playlist?: { name?: string; trackCount?: number; trackIds?: Array<{ id?: number }>; tracks?: NeteaseTrack[] } };
+  const playlist = detail.playlist;
+  if (!playlist) throw new Error("netease_playlist_not_found");
+  // 先按 trackIds 收集全部 ID（v6 的 tracks 只带前 ~10 首）
+  const ids = (playlist.trackIds ?? []).map((t) => t.id).filter((id): id is number => typeof id === "number").slice(0, 300);
+  const songs: NeteaseSong[] = [];
+  if (ids.length) {
+    // c= 批量接口单次上限约 100，分片请求
+    for (let start = 0; start < ids.length; start += 100) {
+      const chunk = ids.slice(start, start + 100);
+      const body = "c=" + encodeURIComponent("[" + chunk.map((id) => `{"id":${id}}`).join(",") + "]");
+      const response = await fetch("https://music.163.com/api/v3/song/detail", {
+        method: "POST",
+        headers: { ...headers, "content-type": "application/x-www-form-urlencoded" },
+        body, signal: AbortSignal.timeout(15000),
+      });
+      if (!response.ok) throw new Error(`netease_songs_http_${response.status}`);
+      const data = await response.json() as { code?: number; songs?: NeteaseSong[] };
+      songs.push(...(data.songs ?? []));
+    }
+  }
+  const works = songs.map((song) => ({
+    id: `netease-${song.id ?? Math.random().toString(36).slice(2, 10)}`,
+    title: song.name ?? "",
+    creator: (song.ar ?? []).map((a) => a.name).filter(Boolean).join("/") || song.al?.name || undefined,
+    poster_url: song.al?.picUrl,
+    type: "music" as const,
+  })).filter((work) => work.title);
+  if (works.length) return works;
+  // v3 全部失败时回退 v6 自带的部分 tracks（至少能拿到前几首）
+  return (playlist.tracks ?? []).slice(0, 300).map((track) => ({
     id: `netease-${track.id ?? Math.random().toString(36).slice(2, 10)}`,
     title: track.name ?? "",
     creator: (track.artists ?? []).map((a) => a.name).filter(Boolean).join("/") || track.album?.name || undefined,

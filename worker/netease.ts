@@ -318,13 +318,14 @@ export async function neteaseUserId(cookie: string): Promise<number | null> {
 /**
  * 获取用户全部歌单（含收藏的），开放接口 GET api/user/playlist?uid=&limit=1000。
  * subscribed=true 表示「我收藏的」（他人歌单）；specialType=5 为「我喜欢的音乐」。
+ * cookie 可选：该接口匿名可用，带 Cookie 时可见私有/收藏歌单。
  */
-export async function neteaseUserPlaylists(cookie: string, uid: number): Promise<NeteasePlaylistInfo[]> {
+export async function neteaseUserPlaylists(cookie: string | null | undefined, uid: number): Promise<NeteasePlaylistInfo[]> {
   const response = await fetch(`https://music.163.com/api/user/playlist?uid=${encodeURIComponent(uid)}&limit=1000`, {
     headers: {
       "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
       "referer": "https://music.163.com/",
-      cookie,
+      ...(cookie ? { cookie } : {}),
     },
     signal: AbortSignal.timeout(15000),
   });

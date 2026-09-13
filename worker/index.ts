@@ -3,7 +3,7 @@ import { accountRoute, hashPasswordStrong, needsPasswordUpgrade, timingSafeEqual
 import { getUserFromToken } from "./account";
 import { adminPlazaRoute, plazaRoute } from "./plaza";
 import { importRoute } from "./import";
-import { neteaseQrIssue, neteaseQrPoll, hasProviderCookie, deleteProviderCookie, saveProviderCookie, neteaseUserId, neteaseAccountInfo } from "./netease";
+import { neteaseQrIssue, neteaseQrPoll, hasProviderCookie, deleteProviderCookie, saveProviderCookie, loadProviderCookie, neteaseUserId, neteaseAccountInfo, neteaseUserPlaylists } from "./netease";
 import { doubanQrIssue, doubanQrPoll, extractDoubanLoginCookie, doubanUserId, doubanAccountInfo } from "./douban";
 import { otherSearch, otherDetail } from "./other";
 import { recordAudit } from "./audit";
@@ -1734,6 +1734,13 @@ async function route(request: Request, env: Env): Promise<Response> {
         const connected = await hasProviderCookie(env, user.id, "netease");
         const account = connected ? await neteaseAccountInfo(env, user.id) : null;
         return json({ connected, account });
+      }
+      // 按 UID 浏览任意用户的公开歌单列表（api/user/playlist?uid= 匿名可用）
+      if (url.pathname === "/api/netease/user-playlists" && request.method === "GET") {
+        const uid = Number(url.searchParams.get("uid")?.trim());
+        if (!Number.isInteger(uid) || uid <= 0 || uid > 1e12) return json({ error: "invalid_uid", msg: "请输入正确的网易云用户 ID（个人主页 URL 里的纯数字）" }, 400);
+        const playlists = await neteaseUserPlaylists(await loadProviderCookie(env, user.id, "netease"), uid);
+        return json({ playlists, total: playlists.length });
       }
       // 手动粘贴 Cookie 连接（扫码被风控时的替代入口）：校验 MUSIC_U 真实可用后才入保险库
       if (url.pathname === "/api/netease/cookie" && request.method === "POST") {

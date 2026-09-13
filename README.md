@@ -42,7 +42,7 @@ ART/RANK 把"从看过、读过、听过的作品里排出自己的 Top N"拆成
 
 - **即搜即加**：输入标题回车，豆瓣搜索候选（电影/书籍/音乐三类全启用）以海报+元数据点选加入；无匹配可仅以标题加入；原批量 TXT/JSON 导入折叠为高级入口。
 - **豆瓣豆列**：粘贴 `douban.com/doulist/` 链接，Worker 端分页抓取整份豆列（最多 300 条，含标题/创作者/年份/评分/海报），按条目链接自动识别媒介；非当前媒介的作品会提示切换媒介后重导。
-- **网易云歌单**：音乐媒介粘贴歌单链接或 ID，抓取歌名/歌手/专辑封面（上限 300 首）；专辑封面经图片代理加载（`music.126.net` 已入白名单）。
+- **网易云歌单**：音乐媒介粘贴歌单链接或 ID，抓取歌名/歌手/专辑封面（上限 300 首）；也可输入对方用户 ID 浏览 TA 的公开歌单再选导入。专辑封面经图片代理加载（`music.126.net` 已入白名单）。
 
 **网易云扫码连接**：音乐媒介可「扫码连接网易云」——用网易云音乐 App 扫二维码授权后，可浏览并一键导入自己的歌单（含「我喜欢的音乐」与收藏歌单）。授权 Cookie 仅提取 `MUSIC_U`（+`__csrf`）并以 **AES-GCM 加密**存于 D1（绝不落明文，密钥首次使用自动生成存于 admin_config），可随时断开并删除。扫码被网易云风控拒绝时，弹窗内可直接「粘贴 Cookie 连接」兜底。
 
@@ -357,8 +357,9 @@ film-sort3/
 | GET | `/api/share/:code` | 获取分享内容（profile + notes + expires_at） |
 | GET | `/api/import/doulist?url=` | 导入豆瓣豆列（登录用户，IP 限流） |
 | GET | `/api/import/douban-list?url=` | 统一豆瓣导入：自动识别豆列 / subject_collection 清单 / mine 想看已看（登录用户） |
-| GET | `/api/import/netease?url=` | 导入网易云歌单（登录用户，支持连接 Cookie 导入私有歌单） |
+| GET | `/api/import/netease?url=` | 导入网易云歌单（登录用户，支持连接 Cookie 导入私有歌单；v6 detail + v3 song/detail 两步链） |
 | GET | `/api/import/netease/mine` | 我的网易云歌单列表（需扫码连接） |
+| GET | `/api/netease/user-playlists?uid=` | 按用户 ID 浏览任意用户的公开歌单（无需连接网易云） |
 | GET | `/api/netease/qr/issue` | 生成网易云扫码登录二维码（登录用户；开放接口优先/weapi 兜底，返回 ttl） |
 | GET | `/api/netease/qr/poll?unikey=` | 轮询扫码状态 waiting/scanned/confirmed/expired/risk |
 | GET | `/api/netease/status` | 网易云连接状态（含账号昵称头像） |

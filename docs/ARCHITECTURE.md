@@ -339,9 +339,9 @@ Worker 模块划分：
 | `other.ts` | "其他"类别维基搜索/详情（opensearch + pageimages 图片） |
 | `plaza.ts` | 广场帖子 CRUD/点赞/留言/编辑历史/可见性 + 管理端 |
 | `account.ts` | 注册/登录/OAuth/画像云同步/云端清单 + 管理端账户 |
-| `import.ts` | 豆列/网易云歌单导入路由（`/api/import/*`） |
+| `import.ts` | 豆列/网易云歌单导入路由（`/api/import/*`）；网易云用 v6 detail + v3 song/detail 两步链（旧 detail 已要求登录） |
 | `doubanlist.ts` | 统一豆瓣导入：豆列/subject_collection/mine 三类链接识别与抓取 |
-| `netease.ts` | 网易云 weapi 加密、扫码（开放接口+weapi）、Cookie 保险库、歌单 |
+| `netease.ts` | 网易云 weapi 加密、扫码（开放接口+weapi）、Cookie 保险库、用户歌单（`api/user/playlist` 匿名可用） |
 | `douban.ts` | 豆瓣扫码登录（qrlogin）、dbcl2 入库、Cookie 保险库 |
 | `audit.ts` | 管理操作审计写入 |
 

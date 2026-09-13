@@ -59,7 +59,7 @@ Cookie 保险库密钥无需配置：首次使用时自动生成 AES-256 密钥�
 
 - **豆瓣数据**：`/api/douban/{top250,books/top250,music/top250,suggest,books/suggest}`、`/api/{movie,book,music}/{list,detail}`（详情豆瓣官方简介优先→维基消歧打分→百度百科）、`/api/other/{list,detail}`（其他类别维基）、`/api/artwork/detail`、`/api/posters`、`/api/image`
 - **导入**：`/api/import/{doulist,douban-list,netease,netease/mine}`（登录 + 8 次/10 分钟）
-- **连接**：`/api/netease/*`、`/api/douban/*`（扫码/Cookie/status/disconnect，登录 + 120/10 分钟）
+- **连接**：`/api/netease/*`、`/api/douban/*`（扫码/Cookie/status/disconnect/user-playlists 按 UID 浏览他人公开歌单，登录 + 120/10 分钟）
 - **广场**：`/api/plaza/posts*`、`/api/comments/:id`
 - **账号**：`/api/account/*`
 - **分享/挑战**：`POST /api/share`、`GET /api/share/:code`、`/api/challenges*`
