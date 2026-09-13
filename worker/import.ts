@@ -135,12 +135,26 @@ export function neteasePlaylistId(raw: string): string | null {
 
 /**
  * 抓取歌单曲目。旧接口 api/playlist/detail 已要求登录（返回 code 20001）。
- * 分层策略（Cloudflare 海外出口常被网易云匿名风控，开放接口静默返回空）：
+ * 分层策略（Cloudflare 海外出口常被网易云匿名风控，开放接口静默返回空、weapi 单发可通但连发限流）：
  * 1. 开放接口 GET api/v6/playlist/detail → trackIds 全量 ID + tracks 前若干首
- * 2. 空结果降级 weapi /weapi/v6/playlist/detail/
- * 3. 曲目批量：POST api/v3/song/detail (c=[{id},...])，空则降级 weapi /weapi/v3/song/detail/
+ * 2. 空结果降级 weapi /weapi/v6/playlist/detail/（失败退避重试 2 次）
+ * 3. 曲目批量：POST api/v3/song/detail (c=[{id},...])，空则降级 weapi（同样退避）；分片间 700ms 节流
  * 带 Cookie 时私有歌单也可导入。
  */
+const neteaseSleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+/** 依次尝试多个取数器，返回首个非空结果；每次失败后退避（网易云对 CF 出口连发限流） */
+async function firstNonEmpty<T>(attempts: Array<() => Promise<T[]>>): Promise<T[]> {
+  for (const attempt of attempts) {
+    try {
+      const got = await attempt();
+      if (got.length) return got;
+    } catch { /* try next */ }
+    await neteaseSleep(900);
+  }
+  return [];
+}
+
 export async function fetchNeteasePlaylist(playlistId: string, cookie?: string | null): Promise<ImportedWork[]> {
   const headers: Record<string, string> = { "user-agent": NETEASE_UA, "referer": "https://music.163.com/" };
   if (cookie) headers.cookie = cookie;
@@ -148,50 +162,52 @@ export async function fetchNeteasePlaylist(playlistId: string, cookie?: string |
   let ids: number[] = [];
   let fallbackTracks: NeteaseTrack[] = [];
   const collectIds = (pl: DetailShape | undefined) => (pl?.trackIds ?? []).map((t) => t.id).filter((id): id is number => typeof id === "number").slice(0, 300);
-  // 第一层：开放接口 v6 detail
-  try {
-    const detailResponse = await fetch(`https://music.163.com/api/v6/playlist/detail?id=${encodeURIComponent(playlistId)}&n=1000&s=0`, { headers, signal: AbortSignal.timeout(15000) });
-    if (detailResponse.ok) {
-      const detail = await detailResponse.json() as { playlist?: DetailShape };
-      ids = collectIds(detail.playlist);
-      fallbackTracks = detail.playlist?.tracks ?? [];
-    }
-  } catch { /* fall through to weapi */ }
-  // 第二层：weapi 加密通道兜底 detail
-  if (!ids.length) {
-    try {
+  const detailAttempts: Array<() => Promise<DetailShape | undefined>> = [
+    async () => {
+      const response = await fetch(`https://music.163.com/api/v6/playlist/detail?id=${encodeURIComponent(playlistId)}&n=1000&s=0`, { headers, signal: AbortSignal.timeout(15000) });
+      if (!response.ok) return undefined;
+      return ((await response.json()) as { playlist?: DetailShape }).playlist;
+    },
+    async () => {
       const { json } = await weapiPost("/weapi/v6/playlist/detail/", { id: playlistId, n: 1000, s: 0 }, cookie ?? null);
-      const pl = json.playlist as DetailShape | undefined;
+      return json.playlist as DetailShape | undefined;
+    },
+    async () => {
+      const { json } = await weapiPost("/weapi/v6/playlist/detail/", { id: playlistId, n: 1000, s: 0 }, cookie ?? null);
+      return json.playlist as DetailShape | undefined;
+    },
+  ];
+  for (const attempt of detailAttempts) {
+    try {
+      const pl = await attempt();
       ids = collectIds(pl);
       if (!fallbackTracks.length) fallbackTracks = pl?.tracks ?? [];
-    } catch (error) {
-      console.error("netease weapi detail failed:", error instanceof Error ? error.message : error);
-    }
+      if (ids.length) break;
+    } catch { /* next attempt */ }
+    await neteaseSleep(900);
   }
   if (!ids.length && !fallbackTracks.length) throw new Error("netease_playlist_not_found");
-  // 第三层：批量补全曲目（开放 v3 → weapi v3），v6 的 tracks 只带前 ~10 首
+  // 批量补全曲目（v6 的 tracks 只带前 ~10 首）：开放 v3 → weapi v3 ×2，分片间节流
   const songs: NeteaseSong[] = [];
   for (let start = 0; start < ids.length; start += 100) {
+    if (start > 0) await neteaseSleep(700);
     const chunk = ids.slice(start, start + 100);
     const cJson = "[" + chunk.map((id) => `{"id":${id}}`).join(",") + "]";
-    let got: NeteaseSong[] = [];
-    try {
-      const response = await fetch("https://music.163.com/api/v3/song/detail", {
-        method: "POST",
-        headers: { ...headers, "content-type": "application/x-www-form-urlencoded" },
-        body: "c=" + encodeURIComponent(cJson),
-        signal: AbortSignal.timeout(15000),
-      });
-      if (response.ok) got = ((await response.json()) as { songs?: NeteaseSong[] }).songs ?? [];
-    } catch { /* fall through to weapi */ }
-    if (!got.length) {
-      try {
-        const { json } = await weapiPost("/weapi/v3/song/detail/", { c: cJson, ids: "[" + chunk.join(",") + "]" }, cookie ?? null);
-        got = (json.songs as NeteaseSong[] | undefined) ?? [];
-      } catch (error) {
-        console.error("netease weapi songs failed:", error instanceof Error ? error.message : error);
-      }
-    }
+    const idsJson = "[" + chunk.join(",") + "]";
+    const got = await firstNonEmpty<NeteaseSong>([
+      async () => {
+        const response = await fetch("https://music.163.com/api/v3/song/detail", {
+          method: "POST",
+          headers: { ...headers, "content-type": "application/x-www-form-urlencoded" },
+          body: "c=" + encodeURIComponent(cJson),
+          signal: AbortSignal.timeout(15000),
+        });
+        if (!response.ok) return [];
+        return ((await response.json()) as { songs?: NeteaseSong[] }).songs ?? [];
+      },
+      async () => ((await weapiPost("/weapi/v3/song/detail/", { c: cJson, ids: idsJson }, cookie ?? null)).json.songs as NeteaseSong[] | undefined) ?? [],
+      async () => ((await weapiPost("/weapi/v3/song/detail/", { c: cJson, ids: idsJson }, cookie ?? null)).json.songs as NeteaseSong[] | undefined) ?? [],
+    ]);
     songs.push(...got);
   }
   const fromSongs = songs.map((song) => ({

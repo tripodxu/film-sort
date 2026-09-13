@@ -928,11 +928,12 @@ OAuth 回调。自动创建或关联用户，重定向到前端带 token。
 
 导入网易云歌单（`playlist?id=` 或纯 ID，公开接口）。已连接时带 Cookie 可导入私有歌单。
 
-> **上游接口（2026-09 起）**：旧 `api/playlist/detail` 已要求登录（匿名返回 `code 20001`），改用两步链：
+> **上游接口（2026-09 起）**：旧 `api/playlist/detail` 已要求登录（匿名返回 `code 20001`），改用分层链。Cloudflare 海外出口常被网易云匿名风控（开放接口静默返回空、weapi 单发可通但连发限流），故每层带退避重试与分片节流：
 > 1. `GET music.163.com/api/v6/playlist/detail?id=&n=1000&s=0` → `playlist.trackIds` 全量曲目 ID（v6 的 `tracks` 仅带前 ~10 首）
-> 2. `POST music.163.com/api/v3/song/detail`（表单 `c=[{"id":1},{"id":2},…]`，每片 ≤100 个）→ 批量补全全部曲目的 `name/ar[].name/al.name/al.picUrl`
+> 2. 空则降级 `POST music.163.com/weapi/v6/playlist/detail/`（AES-CBC+RSA 加密，重试 2 次、间隔 900ms）
+> 3. 曲目批量：`POST music.163.com/api/v3/song/detail`（表单 `c=[{"id":1},…]`，每片 ≤100 个），空则降级 `weapi/v3/song/detail/`；分片间 700ms 节流
 >
-> v3 全部失败时回退 v6 内联 `tracks`（至少前几首）。测试用例：歌单 `5204302550`（我喜欢的音乐，9 首）。
+> 全部失败时回退 detail 自带的前几首 `tracks`。带连接 Cookie 时私有歌单也可导入。测试用例：`5204302550`（我喜欢的音乐，9 首）、`66873341`（收藏的英文老歌，129 首）。
 
 ### GET /api/import/netease/mine
 

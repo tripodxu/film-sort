@@ -357,7 +357,7 @@ film-sort3/
 | GET | `/api/share/:code` | 获取分享内容（profile + notes + expires_at） |
 | GET | `/api/import/doulist?url=` | 导入豆瓣豆列（登录用户，IP 限流） |
 | GET | `/api/import/douban-list?url=` | 统一豆瓣导入：自动识别豆列 / subject_collection 清单 / mine 想看已看（登录用户） |
-| GET | `/api/import/netease?url=` | 导入网易云歌单（登录用户，支持连接 Cookie 导入私有歌单；v6 detail + v3 song/detail 两步链） |
+| GET | `/api/import/netease?url=` | 导入网易云歌单（登录用户，支持连接 Cookie 导入私有歌单；v6+v3 分层链，开放接口→weapi 降级+退避） |
 | GET | `/api/import/netease/mine` | 我的网易云歌单列表（需扫码连接） |
 | GET | `/api/netease/user-playlists?uid=` | 按用户 ID 浏览任意用户的全部歌单（含收藏；开放接口→weapi 分层降级，登录用户） |
 | GET | `/api/netease/qr/issue` | 生成网易云扫码登录二维码（登录用户；开放接口优先/weapi 兜底，返回 ttl） |

@@ -104,7 +104,7 @@
 | 豆瓣清单导入（m.douban.com/subject_collection/XXX，rexxar JSON） | 同一输入框自动识别 | `/api/import/douban-list` |
 | 我的豆瓣「想看/已看/想读/已读」导入（需连接） | 一键按钮 / mine 链接 | `{movie,book}.douban.com/mine` 解析 |
 | 网易云按 UID 浏览全部歌单（含收藏，主流程）：输入用户 ID/主页链接 → 列全部歌单 → 点选导入；开放接口→weapi 分层降级，被风控时 blocked 引导连接 | 「输入网易云用户 ID → 浏览歌单」 | `/api/netease/user-playlists?uid=` |
-| 网易云歌单导入（公开链接即可；私有需连接；v6 detail + v3 song/detail 两步链，旧 detail 已要求登录） | Source 粘贴 | `/api/import/netease` |
+| 网易云歌单导入（公开链接即可；私有需连接；v6+v3 分层链，开放接口→weapi 降级+退避+节流，旧 detail 已要求登录） | Source 粘贴 | `/api/import/netease` |
 | 网易云「我的歌单」浏览（含收藏，special=我喜欢的音乐） | 折叠区「连接账号」→「浏览我的全部歌单」（填充主列表） | `/api/import/netease/mine` |
 | 按用户 ID 浏览任意用户的公开歌单并选导入（无需连接网易云） | 「输入对方网易云用户 ID → 浏览歌单」 | `/api/netease/user-playlists?uid=` |
 | 网易云扫码连接（开放接口优先 + weapi 兜底 + Cookie 罐 + 倒计时换码≤2 次 + 风控连续 3 次降级） | 「扫码连接网易云」 | `/api/netease/qr/*` |
