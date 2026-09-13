@@ -101,7 +101,7 @@ export function ProfileView({ profile, activeRanking, locale, t, label, format, 
         )}
 
         {plazaSyncPostId !== null && !editWorksOpen && (
-          <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 14px", marginBottom: 14, borderRadius: 10, background: "rgba(216,248,106,.06)", border: "1px solid rgba(216,248,106,.25)", fontSize: 12, color: "var(--muted)" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 14px", marginBottom: 14, borderRadius: 10, background: "color-mix(in srgb,var(--accent) 6%,transparent)", border: "1px solid color-mix(in srgb,var(--accent) 25%,transparent)", fontSize: 12, color: "var(--muted)" }}>
             <span>{t("该榜单已发布到广场，作品变更后可同步更新广场帖子。", "This list is on the Plaza. Sync your changes to the post.")}</span>
             <button className="text-button" disabled={busy} onClick={() => { syncPlazaPost(plazaSyncPostId, profileRankIdx); setPlazaSyncPostId(null); }} style={{ fontSize: 12, flexShrink: 0 }}>{t("同步到广场", "Sync to plaza")}</button>
             <button className="text-button" onClick={() => setPlazaSyncPostId(null)} style={{ fontSize: 12, color: "var(--muted)", flexShrink: 0 }}>{t("暂不", "Later")}</button>

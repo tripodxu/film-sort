@@ -343,7 +343,7 @@ export function PlazaPostView({ postId, t, label, navigateTo, accountToken, acco
       {post.description && <p style={{ fontSize: 14, color: "var(--muted)", marginBottom: 16, lineHeight: 1.7 }}>{post.description}</p>}
 
       {isAuthor && !post.is_public && (
-        <div style={{ display: "flex", alignItems: "center", gap: 8, margin: "0 0 16px", padding: "10px 14px", borderRadius: 10, background: "rgba(250,204,21,.06)", border: "1px solid rgba(250,204,21,.35)", fontSize: 12, color: "var(--yellow)" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, margin: "0 0 16px", padding: "10px 14px", borderRadius: 10, background: "color-mix(in srgb,var(--warn) 6%,transparent)", border: "1px solid color-mix(in srgb,var(--warn) 35%,transparent)", fontSize: 12, color: "var(--yellow)" }}>
           <EyeOff size={14} style={{ flexShrink: 0 }} />
           {t("该帖子已隐藏，其他用户无法看到（仅你可见），可随时恢复。", "Hidden — only you can see this post. Restore anytime.")}
         </div>
@@ -501,7 +501,7 @@ export function PlazaPostView({ postId, t, label, navigateTo, accountToken, acco
 
       {/* Profile-level note (profile posts) */}
       {isProfilePost && Object.entries(parsedNotes).filter(([key]) => key.startsWith("profile:")).map(([key, text]) => (
-        <div key={key} style={{ margin: "0 0 16px", padding: "12px 16px", borderRadius: 10, background: "rgba(121,217,174,.05)", borderLeft: "2px solid rgba(216,248,106,.2)" }}>
+        <div key={key} style={{ margin: "0 0 16px", padding: "12px 16px", borderRadius: 10, background: "color-mix(in srgb,var(--music) 5%,transparent)", borderLeft: "2px solid color-mix(in srgb,var(--accent) 20%,transparent)" }}>
           <ExpandableNote text={text} onView={openNoteView ? (t2) => openNoteView(post.collection_title, t2) : undefined} style={{ margin: 0 }} />
         </div>
       ))}

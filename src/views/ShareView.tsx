@@ -55,7 +55,7 @@ export function ShareView({ peer, t, label, navigateTo, openCollection, profile,
 
       {/* Profile-level notes */}
       {viewNotes[`profile:${peer.profileId}`] && (
-        <div style={{ margin: "16px 0", padding: "12px 16px", borderRadius: 8, background: "rgba(121,217,174,.06)", border: "1px solid var(--line)" }}>
+        <div style={{ margin: "16px 0", padding: "12px 16px", borderRadius: 8, background: "color-mix(in srgb,var(--music) 6%,transparent)", border: "1px solid var(--line)" }}>
           <ExpandableNote text={viewNotes[`profile:${peer.profileId}`]} maxLength={30} onView={openNoteView ? (text) => openNoteView(peer.profileName, text) : undefined} style={{ margin: 0 }} />
         </div>
       )}
@@ -115,8 +115,8 @@ export function ShareView({ peer, t, label, navigateTo, openCollection, profile,
 
       {/* How to create your own share link */}
       {!profile && (
-        <div style={{ margin: "24px 0", padding: "20px 24px", borderRadius: 14, border: "1px solid var(--line)", background: "rgba(20,27,25,.4)" }}>
-          <h3 style={{ fontSize: 14, fontWeight: 600, color: "#eef4ed", marginBottom: 8, display: "flex", alignItems: "center", gap: 8 }}><Share2 size={15} />{t("如何创建自己的分享链接？", "How to create your own share link?")}</h3>
+        <div style={{ margin: "24px 0", padding: "20px 24px", borderRadius: 14, border: "1px solid var(--line)", background: "color-mix(in srgb,var(--surface-3) 40%,transparent)" }}>
+          <h3 style={{ fontSize: 14, fontWeight: 600, color: "var(--text)", marginBottom: 8, display: "flex", alignItems: "center", gap: 8 }}><Share2 size={15} />{t("如何创建自己的分享链接？", "How to create your own share link?")}</h3>
           <ol style={{ fontSize: 13, color: "var(--muted)", lineHeight: 2, paddingLeft: 20, margin: 0 }}>
             <li>{t("选择一个媒介维度，完成排序", "Choose a medium and complete a ranking")}</li>
             <li>{t("在「我的文化索引」页面，点击「分享此榜单」或「复制比较链接」", "In 'My Culture Index', click 'Share this list' or 'Copy compare link'")}</li>
