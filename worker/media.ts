@@ -974,8 +974,11 @@ export async function doubanMusicDetail(url: string): Promise<{ status: boolean;
 export function allowedImage(raw: string): URL | null {
   try {
     const url = new URL(raw);
-    if (url.protocol !== "https:" || url.username || url.password || (url.port && url.port !== "443")) return null;
-    return /^(?:img\d+\.doubanio\.com|m\.media-amazon\.com|ia\.media-imdb\.com|image\.tmdb\.org|[\w-]+\.music\.126\.net|(?:upload|thumb)\.wikimedia\.org|bkimg\.cdn\.bcebos\.com)$/.test(url.hostname) ? url : null;
+    // 网易云 API 返回的封面常是 http://，白名单主机统一升级到 https 再取
+    if ((url.protocol !== "https:" && url.protocol !== "http:") || url.username || url.password || (url.port && url.port !== "443" && url.port !== "80")) return null;
+    if (!/^(?:img\d+\.doubanio\.com|m\.media-amazon\.com|ia\.media-imdb\.com|image\.tmdb\.org|[\w-]+\.music\.126\.net|(?:upload|thumb)\.wikimedia\.org|bkimg\.cdn\.bcebos\.com)$/.test(url.hostname)) return null;
+    url.protocol = "https:";
+    return url;
   } catch { return null; }
 }
 
@@ -985,7 +988,8 @@ export async function proxyImage(raw: string): Promise<Response> {
   try {
     const response = await upstream(url.href);
     const type = response.headers.get("content-type") ?? "";
-    if (!/^image\/(jpeg|png|webp|avif)(;|$)/i.test(type)) return new Response(null, { status: 415 });
+    // 网易云 126.net 返回非标准的 image/jpg
+    if (!/^image\/(jpe?g|png|webp|avif)(;|$)/i.test(type)) return new Response(null, { status: 415 });
     return new Response(response.body, { headers: { "content-type": type, "cache-control": "public, max-age=86400", "x-content-type-options": "nosniff" } });
   } catch { return new Response(null, { status: 502 }); }
 }
