@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ArrowDown, ArrowLeft, ArrowUp, Eye, EyeOff, GripVertical, Heart, MessageCircle, PenLine, Play, Plus, Trash2, Send } from "lucide-react";
 import { Poster } from "../components/Poster";
 import { RankingDetail } from "../components/RankingDetail";
@@ -25,6 +25,8 @@ export function PlazaPostView({ postId, t, label, navigateTo, accountToken, acco
   const [infoDesc, setInfoDesc] = useState("");
   const [editDesc, setEditDesc] = useState("");
   const [syncProfileData, setSyncProfileData] = useState(false);
+  const dragIndex = useRef<number | null>(null);
+  const [dropIdx, setDropIdx] = useState<number | null>(null);
 
   // Parse notes from post
   const parsedNotes: Record<string, string> = (() => {
@@ -285,6 +287,32 @@ export function PlazaPostView({ postId, t, label, navigateTo, accountToken, acco
       return next;
     });
   }
+  function handleEditDragStart(e: React.DragEvent, idx: number) {
+    dragIndex.current = idx;
+    e.dataTransfer.effectAllowed = "move";
+    e.dataTransfer.setData("text/plain", String(idx));
+    (e.currentTarget as HTMLElement).classList.add("dragging");
+  }
+  function handleEditDragEnd(e: React.DragEvent) {
+    (e.currentTarget as HTMLElement).classList.remove("dragging");
+    setDropIdx(null);
+    dragIndex.current = null;
+  }
+  function handleEditDragOver(e: React.DragEvent, idx: number) {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "move";
+    setDropIdx(idx <= (dragIndex.current ?? -1) ? idx : idx + 1);
+  }
+  function handleEditDrop(e: React.DragEvent, idx: number) {
+    e.preventDefault();
+    const from = dragIndex.current;
+    if (from === null) return;
+    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    const to = e.clientY < rect.top + rect.height / 2 ? idx : idx + 1;
+    moveEditItem(from, to === from ? from : to > from ? to - 1 : to);
+    setDropIdx(null);
+    dragIndex.current = null;
+  }
   function addEditWork(title: string, creator?: string, year?: number) {
     const clean = title.trim();
     if (!clean) return;
@@ -393,10 +421,18 @@ export function PlazaPostView({ postId, t, label, navigateTo, accountToken, acco
       {/* Unified ranking detail (same component as share page & compare detail) */}
       {editItems !== null && isAuthor && !isProfilePost ? (
         <div className="plaza-post-detail">
-          <div className="section-heading"><h2>{t("编辑榜单作品", "Edit works")}</h2><span>{t(`${editItems.length} 件`, `${editItems.length} works`)}</span></div>
+          <div className="section-heading"><h2>{t("编辑榜单作品", "Edit works")}</h2><span>{t("拖拽或用 ↑↓ 调整顺序", "Drag or use ↑↓ to reorder")} · {t(`${editItems.length} 件`, `${editItems.length} works`)}</span></div>
           <ol className="ranking-list reorder-list">
             {editItems.map((work, idx) => (
-              <li key={work.id} className="reorder-item">
+              <li
+                key={work.id}
+                className={`reorder-item ${dropIdx === idx ? "drop-before" : ""} ${dropIdx === editItems.length && idx === editItems.length - 1 ? "drop-after" : ""}`}
+                draggable
+                onDragStart={(e) => handleEditDragStart(e, idx)}
+                onDragEnd={handleEditDragEnd}
+                onDragOver={(e) => handleEditDragOver(e, idx)}
+                onDrop={(e) => handleEditDrop(e, idx)}
+              >
                 <span className="reorder-handle"><GripVertical size={16} /></span>
                 <span className="row-number">{String(idx + 1).padStart(2, "0")}</span>
                 <Poster work={work} kind={post.kind as MediaKind} />

@@ -171,7 +171,9 @@ export function ProfileView({ profile, activeRanking, locale, t, label, format, 
           <p style={{ fontSize: 13, color: "var(--muted)", lineHeight: 1.7 }}>
             {publishTarget === "profile" ? t(`将画像「${profile.profileName}」（${profile.rankings.length} 个榜单）发布到文化广场，其他用户可以看到、点赞、留言和使用其中的榜单排序。`, `Publish profile "${profile.profileName}" (${profile.rankings.length} lists) to the Culture Plaza.`) : t(`将「${activeRanking.collectionTitle}」发布到文化广场，其他用户可以看到、点赞、留言和使用你的榜单排序。`, `Publish "${activeRanking.collectionTitle}" to the Culture Plaza. Others can see, like, comment, and sort with your ranking.`)}
           </p>
-          <textarea className="note-textarea" value={publishDesc} onChange={(e) => setPublishDesc(e.target.value)} placeholder={t("添加描述，让其他人了解你的榜单…（可选）\n\n例如：这是我看过的最好的华语电影 Top 10", "Add a description to help others understand your ranking… (optional)\n\nFor example: My top 10 Chinese films of all time")} rows={5} autoFocus />
+          <div className="publish-desc-label"><b>{t("榜单描述", "Description")}</b><span>{publishDesc.length} / 500</span></div>
+          <textarea className="publish-desc" maxLength={500} value={publishDesc} onChange={(e) => setPublishDesc(e.target.value)} placeholder={t("介绍一下这份榜单，让别人更懂你的品味…（可选）", "Introduce this list so others understand your taste… (optional)")} rows={4} autoFocus />
+          <div className="publish-preview">{t("将随帖子公开展示，可在广场详情页看到。", "Shown publicly on your plaza post detail page.")}</div>
           <div className="guide-modal-footer">
             <button className="button secondary" onClick={() => { setShowPublishModal(false); setPublishDesc(""); }}>{t("取消", "Cancel")}</button>
             <button className="button primary" onClick={handlePublish} style={{ position: "relative" }}>
