@@ -258,6 +258,19 @@ export interface DimensionComparison {
   top3Agreement: number;
   commonPreference: string;
   divergence: string;
+  // 新增指标
+  kendallTau: number | null;      // Kendall τ-b（含并列），0-100
+  topJaccard: number;             // Top-5 集合 Jaccard 相似度 0-100
+  eraAffinity: number | null;     // 年代偏好一致度 0-100（任一方无年份则 null）
+  consensusScore: number;         // 综合共识评分 0-100
+}
+
+// 中位数（升序数值数组）
+function median(values: number[]): number | null {
+  const sorted = [...values].sort((a, b) => a - b);
+  if (!sorted.length) return null;
+  const mid = Math.floor(sorted.length / 2);
+  return sorted.length % 2 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
 }
 
 function greedyMatch(ownItems: MergedItem[], peerItems: MergedItem[]): MatchedItem[] {
@@ -335,20 +348,60 @@ export function compareDimensions(own: MergedDimension, peer: MergedDimension): 
   const closest = [...shared].sort((a, b) => a.difference - b.difference).slice(0, 3).map((m) => m.title).join("、");
   const biggest = [...shared].sort((a, b) => b.difference - a.difference)[0]?.title ?? "暂无共同作品";
 
+  // Kendall τ-b：统计一致/不一致/仅一方并列的序对，τ = (C - D) / sqrt((C+D+Ty)(C+D+Tx))
+  const overlap = unionCount ? Math.round(100 * shared.length / unionCount) : 0;
+  const orderAgreement = pairs ? Math.round(100 * agreements / pairs) : null;
+  const weightedTopAgreement = Math.round(weightedAgreement * 100);
+  let concordant = 0, discordant = 0, tieOwn = 0, tiePeer = 0;
+  for (let i = 0; i < n; i++) {
+    for (let j = i + 1; j < n; j++) {
+      const a = shared[i], b = shared[j];
+      const dOwn = a.ownRank - b.ownRank, dPeer = a.peerRank - b.peerRank;
+      if (dOwn === 0 && dPeer === 0) continue;
+      if (dOwn === 0) { tieOwn++; continue; }
+      if (dPeer === 0) { tiePeer++; continue; }
+      if (dOwn * dPeer > 0) concordant++; else discordant++;
+    }
+  }
+  const kendallDenom = Math.sqrt((concordant + discordant + tieOwn) * (concordant + discordant + tiePeer));
+  // τ-b ∈ [-1,1]，线性映射到 0-100（50=无关，100=完全一致）
+  const kendallTau = n < 2 || !kendallDenom ? null : Math.round(((concordant - discordant) / kendallDenom + 1) * 50);
+
+  // Top-5 集合 Jaccard（双方前五名的共同比例）
+  const ownTop = new Set(own.items.filter((m) => m.bestRank <= 5).map((m) => m.title));
+  const peerTop = new Set(peer.items.filter((m) => m.bestRank <= 5).map((m) => m.title));
+  const topInter = [...ownTop].filter((t) => peerTop.has(t)).length;
+  const topUnion = new Set([...ownTop, ...peerTop]).size;
+  const topJaccard = topUnion ? Math.round(100 * topInter / topUnion) : 0;
+
+  // 年代偏好：比较双方完整榜单的年代中位数（匹配规则下共同作品年份必相同，故取全量分布）
+  const ownYears = own.items.map((m) => m.representative.year).filter((y): y is number => typeof y === "number");
+  const peerYears = peer.items.map((m) => m.representative.year).filter((y): y is number => typeof y === "number");
+  const ownMed = median(ownYears); const peerMed = median(peerYears);
+  const eraAffinity = ownMed === null || peerMed === null ? null : Math.max(0, Math.round(100 - Math.abs(ownMed - peerMed) * 6));
+
+  // 综合共识评分：加权合成（顺序一致 30% + 重合 20% + 加权偏好 20% + 名次距离 15% + 年代 15%）
+  const orderPart = orderAgreement ?? kendallTau ?? 0;
+  const eraPart = eraAffinity ?? 70;
+  const consensusScore = shared.length
+    ? Math.round(orderPart * 0.3 + overlap * 0.2 + weightedTopAgreement * 0.2 + (100 - rankDistance) * 0.15 + eraPart * 0.15)
+    : 0;
+
   return {
     shared, onlyOwn, onlyPeer,
-    overlap: unionCount ? Math.round(100 * shared.length / unionCount) : 0,
-    orderAgreement: pairs ? Math.round(100 * agreements / pairs) : null,
+    overlap,
+    orderAgreement,
     top5Overlap: shared.filter((m) => m.ownRank <= 5 && m.peerRank <= 5).length,
     disagreements: shared.filter((m) => m.difference > 0).sort((a, b) => b.difference - a.difference).slice(0, 5),
     sharedCount: shared.length,
     coverage: Math.min(100, Math.round(100 * shared.length / Math.max(1, Math.min(own.items.length, peer.items.length)))),
-    weightedTopAgreement: Math.round(weightedAgreement * 100),
+    weightedTopAgreement,
     rankDistance, spearmanLikeAgreement,
     championAgreement: shared.length ? shared.some((m) => m.ownRank === 1 && m.peerRank === 1) : null,
     top3Agreement: top3Overlap,
     commonPreference: closest || "暂无共同作品",
     divergence: biggest,
+    kendallTau, topJaccard, eraAffinity, consensusScore,
   };
 }
 

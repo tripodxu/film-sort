@@ -228,6 +228,58 @@ describe("compareRankings", () => {
     const result = compareDimensions(ownMerged, peerMerged);
     expect(result.orderAgreement).toBe(100);
   });
+
+  it("identical rankings score high on all new metrics", () => {
+    const own = makeRanking();
+    const result = compareRankings(own, makeRanking());
+    expect(result.kendallTau).toBe(100);
+    expect(result.topJaccard).toBe(100);
+    expect(result.consensusScore).toBeGreaterThan(90);
+  });
+
+  it("reversed shared order yields low kendall tau", () => {
+    const own = makeRanking({ items: [
+      { id: "a", title: "A", rank: 1 },
+      { id: "b", title: "B", rank: 2 },
+      { id: "c", title: "C", rank: 3 },
+    ] });
+    const peer = makeRanking({ items: [
+      { id: "x", title: "C", rank: 1 },
+      { id: "y", title: "B", rank: 2 },
+      { id: "z", title: "A", rank: 3 },
+    ] });
+    const result = compareRankings(own, peer);
+    expect(result.kendallTau).toBe(0);
+    expect(result.consensusScore).toBeLessThan(60);
+  });
+
+  it("era affinity reflects year gap", () => {
+    const own = makeRanking({ items: [
+      { id: "a", title: "A", rank: 1, year: 1994 },
+      { id: "b", title: "B", rank: 2, year: 1994 },
+    ] });
+    const peerSame = makeRanking({ items: [
+      { id: "x", title: "A", rank: 1, year: 1994 },
+      { id: "y", title: "B", rank: 2, year: 1994 },
+    ] });
+    expect(compareRankings(own, peerSame).eraAffinity).toBe(100);
+    const peerFar = makeRanking({ items: [
+      { id: "x", title: "A", rank: 1, year: 2024 },
+      { id: "y", title: "B", rank: 2, year: 2024 },
+    ] });
+    expect(compareRankings(own, peerFar).eraAffinity!).toBeLessThan(100);
+    // 无年份 → null
+    const noYear = makeRanking({ items: [{ id: "a", title: "A", rank: 1 }, { id: "b", title: "B", rank: 2 }] });
+    expect(compareRankings(noYear, makeRanking({ items: [{ id: "x", title: "A", rank: 1 }, { id: "y", title: "B", rank: 2 }] })).eraAffinity).toBeNull();
+  });
+
+  it("zero overlap: kendall null, consensus 0", () => {
+    const own = makeRanking({ items: [{ id: "a", title: "独有A", rank: 1 }, { id: "b", title: "独有B", rank: 2 }] });
+    const peer = makeRanking({ items: [{ id: "x", title: "独有X", rank: 1 }, { id: "y", title: "独有Y", rank: 2 }] });
+    const result = compareRankings(own, peer);
+    expect(result.kendallTau).toBeNull();
+    expect(result.consensusScore).toBe(0);
+  });
 });
 
 describe("mergeDimensionRankings", () => {

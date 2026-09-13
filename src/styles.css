@@ -552,3 +552,28 @@ kbd{display:inline-flex;align-items:center;justify-content:center;min-width:22px
 [data-theme=cyber] .topbar nav button.active:after{box-shadow:0 0 8px var(--accent)}
 [data-theme=cyber] .rank-pill,[data-theme=cyber] .dim-chip.active{border-color:color-mix(in srgb,var(--accent) 50%,transparent)}
 [data-theme=cyber] .eyebrow{letter-spacing:.14em;color:var(--accent)}
+
+/* ===== 比较指标：共识评分 hero + 悬浮解释 + 折叠明细 ===== */
+.consensus-hero{display:flex;align-items:center;gap:26px;margin:0 0 26px;padding:22px 26px;border:1px solid var(--line);border-radius:16px;background:color-mix(in srgb,var(--surface-3) 55%,transparent)}
+.consensus-dial{position:relative;width:96px;height:96px;flex-shrink:0;border-radius:50%;display:flex;flex-direction:column;align-items:center;justify-content:center}
+.consensus-dial::before{content:"";position:absolute;inset:0;border-radius:50%;background:conic-gradient(var(--accent) var(--metric-pct,0%),var(--line) 0);-webkit-mask:radial-gradient(circle closest-side,transparent 62%,#000 63%);mask:radial-gradient(circle closest-side,transparent 62%,#000 63%)}
+.consensus-dial strong,.consensus-dial span{position:relative;z-index:1}
+.consensus-dial strong{line-height:1;text-align:center;font-family:var(--font-mono);font-size:30px;font-weight:600;color:var(--text)}
+.consensus-dial span{margin-top:2px;text-align:center;font-family:var(--font-mono);font-size:10px;color:var(--muted)}
+.consensus-copy{min-width:0}
+.consensus-copy .eyebrow{color:var(--accent)}
+.consensus-copy h3{margin:4px 0 6px;font-size:22px;font-weight:600}
+.consensus-copy p{font-size:12px;color:var(--muted);line-height:1.7}
+.metric-help{display:inline-flex;align-items:center;justify-content:center;width:14px;height:14px;margin-left:5px;border:1px solid var(--line);border-radius:50%;font-style:normal;font-size:9px;color:var(--muted);cursor:help;vertical-align:1px}
+.metric-help:hover{color:var(--accent);border-color:var(--accent)}
+.metrics-more{grid-column:1/-1;border-top:1px dashed var(--line);padding-top:14px;margin-top:4px}
+.metrics-more summary{cursor:pointer;font-size:12px;color:var(--muted);list-style:none;display:inline-flex;gap:6px;align-items:center;user-select:none}
+.metrics-more summary::before{content:"▸";transition:transform .15s}
+.metrics-more[open] summary::before{transform:rotate(90deg)}
+.metrics-more[open]{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:16px}
+.metrics-more[open] summary{grid-column:1/-1}
+.metrics-more>div{display:flex;flex-direction:column;gap:8px}
+.metrics-more>div span{font-size:11px;color:var(--muted)}
+.metrics-more>div strong{font-family:var(--font-mono);font-size:24px;font-weight:500;color:var(--text-2)}
+.metrics-more>div small{font-size:14px;color:inherit}
+@media(max-width:600px){.consensus-hero{gap:16px;padding:16px}.consensus-dial{width:76px;height:76px}.consensus-dial strong{font-size:24px}.metrics-more[open]{grid-template-columns:repeat(2,minmax(0,1fr))}}
