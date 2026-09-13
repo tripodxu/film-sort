@@ -364,11 +364,22 @@ export default function App() {
   }, [view, comparison, accountOpen, act]);
 
   function chooseKind(next: MediaKind) { setKind(next); setSource("builtin"); setSearch(""); setCustomText(""); setCustomWorks([]); navigateTo("source"); }
-  // 自行导入：豆瓣搜索候选（电影/书籍/音乐），返回带海报与元数据的完整作品
+  // 自行导入：搜索候选（电影/书籍/音乐→豆瓣；其他→维基百科），返回带海报与元数据的完整作品
   async function searchWorks(query: string): Promise<Artwork[]> {
     const trimmed = query.trim();
-    if (!trimmed || kind === "other") return [];
+    if (!trimmed) return [];
     try {
+      if (kind === "other") {
+        const response = await fetch(`/api/other/list?key=${encodeURIComponent(trimmed)}`, { signal: AbortSignal.timeout(15000) });
+        const data = await response.json() as { data?: Array<{ title?: string; subtitle?: string; year?: number; poster_url?: string }> };
+        return (data.data ?? []).slice(0, 6).map((item) => ({
+          id: `search-${Math.random().toString(36).slice(2, 10)}`,
+          title: item.title ?? "",
+          subtitle: item.subtitle,
+          year: item.year,
+          posterUrls: item.poster_url ? [item.poster_url] : undefined,
+        })).filter((work) => work.title);
+      }
       const apiType = kind === "film" ? "movie" : kind;
       const response = await fetch(`/api/${apiType}/list?key=${encodeURIComponent(trimmed)}&page=1`, { signal: AbortSignal.timeout(15000) });
       const data = await response.json() as { data?: Array<{ title?: string; year?: string; rating?: string; author?: string; artist?: string; cover?: string; actors?: string[] }> };
@@ -586,8 +597,16 @@ export default function App() {
   }
   async function openArtworkDetail(work: RankedArtwork, detailKind: MediaKind) {
     setDetailWork({ work, kind: detailKind, data: null, loading: true });
-    if (detailKind === "other") { setDetailWork({ work, kind: detailKind, data: null, loading: false }); return; }
     try {
+      if (detailKind === "other") {
+        const response = await fetch(`/api/other/detail?name=${encodeURIComponent(work.title)}`, { signal: AbortSignal.timeout(20000) });
+        const payload = await response.json() as { data?: (Record<string, unknown> & { poster_url?: string }) | null };
+        const data = payload.data ?? null;
+        // 维基图片并入 work，让大图海报直接显示
+        const merged = data?.poster_url && !work.posterUrls?.length ? { ...work, posterUrls: [String(data.poster_url)] } : work;
+        setDetailWork({ work: merged, kind: detailKind, data, loading: false });
+        return;
+      }
       const apiType = detailKind === "film" ? "movie" : detailKind;
       const extra = new URLSearchParams();
       if (work.year) extra.set("year", String(work.year));

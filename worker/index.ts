@@ -5,6 +5,7 @@ import { adminPlazaRoute, plazaRoute } from "./plaza";
 import { importRoute } from "./import";
 import { neteaseQrIssue, neteaseQrPoll, hasProviderCookie, deleteProviderCookie, saveProviderCookie, neteaseUserId, neteaseAccountInfo } from "./netease";
 import { doubanQrIssue, doubanQrPoll, extractDoubanLoginCookie, doubanUserId, doubanAccountInfo } from "./douban";
+import { otherSearch, otherDetail } from "./other";
 import { recordAudit } from "./audit";
 
 export interface Env {
@@ -85,7 +86,7 @@ const MAX_CHALLENGE_ITEMS = 300;
 const MUSIC_API_ORIGIN = "https://music-api.gdstudio.xyz";
 const upstreamWindows = new Map<string, { startedAt: number; count: number }>();
 
-function allowUpstreamRequest(request: Request, bucket: "ai" | "music" | "auth" | "share" | "import" | "netease" | "douban", limit: number): boolean {
+function allowUpstreamRequest(request: Request, bucket: "ai" | "music" | "auth" | "share" | "import" | "netease" | "douban" | "other", limit: number): boolean {
   const client = request.headers.get("cf-connecting-ip") ?? "anonymous";
   const key = `${bucket}:${client}`;
   const now = Date.now();
@@ -105,7 +106,7 @@ const JSON_HEADERS = {
 
 const SECURITY_HEADERS: Record<string, string> = {
     "content-security-policy":
-      "default-src 'self'; img-src 'self' data: https://img*.doubanio.com https://m.media-amazon.com https://ia.media-imdb.com https://image.tmdb.org https://*.music.126.net https://*.githubusercontent.com; style-src 'self' 'unsafe-inline'; script-src 'self' https://cdn.jsdelivr.net https://static.cloudflareinsights.com 'sha256-d+1XxRQUWY8LGwXhdeFvJFpB3nkb5L9UFxsCt9kf/SU='; connect-src 'self' https://cloudflareinsights.com; font-src 'self' data:; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'; upgrade-insecure-requests",
+      "default-src 'self'; img-src 'self' data: https://img*.doubanio.com https://m.media-amazon.com https://ia.media-imdb.com https://image.tmdb.org https://*.music.126.net https://*.githubusercontent.com https://upload.wikimedia.org https://bkimg.cdn.bcebos.com; style-src 'self' 'unsafe-inline'; script-src 'self' https://cdn.jsdelivr.net https://static.cloudflareinsights.com 'sha256-d+1XxRQUWY8LGwXhdeFvJFpB3nkb5L9UFxsCt9kf/SU='; connect-src 'self' https://cloudflareinsights.com; font-src 'self' data:; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'; upgrade-insecure-requests",
   "cross-origin-opener-policy": "same-origin",
   "referrer-policy": "strict-origin-when-cross-origin",
   "x-content-type-options": "nosniff",
@@ -1631,8 +1632,17 @@ async function route(request: Request, env: Env): Promise<Response> {
   if (url.pathname === "/api/artwork/detail" && request.method === "GET") {
     const kind = url.searchParams.get("kind");
     const title = url.searchParams.get("q")?.trim();
-    if (!title || title.length > 120 || (kind !== "film" && kind !== "book" && kind !== "music")) {
+    if (!title || title.length > 120 || (kind !== "film" && kind !== "book" && kind !== "music" && kind !== "other")) {
       return json({ status: false, msg: "invalid_query", data: null }, 400);
+    }
+    if (kind === "other") {
+      try {
+        const work = await otherDetail(title);
+        if (!work) return json({ status: false, msg: "not_found", data: null }, 404, { "cache-control": "public, max-age=300" });
+        return json({ status: true, msg: "ok", data: work }, 200, { "cache-control": "public, max-age=86400" });
+      } catch {
+        return json({ status: false, msg: "wiki_unavailable", data: null }, 502, { "cache-control": "public, max-age=300" });
+      }
     }
     const type = kind === "film" ? "movie" : kind;
     try {
@@ -1643,6 +1653,29 @@ async function route(request: Request, env: Env): Promise<Response> {
       return json({ ...detail, source_url: subject.cover_link }, detail.status ? 200 : 502, { "cache-control": detail.status ? "public, max-age=86400" : "public, max-age=300" });
     } catch {
       return json({ status: false, msg: "douban_unavailable", data: null }, 502, { "cache-control": "public, max-age=300" });
+    }
+  }
+  if (url.pathname === "/api/other/list" && request.method === "GET") {
+    const key = url.searchParams.get("key")?.trim() ?? "";
+    if (!key || key.length > 80) return json({ status: false, msg: "invalid_key", data: [] }, 400);
+    if (!allowUpstreamRequest(request, "other", 20)) return json({ error: "rate_limited" }, 429, { "retry-after": "60" });
+    try {
+      const works = await otherSearch(key);
+      return json({ status: true, msg: "ok", data: works }, 200, { "cache-control": "public, max-age=3600" });
+    } catch {
+      return json({ status: false, msg: "wiki_unavailable", data: [] }, 502);
+    }
+  }
+  if (url.pathname === "/api/other/detail" && request.method === "GET") {
+    const name = (url.searchParams.get("name") ?? url.searchParams.get("title"))?.trim() ?? "";
+    if (!name || name.length > 120) return json({ status: false, msg: "invalid_name", data: null }, 400);
+    if (!allowUpstreamRequest(request, "other", 20)) return json({ error: "rate_limited" }, 429, { "retry-after": "60" });
+    try {
+      const work = await otherDetail(name);
+      if (!work) return json({ status: false, msg: "not_found", data: null }, 404, { "cache-control": "public, max-age=300" });
+      return json({ status: true, msg: "ok", data: work }, 200, { "cache-control": "public, max-age=86400" });
+    } catch {
+      return json({ status: false, msg: "wiki_unavailable", data: null }, 502, { "cache-control": "public, max-age=300" });
     }
   }
   if (url.pathname === "/api/insights" && request.method === "POST") {

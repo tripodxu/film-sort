@@ -272,15 +272,15 @@ function WorkEditor({ ranking, t, onCancel, onSave }: {
   const [items, setItems] = useState<RankedArtwork[]>([...ranking.items]);
   const [manual, setManual] = useState("");
   const [searchKey, setSearchKey] = useState("");
-  const [results, setResults] = useState<Array<{ title: string; creator?: string; year?: string; rating?: string }>>([]);
+  const [results, setResults] = useState<Array<{ title: string; creator?: string; year?: string; rating?: string; poster?: string }>>([]);
   const [searching, setSearching] = useState(false);
   const kind = ranking.kind;
 
-  function addWork(title: string, creator?: string, year?: number) {
+  function addWork(title: string, creator?: string, year?: number, poster?: string) {
     const clean = title.trim();
     if (!clean) return;
     if (items.some((w) => w.title === clean)) return;
-    setItems((cur) => [...cur, { id: `edit-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`, title: clean, rank: cur.length + 1, ...(creator ? { creator } : {}), ...(year ? { year } : {}) }]);
+    setItems((cur) => [...cur, { id: `edit-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`, title: clean, rank: cur.length + 1, ...(creator ? { creator } : {}), ...(year ? { year } : {}), ...(poster ? { posterUrls: [poster] } : {}) }]);
   }
 
   function parseManual() {
@@ -300,9 +300,20 @@ function WorkEditor({ ranking, t, onCancel, onSave }: {
 
   async function runSearch() {
     const key = searchKey.trim();
-    if (!key || kind === "other") return;
+    if (!key) return;
     setSearching(true);
     try {
+      if (kind === "other") {
+        const response = await fetch(`/api/other/list?key=${encodeURIComponent(key)}`, { signal: AbortSignal.timeout(20000) });
+        const data = await response.json() as { data?: Array<{ title?: string; year?: number; subtitle?: string; poster_url?: string }> };
+        setResults((data.data ?? []).slice(0, 8).map((item) => ({
+          title: item.title ?? "",
+          year: item.year ? String(item.year) : undefined,
+          creator: item.subtitle,
+          poster: item.poster_url,
+        })).filter((item) => item.title));
+        return;
+      }
       const apiType = kind === "film" ? "movie" : kind;
       const response = await fetch(`/api/${apiType}/list?key=${encodeURIComponent(key)}&page=1`, { signal: AbortSignal.timeout(20000) });
       const data = await response.json() as { data?: Array<{ title?: string; year?: string; rating?: string; author?: string; artist?: string; actors?: string[] }> };
@@ -335,9 +346,9 @@ function WorkEditor({ ranking, t, onCancel, onSave }: {
           <textarea value={manual} onChange={(e) => setManual(e.target.value)} rows={3} placeholder={t("花样年华 - 王家卫（2000）", "In the Mood for Love - Wong Kar-wai (2000)")} style={{ minHeight: 70, fontSize: 13 }} />
           <button className="button secondary" onClick={parseManual} style={{ marginTop: 8, minHeight: 34 }}><Plus size={14} />{t("加入榜单", "Add to list")}</button>
         </div>
-        {kind !== "other" && (
+        {(
           <div>
-            <label style={{ fontSize: 12, color: "var(--muted)", display: "block", marginBottom: 6 }}>{t("豆瓣搜索添加", "Search Douban to add")}</label>
+            <label style={{ fontSize: 12, color: "var(--muted)", display: "block", marginBottom: 6 }}>{kind === "other" ? t("维基百科搜索添加", "Search Wikipedia to add") : t("豆瓣搜索添加", "Search Douban to add")}</label>
             <div style={{ display: "flex", gap: 8 }}>
               <input value={searchKey} onChange={(e) => setSearchKey(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") void runSearch(); }} placeholder={t("输入关键词搜索", "Type keywords to search")} style={{ flex: 1 }} />
               <button className="button secondary" disabled={searching || !searchKey.trim()} onClick={() => void runSearch()} style={{ minHeight: 34, flexShrink: 0 }}>{searching ? t("搜索中…", "Searching…") : t("搜索", "Search")}</button>
@@ -347,7 +358,7 @@ function WorkEditor({ ranking, t, onCancel, onSave }: {
                 {results.map((item) => (
                   <div key={item.title + (item.year ?? "")} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 10px", border: "1px solid var(--line)", borderRadius: 8, fontSize: 13 }}>
                     <div style={{ flex: 1, minWidth: 0 }}><strong>{item.title}</strong> {item.rating && <small>★{item.rating}</small>}<div className="mini-note">{item.creator} {item.year}</div></div>
-                    <button className="text-button" onClick={() => { addWork(item.title, item.creator, item.year ? Number(item.year) : undefined); setResults((cur) => cur.filter((r) => r.title !== item.title)); }} style={{ fontSize: 12, flexShrink: 0 }}><Plus size={12} />{t("添加", "Add")}</button>
+                    <button className="text-button" onClick={() => { addWork(item.title, item.creator, item.year ? Number(item.year) : undefined, item.poster); setResults((cur) => cur.filter((r) => r.title !== item.title)); }} style={{ fontSize: 12, flexShrink: 0 }}><Plus size={12} />{t("添加", "Add")}</button>
                   </div>
                 ))}
               </div>
