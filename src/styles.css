@@ -515,7 +515,7 @@ kbd{display:inline-flex;align-items:center;justify-content:center;min-width:22px
   --status-ok:#3fa06a;--status-warn:#e0a33e;--status-danger:#d85a3a;
 }
 [data-theme=retro] .button,[data-theme=retro] .rank-pill,[data-theme=retro] .dim-chip{border-radius:6px}
-[data-theme=retro] .topbar,[data-theme=retro] .glass-capsule,[data-theme=retro] .segmented{backdrop-filter:none;-webkit-backdrop-filter:none}
+[data-theme=retro] .topbar,[data-theme=retro] .glass-capsule,[data-theme=retro] .segmented,[data-theme=retro] .medium-item,[data-theme=retro] .account-dialog,[data-theme=retro] .artwork-main,[data-theme=retro] .toast,[data-theme=retro] .dim-chip,[data-theme=retro] .rank-pill,[data-theme=retro] .rank-menu,[data-theme=retro] .guide-help-btn,[data-theme=retro] .plaza-header,[data-theme=retro] .scroll-top,[data-theme=retro] .custom-suggestions,[data-theme=retro] .detail-dialog,[data-theme=retro] .rank-detail-dialog{backdrop-filter:none;-webkit-backdrop-filter:none}
 [data-theme=retro] .eyebrow{text-transform:uppercase;letter-spacing:.12em;color:var(--accent-2)}
 [data-theme=retro] .home-heading h1{letter-spacing:-.03em}
 [data-theme=retro] .list-card:hover,[data-theme=retro] .collection-row:hover{box-shadow:0 9px 25px rgba(32,53,43,.08)}
@@ -532,6 +532,7 @@ kbd{display:inline-flex;align-items:center;justify-content:center;min-width:22px
 [data-theme=minimal] .button.primary{border-radius:2px}
 [data-theme=minimal] .topbar nav button.active:after{height:1px}
 [data-theme=minimal] .poster{box-shadow:none}
+[data-theme=minimal] :is(.topbar,.glass-capsule,.segmented,.medium-item,.account-dialog,.artwork-main,.toast,.dim-chip,.rank-pill,.rank-menu,.guide-help-btn,.plaza-header,.scroll-top,.custom-suggestions,.detail-dialog,.rank-detail-dialog){backdrop-filter:none;-webkit-backdrop-filter:none}
 
 /* ===== 主题：简约（浅色扁平蓝灰） ===== */
 [data-theme=simple]{
@@ -541,6 +542,7 @@ kbd{display:inline-flex;align-items:center;justify-content:center;min-width:22px
   --scrim:rgba(20,30,45,.45);--toast-bg:#eaf1ff;--toast-bg-2:#dfeaff;--toast-ink:#1d3a6b;--toast-border:#b9cff5;
   --reader-dim:.92;--reader-poster-opacity:.2;
 }
+[data-theme=simple] :is(.topbar,.glass-capsule,.segmented,.medium-item,.account-dialog,.artwork-main,.toast,.dim-chip,.rank-pill,.rank-menu,.guide-help-btn,.plaza-header,.scroll-top,.custom-suggestions,.detail-dialog,.rank-detail-dialog){backdrop-filter:none;-webkit-backdrop-filter:none}
 
 /* ===== 主题：古典（衬线米黄双线框印章红） ===== */
 [data-theme=classic]{
@@ -555,6 +557,7 @@ kbd{display:inline-flex;align-items:center;justify-content:center;min-width:22px
 [data-theme=classic] .profile-layout section,[data-theme=classic] .profile-layout aside{border:1px solid var(--line);box-shadow:0 0 0 3px var(--bg),0 0 0 4px color-mix(in srgb,var(--accent) 40%,transparent)}
 [data-theme=classic] .button{border-radius:2px}
 [data-theme=classic] .eyebrow{letter-spacing:.18em}
+[data-theme=classic] :is(.topbar,.glass-capsule,.segmented,.medium-item,.account-dialog,.artwork-main,.toast,.dim-chip,.rank-pill,.rank-menu,.guide-help-btn,.plaza-header,.scroll-top,.custom-suggestions,.detail-dialog,.rank-detail-dialog){backdrop-filter:none;-webkit-backdrop-filter:none}
 
 /* ===== 主题：赛博朋克（黑底霓虹青/品红发光） ===== */
 [data-theme=cyber]{
@@ -602,3 +605,11 @@ kbd{display:inline-flex;align-items:center;justify-content:center;min-width:22px
 .sync-dot[data-status="saving"]{background:var(--status-warn)}
 .sync-dot[data-status="saved"]{background:var(--status-ok)}
 .sync-dot[data-status="error"]{background:var(--status-danger)}
+
+/* ===== 全主题统一：胶囊容器内的按钮必须保持圆角，避免圆容器套方按钮 ===== */
+/* 主题块里的 [data-theme=x] .button 扁平方角规则只作用于独立按钮；
+   嵌在 .home-actions / .identity 这类 999px 胶囊内的按钮用更高特异度守卫回圆角 */
+[data-theme] .home-actions .button,
+[data-theme] .home-actions .button.primary,
+[data-theme] .home-actions .button.secondary,
+.home-actions .button{border-radius:999px}
