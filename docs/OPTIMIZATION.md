@@ -568,3 +568,30 @@ jobs:
 - 首页媒介选择卡片需要在数据加载前显示骨架屏
 
 改动链路长且影响首屏渲染逻辑。`"sideEffects": false` 已添加，Vite tree-shaking 已生效，实际收益有限。
+
+---
+
+## 可优化点清单 v1（2026-09-13，P1-P5 执行中累积，P6 滚动输入）
+
+### UI/组件精修（P6 候选）
+- [ ] PlazaPostView.tsx（629 行 / 68 内联样式）拆出评论区、作者编辑区子组件
+- [ ] CompareView.tsx 超长单行 JSX 格式化（42 行含 38 内联 style）
+- [ ] styles.css 历史重复定义清理（.rank-detail-dialog/.guide-help-btn/.profile-layout section/.ranking-card-* 各 2 份）
+- [ ] 弹窗焦点陷阱推广到全部 modal（现仅新手引导用 FocusTrap）
+- [ ] toast 通知队列化（现在多条会互相顶掉）；aria-live 播报
+- [ ] OrbScene 移动端降级（低 dpr/小屏减粒子或静态图）
+- [ ] 广场/比较长列表虚拟化（>200 项时）
+- [ ] 主题切换器下拉在 cyber/retro 下的对比度微调（菜单 hover 态）
+- [ ] retro 主题字体本地化（Manrope/DM Mono woff2 入 public/fonts，当前回退系统字体）
+
+### 数据/逻辑
+- [ ] clearAllData 与登出的 localStorage 清理集合不一致（notes 一处清一处不清）
+- [ ] Poster 缓存键已含 kind，但 douban 标题带原文后缀问题可同样喂给维基（当前已用用户输入标题，可再优化为豆瓣干净标题剥离）
+- [ ] /api/share 无独立限流桶（share 桶已声明未使用）
+- [ ] other 类别的 /api/posters 解析路径未接维基（仅详情带图；搜索候选带图已可用）
+- [ ] 网易云扫码 risk 判定后 unikey 已销毁，「再试一次扫码」会重新签发——可保留原 unikey 轮询恢复窗口
+- [ ] doubanSearch 无 music suggest（/api/douban/music/suggest 缺失）
+
+### 文档
+- [ ] FEATURES.md 的回归走查清单尚未做成可自动化脚本（Playwright）
+- [ ] PLAN-plaza.md 标注「已被 FEATURES.md 取代」或归档至 docs/old/
