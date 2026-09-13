@@ -187,11 +187,12 @@ export async function fetchNeteasePlaylist(playlistId: string, cookie?: string |
     await neteaseSleep(900);
   }
   if (!ids.length && !fallbackTracks.length) throw new Error("netease_playlist_not_found");
-  // 批量补全曲目（v6 的 tracks 只带前 ~10 首）：开放 v3 → weapi v3 ×2，分片间节流
+  // 批量补全曲目（v6 的 tracks 只带前 ~10 首）：开放 v3 → weapi v3 ×2。
+  // 一批可装 300 首（=ids 上限），绝大多数歌单单次请求即可，最小化连发次数以规避 CF 出口限流。
   const songs: NeteaseSong[] = [];
-  for (let start = 0; start < ids.length; start += 100) {
+  for (let start = 0; start < ids.length; start += 300) {
     if (start > 0) await neteaseSleep(700);
-    const chunk = ids.slice(start, start + 100);
+    const chunk = ids.slice(start, start + 300);
     const cJson = "[" + chunk.map((id) => `{"id":${id}}`).join(",") + "]";
     const idsJson = "[" + chunk.join(",") + "]";
     const got = await firstNonEmpty<NeteaseSong>([
