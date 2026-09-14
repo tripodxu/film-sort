@@ -27,6 +27,7 @@ import { PlazaPostView } from "./views/PlazaPostView";
 
 import { stored, track, decode, saveFile, crossProfileSummary, type Locale } from "./lib/utils";
 import { useRouter, pathToView, type View } from "./lib/useRouter";
+import { useAuth } from "./lib/useAuth";
 
 type Draft = { collection: MediaCollection; ranking: string; profileName: string };
 const DRAFT_KEY = "art-rank:draft:v2";
@@ -87,20 +88,6 @@ export default function App() {
   const [qrUrl, setQrUrl] = useState("");
   const [shareModal, setShareModal] = useState<{ ranking?: RankingExport } | null>(null);
   const [shareExpires, setShareExpires] = useState("");
-  const [accountOpen, setAccountOpen] = useState(new URLSearchParams(location.search).has("account"));
-  const [accountEmail, setAccountEmail] = useState("");
-  const [accountNickname, setAccountNickname] = useState("");
-  const [accountToken, setAccountToken] = useState(() => { try { return localStorage.getItem("art-rank:account-token") ?? ""; } catch { return ""; } });
-  const [authMode, setAuthMode] = useState<"login" | "register">("login");
-  const [authEmail, setAuthEmail] = useState("");
-  const [authPassword, setAuthPassword] = useState("");
-  const [authNickname, setAuthNickname] = useState("");
-  const [authError, setAuthError] = useState("");
-  const [needNickname, setNeedNickname] = useState(false);
-  const [editingNickname, setEditingNickname] = useState(false);
-  const [editNicknameValue, setEditNicknameValue] = useState("");
-  const [syncStatus, setSyncStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
-  const [cloudConflict, setCloudConflict] = useState<ArtisticProfile | null>(null);
   const [editingRankIdx, setEditingRankIdx] = useState<number | null>(null);
   const [editingRankTitle, setEditingRankTitle] = useState("");
   const [notes, setNotes] = useState<Record<string, string>>(readNotes);
@@ -117,10 +104,18 @@ export default function App() {
   const [showTech, setShowTech] = useState(false);
   const [reorderMode, setReorderMode] = useState<number | null>(null);
   const [reorderItems, setReorderItems] = useState<RankedArtwork[]>([]);
-  const syncTimer = useRef<number | null>(null);
-  const syncing = useRef(false);
   const rankingSnapshots = useRef<string[]>([]);
   const [showScrollTop, setShowScrollTop] = useState(false);
+
+  const auth = useAuth({
+    getProfile: () => profile, getNotes: () => notes,
+    namedProfile: () => { if (!profile) return null; const name = profileName.trim() || t("我的艺术人格", "My artistic profile"); return { ...profile, profileName: name, rankings: profile.rankings.map((entry) => ({ ...entry, profileName: name })) }; },
+    persist: (next) => { setProfile(next); setProfileName(next.profileName); setShareUrl(""); setQrUrl(""); try { localStorage.setItem(LIBRARY_KEY, JSON.stringify(next)); writeNotes(notes); } catch { setNotice(t("浏览器无法保存，请及时导出画像。", "Browser storage is unavailable. Export your profile to keep it.")); } },
+    setNotes, setProfile, setPeer,
+    setDraft: setDraft as (d: unknown) => void,
+    setNotice, t,
+  });
+  const { accountOpen, setAccountOpen, accountEmail, setAccountEmail, accountNickname, setAccountNickname, accountToken, setAccountToken, authMode, setAuthMode, authEmail, setAuthEmail, authPassword, setAuthPassword, authNickname, setAuthNickname, authError, setAuthError, needNickname, setNeedNickname, editingNickname, setEditingNickname, editNicknameValue, setEditNicknameValue, syncStatus, setSyncStatus, cloudConflict, setCloudConflict, accountAuth, accountSave, accountLoad, saveNickname, accountLogout } = auth;
 
   const comparison = ranking ? getCurrentComparison(ranking) : null;
   const progress = ranking ? getRankingProgress(ranking) : null;
@@ -226,27 +221,6 @@ export default function App() {
         }
       }
     }
-
-    // Restore session
-    const savedToken = accountToken;
-    if (savedToken) {
-      void fetch("/api/account/profile", { headers: { authorization: `Bearer ${savedToken}` } })
-        .then((r) => r.ok ? r.json() : null)
-        .then((data: { email?: string; nickname?: string; profile?: unknown; notes?: Record<string, string> } | null) => {
-          if (data?.email) {
-            setAccountEmail(data.email);
-            setAccountNickname(data.nickname ?? data.email.split("@")[0]);
-            // Restore notes from cloud on session restore
-            if (data.notes && typeof data.notes === "object") {
-              const localNotes = readNotes();
-              const merged = { ...localNotes, ...data.notes };
-              setNotes(merged);
-              writeNotes(merged);
-            }
-          }
-          else { setAccountToken(""); try { localStorage.removeItem("art-rank:account-token"); } catch {} }
-        }).catch(() => {});
-    }
   }, []);
   useEffect(() => { document.documentElement.lang = locale === "zh" ? "zh-CN" : "en"; }, [locale]);
   useEffect(() => { applyTheme(readTheme()); }, []);
@@ -263,21 +237,6 @@ export default function App() {
     setDraft(next);
     try { localStorage.setItem(DRAFT_KEY, JSON.stringify(next)); } catch { setNotice(t("进度无法写入浏览器存储。", "Progress could not be saved in this browser.")); }
   }, [ranking, collection, view, profileName]);
-  useEffect(() => {
-    if (!accountToken || !profile) return;
-    if (syncTimer.current !== null) window.clearTimeout(syncTimer.current);
-    syncTimer.current = window.setTimeout(() => { void syncProfile(false); }, 900);
-    return () => { if (syncTimer.current !== null) window.clearTimeout(syncTimer.current); };
-  }, [profile, accountToken]);
-  useEffect(() => {
-    const flush = () => { if (accountToken && profile) void syncProfile(true); };
-    const online = () => { if (accountToken && profile) void syncProfile(false); };
-    const visibility = () => { if (document.visibilityState === "hidden") flush(); };
-    window.addEventListener("pagehide", flush);
-    document.addEventListener("visibilitychange", visibility);
-    window.addEventListener("online", online);
-    return () => { window.removeEventListener("pagehide", flush); document.removeEventListener("visibilitychange", visibility); window.removeEventListener("online", online); };
-  }, [accountToken, profile]);
   useEffect(() => { void loadCloudCollections(); }, [accountToken]);
   useEffect(() => {
     const handler = (event: KeyboardEvent) => {
@@ -706,114 +665,6 @@ export default function App() {
       } else { setNotice(t("生成链接失败。", "Failed to create link.")); }
     } catch { setNotice(t("生成链接失败。", "Failed to create link.")); }
     finally { setBusy(false); }
-  }
-  async function accountLoad(autoApply: boolean) {
-    if (!accountToken) return;
-    setBusy(true);
-    try {
-      const response = await fetch("/api/account/profile", { headers: { authorization: `Bearer ${accountToken}` } });
-      if (!response.ok) throw new Error();
-      const data = await response.json() as { email: string; nickname?: string; profile: unknown; notes?: Record<string, string> };
-      if (data.email) setAccountEmail(data.email);
-      if (data.nickname) setAccountNickname(data.nickname);
-      if (data.profile) {
-        const parsed = parseProfile(data.profile);
-        if (autoApply && !profile) { persist(parsed); setNotice(t("已从云端恢复画像。", "Profile restored from cloud.")); }
-        else if (!autoApply) { persist(parsed); setNotice(t("已从云端同步画像。", "Profile synced from cloud.")); }
-      }
-      if (data.notes && typeof data.notes === "object") {
-        const merged = { ...notes, ...data.notes };
-        setNotes(merged);
-        writeNotes(merged);
-      }
-    } catch { if (!autoApply) setNotice(t("读取失败，请重新登录。", "Failed to load. Please sign in again.")); }
-    finally { setBusy(false); }
-  }
-  async function accountSave() {
-    if (!accountToken) { setNotice(t("请先登录。", "Please sign in first.")); return; }
-    const next = namedProfile(); if (!next) return;
-    setBusy(true);
-    try {
-      const hasAnyNotes = Object.keys(notes).length > 0;
-      const response = await fetch("/api/account/profile", { method: "PUT", headers: { "content-type": "application/json", authorization: `Bearer ${accountToken}` }, body: JSON.stringify({ profile: next, ...(hasAnyNotes ? { notes } : {}) }) });
-      if (!response.ok) throw new Error();
-      persist(next); setSyncStatus("saved"); setNotice(t("画像已保存到云端。", "Profile saved to cloud."));
-    } catch { setNotice(t("同步失败，本地画像仍然保留。", "Sync failed. Your local profile is still available.")); }
-    finally { setBusy(false); }
-  }
-  async function syncProfile(keepalive: boolean) {
-    if (!accountToken || !profile || syncing.current) return;
-    const next = namedProfile(); if (!next) return;
-    syncing.current = true;
-    setSyncStatus("saving");
-    try {
-      const hasAnyNotes = Object.keys(notes).length > 0;
-      const ok = (await fetch("/api/account/profile", { method: "PUT", headers: { "content-type": "application/json", authorization: `Bearer ${accountToken}` }, body: JSON.stringify({ profile: next, ...(hasAnyNotes ? { notes } : {}) }), keepalive })).ok;
-      setSyncStatus(ok ? "saved" : "error");
-    } catch { setSyncStatus("error"); }
-    finally { syncing.current = false; }
-  }
-  async function accountAuth(mode: "login" | "register") {
-    setAuthError(""); setBusy(true);
-    try {
-      if (mode === "register" && !authNickname.trim()) { setAuthError(t("请填写昵称", "Please enter a nickname")); setBusy(false); return; }
-      const response = await fetch(`/api/account/${mode}`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ email: authEmail, password: authPassword, nickname: authNickname || undefined }) });
-      const data = await response.json() as { token?: string; email?: string; nickname?: string; error?: string; msg?: string };
-      if (!response.ok || !data.token) { setAuthError(data.msg ?? data.error ?? t("操作失败", "Failed")); return; }
-      setAccountToken(data.token); setAccountEmail(data.email ?? authEmail); setAccountNickname(data.nickname ?? ""); setAuthEmail(""); setAuthPassword(""); setAuthNickname("");
-      try { localStorage.setItem("art-rank:account-token", data.token); } catch {}
-      setNotice(t("登录成功！", "Signed in!"));
-      // Auto-load cloud profile + notes after login, detect conflicts
-      const freshToken = data.token;
-      setTimeout(async () => {
-        try {
-          const r = await fetch("/api/account/profile", { headers: { authorization: `Bearer ${freshToken}` } });
-          if (!r.ok) return;
-          const d = await r.json() as { nickname?: string; profile: unknown; notes?: Record<string, string> };
-          if (d.nickname) setAccountNickname(d.nickname);
-          // Restore notes from cloud
-          if (d.notes && typeof d.notes === "object") {
-            const localNotes = readNotes();
-            const merged = { ...localNotes, ...d.notes };
-            setNotes(merged);
-            writeNotes(merged);
-          }
-          if (d.profile) {
-            const cloudParsed = parseProfile(d.profile);
-            if (profile) { setCloudConflict(cloudParsed); } // both local & cloud → show conflict dialog
-            else { persist(cloudParsed); setNotice(t("已从云端恢复画像和批注。", "Profile and notes restored from cloud.")); }
-          }
-        } catch {}
-      }, 100);
-    } catch { setAuthError(t("网络错误", "Network error")); }
-    finally { setBusy(false); }
-  }
-  async function saveNickname() {
-    const name = editingNickname ? editNicknameValue.trim() : authNickname.trim();
-    if (!name || !accountToken) return;
-    setBusy(true);
-    try {
-      const response = await fetch("/api/account/nickname", { method: "PUT", headers: { "content-type": "application/json", authorization: `Bearer ${accountToken}` }, body: JSON.stringify({ nickname: name }) });
-      if (response.ok) { setAccountNickname(name); setNeedNickname(false); setEditingNickname(false); setAuthNickname(""); setEditNicknameValue(""); setNotice(t("昵称已更新！", "Nickname updated!")); }
-    } catch {}
-    finally { setBusy(false); }
-  }
-  async function accountLogout() {
-    if (accountToken) {
-      // 先同步画像和批注到云端
-      const next = namedProfile();
-      if (next) {
-        try {
-          const hasAnyNotes = Object.keys(notes).length > 0;
-          await fetch("/api/account/profile", { method: "PUT", headers: { "content-type": "application/json", authorization: `Bearer ${accountToken}` }, body: JSON.stringify({ profile: next, ...(hasAnyNotes ? { notes } : {}) }), keepalive: true });
-        } catch { /* best-effort */ }
-      }
-      void fetch("/api/account/logout", { method: "POST", headers: { authorization: `Bearer ${accountToken}` } }).catch(() => {});
-    }
-    // 清除本地数据
-    setAccountToken(""); setAccountEmail(""); setAccountNickname(""); setEditingNickname(false); setSyncStatus("idle"); setCloudConflict(null);
-    setProfile(null); setNotes({}); setPeer(null); setDraft(null);
-    try { localStorage.removeItem("art-rank:account-token"); localStorage.removeItem(LIBRARY_KEY); localStorage.removeItem(DRAFT_KEY); localStorage.removeItem(PEER_KEY); localStorage.removeItem("art-rank:notes"); } catch {}
   }
   function createFromPeer(nextKind: MediaKind) {
     const entry = peer?.rankings.find((item) => item.kind === nextKind);
