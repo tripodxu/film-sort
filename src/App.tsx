@@ -25,17 +25,15 @@ import { ShareView } from "./views/ShareView";
 import { PlazaView } from "./views/PlazaView";
 import { PlazaPostView } from "./views/PlazaPostView";
 
-type View = "home" | "source" | "setup" | "sorting" | "profile" | "compare" | "share" | "plaza" | "plazaPost";
-const VIEW_PATH: Record<View, string> = { home: "/", source: "/catalog/source", setup: "/catalog/setup", sorting: "/catalog/sorting", profile: "/myself", compare: "/encounter", share: "/share", plaza: "/plaza", plazaPost: "/plaza/0" };
-function pathToView(p: string): View | null { const clean = p.replace(/\/+$/, "") || "/"; if (clean.startsWith("/share")) return "share"; if (/^\/plaza\/\d+/.test(clean)) return "plazaPost"; if (clean === "/plaza") return "plaza"; return (Object.entries(VIEW_PATH) as [View, string][]).find(([, v]) => clean === v)?.[0] ?? null; }
-type Locale = "zh" | "en";
+import { stored, track, decode, saveFile, crossProfileSummary, type Locale } from "./lib/utils";
+import { useRouter, pathToView, type View } from "./lib/useRouter";
+
 type Draft = { collection: MediaCollection; ranking: string; profileName: string };
 const DRAFT_KEY = "art-rank:draft:v2";
 const PEER_KEY = "art-rank:peer:v2";
 const kinds = Object.keys(mediaLabels) as MediaKind[];
 const englishKinds = { film: "Films", book: "Books", music: "Music", other: "Other" };
 
-function stored(key: string) { try { return localStorage.getItem(key); } catch { return null; } }
 function loadPeer() { try { return parseProfile(JSON.parse(stored(PEER_KEY) ?? "")); } catch { return null; } }
 function loadDraft(): Draft | null {
   try {
@@ -47,39 +45,12 @@ function loadDraft(): Draft | null {
     return data;
   } catch { return null; }
 }
-function track(event: string, payload: Record<string, string | number>) {
-  try {
-    const id = stored("art-rank:session:v1") ?? crypto.randomUUID();
-    localStorage.setItem("art-rank:session:v1", id);
-    void fetch("/api/events", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ event_name: event, session_id: id, payload }) }).catch(() => undefined);
-  } catch { /* Local privacy settings must not interrupt sorting. */ }
-}
-async function decode(payload: string) {
-  const { decompressSync, strFromU8 } = await import("fflate");
-  if (payload.length > 100000) throw new Error("Link too large");
-  const binary = atob(payload.replace(/-/g, "+").replace(/_/g, "/") + "=".repeat((4 - payload.length % 4) % 4));
-  const data = decompressSync(Uint8Array.from(binary, (char) => char.charCodeAt(0)), { out: new Uint8Array(MAX_PROFILE_BYTES + 1) });
-  if (data.length > MAX_PROFILE_BYTES) throw new Error("Profile too large");
-  return parseProfile(JSON.parse(strFromU8(data)));
-}
-function saveFile(content: BlobPart, name: string, type: string) {
-  const url = URL.createObjectURL(new Blob([content], { type }));
-  const link = document.createElement("a"); link.href = url; link.download = name; link.click();
-  setTimeout(() => URL.revokeObjectURL(url), 1000);
-}
-function crossProfileSummary(own: ArtisticProfile, peer: ArtisticProfile): string {
-  return own.rankings.map((ranking) => {
-    const other = peer.rankings.find((entry) => entry.kind === ranking.kind);
-    if (!other) return `${ranking.kind}: only one side has a list`;
-    return `${ranking.kind}: mine=${ranking.items.slice(0, 5).map((item) => item.title).join(", ")}; theirs=${other.items.slice(0, 5).map((item) => item.title).join(", ")}`;
-  }).join("\n").slice(0, 2200);
-}
 
 export default function App() {
   const [locale, setLocale] = useState<Locale>(() => new URLSearchParams(location.search).get("lang") === "en" ? "en" : "zh");
   const t = (zh: string, en: string) => locale === "zh" ? zh : en;
   const label = (kind: MediaKind) => locale === "zh" ? mediaLabels[kind].label : englishKinds[kind];
-  const [view, setView] = useState<View>("home");
+  const { view, setView, navigateTo, plazaPostId } = useRouter();
   const [kind, setKind] = useState<MediaKind>("film");
   const [source, setSource] = useState<"builtin" | "custom" | "douban">("builtin");
   const [collection, setCollection] = useState<MediaCollection | null>(null);
@@ -144,7 +115,6 @@ export default function App() {
   const [sharePeer, setSharePeer] = useState<ArtisticProfile | null>(null);
   const [showGuide, setShowGuide] = useState(() => { try { return !localStorage.getItem("art-rank:guide-dismissed"); } catch { return true; } });
   const [showTech, setShowTech] = useState(false);
-  const [plazaPostId, setPlazaPostId] = useState<number>(0);
   const [reorderMode, setReorderMode] = useState<number | null>(null);
   const [reorderItems, setReorderItems] = useState<RankedArtwork[]>([]);
   const syncTimer = useRef<number | null>(null);
@@ -158,24 +128,6 @@ export default function App() {
   const collections = getCollectionsByKind(kind).filter((item) => [item.title, item.description, ...item.works.map((work) => work.title)].join(" ").toLowerCase().includes(search.toLowerCase()));
   const activeRanking = profile?.rankings.find((entry, idx) => `${entry.kind}-${idx}` === activeKind) ?? profile?.rankings[0];
 
-  function navigateTo(nextViewOrPlaza: View | string) {
-    const nextView = (typeof nextViewOrPlaza === "string" && nextViewOrPlaza.startsWith("plazaPost:"))
-      ? "plazaPost" as View
-      : nextViewOrPlaza as View;
-    if (nextView === "plazaPost" && typeof nextViewOrPlaza === "string") {
-      const id = Number(nextViewOrPlaza.split(":")[1]) || 0;
-      setPlazaPostId(id);
-      setView("plazaPost");
-      const lang = new URLSearchParams(location.search).get("lang");
-      const qs = lang ? `?lang=${lang}` : "";
-      history.pushState({ view: "plazaPost" }, "", `/plaza/${id}${qs}`);
-      return;
-    }
-    setView(nextView);
-    const lang = new URLSearchParams(location.search).get("lang");
-    const qs = lang ? `?lang=${lang}` : "";
-    history.pushState({ view: nextView }, "", VIEW_PATH[nextView] + qs);
-  }
   function openNoteModal(key: string, title: string, kind: MediaKind, posterUrls?: readonly string[]) {
     setNoteModal({ key, title, kind, posterUrls });
     setNoteDraft(notes[key] ?? "");
@@ -275,16 +227,6 @@ export default function App() {
       }
     }
 
-    // Restore view from URL path (after peer/profile handlers which take priority)
-    const initialView = pathToView(location.pathname);
-    if (initialView) {
-      setView(initialView);
-      if (initialView === "plazaPost") {
-        const match = location.pathname.match(/^\/plaza\/(\d+)/);
-        if (match) setPlazaPostId(Number(match[1]));
-      }
-    }
-
     // Restore session
     const savedToken = accountToken;
     if (savedToken) {
@@ -308,25 +250,10 @@ export default function App() {
   }, []);
   useEffect(() => { document.documentElement.lang = locale === "zh" ? "zh-CN" : "en"; }, [locale]);
   useEffect(() => { applyTheme(readTheme()); }, []);
-  useEffect(() => { window.scrollTo({ top: 0, behavior: "smooth" }); }, [view]);
   useEffect(() => {
     const onScroll = () => setShowScrollTop(window.scrollY > 400);
     window.addEventListener("scroll", onScroll, { passive: true });
     return () => window.removeEventListener("scroll", onScroll);
-  }, []);
-  useEffect(() => {
-    function onPopState() {
-      const v = pathToView(location.pathname);
-      if (v) {
-        setView(v);
-        if (v === "plazaPost") {
-          const match = location.pathname.match(/^\/plaza\/(\d+)/);
-          if (match) setPlazaPostId(Number(match[1]));
-        }
-      } else setView("home");
-    }
-    window.addEventListener("popstate", onPopState);
-    return () => window.removeEventListener("popstate", onPopState);
   }, []);
   useEffect(() => { setEditingRankIdx(null); setEditingRankTitle(""); setReorderMode(null); setReorderItems([]); }, [view]);
   useEffect(() => { if (!notice) return; const timer = setTimeout(() => setNotice(""), 4000); return () => clearTimeout(timer); }, [notice]);
