@@ -30,9 +30,12 @@ export interface AuthDeps {
   t: (zh: string, en: string) => string;
 }
 
-export function useAuth(deps: AuthDeps) {
+export function useAuth(deps: Omit<AuthDeps, 'setDraft'> & { setDraft?: (d: unknown) => void }) {
   const depsRef = useRef(deps);
   depsRef.current = deps;
+  // setDraft may be set lazily via updateSetDraft() to break circular dependency
+  const setDraftRef = useRef<(d: unknown) => void>(() => {});
+  if (deps.setDraft) setDraftRef.current = deps.setDraft;
 
   const [accountOpen, setAccountOpen] = useState(new URLSearchParams(location.search).has("account"));
   const [accountEmail, setAccountEmail] = useState("");
@@ -171,7 +174,7 @@ export function useAuth(deps: AuthDeps) {
       void fetch("/api/account/logout", { method: "POST", headers: { authorization: `Bearer ${token}` } }).catch(() => {});
     }
     setAccountToken(""); setAccountEmail(""); setAccountNickname(""); setEditingNickname(false); setSyncStatus("idle"); setCloudConflict(null);
-    d.setProfile(null); d.setNotes({}); d.setPeer(null); d.setDraft(null);
+    d.setProfile(null); d.setNotes({}); d.setPeer(null); setDraftRef.current(null);
     try { localStorage.removeItem("art-rank:account-token"); localStorage.removeItem(LIBRARY_KEY); localStorage.removeItem(DRAFT_KEY); localStorage.removeItem(PEER_KEY); localStorage.removeItem("art-rank:notes"); } catch {}
   }, []);
 
@@ -228,5 +231,7 @@ export function useAuth(deps: AuthDeps) {
     busy, setBusy,
     // Functions
     accountAuth, accountSave, accountLoad, syncProfile, saveNickname, accountLogout,
+    /** Update the setDraft callback (used to break circular dependency with useSorting). */
+    updateSetDraft: (fn: (d: unknown) => void) => { setDraftRef.current = fn; },
   };
 }

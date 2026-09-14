@@ -28,6 +28,7 @@ import { PlazaPostView } from "./views/PlazaPostView";
 import { stored, track, decode, saveFile, crossProfileSummary, type Locale } from "./lib/utils";
 import { useRouter, pathToView, type View } from "./lib/useRouter";
 import { useAuth } from "./lib/useAuth";
+import { useSorting } from "./lib/useSorting";
 
 type Draft = { collection: MediaCollection; ranking: string; profileName: string };
 const DRAFT_KEY = "art-rank:draft:v2";
@@ -52,12 +53,6 @@ export default function App() {
   const t = (zh: string, en: string) => locale === "zh" ? zh : en;
   const label = (kind: MediaKind) => locale === "zh" ? mediaLabels[kind].label : englishKinds[kind];
   const { view, setView, navigateTo, plazaPostId } = useRouter();
-  const [kind, setKind] = useState<MediaKind>("film");
-  const [source, setSource] = useState<"builtin" | "custom" | "douban">("builtin");
-  const [collection, setCollection] = useState<MediaCollection | null>(null);
-  const [selected, setSelected] = useState<string[]>([]);
-  const [ranking, setRanking] = useState<RankingState | null>(null);
-  const [draft, setDraft] = useState(loadDraft);
   const [profile, setProfile] = useState<ArtisticProfile | null>(() => { try { return readProfile(localStorage); } catch { return null; } });
   const [peer, setPeer] = useState<ArtisticProfile | null>(loadPeer);
   const [profileName, setProfileName] = useState(() => { try { return readProfile(localStorage)?.profileName ?? "我的艺术人格"; } catch { return "我的艺术人格"; } });
@@ -69,19 +64,9 @@ export default function App() {
   const [compareRankDetail, setCompareRankDetail] = useState<{ side: "own" | "peer"; collectionTitle: string; ranking: RankingExport | null; highlightId?: string } | null>(null);
   const [compareSortBy, setCompareSortBy] = useState<"own" | "peer">("own");
   const [peerRankPickOpen, setPeerRankPickOpen] = useState(false);
-  const [topN, setTopN] = useState(10);
-  const [seed, setSeed] = useState("");
-  const [customText, setCustomText] = useState("");
-  const [customItem, setCustomItem] = useState("");
-  const [customWorks, setCustomWorks] = useState<Artwork[]>([]);
-  const [cloudCollections, setCloudCollections] = useState<Array<MediaCollection & { remoteId: number }>>([]);
   const [aiInsight, setAiInsight] = useState("");
   const [aiBusy, setAiBusy] = useState(false);
-  const [search, setSearch] = useState("");
   const [notice, setNotice] = useState("");
-  const [colCount, setColCount] = useState<number>(() => { try { return Number(localStorage.getItem("art-rank:cols")) || 3; } catch { return 3; } });
-  const [busy, setBusy] = useState(false);
-  const [doubanLimit, setDoubanLimit] = useState(50);
   const [format, setFormat] = useState<"json" | "txt" | "md" | "csv" | "png">("json");
   const [exportLayout, setExportLayout] = useState<ExportLayout>("editorial");
   const [shareUrl, setShareUrl] = useState("");
@@ -104,7 +89,6 @@ export default function App() {
   const [showTech, setShowTech] = useState(false);
   const [reorderMode, setReorderMode] = useState<number | null>(null);
   const [reorderItems, setReorderItems] = useState<RankedArtwork[]>([]);
-  const rankingSnapshots = useRef<string[]>([]);
   const [showScrollTop, setShowScrollTop] = useState(false);
 
   const auth = useAuth({
@@ -112,15 +96,22 @@ export default function App() {
     namedProfile: () => { if (!profile) return null; const name = profileName.trim() || t("我的艺术人格", "My artistic profile"); return { ...profile, profileName: name, rankings: profile.rankings.map((entry) => ({ ...entry, profileName: name })) }; },
     persist: (next) => { setProfile(next); setProfileName(next.profileName); setShareUrl(""); setQrUrl(""); try { localStorage.setItem(LIBRARY_KEY, JSON.stringify(next)); writeNotes(notes); } catch { setNotice(t("浏览器无法保存，请及时导出画像。", "Browser storage is unavailable. Export your profile to keep it.")); } },
     setNotes, setProfile, setPeer,
-    setDraft: setDraft as (d: unknown) => void,
     setNotice, t,
   });
   const { accountOpen, setAccountOpen, accountEmail, setAccountEmail, accountNickname, setAccountNickname, accountToken, setAccountToken, authMode, setAuthMode, authEmail, setAuthEmail, authPassword, setAuthPassword, authNickname, setAuthNickname, authError, setAuthError, needNickname, setNeedNickname, editingNickname, setEditingNickname, editNicknameValue, setEditNicknameValue, syncStatus, setSyncStatus, cloudConflict, setCloudConflict, accountAuth, accountSave, accountLoad, saveNickname, accountLogout } = auth;
 
-  const comparison = ranking ? getCurrentComparison(ranking) : null;
-  const progress = ranking ? getRankingProgress(ranking) : null;
-  const worksById = useMemo(() => new Map(collection?.works.map((work) => [work.id, work]) ?? []), [collection]);
-  const collections = getCollectionsByKind(kind).filter((item) => [item.title, item.description, ...item.works.map((work) => work.title)].join(" ").toLowerCase().includes(search.toLowerCase()));
+  const sorting = useSorting({
+    getAccountToken: () => accountToken, getProfile: () => profile, getProfileName: () => profileName,
+    getPeer: () => peer, getNotes: () => notes,
+    persist: (next) => { setProfile(next); setProfileName(next.profileName); setShareUrl(""); setQrUrl(""); try { localStorage.setItem(LIBRARY_KEY, JSON.stringify(next)); writeNotes(notes); } catch { setNotice(t("浏览器无法保存，请及时导出画像。", "Browser storage is unavailable. Export your profile to keep it.")); } },
+    setActiveKind, setNotice, navigateTo, setView: setView as (v: string) => void, t, label, locale,
+  });
+  const { kind, setKind, source, setSource, collection, setCollection, selected, setSelected, ranking, setRanking, draft, setDraft, topN, setTopN, seed, setSeed, customText, setCustomText, customItem, setCustomItem, customWorks, setCustomWorks, cloudCollections, doubanLimit, setDoubanLimit, search, setSearch, colCount, busy: sortingBusy, setBusy, comparison, progress, worksById, collections, chooseKind, searchWorks, addCustomWork, removeCustomWork, loadCustomWorks, openCollection, applyImportedWorks, importDoulist, importNeteasePlaylist, saveCollectionCloud, loadCloudCollections, deleteCloudCollection, changeCols, loadDouban, startRanking, act, resume } = sorting;
+  const busy = sortingBusy;
+
+  // Wire auth's setDraft to sorting's setDraft (breaks circular dependency)
+  auth.updateSetDraft(setDraft as (d: unknown) => void);
+
   const activeRanking = profile?.rankings.find((entry, idx) => `${entry.kind}-${idx}` === activeKind) ?? profile?.rankings[0];
 
   function openNoteModal(key: string, title: string, kind: MediaKind, posterUrls?: readonly string[]) {
@@ -232,13 +223,6 @@ export default function App() {
   useEffect(() => { setEditingRankIdx(null); setEditingRankTitle(""); setReorderMode(null); setReorderItems([]); }, [view]);
   useEffect(() => { if (!notice) return; const timer = setTimeout(() => setNotice(""), 4000); return () => clearTimeout(timer); }, [notice]);
   useEffect(() => {
-    if (view !== "sorting" || !ranking || !collection) return;
-    const next = { collection, ranking: serializeRankingState(ranking), profileName };
-    setDraft(next);
-    try { localStorage.setItem(DRAFT_KEY, JSON.stringify(next)); } catch { setNotice(t("进度无法写入浏览器存储。", "Progress could not be saved in this browser.")); }
-  }, [ranking, collection, view, profileName]);
-  useEffect(() => { void loadCloudCollections(); }, [accountToken]);
-  useEffect(() => {
     const handler = (event: KeyboardEvent) => {
       if (view !== "sorting" || !comparison || event.repeat || accountOpen || (event.target instanceof HTMLElement && event.target.closest("input,textarea,select,[contenteditable=true]"))) return;
       const key = event.key.toLowerCase();
@@ -250,112 +234,6 @@ export default function App() {
     return () => window.removeEventListener("keydown", handler);
   }, [view, comparison, accountOpen, act]);
 
-  function chooseKind(next: MediaKind) { setKind(next); setSource("builtin"); setSearch(""); setCustomText(""); setCustomWorks([]); navigateTo("source"); }
-  // 自行导入：搜索候选（电影/书籍/音乐→豆瓣；其他→维基百科），返回带海报与元数据的完整作品
-  async function searchWorks(query: string): Promise<Artwork[]> {
-    const trimmed = query.trim();
-    if (!trimmed) return [];
-    try {
-      if (kind === "other") {
-        const response = await fetch(`/api/other/list?key=${encodeURIComponent(trimmed)}`, { signal: AbortSignal.timeout(15000) });
-        const data = await response.json() as { data?: Array<{ title?: string; subtitle?: string; year?: number; poster_url?: string }> };
-        return (data.data ?? []).slice(0, 6).map((item) => ({
-          id: `search-${Math.random().toString(36).slice(2, 10)}`,
-          title: item.title ?? "",
-          subtitle: item.subtitle,
-          year: item.year,
-          posterUrls: item.poster_url ? [item.poster_url] : undefined,
-        })).filter((work) => work.title);
-      }
-      const apiType = kind === "film" ? "movie" : kind;
-      const response = await fetch(`/api/${apiType}/list?key=${encodeURIComponent(trimmed)}&page=1`, { signal: AbortSignal.timeout(15000) });
-      const data = await response.json() as { data?: Array<{ title?: string; year?: string; rating?: string; author?: string; artist?: string; cover?: string; actors?: string[] }> };
-      return (data.data ?? []).slice(0, 6).map((item) => ({
-        id: `search-${Math.random().toString(36).slice(2, 10)}`,
-        title: item.title ?? "",
-        creator: item.author || item.artist || (Array.isArray(item.actors) ? item.actors.slice(0, 2).join("/") : undefined),
-        year: item.year ? Number(item.year) || undefined : undefined,
-        posterUrls: item.cover ? [item.cover] : undefined,
-      })).filter((work) => work.title);
-    } catch { return []; }
-  }
-  function addCustomWork(work: Artwork) {
-    setCustomWorks((cur) => cur.some((w) => w.title === work.title && w.year === work.year) ? cur : [...cur, work]);
-  }
-  function removeCustomWork(id: string) {
-    setCustomWorks((cur) => cur.filter((w) => w.id !== id));
-  }
-  function loadCustomWorks() {
-    if (customWorks.length < 2) { setNotice(t("至少添加 2 件作品再开始。", "Add at least 2 works first.")); return; }
-    const next: MediaCollection = { id: `custom-${kind}-${crypto.randomUUID()}`, kind, source: "custom", title: `我的${mediaLabels[kind].label}清单`, description: "", topN: Math.min(10, customWorks.length), works: customWorks };
-    openCollection(next);
-    void saveCollectionCloud(next);
-  }
-  // 外部导入（豆列/歌单）：按当前媒介筛选加入已添加区，其余媒介提示切换后重导
-  function applyImportedWorks(works: Array<Artwork & { type?: string; poster_url?: string }>) {
-    const normalized = works.map((w) => ({ id: w.id || `imp-${Math.random().toString(36).slice(2, 10)}`, title: w.title, creator: w.creator, year: w.year, posterUrls: w.posterUrls ?? (w.poster_url ? [w.poster_url] : undefined) })) as Array<Artwork & { type?: string }>;
-    const matching = normalized.filter((w) => !w.type || w.type === kind);
-    const others = normalized.length - matching.length;
-    setCustomWorks((cur) => {
-      const seen = new Set(cur.map((w) => w.title));
-      return [...cur, ...matching.filter((w) => !seen.has(w.title))];
-    });
-    setNotice(others > 0
-      ? t(`已加入 ${matching.length} 件${label(kind)}作品；另有 ${others} 件其他媒介，切换媒介后可重新导入。`, `Added ${matching.length} ${label(kind)} works; ${others} other media — switch and re-import.`)
-      : t(`已加入 ${matching.length} 件作品。`, `Added ${matching.length} works.`));
-  }
-  async function importDoulist(rawUrl: string) {
-    if (!accountToken) { setNotice(t("请先登录后再导入。", "Sign in to import.")); return; }
-    const target = rawUrl.trim();
-    if (!target) return;
-    setBusy(true);
-    try {
-      const response = await fetch(`/api/import/douban-list?url=${encodeURIComponent(target)}`, { headers: { authorization: `Bearer ${accountToken}` }, signal: AbortSignal.timeout(120000) });
-      const data = await response.json() as { works?: Array<Artwork & { type?: string; poster_url?: string }>; msg?: string; error?: string };
-      if (!response.ok || !data.works) { setNotice(t("豆瓣导入失败：" + (data.msg ?? data.error ?? "未知错误"), "Douban import failed: " + (data.msg ?? data.error ?? ""))); return; }
-      applyImportedWorks(data.works);
-      setNotice(t(`已导入 ${data.works.length} 件作品。`, `Imported ${data.works.length} works.`));
-    } catch { setNotice(t("豆瓣导入失败，可能限流，请稍后重试。", "Douban import failed (may be rate limited). Please retry.")); }
-    finally { setBusy(false); }
-  }
-  async function importNeteasePlaylist(rawUrl: string) {
-    if (!accountToken) { setNotice(t("请先登录后再导入。", "Sign in to import.")); return; }
-    const target = rawUrl.trim();
-    if (!target) return;
-    setBusy(true);
-    try {
-      const response = await fetch(`/api/import/netease?url=${encodeURIComponent(target)}`, { headers: { authorization: `Bearer ${accountToken}` }, signal: AbortSignal.timeout(60000) });
-      const data = await response.json() as { works?: Array<Artwork & { poster_url?: string }>; msg?: string; error?: string };
-      if (!response.ok || !data.works) { setNotice(t("歌单导入失败：" + (data.msg ?? data.error ?? "未知错误"), "Playlist import failed: " + (data.msg ?? data.error ?? ""))); return; }
-      applyImportedWorks(data.works.map((w) => ({ ...w, type: "music" })));
-    } catch { setNotice(t("歌单导入失败，请稍后重试。", "Playlist import failed. Please retry.")); }
-    finally { setBusy(false); }
-  }
-  async function saveCollectionCloud(collectionToSave: MediaCollection) {
-    if (!accountToken) return;
-    try {
-      const response = await fetch("/api/account/collections", { method: "POST", headers: { "content-type": "application/json", authorization: `Bearer ${accountToken}` }, body: JSON.stringify({ kind: collectionToSave.kind, title: collectionToSave.title, description: collectionToSave.description, items: collectionToSave.works }) });
-      if (response.ok) void loadCloudCollections();
-    } catch { /* Local collection remains usable. */ }
-  }
-  async function loadCloudCollections() {
-    if (!accountToken) { setCloudCollections([]); return; }
-    try {
-      const response = await fetch("/api/account/collections", { headers: { authorization: `Bearer ${accountToken}` } });
-      const data = response.ok ? await response.json() as { collections?: Array<{ id: number; kind: MediaKind; title: string; description: string; items: MediaCollection["works"] }> } : null;
-      setCloudCollections((data?.collections ?? []).map((item) => ({ remoteId: item.id, id: `cloud-${item.id}`, kind: item.kind, source: "custom", title: item.title, description: item.description, topN: Math.min(10, item.items.length), works: item.items })));
-    } catch { setCloudCollections([]); }
-  }
-  async function deleteCloudCollection(item: MediaCollection & { remoteId: number }) {
-    if (!accountToken) return;
-    try {
-      const response = await fetch(`/api/account/collections/${item.remoteId}`, { method: "DELETE", headers: { authorization: `Bearer ${accountToken}` } });
-      if (!response.ok) throw new Error();
-      setCloudCollections((current) => current.filter((entry) => entry.remoteId !== item.remoteId));
-      setNotice(t("云端清单已移除。", "Cloud list removed."));
-    } catch { setNotice(t("无法移除云端清单，请稍后重试。", "Could not remove the cloud list. Please retry.")); }
-  }
-  function changeCols(n: number) { setColCount(n); try { localStorage.setItem("art-rank:cols", String(n)); } catch {} }
   function renameRank(idx: number) {
     if (!profile || !editingRankTitle.trim()) return;
     const next = renameRanking(profile, idx, editingRankTitle.trim());
@@ -418,69 +296,6 @@ export default function App() {
     setProfile(null); setDraft(null); setPeer(null); setPeerNotes({});
     try { localStorage.removeItem(LIBRARY_KEY); localStorage.removeItem(DRAFT_KEY); localStorage.removeItem(PEER_KEY); } catch {}
     setNotice(t("本地数据已清除。", "Local data cleared."));
-  }
-  function openCollection(next: MediaCollection) {
-    setKind(next.kind); setCollection(next); setSelected(next.works.map((work) => work.id)); setTopN(next.topN); setRanking(null); navigateTo("setup");
-  }
-  async function loadDouban() {
-    setBusy(true); setNotice("");
-    try {
-      const isBook = kind === "book";
-      const isMusic = kind === "music";
-      const endpoint = isBook ? `/api/douban/books/top250?limit=${doubanLimit}` : isMusic ? `/api/douban/music/top250?limit=${doubanLimit}` : `/api/douban/top250?limit=${doubanLimit}`;
-      const response = await fetch(endpoint, { signal: AbortSignal.timeout(60000) });
-      const data = await response.json() as { works?: Array<{ id: string; title: string; year?: number; poster_url?: string }> };
-      if (!response.ok || !data.works || data.works.length < 2) throw new Error();
-      const title = isBook ? `豆瓣读书 Top ${doubanLimit}` : isMusic ? `豆瓣音乐 Top ${doubanLimit}` : `豆瓣 Top ${doubanLimit}`;
-      openCollection({ id: `douban-${isBook ? 'book-' : isMusic ? 'music-' : ''}top${doubanLimit}`, kind: kind, source: "douban", title, description: "", topN: 10, works: data.works.map((work) => ({ ...work, posterUrls: work.poster_url ? [work.poster_url] : [] })) });
-    } catch { setNotice(t("豆瓣暂时无法访问，可以重试或选择内置榜单。", "Douban is unavailable. Retry or choose a built-in collection.")); }
-    finally { setBusy(false); }
-  }
-  function startRanking() {
-    if (!collection || selected.length < 2) return;
-    const works = collection.works.filter((work) => selected.includes(work.id));
-    const next = createRankingState(works.map((work) => work.id), { topN, seed: seed.trim() || crypto.randomUUID() });
-    rankingSnapshots.current = []; setCollection({ ...collection, works }); setRanking(next); navigateTo("sorting"); setNotice("");
-    track("sorting_started", { mode: kind, item_count: works.length, top_k: next.topN });
-  }
-  function act(action: "left" | "right" | "undo" | "skip-left" | "skip-right" | "defer-left" | "defer-right") {
-    if (!ranking || !collection || (ranking.completed && action !== "undo")) return;
-    let next: RankingState;
-    if (action === "undo") {
-      // O(1) undo via snapshot
-      if (rankingSnapshots.current.length > 0) {
-        const prev = rankingSnapshots.current.pop()!;
-        next = deserializeRankingState(prev);
-      } else {
-        next = undoLastAction(ranking); // fallback
-      }
-    } else {
-      // Save snapshot before decision (cap at 500 to prevent memory issues)
-      if (rankingSnapshots.current.length >= 500) rankingSnapshots.current.shift();
-      rankingSnapshots.current.push(serializeRankingState(ranking));
-      if (action === "skip-left") next = skipWork(ranking, comparison!.leftId);
-      else if (action === "skip-right") next = skipWork(ranking, comparison!.rightId);
-      else if (action === "defer-left") next = deferWork(ranking, comparison!.leftId);
-      else if (action === "defer-right") next = deferWork(ranking, comparison!.rightId);
-      else next = chooseSide(ranking, action);
-    }
-    setRanking(next);
-    if (next.completed) {
-      const result: RankingExport = {
-        version: 1, profileId: crypto.randomUUID(), profileName: profileName.trim() || t("我的艺术人格", "My artistic profile"), kind: collection.kind,
-        collectionTitle: collection.title, createdAt: new Date().toISOString(),
-        items: getRankingResult(next).map((id, index) => ({ ...worksById.get(id)!, rank: index + 1 })),
-      };
-      persist(mergeRanking(profile, result)); setActiveKind(result.kind); setDraft(null);
-      try { localStorage.removeItem(DRAFT_KEY); } catch { /* Progress already exists in memory. */ }
-      navigateTo(peer && collection.id.startsWith("peer-") ? "compare" : "profile");
-      track("ranking_completed", { mode: kind, item_count: next.sourceIds.length, top_k: next.topN, comparison_count: next.comparisonCount });
-    }
-  }
-  function resume() {
-    if (!draft) return;
-    try { rankingSnapshots.current = []; setCollection(draft.collection); setKind(draft.collection.kind); setRanking(deserializeRankingState(draft.ranking)); setProfileName(draft.profileName); navigateTo("sorting"); }
-    catch { setNotice(t("草稿无法读取。", "The draft could not be restored.")); }
   }
   async function openArtworkDetail(work: RankedArtwork, detailKind: MediaKind) {
     setDetailWork({ work, kind: detailKind, data: null, loading: true });
