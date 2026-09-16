@@ -131,7 +131,7 @@ export function useSorting(deps: SortingDeps) {
     const ranking: RankingExport = {
       version: 1, profileId: d.getProfile()?.profileId ?? crypto.randomUUID(), profileName: d.profileName.trim() || d.t("我的艺术人格", "My artistic profile"), kind,
       collectionTitle: `我的${mediaLabels[kind].label}清单`, createdAt: new Date().toISOString(),
-      items: kept.map((w, i) => ({ ...w, rank: i + 1 })),
+      items: kept.map((w, i) => ({ id: w.id, title: w.title, rank: i + 1, ...(w.creator ? { creator: w.creator } : {}), ...(w.year ? { year: w.year } : {}), ...(w.subtitle ? { subtitle: w.subtitle } : {}) })),
     };
     d.persist(mergeRanking(d.getProfile(), ranking));
     d.setActiveKind(kind);
@@ -151,7 +151,8 @@ export function useSorting(deps: SortingDeps) {
     const ranking: RankingExport = {
       version: 1, profileId: d.getProfile()?.profileId ?? crypto.randomUUID(), profileName: d.profileName.trim() || d.t("我的艺术人格", "My artistic profile"), kind: collection.kind,
       collectionTitle: collection.title, createdAt: new Date().toISOString(),
-      items: kept.map((w, i) => ({ ...w, rank: i + 1 })),
+      // 只保留最小字段，去掉 posterUrls 避免画像过大（海报由 Poster 组件按需解析）
+      items: kept.map((w, i) => ({ id: w.id, title: w.title, rank: i + 1, ...(w.creator ? { creator: w.creator } : {}), ...(w.year ? { year: w.year } : {}), ...(w.subtitle ? { subtitle: w.subtitle } : {}) })),
     };
     d.persist(mergeRanking(d.getProfile(), ranking));
     d.setActiveKind(collection.kind);
