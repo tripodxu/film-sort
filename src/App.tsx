@@ -132,8 +132,10 @@ export default function App() {
     setNoteModal(null);
   }
   function persist(next: ArtisticProfile) {
-    setProfile(next); setProfileName(next.profileName); setShareUrl(""); setQrUrl("");
-    try { localStorage.setItem(LIBRARY_KEY, JSON.stringify(next)); writeNotes(notes); }
+    // 去掉 posterUrls 避免画像过大（海报由 Poster 组件按需解析）
+    const cleaned: ArtisticProfile = { ...next, rankings: next.rankings.map((r) => ({ ...r, items: r.items.map((item) => { const { posterUrls, ...rest } = item as RankedArtwork & { posterUrls?: readonly string[] }; return rest; }) })) };
+    setProfile(cleaned); setProfileName(cleaned.profileName); setShareUrl(""); setQrUrl("");
+    try { localStorage.setItem(LIBRARY_KEY, JSON.stringify(cleaned)); writeNotes(notes); }
     catch { setNotice(t("浏览器无法保存，请及时导出画像。", "Browser storage is unavailable. Export your profile to keep it.")); }
   }
   function acceptPeer(next: ArtisticProfile) {
