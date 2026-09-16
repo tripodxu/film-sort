@@ -345,7 +345,11 @@ export async function accountRoute(request: Request, env: Env): Promise<Response
     const row = await env.DB.prepare("SELECT profile, notes, updated_at FROM user_profiles_v2 WHERE user_id = ? LIMIT 1").bind(user.id).first<{ profile: string; notes: string | null; updated_at: string }>();
     let notes: Record<string, string> = {};
     if (row?.notes) { try { notes = JSON.parse(row.notes); } catch { /* ignore */ } }
-    return json({ email: user.email, nickname: account?.nickname ?? user.email.split("@")[0], profile: row ? JSON.parse(row.profile) : null, notes, updatedAt: row?.updated_at ?? null });
+    let profileData: unknown = null;
+    if (row?.profile) {
+      try { profileData = JSON.parse(row.profile); } catch { profileData = null; }
+    }
+    return json({ email: user.email, nickname: account?.nickname ?? user.email.split("@")[0], profile: profileData, notes, updatedAt: row?.updated_at ?? null });
   }
 
   // PUT /api/account/profile
@@ -357,9 +361,22 @@ export async function accountRoute(request: Request, env: Env): Promise<Response
     let profile: unknown; let notes: unknown;
     try { const body = JSON.parse(raw); profile = body.profile; notes = body.notes; } catch { return json({ error: "invalid_json" }, 400); }
     if (!profile || typeof profile !== "object" || Array.isArray(profile)) return json({ error: "invalid_profile" }, 400);
+    // 去掉 posterUrls 避免画像过大（海报由前端 Poster 组件按需解析）
+    const p = profile as Record<string, unknown>;
+    if (Array.isArray(p.rankings)) {
+      for (const ranking of p.rankings) {
+        if (ranking && Array.isArray((ranking as Record<string, unknown>).items)) {
+          for (const item of (ranking as Record<string, unknown>).items as Record<string, unknown>[]) {
+            if (item && Array.isArray(item.posterUrls)) delete item.posterUrls;
+          }
+        }
+      }
+    }
     const notesJson = notes && typeof notes === "object" && !Array.isArray(notes) ? JSON.stringify(notes) : null;
+    const profileJson = JSON.stringify(profile);
+    if (encoder.encode(profileJson).byteLength > 512 * 1024) return json({ error: "profile_too_large", msg: "画像数据过大，请减少作品数量。" }, 413);
     await env.DB.prepare("INSERT INTO user_profiles_v2 (user_id, profile, notes) VALUES (?, ?, ?) ON CONFLICT(user_id) DO UPDATE SET profile = excluded.profile, notes = COALESCE(excluded.notes, user_profiles_v2.notes), updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')")
-      .bind(user.id, JSON.stringify(profile), notesJson).run();
+      .bind(user.id, profileJson, notesJson).run();
     return json({ stored: true });
   }
 
