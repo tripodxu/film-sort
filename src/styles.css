@@ -595,8 +595,11 @@ kbd{display:inline-flex;align-items:center;justify-content:center;min-width:22px
 .consensus-copy .eyebrow{color:var(--accent)}
 .consensus-copy h3{margin:4px 0 6px;font-size:22px;font-weight:600}
 .consensus-copy p{font-size:12px;color:var(--muted);line-height:1.7}
-.metric-help{display:inline-flex;align-items:center;justify-content:center;width:14px;height:14px;margin-left:5px;border:1px solid var(--line);border-radius:50%;font-style:normal;font-size:9px;color:var(--muted);cursor:help;vertical-align:1px}
+.metric-help{position:relative;display:inline-flex;align-items:center;justify-content:center;width:14px;height:14px;margin-left:5px;border:1px solid var(--line);border-radius:50%;font-style:normal;font-size:9px;color:var(--muted);cursor:help;vertical-align:1px}
 .metric-help:hover{color:var(--accent);border-color:var(--accent)}
+.metric-help::after{content:attr(data-tip);position:absolute;left:50%;bottom:calc(100% + 7px);transform:translateX(-50%) translateY(3px);z-index:40;width:max-content;max-width:min(240px,80vw);padding:8px 11px;border:1px solid var(--border-2);border-radius:8px;background:var(--surface-4);color:var(--text-hi);font-family:var(--font-body);font-size:12px;line-height:1.6;letter-spacing:0;text-align:left;white-space:normal;box-shadow:0 10px 30px rgba(0,0,0,.35);opacity:0;visibility:hidden;pointer-events:none;transition:opacity .15s,transform .15s,visibility .15s}
+.metric-help:hover::after,.metric-help:focus-visible::after,.metric-help:focus::after{opacity:1;visibility:visible;transform:translateX(-50%) translateY(0)}
+.metric-help:focus{outline:none}
 .metrics-more{grid-column:1/-1;margin-top:2px}
 .metrics-more summary{cursor:pointer;font-size:12px;color:var(--muted);list-style:none;display:inline-flex;gap:7px;align-items:center;user-select:none;padding:7px 14px;border:1px solid var(--line);border-radius:999px;background:color-mix(in srgb,var(--surface-2) 55%,transparent);transition:color .15s,border-color .15s}
 .metrics-more summary:hover{color:var(--accent);border-color:color-mix(in srgb,var(--accent) 40%,transparent)}
