@@ -1693,6 +1693,19 @@ async function route(request: Request, env: Env): Promise<Response> {
       return json({ enabled: true, insight: text || "暂时无法生成解读。" }, 200, { "cache-control": "no-store" });
     } catch { return json({ error: "ai_unavailable" }, 502); }
   }
+  // 临时调试：测试 gdstudio 连通性
+  if (url.pathname === "/api/music/debug" && request.method === "GET") {
+    const testUrl = "https://music-api.gdstudio.xyz/api.php?types=search&source=netease&name=test&count=1&pages=1";
+    const t0 = Date.now();
+    try {
+      const r = await fetch(testUrl, { signal: AbortSignal.timeout(10000) });
+      const elapsed = Date.now() - t0;
+      const body = await r.text();
+      return json({ status: r.status, elapsed_ms: elapsed, body_preview: body.slice(0, 500), url: testUrl });
+    } catch (e) {
+      return json({ error: String(e), elapsed_ms: Date.now() - t0, url: testUrl });
+    }
+  }
   if (url.pathname === "/api/music/play" && request.method === "GET") {
     const query = url.searchParams.get("q")?.trim();
     const artist = url.searchParams.get("artist")?.trim() ?? "";
