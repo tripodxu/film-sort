@@ -127,8 +127,9 @@ export async function plazaRoute(request: Request, env: Env): Promise<Response> 
     const isPublic = body.is_public === undefined || body.is_public === null ? 1 : (body.is_public ? 1 : 0);
 
     // ranking 帖 items 为作品数组；profile 帖 items 为 RankingExport 数组（各维度榜单整体）
-    if (!Array.isArray(body.items) || body.items.length < 1 || body.items.length > 20) return json({ error: "invalid_items" }, 400);
+    if (!Array.isArray(body.items) || body.items.length < 1) return json({ error: "invalid_items" }, 400);
     if (postType === "ranking" && body.items.length > 300) return json({ error: "invalid_items" }, 400);
+    if (postType === "profile" && body.items.length > 20) return json({ error: "invalid_items" }, 400);
     if (postType === "profile" && body.items.some((item) => typeof item !== "object" || item === null || !Array.isArray((item as Record<string, unknown>).items))) {
       return json({ error: "invalid_items" }, 400);
     }
