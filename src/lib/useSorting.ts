@@ -15,7 +15,7 @@ export function loadDraft(): Draft | null {
   try {
     const data = JSON.parse(stored(DRAFT_KEY) ?? "") as Draft;
     const state = deserializeRankingState(data.ranking);
-    if (state.completed || !kinds.includes(data.collection.kind) || !Array.isArray(data.collection.works) || data.collection.works.length > 300 ||
+    if (state.completed || !kinds.includes(data.collection.kind) || !Array.isArray(data.collection.works) || data.collection.works.length > 1000 ||
       !state.sourceIds.every((id) => data.collection.works.some((work) => work.id === id && typeof work.title === "string"))) return null;
     getCurrentComparison(state);
     return data;
@@ -57,12 +57,17 @@ export function useSorting(deps: SortingDeps) {
   const [customText, setCustomText] = useState("");
   const [customItem, setCustomItem] = useState("");
   const [customWorks, setCustomWorks] = useState<Artwork[]>([]);
+  const [customDeselected, setCustomDeselected] = useState<string[]>([]);
+  const [importProgress, setImportProgress] = useState<{ done: number; total: number | null; label: string } | null>(null);
   const [cloudCollections, setCloudCollections] = useState<Array<MediaCollection & { remoteId: number }>>([]);
   const [doubanLimit, setDoubanLimit] = useState(50);
   const [search, setSearch] = useState("");
   const [colCount, setColCount] = useState<number>(() => { try { return Number(localStorage.getItem("art-rank:cols")) || 3; } catch { return 3; } });
+  const [importCap, setImportCapState] = useState<number>(() => { const v = Number(localStorage.getItem("art-rank:import-cap")); return v >= 50 && v <= 1000 ? v : 300; });
+  function setImportCap(v: number) { setImportCapState(v); try { localStorage.setItem("art-rank:import-cap", String(v)); } catch { /* */ } }
   const [busy, setBusy] = useState(false);
   const rankingSnapshots = useRef<string[]>([]);
+  const importingRef = useRef(false);
 
   const comparison = ranking ? getCurrentComparison(ranking) : null;
   const progress = ranking ? getRankingProgress(ranking) : null;
@@ -109,52 +114,94 @@ export function useSorting(deps: SortingDeps) {
     d.navigateTo("setup");
   }
 
-  function loadCustomWorksFn() {
+  function loadCustomWorksFn(works?: Artwork[]) {
     const d = depsRef.current;
-    if (customWorks.length < 2) { d.setNotice(d.t("至少添加 2 件作品再开始。", "Add at least 2 works first.")); return; }
-    const next: MediaCollection = { id: `custom-${kind}-${crypto.randomUUID()}`, kind, source: "custom", title: `我的${mediaLabels[kind].label}清单`, description: "", topN: Math.min(10, customWorks.length), works: customWorks };
+    const list = works ?? customWorks;
+    if (list.length < 2) { d.setNotice(d.t("至少添加 2 件作品再开始。", "Add at least 2 works first.")); return; }
+    const next: MediaCollection = { id: `custom-${kind}-${crypto.randomUUID()}`, kind, source: "custom", title: `我的${mediaLabels[kind].label}清单`, description: "", topN: Math.min(10, list.length), works: list };
     openCollectionFn(next);
     void saveCollectionCloudFn(next);
   }
 
-  function applyImportedWorks(works: Array<Artwork & { type?: string; poster_url?: string }>) {
+  /** 仅保存不排序：把当前清单（去掉取消勾选的）按现有顺序存为画像榜单，不进比较流程 */
+  function saveCustomWorksFn() {
+    const d = depsRef.current;
+    const kept = customWorks.filter((w) => !customDeselected.includes(w.id));
+    if (!kept.length) { d.setNotice(d.t("清单为空。", "The list is empty.")); return; }
+    const ranking: RankingExport = {
+      version: 1, profileId: d.getProfile()?.profileId ?? crypto.randomUUID(), profileName: d.profileName.trim() || d.t("我的艺术人格", "My artistic profile"), kind,
+      collectionTitle: `我的${mediaLabels[kind].label}清单`, createdAt: new Date().toISOString(),
+      items: kept.map((w, i) => ({ ...w, rank: i + 1 })),
+    };
+    d.persist(mergeRanking(d.getProfile(), ranking));
+    d.setActiveKind(kind);
+    void saveCollectionCloudFn({ id: `custom-${kind}-${crypto.randomUUID()}`, kind, source: "custom", title: ranking.collectionTitle, description: "", topN: Math.min(10, kept.length), works: kept });
+    d.setNotice(d.t(`已保存 ${kept.length} 件作品为榜单（按导入顺序，未排序）。`, `Saved ${kept.length} works as a list (import order, unsorted).`));
+    d.navigateTo("profile");
+  }
+
+  function clearCustomWorksFn() { setCustomWorks([]); setCustomDeselected([]); }
+
+  function applyImportedWorks(works: Array<Artwork & { type?: string; poster_url?: string }>, silent = false) {
     const d = depsRef.current;
     const normalized = works.map((w) => ({ id: w.id || `imp-${Math.random().toString(36).slice(2, 10)}`, title: w.title, creator: w.creator, year: w.year, posterUrls: w.posterUrls ?? (w.poster_url ? [w.poster_url] : undefined) })) as Array<Artwork & { type?: string }>;
     const matching = normalized.filter((w) => !w.type || w.type === kind);
     const others = normalized.length - matching.length;
     setCustomWorks((cur) => { const seen = new Set(cur.map((w) => w.title)); return [...cur, ...matching.filter((w) => !seen.has(w.title))]; });
+    if (silent) return matching.length;
     d.setNotice(others > 0
       ? d.t(`已加入 ${matching.length} 件${d.label(kind)}作品；另有 ${others} 件其他媒介，切换媒介后可重新导入。`, `Added ${matching.length} ${d.label(kind)} works; ${others} other media — switch and re-import.`)
       : d.t(`已加入 ${matching.length} 件作品。`, `Added ${matching.length} works.`));
+    return matching.length;
   }
 
-  async function importDoulist(rawUrl: string) {
+  /** 分批导入引擎：按 offset/nextOffset 游标循环拉取，边拉边入清单并更新进度，直到达上限/无更多/出错 */
+  async function runBatchedImport(endpoint: string, label: string, forceType?: string) {
     const d = depsRef.current;
     if (!d.accountToken) { d.setNotice(d.t("请先登录后再导入。", "Sign in to import.")); return; }
-    const target = rawUrl.trim(); if (!target) return;
+    if (importingRef.current) return; // 防重入
+    const target = endpoint.trim(); if (!target) return;
+    importingRef.current = true;
+    const cap = importCap;
     setBusy(true);
+    let offset = 0, total: number | null = null, fetched = 0, batches = 0, failed = false;
+    setImportProgress({ done: 0, total, label });
     try {
-      const response = await fetch(`/api/import/douban-list?url=${encodeURIComponent(target)}`, { headers: { authorization: `Bearer ${d.accountToken}` }, signal: AbortSignal.timeout(120000) });
-      const data = await response.json() as { works?: Array<Artwork & { type?: string; poster_url?: string }>; msg?: string; error?: string };
-      if (!response.ok || !data.works) { d.setNotice(d.t("豆瓣导入失败：" + (data.msg ?? data.error ?? "未知错误"), "Douban import failed: " + (data.msg ?? data.error ?? ""))); return; }
-      applyImportedWorks(data.works);
-      d.setNotice(d.t(`已导入 ${data.works.length} 件作品。`, `Imported ${data.works.length} works.`));
-    } catch { d.setNotice(d.t("豆瓣导入失败，可能限流，请稍后重试。", "Douban import failed (may be rate limited). Please retry.")); }
-    finally { setBusy(false); }
+      for (;;) {
+        const size = Math.min(300, cap - offset);
+        if (size <= 0) break;
+        const response = await fetch(`${target}${target.includes("?") ? "&" : "?"}offset=${offset}&limit=${size}`, { headers: { authorization: `Bearer ${d.accountToken}` }, signal: AbortSignal.timeout(120000) });
+        const data = await response.json() as { works?: Array<Artwork & { type?: string; poster_url?: string }>; listTotal?: number | null; hasMore?: boolean; nextOffset?: number; msg?: string; error?: string };
+        if (!response.ok || !data.works) {
+          const msg = data.msg ?? data.error ?? d.t("未知错误", "unknown error");
+          d.setNotice(offset > 0 ? d.t(`已抓取 ${offset} 件后中断：${msg}`, `Stopped after ${offset}: ${msg}`) : d.t(`导入失败：${msg}`, `Import failed: ${msg}`));
+          failed = true;
+          break;
+        }
+        applyImportedWorks(data.works.map((w) => (forceType ? { ...w, type: forceType } : w)), true);
+        batches++;
+        total = data.listTotal ?? total;
+        offset = data.nextOffset ?? (offset + data.works.length);
+        fetched += data.works.length;
+        setImportProgress({ done: offset, total, label });
+        if (!data.hasMore || data.works.length === 0 || offset >= (total ?? Infinity)) break;
+        if (batches > 20) break; // 安全阀
+      }
+      if (!failed) d.setNotice(fetched > 0
+        ? d.t(`导入完成：抓取 ${fetched} 件作品${total && total > fetched ? `（清单全量 ${total} 件，可在右上角设置中提高单次导入上限）` : ""}。`, `Imported ${fetched} works${total && total > fetched ? ` (list has ${total} total — raise the per-import cap in settings)` : ""}.`)
+        : d.t("没有可导入的作品。", "No works to import."));
+    } catch { d.setNotice(d.t("导入失败，可能限流，请稍后重试。", "Import failed (may be rate limited). Please retry.")); }
+    finally { setImportProgress(null); setBusy(false); importingRef.current = false; }
   }
 
-  async function importNeteasePlaylist(rawUrl: string) {
-    const d = depsRef.current;
-    if (!d.accountToken) { d.setNotice(d.t("请先登录后再导入。", "Sign in to import.")); return; }
+  function importDoulist(rawUrl: string) {
     const target = rawUrl.trim(); if (!target) return;
-    setBusy(true);
-    try {
-      const response = await fetch(`/api/import/netease?url=${encodeURIComponent(target)}`, { headers: { authorization: `Bearer ${d.accountToken}` }, signal: AbortSignal.timeout(60000) });
-      const data = await response.json() as { works?: Array<Artwork & { poster_url?: string }>; msg?: string; error?: string };
-      if (!response.ok || !data.works) { d.setNotice(d.t("歌单导入失败：" + (data.msg ?? data.error ?? "未知错误"), "Playlist import failed: " + (data.msg ?? data.error ?? ""))); return; }
-      applyImportedWorks(data.works.map((w) => ({ ...w, type: "music" })));
-    } catch { d.setNotice(d.t("歌单导入失败，请稍后重试。", "Playlist import failed. Please retry.")); }
-    finally { setBusy(false); }
+    return runBatchedImport(`/api/import/douban-list?url=${encodeURIComponent(target)}`, "豆瓣清单");
+  }
+
+  function importNeteasePlaylist(rawUrl: string) {
+    const target = rawUrl.trim(); if (!target) return;
+    return runBatchedImport(`/api/import/netease?url=${encodeURIComponent(target)}`, "网易云歌单", "music");
   }
 
   async function saveCollectionCloudFn(collectionToSave: MediaCollection) {
@@ -269,10 +316,12 @@ export function useSorting(deps: SortingDeps) {
     selected, setSelected, ranking, setRanking, draft, setDraft,
     topN, setTopN, seed, setSeed, customText, setCustomText,
     customItem, setCustomItem, customWorks, setCustomWorks,
+    customDeselected, setCustomDeselected, importProgress, importCap, setImportCap,
     cloudCollections, doubanLimit, setDoubanLimit, search, setSearch,
     colCount, busy, setBusy, comparison, progress, worksById, collections,
     chooseKind: chooseKindFn, searchWorks, addCustomWork, removeCustomWork,
-    loadCustomWorks: loadCustomWorksFn, openCollection: openCollectionFn,
+    loadCustomWorks: loadCustomWorksFn, saveCustomWorks: saveCustomWorksFn, clearCustomWorks: clearCustomWorksFn,
+    openCollection: openCollectionFn,
     applyImportedWorks, importDoulist, importNeteasePlaylist,
     saveCollectionCloud: saveCollectionCloudFn, loadCloudCollections: loadCloudCollectionsFn,
     deleteCloudCollection, changeCols, loadDouban, startRanking, act, resume,

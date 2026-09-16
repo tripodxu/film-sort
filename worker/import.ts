@@ -2,7 +2,7 @@ import type { Env } from "./index";
 import { getUserFromToken } from "./account";
 import { upstream } from "./media";
 import { loadProviderCookie, neteaseUserId, neteaseUserPlaylists, weapiPost } from "./netease";
-import { classifyDoubanList, fetchDoubanList } from "./doubanlist";
+import { classifyDoubanList, fetchDoubanList, type PagedImport } from "./doubanlist";
 
 const json = (data: unknown, status = 200) => new Response(JSON.stringify(data), { status, headers: { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" } });
 
@@ -81,17 +81,25 @@ function subjectType(url: string): ImportedWork["type"] | undefined {
   return undefined;
 }
 
-/** 抓取完整豆列（分页，最多 300 条）并转为标准作品 */
-export async function fetchDoulist(doulistUrl: string, cookie?: string | null): Promise<ImportedWork[]> {
+/** 抓取豆列窗口 [offset, offset+limit)（每页 25 条，绝对游标 pos 推进，去重/解析失败不漂移） */
+export async function fetchDoulist(doulistUrl: string, cookie?: string | null, offset = 0, limit = 300): Promise<PagedImport> {
   const match = doulistUrl.match(/doulist\/(\d+)/);
   if (!match) throw new Error("invalid_doulist");
   const id = match[1];
   const works: ImportedWork[] = [];
   const seen = new Set<string>();
-  for (let start = 0; start < 300 && start <= 11 * 25; start += 25) {
-    const items = await doulistPage(`https://www.douban.com/doulist/${id}/?start=${start}&sort=seq`, cookie).catch(() => []);
+  limit = Math.min(limit, 300);
+  const total: number | null = null;
+  let pos = offset; // 下一个待处理的绝对索引
+  for (let pageStart = Math.floor(offset / 25) * 25; works.length < limit && pageStart < offset + limit + 25; pageStart += 25) {
+    const items = await doulistPage(`https://www.douban.com/doulist/${id}/?start=${pageStart}&sort=seq`, cookie).catch(() => []);
     if (!items.length) break;
-    for (const item of items) {
+    for (let idx = 0; idx < items.length; idx++) {
+      const abs = pageStart + idx;
+      if (abs >= offset + limit) break; // 窗口右界
+      if (abs < offset) { pos = abs + 1; continue; } // 窗口左界之前，仅推进游标
+      pos = abs + 1;
+      const item = items[idx];
       if (seen.has(item.url)) continue;
       seen.add(item.url);
       const subjectId = item.url.match(/subject\/(\d+)/)?.[1];
@@ -111,10 +119,12 @@ export async function fetchDoulist(doulistUrl: string, cookie?: string | null): 
         poster_url: item.poster,
         type: subjectType(item.url),
       });
-      if (works.length >= 300) return works;
+      if (works.length >= limit) break;
     }
+    if (items.length < 25) break;
   }
-  return works;
+  const hasMore = works.length >= limit;
+  return { works, total, hasMore, nextOffset: pos };
 }
 
 // ===== 网易云歌单抓取 =====
@@ -155,44 +165,44 @@ async function firstNonEmpty<T>(attempts: Array<() => Promise<T[]>>): Promise<T[
   return [];
 }
 
-export async function fetchNeteasePlaylist(playlistId: string, cookie?: string | null): Promise<ImportedWork[]> {
+/** 抓取歌单曲目窗口 [offset, offset+limit)。trackIds 一次拿全（≤1000），song/detail 只请求窗口内的分片。 */
+export async function fetchNeteasePlaylist(playlistId: string, cookie?: string | null, offset = 0, limit = 300): Promise<PagedImport> {
   const headers: Record<string, string> = { "user-agent": NETEASE_UA, "referer": "https://music.163.com/" };
   if (cookie) headers.cookie = cookie;
-  interface DetailShape { trackIds?: Array<{ id?: number }>; tracks?: NeteaseTrack[] }
-  let ids: number[] = [];
+  interface DetailShape { trackCount?: number; trackIds?: Array<{ id?: number }>; tracks?: NeteaseTrack[] }
+  let allIds: number[] = [];
   let fallbackTracks: NeteaseTrack[] = [];
-  const collectIds = (pl: DetailShape | undefined) => (pl?.trackIds ?? []).map((t) => t.id).filter((id): id is number => typeof id === "number").slice(0, 300);
+  let total: number | null = null;
+  const collect = (pl: DetailShape | undefined) => {
+    if (!pl) return;
+    allIds = (pl.trackIds ?? []).map((t) => t.id).filter((id): id is number => typeof id === "number").slice(0, 1000);
+    if (typeof pl.trackCount === "number") total = pl.trackCount;
+    if (!fallbackTracks.length) fallbackTracks = pl.tracks ?? [];
+  };
   const detailAttempts: Array<() => Promise<DetailShape | undefined>> = [
     async () => {
       const response = await fetch(`https://music.163.com/api/v6/playlist/detail?id=${encodeURIComponent(playlistId)}&n=1000&s=0`, { headers, signal: AbortSignal.timeout(15000) });
       if (!response.ok) return undefined;
       return ((await response.json()) as { playlist?: DetailShape }).playlist;
     },
-    async () => {
-      const { json } = await weapiPost("/weapi/v6/playlist/detail/", { id: playlistId, n: 1000, s: 0 }, cookie ?? null);
-      return json.playlist as DetailShape | undefined;
-    },
-    async () => {
-      const { json } = await weapiPost("/weapi/v6/playlist/detail/", { id: playlistId, n: 1000, s: 0 }, cookie ?? null);
-      return json.playlist as DetailShape | undefined;
-    },
+    async () => ((await weapiPost("/weapi/v6/playlist/detail/", { id: playlistId, n: 1000, s: 0 }, cookie ?? null)).json.playlist as DetailShape | undefined),
+    async () => ((await weapiPost("/weapi/v6/playlist/detail/", { id: playlistId, n: 1000, s: 0 }, cookie ?? null)).json.playlist as DetailShape | undefined),
   ];
   for (const attempt of detailAttempts) {
     try {
-      const pl = await attempt();
-      ids = collectIds(pl);
-      if (!fallbackTracks.length) fallbackTracks = pl?.tracks ?? [];
-      if (ids.length) break;
+      collect(await attempt());
+      if (allIds.length) break;
     } catch { /* next attempt */ }
     await neteaseSleep(900);
   }
-  if (!ids.length && !fallbackTracks.length) throw new Error("netease_playlist_not_found");
+  if (!allIds.length && !fallbackTracks.length) throw new Error("netease_playlist_not_found");
   // 批量补全曲目（v6 的 tracks 只带前 ~10 首）：开放 v3 → weapi v3 ×2。
-  // 一批可装 300 首（=ids 上限），绝大多数歌单单次请求即可，最小化连发次数以规避 CF 出口限流。
+  // 每批最多 300 首，只请求窗口 [offset, offset+limit) 内的分片，最小化连发次数以规避 CF 出口限流。
+  const windowIds = allIds.slice(offset, offset + limit);
   const songs: NeteaseSong[] = [];
-  for (let start = 0; start < ids.length; start += 300) {
+  for (let start = 0; start < windowIds.length; start += 300) {
     if (start > 0) await neteaseSleep(700);
-    const chunk = ids.slice(start, start + 300);
+    const chunk = windowIds.slice(start, start + 300);
     const cJson = "[" + chunk.map((id) => `{"id":${id}}`).join(",") + "]";
     const idsJson = "[" + chunk.join(",") + "]";
     const got = await firstNonEmpty<NeteaseSong>([
@@ -218,15 +228,18 @@ export async function fetchNeteasePlaylist(playlistId: string, cookie?: string |
     poster_url: song.al?.picUrl,
     type: "music" as const,
   })).filter((work) => work.title);
-  if (fromSongs.length) return fromSongs;
+  const nextOffset = offset + windowIds.length;
+  const hasMore = total != null ? nextOffset < total : nextOffset < allIds.length;
+  if (fromSongs.length) return { works: fromSongs, total: total ?? (allIds.length || null), hasMore, nextOffset };
   // 全部失败时回退 detail 自带的部分 tracks（至少能拿到前几首）
-  return fallbackTracks.slice(0, 300).map((track) => ({
+  const fallback = fallbackTracks.slice(offset, offset + limit).map((track) => ({
     id: `netease-${track.id ?? Math.random().toString(36).slice(2, 10)}`,
     title: track.name ?? "",
     creator: (track.artists ?? []).map((a) => a.name).filter(Boolean).join("/") || track.album?.name || undefined,
     poster_url: track.album?.picUrl,
     type: "music" as const,
   })).filter((work) => work.title);
+  return { works: fallback, total: total ?? (allIds.length || null), hasMore: false, nextOffset };
 }
 
 /** 登录用户导入路由：/api/import/doulist?url= 与 /api/import/netease?url= */
@@ -235,6 +248,9 @@ export async function importRoute(request: Request, env: Env): Promise<Response>
   const user = await getUserFromToken(request, env.DB);
   if (!user) return json({ error: "authentication_required" }, 401);
   const url = new URL(request.url);
+  // 分批导入窗口参数：offset=起点，limit=本批条数（≤300）
+  const offset = Math.max(0, Math.min(100000, Number(url.searchParams.get("offset") || 0) || 0));
+  const limit = Math.max(1, Math.min(300, Number(url.searchParams.get("limit") || 300) || 300));
 
   if (url.pathname === "/api/import/doulist" && request.method === "GET") {
     const target = url.searchParams.get("url")?.trim() ?? "";
@@ -242,9 +258,9 @@ export async function importRoute(request: Request, env: Env): Promise<Response>
       return json({ error: "invalid_doulist_url", msg: "请粘贴豆瓣豆列链接，如 https://www.douban.com/doulist/12345/" }, 400);
     }
     try {
-      const works = await fetchDoulist(target, await loadProviderCookie(env, user.id, "douban"));
-      if (!works.length) return json({ error: "doulist_empty", msg: "该豆列为空或抓取被拦截，请稍后重试" }, 502);
-      return json({ works, total: works.length });
+      const page = await fetchDoulist(target, await loadProviderCookie(env, user.id, "douban"), offset, limit);
+      if (!page.works.length) return json({ error: "doulist_empty", msg: "该豆列为空或抓取被拦截，请稍后重试" }, 502);
+      return json({ works: page.works, total: page.works.length, listTotal: page.total, hasMore: page.hasMore, nextOffset: page.nextOffset });
     } catch (error) {
       console.error("doulist import failed:", error instanceof Error ? error.message : error);
       return json({ error: "doulist_unavailable", msg: "豆列抓取失败，豆瓣可能限流，请稍后重试" }, 502);
@@ -259,14 +275,14 @@ export async function importRoute(request: Request, env: Env): Promise<Response>
     }
     try {
       const cookie = await loadProviderCookie(env, user.id, "douban");
-      const works = classified.kind === "doulist"
-        ? await fetchDoulist(target, cookie)
-        : (await fetchDoubanList(classified, cookie)).works;
-      if (!works.length) {
-        const reason = classified.kind === "mine" && !cookie ? "请先在上方连接豆瓣（扫码或粘贴 Cookie），再导入想看/已看清单" : "该清单为空或抓取被拦截，请稍后重试";
-        return json({ error: "list_empty", msg: reason }, 502);
+      const page: PagedImport & { error?: string } = classified.kind === "doulist"
+        ? await fetchDoulist(target, cookie, offset, limit)
+        : await fetchDoubanList(classified, cookie, offset, limit);
+      if (page.error === "not_connected") return json({ error: "not_connected", msg: "请先在上方连接豆瓣（扫码或粘贴 Cookie），再导入想看/已看清单" }, 400);
+      if (!page.works.length) {
+        return json({ error: "list_empty", msg: "该清单为空或抓取被拦截，请稍后重试" }, 502);
       }
-      return json({ works, total: works.length, kind: classified.kind });
+      return json({ works: page.works, total: page.works.length, listTotal: page.total, hasMore: page.hasMore, nextOffset: page.nextOffset, kind: classified.kind });
     } catch (error) {
       console.error("douban-list import failed:", error instanceof Error ? error.message : error);
       return json({ error: "douban_list_unavailable", msg: "豆瓣清单抓取失败，可能限流，请稍后重试" }, 502);
@@ -281,9 +297,9 @@ export async function importRoute(request: Request, env: Env): Promise<Response>
     }
     try {
       const cookie = await loadProviderCookie(env, user.id, "netease");
-      const works = await fetchNeteasePlaylist(playlistId, cookie);
-      if (!works.length) return json({ error: "playlist_empty", msg: "该歌单为空，请确认链接后重试" }, 502);
-      return json({ works, total: works.length });
+      const page = await fetchNeteasePlaylist(playlistId, cookie, offset, limit);
+      if (!page.works.length) return json({ error: "playlist_empty", msg: "该歌单为空，请确认链接后重试" }, 502);
+      return json({ works: page.works, total: page.works.length, listTotal: page.total, hasMore: page.hasMore, nextOffset: page.nextOffset });
     } catch (error) {
       console.error("netease import failed:", error instanceof Error ? error.message : error);
       return json({ error: "netease_unavailable", msg: "歌单抓取失败，网易接口可能限流，请稍后重试" }, 502);

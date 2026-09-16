@@ -58,26 +58,37 @@ function scItemToWork(item: ScItem): ImportedWork | null {
   };
 }
 
-/** 抓取豆瓣书影音清单（rexxar API，公开） */
-export async function fetchSubjectCollection(collectionId: string): Promise<ImportedWork[]> {
+/** 分页抓取统一返回：本页 works + 清单总数 total（未知为 null）+ 是否还有更多 + 下一批的绝对游标 */
+export interface PagedImport { works: ImportedWork[]; total: number | null; hasMore: boolean; nextOffset: number }
+
+/** 抓取豆瓣书影音清单（rexxar API，公开）。支持 offset/limit 窗口，pos 游标按绝对位置推进。 */
+export async function fetchSubjectCollection(collectionId: string, offset = 0, limit = 100): Promise<PagedImport> {
   const works: ImportedWork[] = [];
   const seen = new Set<string>();
-  for (let start = 0; start < 500; start += 100) {
-    const response = await fetch(`https://m.douban.com/rexxar/api/v2/subject_collection/${encodeURIComponent(collectionId)}/items?type=S&start=${start}&count=100`, {
+  let total: number | null = null;
+  limit = Math.min(limit, 300);
+  let pos = offset;
+  for (let guard = 0; works.length < limit && guard < 10; guard++) {
+    const response = await fetch(`https://m.douban.com/rexxar/api/v2/subject_collection/${encodeURIComponent(collectionId)}/items?type=S&start=${pos}&count=100`, {
       headers: { "user-agent": MOBILE_UA, "referer": `https://m.douban.com/subject_collection/${collectionId}`, "accept": "application/json" },
       signal: AbortSignal.timeout(20000),
     });
     if (!response.ok) break;
     const data = await response.json() as { subject_collection_items?: ScItem[]; total?: number };
+    if (typeof data.total === "number") total = data.total;
     const items = data.subject_collection_items ?? [];
     if (!items.length) break;
-    for (const item of items) {
-      const work = scItemToWork(item);
+    let consumed = 0;
+    for (let i = 0; i < items.length && works.length < limit; i++) {
+      consumed = i + 1;
+      const work = scItemToWork(items[i]);
       if (work && !seen.has(work.id)) { seen.add(work.id); works.push(work); }
     }
-    if (items.length < 100) break;
+    pos += consumed;
+    if (consumed < items.length || items.length < 100) break;
   }
-  return works.slice(0, 300);
+  const hasMore = total != null ? pos < total : works.length >= limit;
+  return { works, total, hasMore, nextOffset: pos };
 }
 
 interface MineItem { title: string; url: string; poster?: string; meta?: string; titleAttr?: string }
@@ -88,8 +99,9 @@ interface MineItem { title: string; url: string; poster?: string; meta?: string;
  *   .pic a[href*=subject] + .pic img、li.intro（上映日期/演员/国家… 斜杠串，无导演标签）
  * - 书籍 book.douban.com/mine：li.subject-item → h2 a[title=书名]、.pic a + img、
  *   .pub（作者 / 出版社 / 年份 / 定价）
+ * 同时从 <title>「我想看的影视(816)」解析清单总数。
  */
-async function parseMinePage(url: string, cookie: string, media: "movie" | "book"): Promise<MineItem[]> {
+async function parseMinePage(url: string, cookie: string, media: "movie" | "book"): Promise<{ items: MineItem[]; total: number | null }> {
   const response = await fetch(url, {
     headers: { "user-agent": DESKTOP_UA, "accept": "text/html,application/xhtml+xml", "accept-language": "zh-CN,zh;q=0.9", referer: "https://www.douban.com/", cookie },
     redirect: "follow",
@@ -101,11 +113,14 @@ async function parseMinePage(url: string, cookie: string, media: "movie" | "book
   const metaSel = media === "movie" ? "div.item.comment-item li.intro" : "li.subject-item .pub";
   const items: MineItem[] = [];
   let current: MineItem | null = null;
+  let total: number | null = null;
+  let titleText = "";
   const finish = () => {
     if (current && current.title.trim() && current.url) items.push({ ...current, title: current.title.trim() });
     current = null;
   };
   const rewritten = new HTMLRewriter()
+    .on("title", { text(chunk) { titleText += chunk.text; } })
     .on(itemSel, {
       element(el) { finish(); current = { title: "", url: "" }; el.onEndTag(finish); },
     })
@@ -122,7 +137,9 @@ async function parseMinePage(url: string, cookie: string, media: "movie" | "book
     .on(metaSel, { text(chunk) { if (current) current.meta = (current.meta ?? "") + chunk.text; } })
     .transform(response);
   await rewritten.text();
-  return items;
+  const totalMatch = titleText.match(/[（(]\s*(\d+)\s*[)）]/);
+  if (totalMatch) total = Number(totalMatch[1]);
+  return { items, total };
 }
 
 function mineItemToWork(item: MineItem, media: "movie" | "book"): ImportedWork | null {
@@ -159,40 +176,42 @@ function mineItemToWork(item: MineItem, media: "movie" | "book"): ImportedWork |
   };
 }
 
-/** 抓取「我的」想看/已看。分页参数是 start（page_start 被服务端忽略），每页约 15 条，需登录 Cookie */
-export async function fetchDoubanMine(media: "movie" | "book", status: NonNullable<DoubanListTarget["status"]>, cookie: string): Promise<ImportedWork[]> {
+/** 抓取「我的」想看/已看（需登录 Cookie）。分页参数是 start（page_start 被服务端忽略），每页 15 条；
+ * offset/limit 窗口抓取，单请求最多翻 20 页（300 条），更大的量由前端分批请求。 */
+export async function fetchDoubanMine(media: "movie" | "book", status: NonNullable<DoubanListTarget["status"]>, cookie: string, offset = 0, limit = 300): Promise<PagedImport> {
   const host = media === "movie" ? "movie.douban.com" : "book.douban.com";
   const works: ImportedWork[] = [];
   const seen = new Set<string>();
-  for (let start = 0; start < 300; ) {
+  let total: number | null = null;
+  limit = Math.min(limit, 300);
+  let start = offset;
+  for (let pages = 0; works.length < limit && pages < 20; pages++) {
     const url = `https://${host}/mine?status=${status}&sort=time&tag_status=%E5%85%A8%E9%83%A8&start=${start}`;
-    const items = await parseMinePage(url, cookie, media).catch(() => [] as MineItem[]);
-    if (!items.length) break;
+    const page = await parseMinePage(url, cookie, media).catch(() => ({ items: [] as MineItem[], total: null }));
+    if (page.total != null) total = page.total;
+    if (!page.items.length) break;
     let added = 0;
-    for (const item of items) {
+    for (const item of page.items) {
+      if (works.length >= limit) break;
       const work = mineItemToWork(item, media);
       if (work && !seen.has(work.id)) { seen.add(work.id); works.push(work); added++; }
     }
-    // 步长按本页实际条目数推进；整页都是重复说明服务端没翻页，停止
-    start += items.length;
+    // 游标按本页实际条目数推进（绝对位置，解析失败的条目也计入，避免翻页漂移）
+    start += page.items.length;
     if (added === 0) break;
-    if (works.length >= 300) break;
   }
-  return works.slice(0, 300);
+  const hasMore = total != null ? start < total : works.length >= limit;
+  return { works, total, hasMore, nextOffset: start };
 }
 
-/** 统一入口：识别类型 → 抓取。doulist 由调用方处理（需要 fetchDoulist）。 */
-export async function fetchDoubanList(target: DoubanListTarget, cookie: string | null): Promise<{ works: ImportedWork[]; error?: string }> {
-  if (target.kind === "subject_collection") {
-    const works = await fetchSubjectCollection(target.id);
-    return { works };
-  }
+/** 统一入口：识别类型 → 抓取一页（带 offset/limit 窗口）。doulist 由调用方处理（需要 fetchDoulist）。 */
+export async function fetchDoubanList(target: DoubanListTarget, cookie: string | null, offset = 0, limit = 300): Promise<PagedImport & { error?: string }> {
+  if (target.kind === "subject_collection") return await fetchSubjectCollection(target.id, offset, limit);
   if (target.kind === "mine") {
-    if (!cookie) return { works: [], error: "not_connected" };
-    const works = await fetchDoubanMine(target.media ?? "movie", target.status ?? "wish", cookie);
-    return { works };
+    if (!cookie) return { works: [], total: null, hasMore: false, nextOffset: offset, error: "not_connected" };
+    return await fetchDoubanMine(target.media ?? "movie", target.status ?? "wish", cookie, offset, limit);
   }
-  return { works: [], error: "unknown" };
+  return { works: [], total: null, hasMore: false, nextOffset: offset, error: "unknown" };
 }
 
 /** 供 import.ts 路由使用：读取用户豆瓣连接状态 */

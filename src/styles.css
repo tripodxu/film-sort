@@ -447,6 +447,16 @@ kbd{display:inline-flex;align-items:center;justify-content:center;min-width:22px
 .custom-added-item .poster-small img{width:100%;height:100%;object-fit:cover}
 .custom-added-item>span{font-size:13px;line-height:1.4;white-space:normal;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;text-align:center}
 .custom-added-item .icon-button{position:absolute;top:6px;right:6px;width:24px;height:24px;background:rgba(0,0,0,.6);border-radius:50%}
+.custom-added-item input[type=checkbox]{position:absolute;top:8px;left:8px;width:18px;height:18px;min-height:18px;margin:0;z-index:2;accent-color:var(--accent);cursor:pointer}
+.custom-added-item.deselected{opacity:.35}
+.custom-added-item.deselected .poster-small img{filter:grayscale(1)}
+.custom-added-scroll{max-height:420px;overflow-y:auto;padding-right:6px;scrollbar-width:thin}
+.custom-added-actions{display:flex;gap:10px;justify-content:flex-end;flex-wrap:wrap}
+.import-progress{display:flex;align-items:center;gap:10px;margin:8px 0}
+.import-progress-bar{flex:1;height:6px;border-radius:999px;background:color-mix(in srgb,var(--text) 12%,transparent);overflow:hidden}
+.import-progress-bar>span{display:block;height:100%;border-radius:999px;background:var(--accent);transition:width .3s ease;animation:importPulse 1.4s ease-in-out infinite}
+@keyframes importPulse{0%,100%{opacity:1}50%{opacity:.65}}
+.import-progress-text{font-family:var(--font-mono);font-size:11px;color:var(--muted);white-space:nowrap}
 @media(max-width:600px){.custom-added-grid{grid-template-columns:repeat(auto-fill,minmax(104px,1fr))}}
 
 /* ===== 榜单动作栏：胶囊按钮 + 溢出菜单 + 删除确认条 ===== */
@@ -502,6 +512,8 @@ kbd{display:inline-flex;align-items:center;justify-content:center;min-width:22px
 .theme-dot.theme-classic{background:linear-gradient(135deg,#f3ead6 50%,#8c1c13 50%)}
 .theme-dot.theme-cyber{background:linear-gradient(135deg,#05060a 50%,#00f0ff 50%)}
 .theme-name{flex:1}
+.settings-group-label{font-family:var(--font-mono);font-size:10px;letter-spacing:.1em;color:var(--muted);text-transform:uppercase;padding:6px 10px 4px}
+.settings-hint{font-size:11px;color:var(--muted);line-height:1.5;padding:6px 10px 4px;border-top:1px solid var(--line);margin-top:4px}
 .theme-check{margin-left:auto}
 
 /* ===== 主题：复古纸感（编辑部暖纸风，参照 film-sort2） ===== */

@@ -396,9 +396,9 @@ GET /api/douban/books/suggest?q={关键词}   # 书籍
 
 | 链接形态 | 抓取方式 | 是否需要连接豆瓣 |
 |---|---|---|
-| `douban.com/doulist/<id>` | HTML 解析（新版 `.doulist-item` + 旧版 `table.olt` 双兜底，≤300 条） | 公开可抓；私有豆列需连接 |
+| `douban.com/doulist/<id>` | HTML 解析（新版 `.doulist-item` + 旧版 `table.olt` 双兜底，offset/limit 分批） | 公开可抓；私有豆列需连接 |
 | `m.douban.com/subject_collection/<ID>` | rexxar JSON API（`/items?type=S&start=&count=100` 分页） | 否（公开） |
-| `{movie,book}.douban.com/mine?status=wish\|collect\|doing` | HTML 解析 2026 版结构（电影 `div.item.comment-item`、书籍 `li.subject-item`），分页 ≤300 | **是**（扫码或粘贴 Cookie） |
+| `{movie,book}.douban.com/mine?status=wish\|collect\|doing` | HTML 解析 2026 版结构（电影 `div.item.comment-item`、书籍 `li.subject-item`），offset/limit 分批（单批 ≤300，前端游标续抓） | **是**（扫码或粘贴 Cookie） |
 
 响应：`{ works: [{ id, title, creator?, year?, rating?, poster_url?, type? }], total, kind }`。
 

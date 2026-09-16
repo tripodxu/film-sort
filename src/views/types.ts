@@ -49,11 +49,15 @@ export interface SourceViewProps {
   customItem: string;
   setCustomItem: (item: string) => void;
   customWorks: Artwork[];
+  customDeselected: string[];
+  setCustomDeselected: (ids: string[]) => void;
+  importProgress: { done: number; total: number | null; label: string } | null;
   searchWorks: (query: string) => Promise<Artwork[]>;
   addCustomWork: (work: Artwork) => void;
   removeCustomWork: (id: string) => void;
   clearCustomWorks: () => void;
-  loadCustomWorks: () => void;
+  loadCustomWorks: (works?: Artwork[]) => void;
+  saveCustomWorks: () => void;
   accountToken: string;
   importDoulist: (url: string) => void;
   importNeteasePlaylist: (url: string) => void;

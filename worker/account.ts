@@ -82,7 +82,7 @@ function validateCollectionBody(body: Record<string, unknown> | null): { kind: "
   const title = cleanString(body?.title, 160);
   const description = cleanString(body?.description, 500) ?? "";
   const items = body?.items;
-  if ((kind !== "film" && kind !== "book" && kind !== "music" && kind !== "other") || !title || !Array.isArray(items) || items.length < 2 || items.length > 300) return null;
+  if ((kind !== "film" && kind !== "book" && kind !== "music" && kind !== "other") || !title || !Array.isArray(items) || items.length < 2 || items.length > 1000) return null;
   if (items.some((item) => typeof item !== "object" || item === null || typeof (item as Record<string, unknown>).title !== "string" || String((item as Record<string, unknown>).title).trim().length === 0 || String((item as Record<string, unknown>).title).length > 160)) return null;
   return { kind, title, description, items };
 }

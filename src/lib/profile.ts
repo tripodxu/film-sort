@@ -32,7 +32,7 @@ const validUrl = (value: unknown): value is string => {
 function parseRanking(value: unknown): RankingExport {
   if (!record(value) || value.version !== 1 || !text(value.profileId) || !text(value.profileName, 80) ||
     !text(value.collectionTitle) || !Object.hasOwn(mediaLabels, String(value.kind)) || !validDate(value.createdAt) ||
-    !Array.isArray(value.items) || value.items.length < 1 || value.items.length > 300) throw new Error("Invalid ranking");
+    !Array.isArray(value.items) || value.items.length < 1 || value.items.length > 1000) throw new Error("Invalid ranking");
   const ids = new Set<string>();
   const titles = new Set<string>();
   const ranks = new Set<number>();

@@ -911,18 +911,20 @@ OAuth 回调。自动创建或关联用户，重定向到前端带 token。
 
 ## 外部数据导入（均需 Bearer Token + IP 限流 8 次/10 分钟）
 
+> **分批导入**：`/api/import/doulist`、`/api/import/douban-list`、`/api/import/netease` 均支持 `offset`（起点，默认 0）与 `limit`（本批条数，默认 300，上限 300）窗口参数，响应额外返回 `listTotal`（清单全量，未知为 null）、`hasMore`、`nextOffset`（下一批绝对游标，去重/解析失败不漂移）。前端导入引擎按游标循环拉取，单批 300 条、最多 20 批，配合右上角「设置」的**单次导入上限**（100/300/500/1000，localStorage `art-rank:import-cap`，默认 300）与进度条；超过上限时再次点击导入可从 `nextOffset` 续抓。画像/云端清单条目上限 1000。
+
 ### GET /api/import/doulist?url=
 
-导入豆瓣豆列（`douban.com/doulist/<id>`）。新旧版式双解析，≤300 条，按标签行提取创作者。已连接豆瓣时携带 Cookie（私有豆列可抓）。
+导入豆瓣豆列（`douban.com/doulist/<id>`）。新旧版式双解析，按标签行提取创作者。已连接豆瓣时携带 Cookie（私有豆列可抓）。
 
 ### GET /api/import/douban-list?url=
 
 **统一豆瓣导入入口**，自动识别三类链接：
 - `doulist/<id>` → 豆列
 - `m.douban.com/subject_collection/<ID>` → 豆瓣书影音清单（rexxar JSON，公开无需登录）
-- `{movie|book}.douban.com/mine?status=wish|collect|doing` → 我的想看/已看/在观（需已连接豆瓣，否则提示先连接）。HTML 解析 2026 版结构（电影 `div.item.comment-item` / 书籍 `li.subject-item`），分页参数 `start`，≤300 条。详见 DOUBAN_API.md。
+- `{movie|book}.douban.com/mine?status=wish|collect|doing` → 我的想看/已看/在观（需已连接豆瓣，否则提示先连接）。HTML 解析 2026 版结构（电影 `div.item.comment-item` / 书籍 `li.subject-item`），分页参数 `start`。详见 DOUBAN_API.md。
 
-**响应：** `{ "works": [ImportedWork…], "total", "kind": "subject_collection|mine|doulist" }`
+**响应：** `{ "works": [ImportedWork…], "total", "listTotal", "hasMore", "nextOffset", "kind": "subject_collection|mine|doulist" }`
 
 ### GET /api/import/netease?url=
 

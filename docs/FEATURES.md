@@ -100,13 +100,14 @@
 
 | 功能 | 入口 | 实现 |
 |---|---|---|
-| 豆瓣豆列导入（新旧版式双解析，≤300 条，创作者标签提取） | Source 粘贴链接 | `/api/import/doulist`、`/api/import/douban-list` |
-| 豆瓣清单导入（m.douban.com/subject_collection/XXX，rexxar JSON） | 同一输入框自动识别 | `/api/import/douban-list` |
-| 我的豆瓣「想看/已看/想读/已读」导入（需连接） | 一键按钮 / mine 链接 | `{movie,book}.douban.com/mine` 解析 |
+| 豆瓣豆列导入（新旧版式双解析，创作者标签提取，offset/limit 分批） | Source 粘贴链接 | `/api/import/doulist`、`/api/import/douban-list` |
+| 豆瓣清单导入（m.douban.com/subject_collection/XXX，rexxar JSON，分批） | 同一输入框自动识别 | `/api/import/douban-list` |
+| 我的豆瓣「想看/已看/想读/已读」导入（需连接，2026 版结构解析，分批可破 300） | 一键按钮 / mine 链接 | `{movie,book}.douban.com/mine` 解析 |
+| 分批导入引擎 + 进度条：单批 300、按 nextOffset 游标续抓，右上角「设置」调单次上限（100/300/500/1000，localStorage） | 导入时进度条 + 齿轮菜单 | `useSorting.runBatchedImport` |
+| 已导入清单：折叠▾ + 全选/取消勾选 + 内部滚动（420px）+ 仅保存不排序（按导入顺序存榜单，不进比较） | 清单区 | `saveCustomWorks` |
 | 网易云按 UID 浏览全部歌单（含收藏，主流程）：输入用户 ID/主页链接 → 列全部歌单 → 点选导入；开放接口→weapi 分层降级，被风控时 blocked 引导连接 | 「输入网易云用户 ID → 浏览歌单」 | `/api/netease/user-playlists?uid=` |
-| 网易云歌单导入（公开链接即可；私有需连接；v6+v3 分层链，开放接口→weapi 降级+退避+节流，旧 detail 已要求登录） | Source 粘贴 | `/api/import/netease` |
+| 网易云歌单导入（公开链接即可；私有需连接；v6+v3 分层链，开放接口→weapi 降级+退避+节流+分批，旧 detail 已要求登录） | Source 粘贴 | `/api/import/netease` |
 | 网易云「我的歌单」浏览（含收藏，special=我喜欢的音乐） | 折叠区「连接账号」→「浏览我的全部歌单」（填充主列表） | `/api/import/netease/mine` |
-| 按用户 ID 浏览任意用户的公开歌单并选导入（无需连接网易云） | 「输入对方网易云用户 ID → 浏览歌单」 | `/api/netease/user-playlists?uid=` |
 | 网易云扫码连接（开放接口优先 + weapi 兜底 + Cookie 罐 + 倒计时换码≤2 次 + 风控连续 3 次降级） | 「扫码连接网易云」 | `/api/netease/qr/*` |
 | 豆瓣扫码连接（qrlogin_code/status，dbcl2 入库，服务端代理二维码图） | 「扫码连接豆瓣」 | `/api/douban/qr/*` |
 | 粘贴 Cookie 连接（校验凭证真实可用才入库；扫码风控的兜底） | 弹窗内/「粘贴 Cookie 连接」 | `POST /api/netease/cookie`、`/api/douban/cookie` |
@@ -165,7 +166,7 @@
 4. 比较：贴对方链接→共识圆环+全指标+悬浮解释→共同/分歧表→点名次进详情→AI 解读→用对方排序
 5. 分享：短链+有效期、二维码、/share 页、比较链接
 6. 广场：发布→列表(排序/筛选/搜索/滚动)→点赞/评论/回复→作者编辑/历史/隐藏/删除→与曾经的我比较→同步提示
-7. 导入：豆列/subject_collection/mine(连接后一键)/网易云按 UID 浏览全部歌单(含收藏)点选导入/网易云直链/other 维基搜索带海报
+7. 导入：豆列/subject_collection/mine(连接后一键)/网易云按 UID 浏览全部歌单(含收藏)点选导入/网易云直链/other 维基搜索带海报；分批进度条+右上角设置调单次上限(100~1000)+清单折叠/全选/仅保存不排序
 8. 账号：注册/登录/OAuth/同步/冲突弹窗/退出清数据
 9. 主题：六主题切换、刷新持久化、PNG 跟随
 10. /admin 四页签各一操作
