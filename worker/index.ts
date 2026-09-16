@@ -1489,6 +1489,16 @@ async function route(request: Request, env: Env): Promise<Response> {
       }
     }
 
+    // Step 4: douban 搜索完全失败时，用维基搜索兜底获取标题和简介
+    if (!data.title && title) {
+      const intro = await fetchContentIntro(title, "book");
+      if (intro) {
+        data.title = title;
+        data.content_intro = intro.intro;
+        data.content_source = intro.source;
+      }
+    }
+
     if (data.title) {
       return json({ status: true, msg: "ok", time: "0s", data }, 200, { "cache-control": "public, max-age=86400" });
     }
@@ -1556,6 +1566,16 @@ async function route(request: Request, env: Env): Promise<Response> {
       }
     }
 
+    // Step 4: douban 搜索完全失败时，用维基搜索兜底获取标题和简介
+    if (!data.title && title) {
+      const intro = await fetchContentIntro(title, "movie");
+      if (intro) {
+        data.title = title;
+        data.content_intro = intro.intro;
+        data.content_source = intro.source;
+      }
+    }
+
     if (data.title) {
       return json({ status: true, msg: "ok", time: "0s", data }, 200, { "cache-control": "public, max-age=86400" });
     }
@@ -1614,11 +1634,21 @@ async function route(request: Request, env: Env): Promise<Response> {
       } catch {}
     }
 
-    // Step 3: 维基兜底
+    // Step 3: 维基兜底（简介 + douban 搜索失败时的标题/海报兜底）
     if (!data.content_intro && musicTitle) {
       const wikiTitle = title && musicTitle.includes(title) ? title : musicTitle;
       const intro = await fetchContentIntro(wikiTitle, "music", typeof data.artist === "string" ? data.artist.split("/")[0] : undefined, data.date);
       if (intro) {
+        data.content_intro = intro.intro;
+        data.content_source = intro.source;
+      }
+    }
+
+    // Step 4: douban 搜索完全失败时，用维基搜索兜底获取标题和简介
+    if (!data.title && title) {
+      const intro = await fetchContentIntro(title, "music");
+      if (intro) {
+        data.title = title;
         data.content_intro = intro.intro;
         data.content_source = intro.source;
       }
