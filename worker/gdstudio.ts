@@ -6,18 +6,18 @@
  */
 const API_BASE = "https://music-api.gdstudio.xyz/api.php";
 const SOURCE = "netease";
-const BUDGET_WINDOW_MS = 5 * 60 * 1000;
-const BUDGET_MAX = 40; // 上游 50 次/5min，留 10 次余量给重试与部署冷启动
 const CACHE_MAX = 200;
 
-// isolate 级共享预算（所有请求、所有客户端合计）
-let budget = { startedAt: 0, count: 0 };
-function budgetLeft(): boolean {
-  const now = Date.now();
-  if (now - budget.startedAt > BUDGET_WINDOW_MS) { budget = { startedAt: now, count: 0 }; return true; }
-  if (budget.count >= BUDGET_MAX) return false;
-  budget.count += 1;
-  return true;
+// 连续失败计数：仅当 gdstudio 上游返回错误（非超时）时累加，达到阈值后暂缓请求
+let consecutiveFailures = 0;
+let cooldownUntil = 0;
+const FAILURE_THRESHOLD = 5;
+const COOLDOWN_MS = 60_000;
+
+function isCoolingDown(): boolean {
+  if (Date.now() < cooldownUntil) return true;
+  if (cooldownUntil && Date.now() >= cooldownUntil) { cooldownUntil = 0; consecutiveFailures = 0; }
+  return false;
 }
 
 interface CacheEntry { value: unknown; expires: number }
@@ -43,30 +43,36 @@ const lyricCache = makeCache(24 * 60 * 60 * 1000);  // 歌词几乎不变
 
 export interface GdTrack { id: string; name: string; artist: string[] | string; album?: string; pic_id?: string; lyric_id?: string }
 
-async function gdApi(params: Record<string, string>): Promise<unknown | null> {
-  if (!budgetLeft()) return null;
-  const url = new URL(API_BASE);
-  for (const [k, v] of Object.entries(params)) url.searchParams.set(k, v);
-  try {
-    const response = await fetch(url, { signal: AbortSignal.timeout(10000) });
-    if (!response.ok) return null;
-    return await response.json();
-  } catch { return null; }
-}
-
-/** 带重试的搜索：首次失败（网络/超时）自动重试一次，仅在预算耗尽时标记 blocked。 */
-async function gdApiWithRetry(params: Record<string, string>): Promise<{ result: unknown | null; budgetExhausted: boolean }> {
-  if (!budgetLeft()) return { result: null, budgetExhausted: true };
+/** 带重试的搜索：首次失败自动重试一次，仅在连续失败达阈值时标记 blocked。 */
+async function gdApiWithRetry(params: Record<string, string>): Promise<{ result: unknown | null; blocked: boolean }> {
+  if (isCoolingDown()) return { result: null, blocked: true };
   const url = new URL(API_BASE);
   for (const [k, v] of Object.entries(params)) url.searchParams.set(k, v);
   for (let attempt = 0; attempt < 2; attempt++) {
     try {
       const response = await fetch(url, { signal: AbortSignal.timeout(10000) });
-      if (response.ok) return { result: await response.json(), budgetExhausted: false };
-    } catch { /* retry */ }
+      if (response.ok) {
+        consecutiveFailures = 0; cooldownUntil = 0;
+        return { result: await response.json(), blocked: false };
+      }
+    } catch { /* timeout or network error */ }
     if (attempt === 0) await new Promise(r => setTimeout(r, 500));
   }
-  return { result: null, budgetExhausted: false };
+  consecutiveFailures++;
+  if (consecutiveFailures >= FAILURE_THRESHOLD) cooldownUntil = Date.now() + COOLDOWN_MS;
+  return { result: null, blocked: consecutiveFailures >= FAILURE_THRESHOLD };
+}
+
+/** 单次 API 调用（播放链接/歌词/封面，无需重试）。 */
+async function gdApi(params: Record<string, string>): Promise<unknown | null> {
+  if (isCoolingDown()) return null;
+  const url = new URL(API_BASE);
+  for (const [k, v] of Object.entries(params)) url.searchParams.set(k, v);
+  try {
+    const response = await fetch(url, { signal: AbortSignal.timeout(10000) });
+    if (response.ok) { consecutiveFailures = 0; cooldownUntil = 0; return await response.json(); }
+  } catch { /* */ }
+  return null;
 }
 
 /** 搜索曲目。count≤30；失败返回 []（预算耗尽时 blocked=true，网络失败 blocked=false）。 */
@@ -74,9 +80,9 @@ export async function gdSearch(name: string, count = 10): Promise<{ tracks: GdTr
   const key = `${name}|${count}`;
   const hit = searchCache.get(key);
   if (hit) return hit as { tracks: GdTrack[]; blocked: boolean };
-  const { result: raw, budgetExhausted } = await gdApiWithRetry({ types: "search", source: SOURCE, name, count: String(count), pages: "1" });
+  const { result: raw, blocked } = await gdApiWithRetry({ types: "search", source: SOURCE, name, count: String(count), pages: "1" });
   const tracks = Array.isArray(raw) ? (raw as GdTrack[]).filter((t) => t && typeof t.id === "string" && typeof t.name === "string") : [];
-  const outcome = { tracks, blocked: budgetExhausted && tracks.length === 0 };
+  const outcome = { tracks, blocked: blocked && tracks.length === 0 };
   if (tracks.length || raw !== null) searchCache.set(key, outcome);
   return outcome;
 }
