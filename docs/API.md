@@ -920,7 +920,7 @@ OAuth 回调。自动创建或关联用户，重定向到前端带 token。
 **统一豆瓣导入入口**，自动识别三类链接：
 - `doulist/<id>` → 豆列
 - `m.douban.com/subject_collection/<ID>` → 豆瓣书影音清单（rexxar JSON，公开无需登录）
-- `{movie|book}.douban.com/mine?status=wish|collect|doing` → 我的想看/已看/在观（需已连接豆瓣，否则提示先连接）
+- `{movie|book}.douban.com/mine?status=wish|collect|doing` → 我的想看/已看/在观（需已连接豆瓣，否则提示先连接）。HTML 解析 2026 版结构（电影 `div.item.comment-item` / 书籍 `li.subject-item`），分页参数 `start`，≤300 条。详见 DOUBAN_API.md。
 
 **响应：** `{ "works": [ImportedWork…], "total", "kind": "subject_collection|mine|doulist" }`
 

@@ -80,16 +80,25 @@ export async function fetchSubjectCollection(collectionId: string): Promise<Impo
   return works.slice(0, 300);
 }
 
-interface MineItem { title: string; url: string; poster?: string; abstract?: string; rating?: string }
+interface MineItem { title: string; url: string; poster?: string; meta?: string; titleAttr?: string }
 
-/** 解析「我的」页一页（item-root 卡片结构） */
-async function parseMinePage(url: string, cookie: string): Promise<MineItem[]> {
+/**
+ * 解析「我的」页一页。2026 版豆瓣结构（旧 div.item-root 已不存在）：
+ * - 电影 movie.douban.com/mine：div.item.comment-item → li.title a（em 中文名 / 英文名 / 别名…）、
+ *   .pic a[href*=subject] + .pic img、li.intro（上映日期/演员/国家… 斜杠串，无导演标签）
+ * - 书籍 book.douban.com/mine：li.subject-item → h2 a[title=书名]、.pic a + img、
+ *   .pub（作者 / 出版社 / 年份 / 定价）
+ */
+async function parseMinePage(url: string, cookie: string, media: "movie" | "book"): Promise<MineItem[]> {
   const response = await fetch(url, {
     headers: { "user-agent": DESKTOP_UA, "accept": "text/html,application/xhtml+xml", "accept-language": "zh-CN,zh;q=0.9", referer: "https://www.douban.com/", cookie },
     redirect: "follow",
     signal: AbortSignal.timeout(20000),
   });
   if (!response.ok) throw new Error(`douban_mine_http_${response.status}`);
+  const itemSel = media === "movie" ? "div.item.comment-item" : "li.subject-item";
+  const titleSel = media === "movie" ? "div.item.comment-item li.title a" : "li.subject-item h2 a";
+  const metaSel = media === "movie" ? "div.item.comment-item li.intro" : "li.subject-item .pub";
   const items: MineItem[] = [];
   let current: MineItem | null = null;
   const finish = () => {
@@ -97,14 +106,20 @@ async function parseMinePage(url: string, cookie: string): Promise<MineItem[]> {
     current = null;
   };
   const rewritten = new HTMLRewriter()
-    .on("div.item-root", { element() { finish(); current = { title: "", url: "" }; } })
-    .on("div.item-root .title a, div.item-root .info a[href*='/subject/']", {
-      element(el) { if (current && !current.url) current.url = el.getAttribute("href") ?? ""; },
-      text(chunk) { if (current && !current.title) current.title += chunk.text; },
+    .on(itemSel, {
+      element(el) { finish(); current = { title: "", url: "" }; el.onEndTag(finish); },
     })
-    .on("div.item-root .poster img, div.item-root .nbg img", { element(el) { if (current && !current.poster) current.poster = (el.getAttribute("src") || el.getAttribute("data-src")) ?? undefined; } })
-    .on("div.item-root .abstract, div.item-root .desc", { text(chunk) { if (current) current.abstract = (current.abstract ?? "") + chunk.text; } })
-    .on("div.item-root", { element(el) { el.onEndTag(finish); } })
+    .on(`${itemSel} .pic a[href*='/subject/']`, { element(el) { if (current && !current.url) current.url = el.getAttribute("href") ?? ""; } })
+    .on(`${itemSel} .pic img`, { element(el) { if (current && !current.poster) current.poster = (el.getAttribute("src") || el.getAttribute("data-src")) ?? undefined; } })
+    .on(titleSel, {
+      element(el) {
+        if (!current) return;
+        if (!current.url) current.url = el.getAttribute("href") ?? "";
+        if (!current.titleAttr) current.titleAttr = el.getAttribute("title") ?? "";
+      },
+      text(chunk) { if (current) current.title += chunk.text; },
+    })
+    .on(metaSel, { text(chunk) { if (current) current.meta = (current.meta ?? "") + chunk.text; } })
     .transform(response);
   await rewritten.text();
   return items;
@@ -112,36 +127,56 @@ async function parseMinePage(url: string, cookie: string): Promise<MineItem[]> {
 
 function mineItemToWork(item: MineItem, media: "movie" | "book"): ImportedWork | null {
   const subjectId = item.url.match(/subject\/(\d+)/)?.[1];
-  if (!subjectId || !item.title) return null;
-  const abstract = item.abstract ?? "";
-  const year = abstract.match(/\b(?:18|19|20)\d{2}\b/)?.[0];
-  // 电影 abstract：「导演: xxx / 主演: … / 国家 / 年份」；书籍：「作者 / 出版社 / 年份」
-  const creatorLine = abstract.split("/").map((s) => s.trim()).find((s) => /导演|作者|主演|著/.test(s) || (s && !/^\d{4}/.test(s)));
-  const creator = creatorLine?.replace(/^(导演|作者|主演|著)\s*[:：]\s*/, "").trim().split(/\s/)[0] || undefined;
+  if (!subjectId) return null;
+  const flatTitle = item.title.replace(/\s+/g, " ").trim();
+  const meta = (item.meta ?? "").replace(/\s+/g, " ").trim();
+  const metaParts = meta.split("/").map((s) => s.trim()).filter(Boolean);
+  if (media === "book") {
+    // h2 a 的 title 属性是干净书名；兜底取正文 " : " 前段
+    const title = (item.titleAttr || "").trim() || flatTitle.split(" : ")[0].trim();
+    if (!title) return null;
+    const author = metaParts.find((p) => !/^\d{4}/.test(p) && !/元$/.test(p));
+    const year = meta.match(/\b(1[89]\d{2}|20\d{2})\b/)?.[0];
+    return {
+      id: `douban-b-${subjectId}`,
+      title,
+      ...(author ? { creator: author } : {}),
+      ...(year ? { year: Number(year) } : {}),
+      ...(item.poster ? { poster_url: item.poster } : {}),
+      type: "book",
+    };
+  }
+  // 电影：中文名取 " / " 首段；intro 无导演标签，不强造 creator；年份取首个日期
+  const title = flatTitle.split(" / ")[0].trim();
+  if (!title) return null;
+  const year = meta.match(/\b(1[89]\d{2}|20\d{2})\b/)?.[0];
   return {
-    id: `douban-${media === "movie" ? "m" : "b"}-${subjectId}`,
-    title: item.title,
-    ...(creator ? { creator } : {}),
+    id: `douban-m-${subjectId}`,
+    title,
     ...(year ? { year: Number(year) } : {}),
     ...(item.poster ? { poster_url: item.poster } : {}),
-    type: media === "movie" ? "movie" : "book",
+    type: "movie",
   };
 }
 
-/** 抓取「我的」想看/已看（分页，需登录 Cookie） */
+/** 抓取「我的」想看/已看。分页参数是 start（page_start 被服务端忽略），每页约 15 条，需登录 Cookie */
 export async function fetchDoubanMine(media: "movie" | "book", status: NonNullable<DoubanListTarget["status"]>, cookie: string): Promise<ImportedWork[]> {
   const host = media === "movie" ? "movie.douban.com" : "book.douban.com";
   const works: ImportedWork[] = [];
   const seen = new Set<string>();
-  for (let start = 0; start < 300; start += 30) {
-    const url = `https://${host}/mine?status=${status}&sort=time&tag_status=%E5%85%A8%E9%83%A8&page_limit=30&page_start=${start}`;
-    const items = await parseMinePage(url, cookie).catch(() => [] as MineItem[]);
+  for (let start = 0; start < 300; ) {
+    const url = `https://${host}/mine?status=${status}&sort=time&tag_status=%E5%85%A8%E9%83%A8&start=${start}`;
+    const items = await parseMinePage(url, cookie, media).catch(() => [] as MineItem[]);
     if (!items.length) break;
+    let added = 0;
     for (const item of items) {
       const work = mineItemToWork(item, media);
-      if (work && !seen.has(work.id)) { seen.add(work.id); works.push(work); }
+      if (work && !seen.has(work.id)) { seen.add(work.id); works.push(work); added++; }
     }
-    if (items.length < 30) break;
+    // 步长按本页实际条目数推进；整页都是重复说明服务端没翻页，停止
+    start += items.length;
+    if (added === 0) break;
+    if (works.length >= 300) break;
   }
   return works.slice(0, 300);
 }

@@ -398,9 +398,14 @@ GET /api/douban/books/suggest?q={关键词}   # 书籍
 |---|---|---|
 | `douban.com/doulist/<id>` | HTML 解析（新版 `.doulist-item` + 旧版 `table.olt` 双兜底，≤300 条） | 公开可抓；私有豆列需连接 |
 | `m.douban.com/subject_collection/<ID>` | rexxar JSON API（`/items?type=S&start=&count=100` 分页） | 否（公开） |
-| `{movie,book}.douban.com/mine?status=wish\|collect\|doing` | HTML 解析 `.item-root` 卡片，分页 ≤300 | **是**（扫码或粘贴 Cookie） |
+| `{movie,book}.douban.com/mine?status=wish\|collect\|doing` | HTML 解析 2026 版结构（电影 `div.item.comment-item`、书籍 `li.subject-item`），分页 ≤300 | **是**（扫码或粘贴 Cookie） |
 
 响应：`{ works: [{ id, title, creator?, year?, rating?, poster_url?, type? }], total, kind }`。
+
+> **mine 页解析要点（2026-09 实测）**：旧版 `div.item-root` 已被豆瓣移除。
+> - 电影页：`div.item.comment-item` → `li.title a` 内 `<em>中文名 / 英文名 / 别名…</em>`（取 ` / ` 首段为标题）、`.pic a.nbg[href]` 取 subject 链接、`.pic img` 取海报、`li.intro` 是斜杠串元数据（含上映年份，无导演标签，故不强行造 creator）。
+> - 书籍页：`li.subject-item` → `h2 a[title=书名]`、`.pub`「作者 / 出版社 / 年份 / 定价」（首段为作者）。
+> - **分页参数是 `start`**（每页约 15 条）；`page_start`/`page_limit` 会被服务端忽略导致每页返回同一批——必须用 `start`，步长按本页实际条数推进，整页全重复即停止。
 
 ## 豆瓣扫码登录与 Cookie 保险库
 
