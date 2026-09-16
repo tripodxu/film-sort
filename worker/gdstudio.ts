@@ -45,23 +45,38 @@ export interface GdTrack { id: string; name: string; artist: string[] | string; 
 
 async function gdApi(params: Record<string, string>): Promise<unknown | null> {
   if (!budgetLeft()) return null;
+  const url = new URL(API_BASE);
+  for (const [k, v] of Object.entries(params)) url.searchParams.set(k, v);
   try {
-    const url = new URL(API_BASE);
-    for (const [k, v] of Object.entries(params)) url.searchParams.set(k, v);
     const response = await fetch(url, { signal: AbortSignal.timeout(10000) });
     if (!response.ok) return null;
     return await response.json();
   } catch { return null; }
 }
 
-/** 搜索曲目。count≤30；失败返回 []（预算耗尽也返回 []，由调用方区分时可读 msg）。 */
+/** 带重试的搜索：首次失败（网络/超时）自动重试一次，仅在预算耗尽时标记 blocked。 */
+async function gdApiWithRetry(params: Record<string, string>): Promise<{ result: unknown | null; budgetExhausted: boolean }> {
+  if (!budgetLeft()) return { result: null, budgetExhausted: true };
+  const url = new URL(API_BASE);
+  for (const [k, v] of Object.entries(params)) url.searchParams.set(k, v);
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      const response = await fetch(url, { signal: AbortSignal.timeout(10000) });
+      if (response.ok) return { result: await response.json(), budgetExhausted: false };
+    } catch { /* retry */ }
+    if (attempt === 0) await new Promise(r => setTimeout(r, 500));
+  }
+  return { result: null, budgetExhausted: false };
+}
+
+/** 搜索曲目。count≤30；失败返回 []（预算耗尽时 blocked=true，网络失败 blocked=false）。 */
 export async function gdSearch(name: string, count = 10): Promise<{ tracks: GdTrack[]; blocked: boolean }> {
   const key = `${name}|${count}`;
   const hit = searchCache.get(key);
   if (hit) return hit as { tracks: GdTrack[]; blocked: boolean };
-  const raw = await gdApi({ types: "search", source: SOURCE, name, count: String(count), pages: "1" });
+  const { result: raw, budgetExhausted } = await gdApiWithRetry({ types: "search", source: SOURCE, name, count: String(count), pages: "1" });
   const tracks = Array.isArray(raw) ? (raw as GdTrack[]).filter((t) => t && typeof t.id === "string" && typeof t.name === "string") : [];
-  const outcome = { tracks, blocked: tracks.length === 0 && raw === null };
+  const outcome = { tracks, blocked: budgetExhausted && tracks.length === 0 };
   if (tracks.length || raw !== null) searchCache.set(key, outcome);
   return outcome;
 }

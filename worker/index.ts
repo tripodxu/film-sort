@@ -1701,6 +1701,7 @@ async function route(request: Request, env: Env): Promise<Response> {
     try {
       const { tracks, blocked } = await gdSearch(query, 10);
       if (blocked) return json({ error: "music_upstream_limited" }, 429, { "retry-after": "300", msg: "音乐服务暂时限流，稍后再试" });
+      if (!tracks.length) return json({ error: "music_search_failed", msg: "音乐搜索暂不可用，请稍后重试" }, 502, { "cache-control": "public, max-age=60" });
       const track = pickTrack(tracks, query, artist);
       if (!track) return json({ error: "music_not_found" }, 404, { "cache-control": "public, max-age=300" });
       const playUrl = await gdPlayUrl(String(track.id));
@@ -1716,7 +1717,8 @@ async function route(request: Request, env: Env): Promise<Response> {
     if (!allowUpstreamRequest(request, "music", 12)) return json({ error: "rate_limited" }, 429, { "retry-after": "60" });
     try {
       const { tracks, blocked } = await gdSearch(query, 10);
-      if (blocked) return json({ error: "music_upstream_limited" }, 429, { "retry-after": "300", msg: "音乐服务暂时限流，稍后再试" });
+      if (blocked) return json({ error: "music_upstream_limited" }, 429, { "retry-after": "300", msg: "歌词服务暂时限流，稍后再试" });
+      if (!tracks.length) return json({ error: "music_search_failed", msg: "歌词搜索暂不可用，请稍后重试" }, 502, { "cache-control": "public, max-age=60" });
       const track = pickTrack(tracks, query, artist);
       if (!track) return json({ error: "music_not_found" }, 404, { "cache-control": "public, max-age=300" });
       const result = await gdLyric(String(track.lyric_id || track.id));
