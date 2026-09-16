@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Music2, Play, X } from "lucide-react";
 import { Poster } from "./Poster";
 import { IconButton } from "../views/IconButton";
+import { gdPlay, gdLyric } from "../lib/gdMusic";
 import type { RankedArtwork } from "../lib/profile";
 import type { MediaKind } from "../data/media";
 
@@ -29,26 +30,36 @@ export function ArtworkDetail({ detail, label, t, onClose }: { detail: ArtworkDe
   async function playMusic() {
     if (playUrl) return;
     setPlayBusy(true); setPlayError("");
+    const title = detail.work.title;
+    const artist = detail.work.creator;
     try {
-      const qs = new URLSearchParams({ q: detail.work.title });
-      if (detail.work.creator) qs.set("artist", detail.work.creator.split("/")[0].trim());
+      // 优先 Deno Deploy 代理（GCP 出口，不受 CF 封禁）
+      const result = await gdPlay(title, artist);
+      if (result) { setPlayUrl(result.playUrl); setIsCover(result.isCover); return; }
+      // 降级：Worker 端点
+      const qs = new URLSearchParams({ q: title });
+      if (artist) qs.set("artist", artist.split("/")[0].trim());
       const response = await fetch(`/api/music/play?${qs}`);
       const payload = await response.json() as { playUrl?: string; msg?: string; error?: string; isCover?: boolean };
       if (response.ok && payload.playUrl) { setPlayUrl(payload.playUrl); setIsCover(!!payload.isCover); }
-      else setPlayError(payload.msg || (response.status === 429 ? t("音乐服务暂时限流，稍后再试", "Music service rate-limited, retry shortly") : t("未找到可试听的版本", "No playable version found")));
+      else setPlayError(payload.msg || t("未找到可试听的版本", "No playable version found"));
     } catch { setPlayError(t("试听服务暂不可用", "Preview unavailable")); }
     finally { setPlayBusy(false); }
   }
   async function loadLyric() {
     if (lyric) { setLyric(null); return; }
     setLyricBusy(true); setLyricError("");
+    const title = detail.work.title;
+    const artist = detail.work.creator;
     try {
-      const qs = new URLSearchParams({ q: detail.work.title });
-      if (detail.work.creator) qs.set("artist", detail.work.creator.split("/")[0].trim());
+      const result = await gdLyric(title, artist);
+      if (result?.lyric) { setLyric(result.lyric); return; }
+      const qs = new URLSearchParams({ q: title });
+      if (artist) qs.set("artist", artist.split("/")[0].trim());
       const response = await fetch(`/api/music/lyric?${qs}`);
       const payload = await response.json() as { lyric?: string; msg?: string; error?: string };
       if (response.ok && payload.lyric) setLyric(payload.lyric);
-      else setLyricError(payload.msg || (response.status === 404 ? t("暂无歌词", "No lyrics available") : t("歌词服务暂不可用", "Lyrics unavailable")));
+      else setLyricError(payload.msg || t("暂无歌词", "No lyrics available"));
     } catch { setLyricError(t("歌词服务暂不可用", "Lyrics unavailable")); }
     finally { setLyricBusy(false); }
   }
