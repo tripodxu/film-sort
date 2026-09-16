@@ -820,10 +820,12 @@ async function fetchDetailPage(url: string): Promise<{ html: string; debug: Reco
   debug.html_preview = html.slice(0, 300);
   steps.push(`html received: ${html.length} chars`);
   
-  // Check if we got redirected to anti-bot page
+  // Check if we got redirected to anti-bot page — must throw so callers
+  // fall through to their catch block (enables Wikipedia/Baike fallback).
   if (response.url?.includes("sec.douban.com")) {
     steps.push("redirected to sec.douban.com (anti-bot)");
     debug.blocked = true;
+    throw new Error("Anti-bot redirect to sec.douban.com");
   }
   
   return { html, debug };
@@ -884,6 +886,7 @@ export async function doubanBookDetail(url: string): Promise<{ status: boolean; 
       const dirText = cleanHtml(dirMatch[1]);
       detail.dirs = dirText.split(/\s{2,}/).map(s => s.trim()).filter(Boolean);
     }
+    if (!detail.title && !detail.rating) throw new Error("Detail page produced no usable content");
     return { status: true, msg: "获取成功", time: `${((Date.now() - t0) / 1000).toFixed(3)}s`, data: detail };
   } catch (error) {
     console.error(`doubanBookDetail failed:`, error);
@@ -925,6 +928,10 @@ export async function doubanMovieDetail(url: string): Promise<{ status: boolean;
     if (actorMatches) detail.acting_staff = actorMatches.slice(0, 10).map(m => cleanHtml(m)).filter(Boolean);
     const imgMatches = html.match(/<img[^>]+src="(https:\/\/img\d+\.doubanio\.com\/view\/photo\/[^"]+)"/g);
     if (imgMatches) detail.imgs = [...new Set(imgMatches.map(m => m.match(/src="([^"]+)"/)?.[1] ?? "").filter(Boolean))].slice(0, 6);
+    // Sanity check: if the page produced no title and no rating, the HTML was
+    // likely garbage (anti-bot page, empty response, etc.) — treat as failure
+    // so the caller's Wikipedia fallback can kick in.
+    if (!detail.title && !detail.rating) throw new Error("Detail page produced no usable content");
     return { status: true, msg: "获取成功", time: `${((Date.now() - t0) / 1000).toFixed(3)}s`, data: detail, debug };
   } catch (error) {
     return { status: false, msg: error instanceof Error ? error.message : "获取失败", time: `${((Date.now() - t0) / 1000).toFixed(3)}s`, data: null };
@@ -965,6 +972,7 @@ export async function doubanMusicDetail(url: string): Promise<{ status: boolean;
       const songNames = songMatches[0].match(/<span\s+class="song-name"[^>]*>([^<]+)<\/span>/g);
       if (songNames) detail.songs = songNames.map(m => cleanHtml(m)).filter(Boolean);
     }
+    if (!detail.title && !detail.rating) throw new Error("Detail page produced no usable content");
     return { status: true, msg: "获取成功", time: `${((Date.now() - t0) / 1000).toFixed(3)}s`, data: detail };
   } catch (error) {
     return { status: false, msg: error instanceof Error ? error.message : "获取失败", time: `${((Date.now() - t0) / 1000).toFixed(3)}s`, data: null };
