@@ -33,10 +33,10 @@ export function ArtworkDetail({ detail, label, t, onClose }: { detail: ArtworkDe
     const title = detail.work.title;
     const artist = detail.work.creator;
     try {
-      // 优先 Deno Deploy 代理（GCP 出口，不受 CF 封禁）
+      // 优先 Deno Deploy 代理（GCP 出口，原版搜索）
       const result = await gdPlay(title, artist);
       if (result) { setPlayUrl(result.playUrl); setIsCover(result.isCover); return; }
-      // 降级：Worker 端点
+      // 降级：Worker 端点（需已连接网易云 Cookie）
       const qs = new URLSearchParams({ q: title });
       if (artist) qs.set("artist", artist.split("/")[0].trim());
       const response = await fetch(`/api/music/play?${qs}`);
@@ -52,8 +52,10 @@ export function ArtworkDetail({ detail, label, t, onClose }: { detail: ArtworkDe
     const title = detail.work.title;
     const artist = detail.work.creator;
     try {
+      // 优先 Deno Deploy 代理
       const result = await gdLyric(title, artist);
       if (result?.lyric) { setLyric(result.lyric); return; }
+      // 降级：Worker 端点
       const qs = new URLSearchParams({ q: title });
       if (artist) qs.set("artist", artist.split("/")[0].trim());
       const response = await fetch(`/api/music/lyric?${qs}`);
