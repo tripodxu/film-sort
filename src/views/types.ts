@@ -87,6 +87,7 @@ export interface SetupViewProps {
   setSeed: (seed: string) => void;
   setCollection: (collection: MediaCollection) => void;
   startRanking: () => void;
+  saveWithoutSorting: () => void;
 }
 
 export interface SortingViewProps {

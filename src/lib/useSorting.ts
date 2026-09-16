@@ -142,6 +142,23 @@ export function useSorting(deps: SortingDeps) {
 
   function clearCustomWorksFn() { setCustomWorks([]); setCustomDeselected([]); }
 
+  /** 仅保存不排序（setup 页）：把当前选中的作品按清单顺序存为画像榜单，不进比较流程 */
+  function saveWithoutSortingFn() {
+    const d = depsRef.current;
+    if (!collection) return;
+    const kept = collection.works.filter((w) => selected.includes(w.id));
+    if (kept.length < 1) { d.setNotice(d.t("请至少选择 1 件作品。", "Select at least 1 work.")); return; }
+    const ranking: RankingExport = {
+      version: 1, profileId: d.getProfile()?.profileId ?? crypto.randomUUID(), profileName: d.profileName.trim() || d.t("我的艺术人格", "My artistic profile"), kind: collection.kind,
+      collectionTitle: collection.title, createdAt: new Date().toISOString(),
+      items: kept.map((w, i) => ({ ...w, rank: i + 1 })),
+    };
+    d.persist(mergeRanking(d.getProfile(), ranking));
+    d.setActiveKind(collection.kind);
+    d.setNotice(d.t(`已保存 ${kept.length} 件作品为榜单（按清单顺序，未排序）。`, `Saved ${kept.length} works as a list (list order, unsorted).`));
+    d.navigateTo("profile");
+  }
+
   function applyImportedWorks(works: Array<Artwork & { type?: string; poster_url?: string }>, silent = false) {
     const d = depsRef.current;
     const normalized = works.map((w) => ({ id: w.id || `imp-${Math.random().toString(36).slice(2, 10)}`, title: w.title, creator: w.creator, year: w.year, posterUrls: w.posterUrls ?? (w.poster_url ? [w.poster_url] : undefined) })) as Array<Artwork & { type?: string }>;
@@ -325,5 +342,6 @@ export function useSorting(deps: SortingDeps) {
     applyImportedWorks, importDoulist, importNeteasePlaylist,
     saveCollectionCloud: saveCollectionCloudFn, loadCloudCollections: loadCloudCollectionsFn,
     deleteCloudCollection, changeCols, loadDouban, startRanking, act, resume,
+    saveWithoutSorting: saveWithoutSortingFn,
   };
 }
