@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Play, X } from "lucide-react";
+import { Music2, Play, X } from "lucide-react";
 import { Poster } from "./Poster";
 import { IconButton } from "../views/IconButton";
 import type { RankedArtwork } from "../lib/profile";
@@ -20,10 +20,36 @@ export interface ArtworkDetailInfo {
 export function ArtworkDetail({ detail, label, t, onClose }: { detail: ArtworkDetailInfo; label: (kind: MediaKind) => string; t: (zh: string, en: string) => string; onClose: () => void }) {
   const [playUrl, setPlayUrl] = useState("");
   const [playBusy, setPlayBusy] = useState(false);
+  const [playError, setPlayError] = useState("");
+  const [lyric, setLyric] = useState<string | null>(null);
+  const [lyricBusy, setLyricBusy] = useState(false);
+  const [lyricError, setLyricError] = useState("");
+  const isMusic = detail.kind === "music";
   async function playMusic() {
-    setPlayBusy(true);
-    try { const response = await fetch(`/api/music/play?q=${encodeURIComponent(detail.work.title)}`); const payload = await response.json() as { playUrl?: string }; if (response.ok && payload.playUrl) setPlayUrl(payload.playUrl); }
+    if (playUrl) return;
+    setPlayBusy(true); setPlayError("");
+    try {
+      const qs = new URLSearchParams({ q: detail.work.title });
+      if (detail.work.creator) qs.set("artist", detail.work.creator.split("/")[0].trim());
+      const response = await fetch(`/api/music/play?${qs}`);
+      const payload = await response.json() as { playUrl?: string; msg?: string; error?: string };
+      if (response.ok && payload.playUrl) setPlayUrl(payload.playUrl);
+      else setPlayError(payload.msg || (response.status === 429 ? t("音乐服务暂时限流，稍后再试", "Music service rate-limited, retry shortly") : t("未找到可试听的版本", "No playable version found")));
+    } catch { setPlayError(t("试听服务暂不可用", "Preview unavailable")); }
     finally { setPlayBusy(false); }
   }
-  return <div className="modal-backdrop" style={{ zIndex: 60 }} onClick={onClose}><section className="detail-dialog" role="dialog" aria-modal="true" aria-labelledby="detail-heading" onClick={(event) => event.stopPropagation()}><div className="section-heading"><div><span className="eyebrow">{label(detail.kind)} / {t("作品详情", "WORK DETAIL")}</span><h2 id="detail-heading">{detail.work.title}</h2></div><IconButton title={t("关闭", "Close")} onClick={onClose}><X size={18} /></IconButton></div><div className="detail-body"><Poster work={detail.work} kind={detail.kind} large /><div className="detail-copy">{detail.loading ? <p className="empty-state">{t("正在读取作品信息…", "Loading work details…")}</p> : detail.data ? <><div className="detail-meta"><span>{detail.work.creator ?? ""}</span><span>{detail.work.year ?? ""}</span><span>{String(detail.data.rating ?? "")}</span></div>{detail.kind === "music" && <div className="music-preview"><button className="button secondary" disabled={playBusy} onClick={() => void playMusic()}><Play size={15} />{playBusy ? t("准备试听…", "Preparing…") : t("试听片段", "Preview")}</button>{playUrl && <audio controls autoPlay src={playUrl} />}</div>}{typeof detail.data.content_intro === "string" && detail.data.content_intro && <div className="detail-synopsis"><h3>{t("简介", "Synopsis")}</h3><p>{detail.data.content_intro}</p>{typeof detail.data.content_source === "string" && <span className="detail-source">— {detail.data.content_source}</span>}</div>}<dl>{Object.entries(detail.data).filter(([key, value]) => value && !["title", "pic", "rating", "imgs", "content_intro", "content_source"].includes(key)).slice(0, 8).map(([key, value]) => <div key={key}><dt>{key}</dt><dd>{Array.isArray(value) ? value.join("、") : String(value)}</dd></div>)}</dl></> : <p className="empty-state">{t("暂时没有更多资料，仍可保留这件作品。", "No additional details were found.")}</p>}</div></div></section></div>;
+  async function loadLyric() {
+    if (lyric) { setLyric(null); return; }
+    setLyricBusy(true); setLyricError("");
+    try {
+      const qs = new URLSearchParams({ q: detail.work.title });
+      if (detail.work.creator) qs.set("artist", detail.work.creator.split("/")[0].trim());
+      const response = await fetch(`/api/music/lyric?${qs}`);
+      const payload = await response.json() as { lyric?: string; msg?: string; error?: string };
+      if (response.ok && payload.lyric) setLyric(payload.lyric);
+      else setLyricError(payload.msg || (response.status === 404 ? t("暂无歌词", "No lyrics available") : t("歌词服务暂不可用", "Lyrics unavailable")));
+    } catch { setLyricError(t("歌词服务暂不可用", "Lyrics unavailable")); }
+    finally { setLyricBusy(false); }
+  }
+  return <div className="modal-backdrop" style={{ zIndex: 60 }} onClick={onClose}><section className="detail-dialog" role="dialog" aria-modal="true" aria-labelledby="detail-heading" onClick={(event) => event.stopPropagation()}><div className="section-heading"><div><span className="eyebrow">{label(detail.kind)} / {t("作品详情", "WORK DETAIL")}</span><h2 id="detail-heading">{detail.work.title}</h2></div><IconButton title={t("关闭", "Close")} onClick={onClose}><X size={18} /></IconButton></div><div className="detail-body"><Poster work={detail.work} kind={detail.kind} large /><div className="detail-copy">{isMusic && <div className="music-preview"><button className="button secondary" disabled={playBusy} onClick={() => void playMusic()}><Play size={15} />{playBusy ? t("准备试听…", "Preparing…") : t("试听", "Listen")}</button><button className="button secondary" disabled={lyricBusy} onClick={() => void loadLyric()}><Music2 size={15} />{lyricBusy ? t("加载歌词…", "Loading…") : lyric === null ? t("歌词", "Lyrics") : t("收起歌词", "Hide lyrics")}</button>{playUrl && <audio controls autoPlay src={playUrl} />}{playError && <small className="music-panel-msg">{playError}</small>}{lyricError && <small className="music-panel-msg">{lyricError}</small>}{lyric && <pre className="music-lyric">{lyric}</pre>}</div>}{detail.loading ? <p className="empty-state">{isMusic ? t("正在读取专辑信息…", "Loading album details…") : t("正在读取作品信息…", "Loading work details…")}</p> : detail.data ? <><div className="detail-meta"><span>{detail.work.creator ?? ""}</span><span>{detail.work.year ?? ""}</span><span>{String(detail.data.rating ?? "")}</span></div>{typeof detail.data.content_intro === "string" && detail.data.content_intro && <div className="detail-synopsis"><h3>{t("简介", "Synopsis")}</h3><p>{detail.data.content_intro}</p>{typeof detail.data.content_source === "string" && <span className="detail-source">— {detail.data.content_source}</span>}</div>}<dl>{Object.entries(detail.data).filter(([key, value]) => value && !["title", "pic", "rating", "imgs", "content_intro", "content_source"].includes(key)).slice(0, 8).map(([key, value]) => <div key={key}><dt>{key}</dt><dd>{Array.isArray(value) ? value.join("、") : String(value)}</dd></div>)}</dl></> : <p className="empty-state">{t("暂时没有更多资料，仍可保留这件作品。", "No additional details were found.")}</p>}</div></div></section></div>;
 }

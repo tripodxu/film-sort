@@ -6,6 +6,7 @@ import { importRoute } from "./import";
 import { neteaseQrIssue, neteaseQrPoll, hasProviderCookie, deleteProviderCookie, saveProviderCookie, loadProviderCookie, neteaseUserId, neteaseAccountInfo, neteaseUserPlaylists } from "./netease";
 import { doubanQrIssue, doubanQrPoll, extractDoubanLoginCookie, doubanUserId, doubanAccountInfo } from "./douban";
 import { otherSearch, otherDetail } from "./other";
+import { gdSearch, gdPlayUrl, gdLyric, pickTrack, stripLrc } from "./gdstudio";
 import { recordAudit } from "./audit";
 
 export interface Env {
@@ -83,7 +84,6 @@ const CHALLENGE_ID = /^mv-[a-z0-9]{12}$/;
 const MAX_REQUEST_BYTES = 48 * 1024;
 const MAX_EVENT_PAYLOAD_BYTES = 2 * 1024;
 const MAX_CHALLENGE_ITEMS = 300;
-const MUSIC_API_ORIGIN = "https://music-api.gdstudio.xyz";
 const upstreamWindows = new Map<string, { startedAt: number; count: number }>();
 
 function allowUpstreamRequest(request: Request, bucket: "ai" | "music" | "auth" | "share" | "import" | "netease" | "douban" | "other", limit: number): boolean {
@@ -106,7 +106,7 @@ const JSON_HEADERS = {
 
 const SECURITY_HEADERS: Record<string, string> = {
     "content-security-policy":
-      "default-src 'self'; img-src 'self' data: https://img*.doubanio.com https://m.media-amazon.com https://ia.media-imdb.com https://image.tmdb.org https://*.music.126.net https://*.githubusercontent.com https://upload.wikimedia.org https://thumb.wikimedia.org https://bkimg.cdn.bcebos.com; style-src 'self' 'unsafe-inline'; script-src 'self' https://cdn.jsdelivr.net https://static.cloudflareinsights.com 'sha256-d+1XxRQUWY8LGwXhdeFvJFpB3nkb5L9UFxsCt9kf/SU='; connect-src 'self' https://cloudflareinsights.com; font-src 'self' data:; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'; upgrade-insecure-requests",
+      "default-src 'self'; img-src 'self' data: https://img*.doubanio.com https://m.media-amazon.com https://ia.media-imdb.com https://image.tmdb.org https://*.music.126.net https://*.githubusercontent.com https://upload.wikimedia.org https://thumb.wikimedia.org https://bkimg.cdn.bcebos.com; style-src 'self' 'unsafe-inline'; script-src 'self' https://cdn.jsdelivr.net https://static.cloudflareinsights.com 'sha256-d+1XxRQUWY8LGwXhdeFvJFpB3nkb5L9UFxsCt9kf/SU='; connect-src 'self' https://cloudflareinsights.com; font-src 'self' data:; media-src 'self' https://*.music.126.net; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'; upgrade-insecure-requests",
   "cross-origin-opener-policy": "same-origin",
   "referrer-policy": "strict-origin-when-cross-origin",
   "x-content-type-options": "nosniff",
@@ -1695,22 +1695,35 @@ async function route(request: Request, env: Env): Promise<Response> {
   }
   if (url.pathname === "/api/music/play" && request.method === "GET") {
     const query = url.searchParams.get("q")?.trim();
-    if (!query || query.length > 80) return json({ error: "invalid_query" }, 400);
-    if (!allowUpstreamRequest(request, "music", 12)) return json({ error: "rate_limited" }, 429, { "retry-after": "600" });
+    const artist = url.searchParams.get("artist")?.trim() ?? "";
+    if (!query || query.length > 80 || artist.length > 80) return json({ error: "invalid_query" }, 400);
+    if (!allowUpstreamRequest(request, "music", 12)) return json({ error: "rate_limited" }, 429, { "retry-after": "60" });
     try {
-      const upstreamUrl = new URL("/api.php", MUSIC_API_ORIGIN);
-      upstreamUrl.searchParams.set("types", "search"); upstreamUrl.searchParams.set("source", "netease"); upstreamUrl.searchParams.set("name", query); upstreamUrl.searchParams.set("count", "1"); upstreamUrl.searchParams.set("pages", "1");
-      const response = await fetch(upstreamUrl, { signal: AbortSignal.timeout(10000) });
-      if (!response.ok) return json({ error: "music_upstream_failed" }, 502);
-      const data = await response.json() as Array<{ id?: string; name?: string; artist?: string }>;
-      const track = Array.isArray(data) ? data[0] : undefined;
-      if (!track?.id) return json({ error: "music_not_found" }, 404, { "cache-control": "public, max-age=300" });
-      const urlRequest = new URL("/api.php", MUSIC_API_ORIGIN);
-      urlRequest.searchParams.set("types", "url"); urlRequest.searchParams.set("source", "netease"); urlRequest.searchParams.set("id", String(track.id));
-      const urlResponse = await fetch(urlRequest, { signal: AbortSignal.timeout(10000) });
-      const playData = await urlResponse.json() as { url?: string; br?: number };
-      return json({ track, playUrl: typeof playData.url === "string" ? playData.url : "", bitrate: playData.br ?? null }, 200, { "cache-control": "public, max-age=300" });
+      const { tracks, blocked } = await gdSearch(query, 10);
+      if (blocked) return json({ error: "music_upstream_limited" }, 429, { "retry-after": "300", msg: "音乐服务暂时限流，稍后再试" });
+      const track = pickTrack(tracks, query, artist);
+      if (!track) return json({ error: "music_not_found" }, 404, { "cache-control": "public, max-age=300" });
+      const playUrl = await gdPlayUrl(String(track.id));
+      return json({ track, playUrl, lyricId: String(track.lyric_id || track.id) }, 200, { "cache-control": "public, max-age=300" });
     } catch { return json({ error: "music_unavailable" }, 502); }
+  }
+  // 歌词：按歌曲名（+可选歌手）解析曲目后返回 LRC 剥离时间轴的纯文本
+  if (url.pathname === "/api/music/lyric" && request.method === "GET") {
+    const query = url.searchParams.get("q")?.trim();
+    const artist = url.searchParams.get("artist")?.trim() ?? "";
+    if (!query || query.length > 80 || artist.length > 80) return json({ error: "invalid_query" }, 400);
+    if (!allowUpstreamRequest(request, "music", 12)) return json({ error: "rate_limited" }, 429, { "retry-after": "60" });
+    try {
+      const { tracks, blocked } = await gdSearch(query, 10);
+      if (blocked) return json({ error: "music_upstream_limited" }, 429, { "retry-after": "300", msg: "音乐服务暂时限流，稍后再试" });
+      const track = pickTrack(tracks, query, artist);
+      if (!track) return json({ error: "music_not_found" }, 404, { "cache-control": "public, max-age=300" });
+      const result = await gdLyric(String(track.lyric_id || track.id));
+      if (!result) return json({ error: "lyric_not_found" }, 404, { "cache-control": "public, max-age=3600" });
+      const lyric = stripLrc(result.lyric);
+      const tlyric = stripLrc(result.tlyric);
+      return json({ title: track.name, artist: Array.isArray(track.artist) ? track.artist.join(" / ") : String(track.artist ?? ""), lyric, ...(tlyric ? { tlyric } : {}) }, 200, { "cache-control": "public, max-age=86400" });
+    } catch { return json({ error: "lyric_unavailable" }, 502); }
   }
 
   if (url.pathname === "/api/auth/config") return json({ enabled: Boolean(env.DB) });
