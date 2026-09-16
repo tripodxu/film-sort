@@ -85,6 +85,27 @@ export function pickTrack(tracks: GdTrack[], title: string, artist?: string): Gd
   return bestScore > 0 ? best : tracks[0];
 }
 
+/** 判断搜索匹配到的曲目是否为翻唱/改编版而非原版。 */
+export function isCoverTrack(track: GdTrack, title: string, artist?: string): boolean {
+  const name = track.name;
+  const coverHints = /翻唱|cover|女声版|男声版|dj版|live|钢琴版|纯音乐|吉他版|深情版|翻弹|remix|伴奏|钢琴曲|古筝版|小提琴版|acoustic|instrumental|demo|试听版|雨下整夜版|纯净甜美版|压抑/i;
+  if (coverHints.test(name)) return true;
+  const bracket = name.match(/[（(]([^)）]+)[)）]/);
+  if (bracket && coverHints.test(bracket[1])) return true;
+  // 歌名中括号内容（如"七里香 (女声版)"）
+  if (artist) {
+    const wantArtist = artist.split("/")[0].trim();
+    const trackArtists = Array.isArray(track.artist) ? track.artist.join(" ") : String(track.artist ?? "");
+    const norm = (s: string) => s.normalize("NFKC").toLowerCase().replace(/\s/g, "");
+    if (wantArtist && !norm(trackArtists).includes(norm(wantArtist)) && !norm(wantArtist).includes(norm(trackArtists))) {
+      // 仅当搜索结果中没有任何匹配原唱时才标记为翻唱
+      // （由调用方在所有 tracks 层面判断，此处仅做单条判断）
+      return true;
+    }
+  }
+  return false;
+}
+
 /** 签名播放链（br 缺省 320）。 */
 export async function gdPlayUrl(trackId: string): Promise<string> {
   const hit = playCache.get(trackId);
