@@ -23,13 +23,16 @@ export function loadDraft(): Draft | null {
 }
 
 export interface SortingDeps {
-  getAccountToken: () => string;
+  /** Current values, refreshed each render — needed for effect dependency arrays. */
+  accountToken: string;
+  profileName: string;
+  view: string;
   getProfile: () => ArtisticProfile | null;
-  getProfileName: () => string;
   getPeer: () => ArtisticProfile | null;
   getNotes: () => Record<string, string>;
   persist: (p: ArtisticProfile) => void;
   setActiveKind: (k: string) => void;
+  setProfileName: (n: string) => void;
   setNotice: (n: string) => void;
   navigateTo: (v: string) => void;
   setView: (v: string) => void;
@@ -41,6 +44,7 @@ export interface SortingDeps {
 export function useSorting(deps: SortingDeps) {
   const depsRef = useRef(deps);
   depsRef.current = deps;
+  const { view, profileName, accountToken } = deps;
 
   const [kind, setKind] = useState<MediaKind>("film");
   const [source, setSource] = useState<"builtin" | "custom" | "douban">("builtin");
@@ -126,11 +130,11 @@ export function useSorting(deps: SortingDeps) {
 
   async function importDoulist(rawUrl: string) {
     const d = depsRef.current;
-    if (!d.getAccountToken()) { d.setNotice(d.t("请先登录后再导入。", "Sign in to import.")); return; }
+    if (!d.accountToken) { d.setNotice(d.t("请先登录后再导入。", "Sign in to import.")); return; }
     const target = rawUrl.trim(); if (!target) return;
     setBusy(true);
     try {
-      const response = await fetch(`/api/import/douban-list?url=${encodeURIComponent(target)}`, { headers: { authorization: `Bearer ${d.getAccountToken()}` }, signal: AbortSignal.timeout(120000) });
+      const response = await fetch(`/api/import/douban-list?url=${encodeURIComponent(target)}`, { headers: { authorization: `Bearer ${d.accountToken}` }, signal: AbortSignal.timeout(120000) });
       const data = await response.json() as { works?: Array<Artwork & { type?: string; poster_url?: string }>; msg?: string; error?: string };
       if (!response.ok || !data.works) { d.setNotice(d.t("豆瓣导入失败：" + (data.msg ?? data.error ?? "未知错误"), "Douban import failed: " + (data.msg ?? data.error ?? ""))); return; }
       applyImportedWorks(data.works);
@@ -141,11 +145,11 @@ export function useSorting(deps: SortingDeps) {
 
   async function importNeteasePlaylist(rawUrl: string) {
     const d = depsRef.current;
-    if (!d.getAccountToken()) { d.setNotice(d.t("请先登录后再导入。", "Sign in to import.")); return; }
+    if (!d.accountToken) { d.setNotice(d.t("请先登录后再导入。", "Sign in to import.")); return; }
     const target = rawUrl.trim(); if (!target) return;
     setBusy(true);
     try {
-      const response = await fetch(`/api/import/netease?url=${encodeURIComponent(target)}`, { headers: { authorization: `Bearer ${d.getAccountToken()}` }, signal: AbortSignal.timeout(60000) });
+      const response = await fetch(`/api/import/netease?url=${encodeURIComponent(target)}`, { headers: { authorization: `Bearer ${d.accountToken}` }, signal: AbortSignal.timeout(60000) });
       const data = await response.json() as { works?: Array<Artwork & { poster_url?: string }>; msg?: string; error?: string };
       if (!response.ok || !data.works) { d.setNotice(d.t("歌单导入失败：" + (data.msg ?? data.error ?? "未知错误"), "Playlist import failed: " + (data.msg ?? data.error ?? ""))); return; }
       applyImportedWorks(data.works.map((w) => ({ ...w, type: "music" })));
@@ -154,7 +158,7 @@ export function useSorting(deps: SortingDeps) {
   }
 
   async function saveCollectionCloudFn(collectionToSave: MediaCollection) {
-    const token = depsRef.current.getAccountToken();
+    const token = depsRef.current.accountToken;
     if (!token) return;
     try {
       const response = await fetch("/api/account/collections", { method: "POST", headers: { "content-type": "application/json", authorization: `Bearer ${token}` }, body: JSON.stringify({ kind: collectionToSave.kind, title: collectionToSave.title, description: collectionToSave.description, items: collectionToSave.works }) });
@@ -163,7 +167,7 @@ export function useSorting(deps: SortingDeps) {
   }
 
   async function loadCloudCollectionsFn() {
-    const token = depsRef.current.getAccountToken();
+    const token = depsRef.current.accountToken;
     if (!token) { setCloudCollections([]); return; }
     try {
       const response = await fetch("/api/account/collections", { headers: { authorization: `Bearer ${token}` } });
@@ -174,9 +178,9 @@ export function useSorting(deps: SortingDeps) {
 
   async function deleteCloudCollection(item: MediaCollection & { remoteId: number }) {
     const d = depsRef.current;
-    if (!d.getAccountToken()) return;
+    if (!d.accountToken) return;
     try {
-      const response = await fetch(`/api/account/collections/${item.remoteId}`, { method: "DELETE", headers: { authorization: `Bearer ${d.getAccountToken()}` } });
+      const response = await fetch(`/api/account/collections/${item.remoteId}`, { method: "DELETE", headers: { authorization: `Bearer ${d.accountToken}` } });
       if (!response.ok) throw new Error();
       setCloudCollections((current) => current.filter((entry) => entry.remoteId !== item.remoteId));
       d.setNotice(d.t("云端清单已移除。", "Cloud list removed."));
@@ -228,7 +232,7 @@ export function useSorting(deps: SortingDeps) {
     setRanking(next);
     if (next.completed) {
       const result: RankingExport = {
-        version: 1, profileId: crypto.randomUUID(), profileName: d.getProfileName().trim() || d.t("我的艺术人格", "My artistic profile"), kind: collection.kind,
+        version: 1, profileId: crypto.randomUUID(), profileName: d.profileName.trim() || d.t("我的艺术人格", "My artistic profile"), kind: collection.kind,
         collectionTitle: collection.title, createdAt: new Date().toISOString(),
         items: getRankingResult(next).map((id, index) => ({ ...worksById.get(id)!, rank: index + 1 })),
       };
@@ -242,21 +246,23 @@ export function useSorting(deps: SortingDeps) {
   function resume() {
     const d = depsRef.current;
     if (!draft) return;
-    try { rankingSnapshots.current = []; setCollection(draft.collection); setKind(draft.collection.kind); setRanking(deserializeRankingState(draft.ranking)); d.navigateTo("sorting"); }
+    try { rankingSnapshots.current = []; setCollection(draft.collection); setKind(draft.collection.kind); setRanking(deserializeRankingState(draft.ranking)); d.setProfileName(draft.profileName); d.navigateTo("sorting"); }
     catch { d.setNotice(d.t("草稿无法读取。", "The draft could not be restored.")); }
   }
 
-  // Save draft on ranking change
+  // Save draft on ranking change — only while an uncompleted ranking is on screen.
+  // Dependency discipline: this effect setDraft()s itself, so its dep array must only
+  // contain values that actually change with ranking progress; never make it deps-less.
   useEffect(() => {
     const d = depsRef.current;
-    if (!ranking || !collection) return;
-    const next = { collection, ranking: serializeRankingState(ranking), profileName: d.getProfileName() };
+    if (view !== "sorting" || !ranking || !collection || ranking.completed) return;
+    const next = { collection, ranking: serializeRankingState(ranking), profileName };
     setDraft(next);
     try { localStorage.setItem(DRAFT_KEY, JSON.stringify(next)); } catch { d.setNotice(d.t("进度无法写入浏览器存储。", "Progress could not be saved in this browser.")); }
-  });
+  }, [ranking, collection, view, profileName]);
 
-  // Load cloud collections on token change
-  useEffect(() => { void loadCloudCollectionsFn(); }, []);
+  // Load cloud collections on token change (login, logout)
+  useEffect(() => { void loadCloudCollectionsFn(); }, [accountToken]);
 
   return {
     kind, setKind, source, setSource, collection, setCollection,

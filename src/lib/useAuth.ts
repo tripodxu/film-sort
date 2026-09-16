@@ -10,6 +10,8 @@ const DRAFT_KEY = "art-rank:draft:v2";
 export interface AuthDeps {
   /** Current profile (may be null for guests). */
   getProfile: () => ArtisticProfile | null;
+  /** Current profile snapshot, refreshed each render — needed for the auto-sync effect dependency array. */
+  profile: ArtisticProfile | null;
   /** Current notes map. */
   getNotes: () => Record<string, string>;
   /** Build a named copy of the current profile. */
@@ -33,6 +35,7 @@ export interface AuthDeps {
 export function useAuth(deps: Omit<AuthDeps, 'setDraft'> & { setDraft?: (d: unknown) => void }) {
   const depsRef = useRef(deps);
   depsRef.current = deps;
+  const { profile } = deps;
   // setDraft may be set lazily via updateSetDraft() to break circular dependency
   const setDraftRef = useRef<(d: unknown) => void>(() => {});
   if (deps.setDraft) setDraftRef.current = deps.setDraft;
@@ -160,7 +163,7 @@ export function useAuth(deps: Omit<AuthDeps, 'setDraft'> & { setDraft?: (d: unkn
     finally { setBusy(false); }
   }, [editingNickname, editNicknameValue, authNickname]);
 
-  const accountLogout = useCallback(() => {
+  const accountLogout = useCallback(async () => {
     const d = depsRef.current;
     const token = stored("art-rank:account-token") ?? "";
     if (token) {
@@ -168,7 +171,9 @@ export function useAuth(deps: Omit<AuthDeps, 'setDraft'> & { setDraft?: (d: unkn
       if (next) {
         try {
           const hasAnyNotes = Object.keys(d.getNotes()).length > 0;
-          void fetch("/api/account/profile", { method: "PUT", headers: { "content-type": "application/json", authorization: `Bearer ${token}` }, body: JSON.stringify({ profile: next, ...(hasAnyNotes ? { notes: d.getNotes() } : {}) }), keepalive: true });
+          // Await the save so the server records the final profile while the session
+          // is still valid; the logout request below would otherwise race it.
+          await fetch("/api/account/profile", { method: "PUT", headers: { "content-type": "application/json", authorization: `Bearer ${token}` }, body: JSON.stringify({ profile: next, ...(hasAnyNotes ? { notes: d.getNotes() } : {}) }), keepalive: true });
         } catch { /* best-effort */ }
       }
       void fetch("/api/account/logout", { method: "POST", headers: { authorization: `Bearer ${token}` } }).catch(() => {});
@@ -178,14 +183,14 @@ export function useAuth(deps: Omit<AuthDeps, 'setDraft'> & { setDraft?: (d: unkn
     try { localStorage.removeItem("art-rank:account-token"); localStorage.removeItem(LIBRARY_KEY); localStorage.removeItem(DRAFT_KEY); localStorage.removeItem(PEER_KEY); localStorage.removeItem("art-rank:notes"); } catch {}
   }, []);
 
-  // Auto-sync debounced (900ms)
+  // Auto-sync debounced (900ms) — re-arms only when profile or token changes; a deps-less
+  // effect would re-arm on every render (incl. its own syncStatus updates) and PUT forever.
   useEffect(() => {
-    const token = stored("art-rank:account-token") ?? "";
-    if (!token || !depsRef.current.getProfile()) return;
+    if (!accountToken || !profile) return;
     if (syncTimer.current !== null) window.clearTimeout(syncTimer.current);
     syncTimer.current = window.setTimeout(() => { void syncProfile(false); }, 900);
     return () => { if (syncTimer.current !== null) window.clearTimeout(syncTimer.current); };
-  });
+  }, [profile, accountToken, syncProfile]);
 
   // Sync on pagehide / visibilitychange / online
   useEffect(() => {

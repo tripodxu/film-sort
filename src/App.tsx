@@ -92,7 +92,7 @@ export default function App() {
   const [showScrollTop, setShowScrollTop] = useState(false);
 
   const auth = useAuth({
-    getProfile: () => profile, getNotes: () => notes,
+    getProfile: () => profile, profile, getNotes: () => notes,
     namedProfile: () => { if (!profile) return null; const name = profileName.trim() || t("我的艺术人格", "My artistic profile"); return { ...profile, profileName: name, rankings: profile.rankings.map((entry) => ({ ...entry, profileName: name })) }; },
     persist: (next) => { setProfile(next); setProfileName(next.profileName); setShareUrl(""); setQrUrl(""); try { localStorage.setItem(LIBRARY_KEY, JSON.stringify(next)); writeNotes(notes); } catch { setNotice(t("浏览器无法保存，请及时导出画像。", "Browser storage is unavailable. Export your profile to keep it.")); } },
     setNotes, setProfile, setPeer,
@@ -101,16 +101,18 @@ export default function App() {
   const { accountOpen, setAccountOpen, accountEmail, setAccountEmail, accountNickname, setAccountNickname, accountToken, setAccountToken, authMode, setAuthMode, authEmail, setAuthEmail, authPassword, setAuthPassword, authNickname, setAuthNickname, authError, setAuthError, needNickname, setNeedNickname, editingNickname, setEditingNickname, editNicknameValue, setEditNicknameValue, syncStatus, setSyncStatus, cloudConflict, setCloudConflict, accountAuth, accountSave, accountLoad, saveNickname, accountLogout } = auth;
 
   const sorting = useSorting({
-    getAccountToken: () => accountToken, getProfile: () => profile, getProfileName: () => profileName,
+    accountToken, profileName, view,
+    getProfile: () => profile,
     getPeer: () => peer, getNotes: () => notes,
     persist: (next) => { setProfile(next); setProfileName(next.profileName); setShareUrl(""); setQrUrl(""); try { localStorage.setItem(LIBRARY_KEY, JSON.stringify(next)); writeNotes(notes); } catch { setNotice(t("浏览器无法保存，请及时导出画像。", "Browser storage is unavailable. Export your profile to keep it.")); } },
-    setActiveKind, setNotice, navigateTo, setView: setView as (v: string) => void, t, label, locale,
+    setActiveKind, setProfileName, setNotice, navigateTo, setView: setView as (v: string) => void, t, label, locale,
   });
   const { kind, setKind, source, setSource, collection, setCollection, selected, setSelected, ranking, setRanking, draft, setDraft, topN, setTopN, seed, setSeed, customText, setCustomText, customItem, setCustomItem, customWorks, setCustomWorks, cloudCollections, doubanLimit, setDoubanLimit, search, setSearch, colCount, busy: sortingBusy, setBusy, comparison, progress, worksById, collections, chooseKind, searchWorks, addCustomWork, removeCustomWork, loadCustomWorks, openCollection, applyImportedWorks, importDoulist, importNeteasePlaylist, saveCollectionCloud, loadCloudCollections, deleteCloudCollection, changeCols, loadDouban, startRanking, act, resume } = sorting;
   const busy = sortingBusy;
 
-  // Wire auth's setDraft to sorting's setDraft (breaks circular dependency)
-  auth.updateSetDraft(setDraft as (d: unknown) => void);
+  // Wire auth's setDraft to sorting's setDraft (breaks circular dependency).
+  // In an effect, not render: setDraft is a stable state setter, so this binds once.
+  useEffect(() => { auth.updateSetDraft(setDraft as (d: unknown) => void); }, [setDraft]);
 
   const activeRanking = profile?.rankings.find((entry, idx) => `${entry.kind}-${idx}` === activeKind) ?? profile?.rankings[0];
 
