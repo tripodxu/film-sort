@@ -37,7 +37,7 @@ function resolve(work: Artwork, kind: MediaKind): Promise<string[]> {
     const cached = readPosterCache(key);
     if (cached) { request = Promise.resolve(cached); requests.set(key, request); return request; }
     const type = kind === "book" ? "book" : kind === "music" ? "music" : "movie";
-    const params = new URLSearchParams({ q: work.title, en: work.subtitle ?? work.title, type, ...(work.year ? { year: String(work.year) } : {}) });
+    const params = new URLSearchParams({ v: "2", q: work.title, en: work.subtitle ?? work.title, type, ...(work.year ? { year: String(work.year) } : {}) });
     request = fetch(`/api/posters?${params}`, { signal: AbortSignal.timeout(20000) })
       .then(async (response) => response.ok ? await response.json() as { poster_urls?: string[] } : {})
       .then((data) => { const urls = data.poster_urls ?? []; if (urls.length) writePosterCache(key, urls); return urls; }).catch(() => []);

@@ -131,7 +131,7 @@ export async function renderProfilePng({ profile, layout, locale, label, t }: Pn
     let urls = item.posterUrls ? [...item.posterUrls] : [];
     if (!urls.length && posterSources.size < MAX_EXPORT_POSTERS && (kind === "film" || kind === "book" || kind === "music")) {
       try {
-        const params = new URLSearchParams({ q: item.title, en: item.subtitle ?? item.title, type: kind === "film" ? "movie" : kind, ...(item.year ? { year: String(item.year) } : {}) });
+        const params = new URLSearchParams({ v: "2", q: item.title, en: item.subtitle ?? item.title, type: kind === "film" ? "movie" : kind, ...(item.year ? { year: String(item.year) } : {}) });
         const response = await fetch(`/api/posters?${params}`, { signal: AbortSignal.timeout(15000) });
         if (response.ok) {
           const data = await response.json() as { poster_urls?: string[] };
