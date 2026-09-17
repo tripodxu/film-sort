@@ -74,7 +74,7 @@
 | 功能 | 入口 | 实现 |
 |---|---|---|
 | 比较链接（完整画像 base64 内联） | 「复制比较链接」 | `compareUrl` |
-| 分享短链（服务端 8 位码）+ 有效期 7/30/90/365 天 | 「分享链接」弹窗 | `POST /api/share`、`GET /api/share/:code` |
+| 分享短链（服务端 8–12 位码）+ 有效期 7/30/90/365 天 | 「分享链接」弹窗 | `POST /api/share`、`GET /api/share/:code` |
 | 二维码 | 分享弹窗 | qrcode 动态 import |
 | 单榜单分享/比较 | 榜单动作栏 | `shareSingleRanking` |
 | 分享查看页（只读 + 比较/用其排序/批注展示） | `/share/:code` | ShareView |

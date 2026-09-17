@@ -228,8 +228,13 @@ export async function fetchNeteasePlaylist(playlistId: string, cookie?: string |
     poster_url: song.al?.picUrl,
     type: "music" as const,
   })).filter((work) => work.title);
-  const nextOffset = offset + windowIds.length;
-  const hasMore = total != null ? nextOffset < total : nextOffset < allIds.length;
+  // 如果上游只返回了窗口中的一部分歌曲，下一次从第一个缺失曲目重试，
+  // 不能直接按窗口长度跳过；否则这些歌曲会被永久遗漏。
+  const requestedIds = new Set(windowIds);
+  const receivedIds = new Set(songs.map((song) => song.id).filter((id): id is number => typeof id === "number" && requestedIds.has(id)));
+  const firstMissingIndex = windowIds.findIndex((id) => !receivedIds.has(id));
+  const nextOffset = firstMissingIndex >= 0 ? offset + firstMissingIndex : offset + windowIds.length;
+  const hasMore = firstMissingIndex >= 0 || (total != null ? nextOffset < total : nextOffset < allIds.length);
   if (fromSongs.length) return { works: fromSongs, total: total ?? (allIds.length || null), hasMore, nextOffset };
   // 全部失败时回退 detail 自带的部分 tracks（至少能拿到前几首）
   const fallback = fallbackTracks.slice(offset, offset + limit).map((track) => ({

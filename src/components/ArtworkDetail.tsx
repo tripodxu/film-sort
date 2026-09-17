@@ -33,16 +33,9 @@ export function ArtworkDetail({ detail, label, t, onClose }: { detail: ArtworkDe
     const title = detail.work.title;
     const artist = detail.work.creator;
     try {
-      // 优先 Deno Deploy 代理（GCP 出口，原版搜索）
       const result = await gdPlay(title, artist);
-      if (result) { setPlayUrl(result.playUrl); setIsCover(result.isCover); return; }
-      // 降级：Worker 端点（需已连接网易云 Cookie）
-      const qs = new URLSearchParams({ q: title });
-      if (artist) qs.set("artist", artist.split("/")[0].trim());
-      const response = await fetch(`/api/music/play?${qs}`);
-      const payload = await response.json() as { playUrl?: string; msg?: string; error?: string; isCover?: boolean };
-      if (response.ok && payload.playUrl) { setPlayUrl(payload.playUrl); setIsCover(!!payload.isCover); }
-      else setPlayError(payload.msg || t("未找到可试听的版本", "No playable version found"));
+      if (result) { setPlayUrl(result.playUrl); setIsCover(result.isCover); }
+      else setPlayError(t("未找到可试听的版本", "No playable version found"));
     } catch { setPlayError(t("试听服务暂不可用", "Preview unavailable")); }
     finally { setPlayBusy(false); }
   }
@@ -52,16 +45,9 @@ export function ArtworkDetail({ detail, label, t, onClose }: { detail: ArtworkDe
     const title = detail.work.title;
     const artist = detail.work.creator;
     try {
-      // 优先 Deno Deploy 代理
       const result = await gdLyric(title, artist);
-      if (result?.lyric) { setLyric(result.lyric); return; }
-      // 降级：Worker 端点
-      const qs = new URLSearchParams({ q: title });
-      if (artist) qs.set("artist", artist.split("/")[0].trim());
-      const response = await fetch(`/api/music/lyric?${qs}`);
-      const payload = await response.json() as { lyric?: string; msg?: string; error?: string };
-      if (response.ok && payload.lyric) setLyric(payload.lyric);
-      else setLyricError(payload.msg || t("暂无歌词", "No lyrics available"));
+      if (result?.lyric) setLyric(result.lyric);
+      else setLyricError(t("暂无歌词", "No lyrics available"));
     } catch { setLyricError(t("歌词服务暂不可用", "Lyrics unavailable")); }
     finally { setLyricBusy(false); }
   }

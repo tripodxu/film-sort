@@ -7,10 +7,18 @@
 const API_BASE = "https://music-api.gdstudio.xyz/api.php";
 const SOURCE = "netease";
 const CACHE_MAX = 200;
+const BUDGET_WINDOW_MS = 5 * 60 * 1000;
+const BUDGET_MAX = 40;
+
+export interface GdProxyEnv {
+  MUSIC_PROXY_URL?: string;
+  MUSIC_PROXY_KEY?: string;
+}
 
 // 连续失败计数：仅当 gdstudio 上游返回错误（非超时）时累加，达到阈值后暂缓请求
 let consecutiveFailures = 0;
 let cooldownUntil = 0;
+let budget = { startedAt: 0, count: 0 };
 const FAILURE_THRESHOLD = 5;
 const COOLDOWN_MS = 60_000;
 
@@ -18,6 +26,20 @@ function isCoolingDown(): boolean {
   if (Date.now() < cooldownUntil) return true;
   if (cooldownUntil && Date.now() >= cooldownUntil) { cooldownUntil = 0; consecutiveFailures = 0; }
   return false;
+}
+
+function budgetLeft(): boolean {
+  const now = Date.now();
+  if (now - budget.startedAt > BUDGET_WINDOW_MS) budget = { startedAt: now, count: 0 };
+  if (budget.count >= BUDGET_MAX) return false;
+  budget.count += 1;
+  return true;
+}
+
+function buildApiRequest(params: Record<string, string>, env?: GdProxyEnv): { url: URL; headers: Record<string, string> } {
+  const url = new URL(env?.MUSIC_PROXY_URL?.trim() || API_BASE);
+  for (const [k, v] of Object.entries(params)) url.searchParams.set(k, v);
+  return { url, headers: env?.MUSIC_PROXY_KEY ? { "x-proxy-key": env.MUSIC_PROXY_KEY } : {} };
 }
 
 interface CacheEntry { value: unknown; expires: number }
@@ -44,13 +66,13 @@ const lyricCache = makeCache(24 * 60 * 60 * 1000);  // 歌词几乎不变
 export interface GdTrack { id: string; name: string; artist: string[] | string; album?: string; pic_id?: string; lyric_id?: string }
 
 /** 带重试的搜索：首次失败自动重试一次，仅在连续失败达阈值时标记 blocked。 */
-async function gdApiWithRetry(params: Record<string, string>): Promise<{ result: unknown | null; blocked: boolean }> {
+async function gdApiWithRetry(params: Record<string, string>, env?: GdProxyEnv): Promise<{ result: unknown | null; blocked: boolean }> {
   if (isCoolingDown()) return { result: null, blocked: true };
-  const url = new URL(API_BASE);
-  for (const [k, v] of Object.entries(params)) url.searchParams.set(k, v);
+  if (!budgetLeft()) return { result: null, blocked: true };
+  const request = buildApiRequest(params, env);
   for (let attempt = 0; attempt < 2; attempt++) {
     try {
-      const response = await fetch(url, { signal: AbortSignal.timeout(10000) });
+      const response = await fetch(request.url, { headers: request.headers, signal: AbortSignal.timeout(10000) });
       if (response.ok) {
         consecutiveFailures = 0; cooldownUntil = 0;
         return { result: await response.json(), blocked: false };
@@ -64,23 +86,22 @@ async function gdApiWithRetry(params: Record<string, string>): Promise<{ result:
 }
 
 /** 单次 API 调用（播放链接/歌词/封面，无需重试）。 */
-async function gdApi(params: Record<string, string>): Promise<unknown | null> {
-  if (isCoolingDown()) return null;
-  const url = new URL(API_BASE);
-  for (const [k, v] of Object.entries(params)) url.searchParams.set(k, v);
+async function gdApi(params: Record<string, string>, env?: GdProxyEnv): Promise<unknown | null> {
+  if (isCoolingDown() || !budgetLeft()) return null;
+  const request = buildApiRequest(params, env);
   try {
-    const response = await fetch(url, { signal: AbortSignal.timeout(10000) });
+    const response = await fetch(request.url, { headers: request.headers, signal: AbortSignal.timeout(10000) });
     if (response.ok) { consecutiveFailures = 0; cooldownUntil = 0; return await response.json(); }
   } catch { /* */ }
   return null;
 }
 
 /** 搜索曲目。count≤30；失败返回 []（预算耗尽时 blocked=true，网络失败 blocked=false）。 */
-export async function gdSearch(name: string, count = 10): Promise<{ tracks: GdTrack[]; blocked: boolean }> {
+export async function gdSearch(name: string, count = 10, env?: GdProxyEnv): Promise<{ tracks: GdTrack[]; blocked: boolean }> {
   const key = `${name}|${count}`;
   const hit = searchCache.get(key);
   if (hit) return hit as { tracks: GdTrack[]; blocked: boolean };
-  const { result: raw, blocked } = await gdApiWithRetry({ types: "search", source: SOURCE, name, count: String(count), pages: "1" });
+  const { result: raw, blocked } = await gdApiWithRetry({ types: "search", source: SOURCE, name, count: String(count), pages: "1" }, env);
   const tracks = Array.isArray(raw) ? (raw as GdTrack[]).filter((t) => t && typeof t.id === "string" && typeof t.name === "string") : [];
   const outcome = { tracks, blocked: blocked && tracks.length === 0 };
   if (tracks.length || raw !== null) searchCache.set(key, outcome);
@@ -128,30 +149,30 @@ export function isCoverTrack(track: GdTrack, title: string, artist?: string): bo
 }
 
 /** 签名播放链（br 缺省 320）。 */
-export async function gdPlayUrl(trackId: string): Promise<string> {
+export async function gdPlayUrl(trackId: string, env?: GdProxyEnv): Promise<string> {
   const hit = playCache.get(trackId);
   if (hit) return hit as string;
-  const raw = await gdApi({ types: "url", source: SOURCE, id: trackId, br: "320" });
+  const raw = await gdApi({ types: "url", source: SOURCE, id: trackId, br: "320" }, env);
   const url = raw && typeof (raw as { url?: unknown }).url === "string" ? (raw as { url: string }).url : "";
   if (url) playCache.set(trackId, url);
   return url;
 }
 
 /** 签名封面链（size=500）。 */
-export async function gdPicUrl(picId: string): Promise<string> {
+export async function gdPicUrl(picId: string, env?: GdProxyEnv): Promise<string> {
   const hit = picCache.get(picId);
   if (hit) return hit as string;
-  const raw = await gdApi({ types: "pic", source: SOURCE, id: picId, size: "500" });
+  const raw = await gdApi({ types: "pic", source: SOURCE, id: picId, size: "500" }, env);
   const url = raw && typeof (raw as { url?: unknown }).url === "string" ? (raw as { url: string }).url : "";
   if (url) picCache.set(picId, url);
   return url;
 }
 
 /** LRC 歌词（原语 + 可选译文）。lyric_id 通常等于曲目 id。 */
-export async function gdLyric(lyricId: string): Promise<{ lyric: string; tlyric: string } | null> {
+export async function gdLyric(lyricId: string, env?: GdProxyEnv): Promise<{ lyric: string; tlyric: string } | null> {
   const hit = lyricCache.get(lyricId);
   if (hit) return hit as { lyric: string; tlyric: string };
-  const raw = await gdApi({ types: "lyric", source: SOURCE, id: lyricId });
+  const raw = await gdApi({ types: "lyric", source: SOURCE, id: lyricId }, env);
   if (!raw || typeof raw !== "object") return null;
   const data = raw as { lyric?: unknown; tlyric?: unknown };
   if (typeof data.lyric !== "string") return null;

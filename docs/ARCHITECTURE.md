@@ -137,7 +137,7 @@ App.tsx 使用 React useState 管理所有状态，主要状态分组：
 
 ### 2.5 分享链接编码
 
-现行方案为**服务端短码**：`POST /api/share` 将画像 JSON（≤512KB）存入 `shared_links` 表，返回 8 位十六进制码与两个 URL——
+现行方案为**服务端短码**：`POST /api/share` 将画像 JSON（≤512KB）存入 `shared_links` 表，返回 8–12 位十六进制码与两个 URL——
 
 - `/share/<code>`：只读分享查看页（ShareView）；
 - `/encounter?payload=<code>`：比较链接，前端按短码拉取后直接进入比较。
@@ -501,7 +501,7 @@ CREATE TABLE plaza_post_edits (
 **shared_links** — 分享短链（迁移 0009/0013）
 ```sql
 CREATE TABLE shared_links (
-  code TEXT PRIMARY KEY,             -- 8 位十六进制
+  code TEXT PRIMARY KEY,             -- 8–12 位十六进制
   profile TEXT NOT NULL,             -- 画像 JSON（≤512KB）
   notes TEXT,                        -- 批注（迁移 0013）
   expires_at TEXT NOT NULL

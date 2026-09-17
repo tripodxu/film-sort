@@ -276,6 +276,9 @@ export async function plazaRoute(request: Request, env: Env): Promise<Response> 
   const commentsGetMatch = path.match(/^\/api\/plaza\/posts\/(\d+)\/comments$/);
   if (commentsGetMatch && method === "GET") {
     const postId = Number(commentsGetMatch[1]);
+    const viewer = await getUserFromToken(request, env.DB);
+    const post = await env.DB.prepare("SELECT user_id, is_public FROM plaza_posts WHERE id = ?").bind(postId).first<{ user_id: number; is_public: number }>();
+    if (!post || (!post.is_public && (!viewer || viewer.id !== post.user_id))) return json({ error: "post_not_found" }, 404);
     const comments = await env.DB.prepare(
       `SELECT c.id, c.post_id, c.user_id, c.content, c.parent_id, c.created_at, u.nickname
        FROM plaza_comments c LEFT JOIN user_accounts u ON c.user_id = u.id WHERE c.post_id = ? ORDER BY c.created_at ASC LIMIT 200`
@@ -290,8 +293,8 @@ export async function plazaRoute(request: Request, env: Env): Promise<Response> 
     if (!user) return json({ error: "authentication_required" }, 401);
 
     const postId = Number(commentsGetMatch[1]);
-    const post = await env.DB.prepare("SELECT id FROM plaza_posts WHERE id = ?").bind(postId).first();
-    if (!post) return json({ error: "post_not_found" }, 404);
+    const post = await env.DB.prepare("SELECT user_id, is_public FROM plaza_posts WHERE id = ?").bind(postId).first<{ user_id: number; is_public: number }>();
+    if (!post || (!post.is_public && post.user_id !== user.id)) return json({ error: "post_not_found" }, 404);
 
     const raw = await request.text();
     let body: Record<string, unknown>;

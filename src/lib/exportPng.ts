@@ -1,4 +1,4 @@
-import type { ArtisticProfile, RankingExport } from "./profile";
+import type { ArtisticProfile, RankedArtwork, RankingExport } from "./profile";
 import type { MediaKind } from "../data/media";
 
 // ===== 画像 PNG 导出：纯 Canvas 手绘，主题感知（采样当前 data-theme 的 CSS 变量），五套版式 =====
@@ -109,14 +109,49 @@ export async function renderProfilePng({ profile, layout, locale, label, t }: Pn
   const W = 1200; const M = 72;
   const date = new Date().toLocaleDateString(locale === "zh" ? "zh-CN" : "en-US");
 
-  // 预载全部海报
+  // PNG 的浏览器画布有尺寸/内存上限。保留完整文字数据的同时，限制导出绘制量，
+  // 并按需解析海报，避免持久化层移除 posterUrls 后整张图只剩占位图。
+  const MAX_EXPORT_ITEMS = 240;
+  const MAX_EXPORT_POSTERS = 80;
+  let remaining = MAX_EXPORT_ITEMS;
+  const exportRankings = profile.rankings.map((entry) => {
+    const items = entry.items.slice(0, Math.max(0, remaining));
+    remaining -= items.length;
+    return { ...entry, items };
+  }).filter((entry) => entry.items.length > 0);
+  const shownWorks = exportRankings.reduce((sum, entry) => sum + entry.items.length, 0);
+  const posterSources = new Map<string, string[]>();
+  const posterKey = (kind: MediaKind, item: RankedArtwork) => `${kind}|${item.id}|${item.title}|${item.year ?? ""}`;
+  const posterFor = (kind: MediaKind, item: RankedArtwork) => posterSources.get(posterKey(kind, item))?.[0] ?? item.posterUrls?.[0];
+
+  async function resolvePosterUrls(kind: MediaKind, item: RankedArtwork) {
+    const key = posterKey(kind, item);
+    const cached = posterSources.get(key);
+    if (cached) return cached;
+    let urls = item.posterUrls ? [...item.posterUrls] : [];
+    if (!urls.length && posterSources.size < MAX_EXPORT_POSTERS && (kind === "film" || kind === "book" || kind === "music")) {
+      try {
+        const params = new URLSearchParams({ q: item.title, en: item.subtitle ?? item.title, type: kind === "film" ? "movie" : kind, ...(item.year ? { year: String(item.year) } : {}) });
+        const response = await fetch(`/api/posters?${params}`, { signal: AbortSignal.timeout(15000) });
+        if (response.ok) {
+          const data = await response.json() as { poster_urls?: string[] };
+          urls = data.poster_urls ?? [];
+        }
+      } catch { /* Draw the text fallback when poster resolution fails. */ }
+    }
+    const resolved = [...new Set(urls)].slice(0, 4);
+    posterSources.set(key, resolved);
+    return resolved;
+  }
+
+  const posterCandidates = exportRankings.flatMap((entry) => entry.items.map((item) => ({ kind: entry.kind, item })));
+  await Promise.all(posterCandidates.slice(0, MAX_EXPORT_POSTERS).map(({ kind, item }) => resolvePosterUrls(kind, item)));
   const images = new Map<string, HTMLImageElement>();
-  await Promise.all(profile.rankings.flatMap((entry) => entry.items.map(async (item) => {
-    const src = item.posterUrls?.[0];
-    if (!src || images.has(src)) return;
+  await Promise.all([...posterSources.values()].flat().map(async (src) => {
+    if (images.has(src)) return;
     const image = await loadImage(proxiedUrl(src));
     if (image) images.set(src, image);
-  })));
+  }));
 
   const count = (n: number, per: number) => Math.ceil(n / per);
   const sectionHeight = (entry: RankingExport) => {
@@ -128,7 +163,7 @@ export async function renderProfilePng({ profile, layout, locale, label, t }: Pn
     return 56 + 372 + count(Math.max(0, n - 1), 2) * 46 + 34; // editorial
   };
   const headerH = 300;
-  const H = Math.max(760, headerH + profile.rankings.reduce((sum, entry) => sum + sectionHeight(entry), 0) + 90);
+  const H = Math.max(760, headerH + exportRankings.reduce((sum, entry) => sum + sectionHeight(entry), 0) + 90);
 
   const canvas = document.createElement("canvas");
   canvas.width = W * 2; canvas.height = H * 2; // 2x 导出保证清晰度
@@ -178,13 +213,14 @@ export async function renderProfilePng({ profile, layout, locale, label, t }: Pn
   ctx.fillText(ellipsis(ctx, profile.profileName, W - M * 2), M, 182);
   const totalWorks = profile.rankings.reduce((sum, entry) => sum + entry.items.length, 0);
   ctx.font = `15px ${p.fontMono}`; ctx.fillStyle = faint;
-  ctx.fillText(`${profile.rankings.length} ${t("个领域", "media")} · ${totalWorks} ${t("件作品", "works")}`, M, 218);
+  const exportNote = shownWorks < totalWorks ? ` · ${t(`PNG 绘制前 ${shownWorks} 件`, `first ${shownWorks} in PNG`)}` : "";
+  ctx.fillText(`${profile.rankings.length} ${t("个领域", "media")} · ${totalWorks} ${t("件作品", "works")}${exportNote}`, M, 218);
 
   // ===== 各榜单 =====
   let cursor = headerH;
   const rankLabel = (rank: number) => rank <= 3 ? ["🥇", "🥈", "🥉"][rank - 1] : String(rank).padStart(2, "0");
 
-  for (const entry of profile.rankings) {
+  for (const entry of exportRankings) {
     const kc = resolveColor(kindColor(p, entry.kind));
     // 区块头
     ctx.font = `600 13px ${p.fontMono}`; ctx.fillStyle = kc;
@@ -220,7 +256,7 @@ export async function renderProfilePng({ profile, layout, locale, label, t }: Pn
         ctx.rotate(((index % 2 === 0 ? 1 : -1) * (0.7 + (index % 3) * 0.4) * Math.PI) / 180);
         ctx.translate(-(x + tileW / 2), -(y + tileH / 2));
         ctx.shadowColor = "rgba(0,0,0,.28)"; ctx.shadowBlur = 18; ctx.shadowOffsetY = 8;
-        drawPoster(item.posterUrls?.[0], x, y, tileW, tileH, 10, entry.kind === "film" ? p.film : entry.kind === "book" ? p.book : entry.kind === "music" ? p.music : p.other);
+        drawPoster(posterFor(entry.kind, item), x, y, tileW, tileH, 10, entry.kind === "film" ? p.film : entry.kind === "book" ? p.book : entry.kind === "music" ? p.music : p.other);
         ctx.restore();
         ctx.font = `600 15px ${p.fontMono}`; ctx.fillStyle = item.rank === 1 ? accent : text;
         ctx.fillText(rankLabel(item.rank), x + 2, y + tileH + 26);
@@ -245,7 +281,7 @@ export async function renderProfilePng({ profile, layout, locale, label, t }: Pn
         const thumbW = 150; const thumbH = 168; const pad = (W - M * 2 - strip.length * (thumbW + 16)) / 2;
         strip.forEach((item, index) => {
           const x = M + pad + index * (thumbW + 16); const y = cursor + 25;
-          drawPoster(item.posterUrls?.[0], x, y, thumbW, thumbH, 6, entry.kind === "film" ? p.film : entry.kind === "book" ? p.book : entry.kind === "music" ? p.music : p.other);
+          drawPoster(posterFor(entry.kind, item), x, y, thumbW, thumbH, 6, entry.kind === "film" ? p.film : entry.kind === "book" ? p.book : entry.kind === "music" ? p.music : p.other);
           ctx.font = `600 12px ${p.fontMono}`; ctx.fillStyle = item.rank === 1 ? accent : faint;
           ctx.fillText(rankLabel(item.rank), x + 2, y + thumbH + 18);
           ctx.font = `11px ${p.fontBody}`; ctx.fillStyle = text2;
@@ -264,7 +300,7 @@ export async function renderProfilePng({ profile, layout, locale, label, t }: Pn
         const item = top[ti]; if (!item) return;
         const x = M + slot * (podiumW + gapX); const h = heights[ti];
         const y = baseY - h;
-        drawPoster(item.posterUrls?.[0], x + 40, y, podiumW - 80, h - 66, 10, ti === 0 ? p.film : ti === 1 ? p.book : p.music);
+        drawPoster(posterFor(entry.kind, item), x + 40, y, podiumW - 80, h - 66, 10, ti === 0 ? p.film : ti === 1 ? p.book : p.music);
         ctx.font = `700 34px ${p.fontDisplay}`; ctx.textAlign = "center";
         ctx.fillStyle = ti === 0 ? accent : text2;
         ctx.fillText(rankLabel(ti + 1), x + podiumW / 2, baseY + 4);
@@ -291,7 +327,7 @@ export async function renderProfilePng({ profile, layout, locale, label, t }: Pn
       const lead = items[0];
       if (lead) {
         const posterH = 320; const posterW = 224;
-        drawPoster(lead.posterUrls?.[0], M, cursor, posterW, posterH, 12, entry.kind === "film" ? p.film : entry.kind === "book" ? p.book : entry.kind === "music" ? p.music : p.other);
+        drawPoster(posterFor(entry.kind, lead), M, cursor, posterW, posterH, 12, entry.kind === "film" ? p.film : entry.kind === "book" ? p.book : entry.kind === "music" ? p.music : p.other);
         // 冠军徽章
         ctx.fillStyle = accent; roundedRect(ctx, M + 14, cursor + 14, 64, 34, 10); ctx.fill();
         ctx.font = `700 18px ${p.fontDisplay}`; ctx.fillStyle = accentInk; ctx.fillText("TOP 1", M + 26, cursor + 38);

@@ -30,10 +30,11 @@ function slug(value: string): string {
 type WorkSeed = readonly [title: string, creator: string, year: number];
 
 function makeWorks(prefix: string, seeds: readonly WorkSeed[]): Artwork[] {
-  return seeds.map(([title, creator], index) => ({
+  return seeds.map(([title, creator, year], index) => ({
     id: `${prefix}-${index}-${slug(title)}`,
     title,
     creator,
+    ...(year ? { year } : {}),
   }));
 }
 

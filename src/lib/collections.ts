@@ -26,6 +26,6 @@ export function importCollection(kind: MediaKind, text: string): MediaCollection
       posterUrls: urls.filter((url): url is string => { try { return typeof url === "string" && new URL(url).protocol === "https:"; } catch { return false; } }).slice(0, 8),
     });
   }
-  if (works.length < 2 || works.length > 300) throw new Error("List must have 2 to 300 works");
+  if (works.length < 2 || works.length > 1000) throw new Error("List must have 2 to 1000 works");
   return { id: `custom-${kind}-${crypto.randomUUID()}`, kind, source: "custom", title: `我的${mediaLabels[kind].label}清单`, description: "", topN: Math.min(10, works.length), works };
 }

@@ -7,7 +7,7 @@ const redirect = (url: string) => new Response(null, { status: 302, headers: { l
 
 export async function adminAuthLocal(request: Request, db: D1Database): Promise<boolean> {
   const auth = request.headers.get("authorization");
-  const token = auth?.startsWith("Bearer ") ? auth.slice(7) : new URL(request.url).searchParams.get("token");
+  const token = auth?.startsWith("Bearer ") ? auth.slice(7) : null;
   if (!token || token.length < 32) return false;
   const session = await db.prepare("SELECT token FROM admin_sessions WHERE token = ? AND expires_at > datetime('now')").bind(token).first();
   return !!session;
@@ -89,7 +89,7 @@ function validateCollectionBody(body: Record<string, unknown> | null): { kind: "
 
 export async function getUserFromToken(request: Request, db: D1Database): Promise<{ id: number; email: string } | null> {
   const auth = request.headers.get("authorization");
-  const token = auth?.startsWith("Bearer ") ? auth.slice(7) : new URL(request.url).searchParams.get("token");
+  const token = auth?.startsWith("Bearer ") ? auth.slice(7) : null;
   if (!token || token.length < 32) return null;
   return await db.prepare(
     "SELECT u.id, u.email FROM user_sessions s JOIN user_accounts u ON s.user_id = u.id WHERE s.token = ? AND s.expires_at > datetime('now') AND u.disabled_at IS NULL"

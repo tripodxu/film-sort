@@ -21,6 +21,9 @@ export interface Env {
   GITHUB_CLIENT_SECRET?: string;
   AI_API_KEY?: string;
   AI_API_URL?: string;
+  COOKIE_ENC_KEY?: string;
+  MUSIC_PROXY_URL?: string;
+  MUSIC_PROXY_KEY?: string;
 }
 
 type JsonObject = Record<string, unknown>;
@@ -86,17 +89,35 @@ const MAX_EVENT_PAYLOAD_BYTES = 2 * 1024;
 const MAX_CHALLENGE_ITEMS = 300;
 const upstreamWindows = new Map<string, { startedAt: number; count: number }>();
 
-function allowUpstreamRequest(request: Request, bucket: "ai" | "music" | "auth" | "share" | "import" | "netease" | "douban" | "other", limit: number): boolean {
+async function allowUpstreamRequest(request: Request, bucket: "ai" | "music" | "auth" | "share" | "import" | "netease" | "douban" | "other" | "events" | "challenge", limit: number): Promise<boolean> {
   const client = request.headers.get("cf-connecting-ip") ?? "anonymous";
   const key = `${bucket}:${client}`;
   const now = Date.now();
   const previous = upstreamWindows.get(key);
   if (!previous || now - previous.startedAt > 10 * 60 * 1000) {
     upstreamWindows.set(key, { startedAt: now, count: 1 });
-    return true;
+  } else if (previous.count >= limit) {
+    return false;
+  } else {
+    previous.count += 1;
   }
-  if (previous.count >= limit) return false;
-  previous.count += 1;
+
+  // The isolate map is a fast fallback. Edge Cache makes the budget visible
+  // across isolates in production without requiring a Durable Object binding.
+  try {
+    const cache = (caches as unknown as { default: Cache }).default;
+    const cacheKey = new Request(`https://rate-limit.art-rank.internal/${encodeURIComponent(bucket)}/${encodeURIComponent(client)}`);
+    const hit = await cache.match(cacheKey);
+    let next = { startedAt: now, count: 1 };
+    if (hit) {
+      const stored = await hit.json() as { startedAt?: number; count?: number };
+      if (typeof stored.startedAt === "number" && typeof stored.count === "number" && now - stored.startedAt <= 10 * 60 * 1000) {
+        if (stored.count >= limit) return false;
+        next = { startedAt: stored.startedAt, count: stored.count + 1 };
+      }
+    }
+    await cache.put(cacheKey, new Response(JSON.stringify(next), { headers: { "cache-control": "max-age=600", "content-type": "application/json" } }));
+  } catch { /* Cache is best-effort; the in-memory window still protects the isolate. */ }
   return true;
 }
 const JSON_HEADERS = {
@@ -106,7 +127,7 @@ const JSON_HEADERS = {
 
 const SECURITY_HEADERS: Record<string, string> = {
     "content-security-policy":
-      "default-src 'self'; img-src 'self' data: https://img*.doubanio.com https://m.media-amazon.com https://ia.media-imdb.com https://image.tmdb.org https://*.music.126.net https://*.githubusercontent.com https://upload.wikimedia.org https://thumb.wikimedia.org https://bkimg.cdn.bcebos.com; style-src 'self' 'unsafe-inline'; script-src 'self' https://cdn.jsdelivr.net https://static.cloudflareinsights.com 'sha256-d+1XxRQUWY8LGwXhdeFvJFpB3nkb5L9UFxsCt9kf/SU='; connect-src 'self' https://cloudflareinsights.com https://round-budgie-3427.tripodxu.deno.net; font-src 'self' data:; media-src 'self' https://*.music.126.net; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'; upgrade-insecure-requests",
+      "default-src 'self'; img-src 'self' data: https://img*.doubanio.com https://m.media-amazon.com https://ia.media-imdb.com https://image.tmdb.org https://*.music.126.net https://*.githubusercontent.com https://upload.wikimedia.org https://thumb.wikimedia.org https://bkimg.cdn.bcebos.com; style-src 'self' 'unsafe-inline'; script-src 'self' https://cdn.jsdelivr.net https://static.cloudflareinsights.com 'sha256-d+1XxRQUWY8LGwXhdeFvJFpB3nkb5L9UFxsCt9kf/SU='; connect-src 'self' https://cloudflareinsights.com; font-src 'self' data:; media-src 'self' https://*.music.126.net; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'; upgrade-insecure-requests",
   "cross-origin-opener-policy": "same-origin",
   "referrer-policy": "strict-origin-when-cross-origin",
   "x-content-type-options": "nosniff",
@@ -281,8 +302,15 @@ async function clearAccountData(id, type) {
   var r = await fetch('/api/admin/accounts/' + id + '/' + type, { method: 'DELETE', headers: { 'Authorization': 'Bearer ' + getToken() } });
   if (r.ok) load(); else alert('操作失败');
 }
-function exportPosterErrors() {
-  window.open('/api/admin/poster-errors/export?days=30&token=' + getToken(), '_blank');
+async function exportPosterErrors() {
+  var r=await fetch('/api/admin/poster-errors/export?days=30',{headers:{'Authorization':'Bearer '+getToken()}});
+  if(!r.ok){alert('导出失败');return;}
+  var blob=await r.blob();
+  var url=URL.createObjectURL(blob);
+  var a=document.createElement('a');
+  a.href=url; a.download='poster-errors-30d.csv';
+  document.body.appendChild(a); a.click(); a.remove();
+  URL.revokeObjectURL(url);
 }
 async function cleanLogs(table, action) {
   var labels = {delete_all:'清空全部',delete_7d:'删除7天前',keep_24h:'仅保留24小时',delete_24h:'删除最近24小时',keep_1h:'仅保留1小时',delete_1h:'删除最近1小时'};
@@ -748,8 +776,7 @@ async function adminAuth(request: Request, env: Env): Promise<boolean> {
 
 function getAdminToken(request: Request): string | null {
   const auth = request.headers.get("authorization");
-  if (auth?.startsWith("Bearer ")) return auth.slice(7);
-  return new URL(request.url).searchParams.get("token");
+  return auth?.startsWith("Bearer ") ? auth.slice(7) : null;
 }
 
 function assertSameOrigin(request: Request): void {
@@ -996,10 +1023,10 @@ async function getDashboard(env: Env): Promise<Response> {
       storage_extended: ((storageExtended as { results?: unknown[] })?.results ?? []),
       poster_errors: (posterErrors as { results?: unknown[] }).results ?? [],
       poster_error_summary: (posterErrorSummary as { results?: unknown[] }).results ?? [],
-    }, 200, { "cache-control": "public, max-age=30" });
+    }, 200, { "cache-control": "private, no-store" });
   } catch (error) {
     console.error("dashboard query failed", error instanceof Error ? error.message : error);
-    return json({ available: false, error: "query failed" }, 200, { "cache-control": "public, max-age=10" });
+    return json({ available: false, error: "query failed" }, 200, { "cache-control": "private, no-store" });
   }
 }
 
@@ -1259,6 +1286,7 @@ async function route(request: Request, env: Env): Promise<Response> {
     return json({ ok: true, version: "2.0.0", timestamp: new Date().toISOString(), checks }, 200, { "cache-control": "no-store" });
   }
   if (url.pathname === "/api/events" && request.method === "POST") {
+    if (!await allowUpstreamRequest(request, "events", 120)) return json({ error: "rate_limited" }, 429, { "retry-after": "60" });
     return createEvent(request, env);
   }
   if (url.pathname === "/api/stats" && request.method === "GET") {
@@ -1266,6 +1294,7 @@ async function route(request: Request, env: Env): Promise<Response> {
   }
   if (url.pathname === "/api/poster-errors/client" && request.method === "POST") {
     assertSameOrigin(request);
+    if (!await allowUpstreamRequest(request, "other", 120)) return json({ error: "rate_limited" }, 429, { "retry-after": "60" });
     if (!env.DB) return json({ stored: false }, 202);
     const body = await readJson(request);
     const title = cleanString(body.title, "title", 160);
@@ -1277,6 +1306,7 @@ async function route(request: Request, env: Env): Promise<Response> {
     return json({ stored: true }, 202);
   }
   if (url.pathname === "/api/admin/dashboard" && request.method === "GET") {
+    if (!await adminAuth(request, env)) return json({ error: "auth_required" }, 401);
     return getDashboard(env);
   }
   if (url.pathname === "/api/admin/login" && request.method === "POST") {
@@ -1292,7 +1322,7 @@ async function route(request: Request, env: Env): Promise<Response> {
     return withSecurityHeaders(await adminPlazaRoute(request, env));
   }
   if (url.pathname === "/api/admin/reset" && request.method === "POST") {
-    if (!allowUpstreamRequest(request, "auth", 30)) return json({ error: "rate_limited" }, 429, { "retry-after": "300" });
+    if (!await allowUpstreamRequest(request, "auth", 30)) return json({ error: "rate_limited" }, 429, { "retry-after": "300" });
     return handleAdminReset(request, env);
   }
   if (url.pathname === "/api/admin/audit" && request.method === "GET") {
@@ -1300,12 +1330,12 @@ async function route(request: Request, env: Env): Promise<Response> {
     return handleAdminAuditList(request, env);
   }
   if (url.pathname === "/api/admin/change-password" && request.method === "POST") {
-    if (!allowUpstreamRequest(request, "auth", 30)) return json({ error: "rate_limited" }, 429, { "retry-after": "300" });
+    if (!await allowUpstreamRequest(request, "auth", 30)) return json({ error: "rate_limited" }, 429, { "retry-after": "300" });
     return handleAdminChangePassword(request, env);
   }
   if (url.pathname === "/api/admin/sessions/revoke-all" && request.method === "POST") {
     if (!env.DB || !await adminAuth(request, env)) return json({ error: "auth_required" }, 401);
-    if (!allowUpstreamRequest(request, "auth", 30)) return json({ error: "rate_limited" }, 429, { "retry-after": "300" });
+    if (!await allowUpstreamRequest(request, "auth", 30)) return json({ error: "rate_limited" }, 429, { "retry-after": "300" });
     return handleAdminRevokeSessions(request, env);
   }
   if (url.pathname === "/api/admin/links/clean-expired" && request.method === "POST") {
@@ -1688,7 +1718,7 @@ async function route(request: Request, env: Env): Promise<Response> {
   if (url.pathname === "/api/other/list" && request.method === "GET") {
     const key = url.searchParams.get("key")?.trim() ?? "";
     if (!key || key.length > 80) return json({ status: false, msg: "invalid_key", data: [] }, 400);
-    if (!allowUpstreamRequest(request, "other", 20)) return json({ error: "rate_limited" }, 429, { "retry-after": "60" });
+    if (!await allowUpstreamRequest(request, "other", 20)) return json({ error: "rate_limited" }, 429, { "retry-after": "60" });
     try {
       const works = await otherSearch(key);
       return json({ status: true, msg: "ok", data: works }, 200, { "cache-control": "public, max-age=3600" });
@@ -1699,7 +1729,7 @@ async function route(request: Request, env: Env): Promise<Response> {
   if (url.pathname === "/api/other/detail" && request.method === "GET") {
     const name = (url.searchParams.get("name") ?? url.searchParams.get("title"))?.trim() ?? "";
     if (!name || name.length > 120) return json({ status: false, msg: "invalid_name", data: null }, 400);
-    if (!allowUpstreamRequest(request, "other", 20)) return json({ error: "rate_limited" }, 429, { "retry-after": "60" });
+    if (!await allowUpstreamRequest(request, "other", 20)) return json({ error: "rate_limited" }, 429, { "retry-after": "60" });
     try {
       const work = await otherDetail(name);
       if (!work) return json({ status: false, msg: "not_found", data: null }, 404, { "cache-control": "public, max-age=300" });
@@ -1710,7 +1740,7 @@ async function route(request: Request, env: Env): Promise<Response> {
   }
   if (url.pathname === "/api/insights" && request.method === "POST") {
     if (!env.AI_API_KEY) return json({ enabled: false, error: "ai_not_configured" }, 503);
-    if (!allowUpstreamRequest(request, "ai", 8)) return json({ error: "rate_limited" }, 429, { "retry-after": "600" });
+    if (!await allowUpstreamRequest(request, "ai", 8)) return json({ error: "rate_limited" }, 429, { "retry-after": "600" });
     const body = await readJson(request);
     const summary = cleanOptionalString(body.summary, "summary", 2400);
     if (!summary) return json({ error: "invalid_summary" }, 400);
@@ -1727,14 +1757,14 @@ async function route(request: Request, env: Env): Promise<Response> {
     const query = url.searchParams.get("q")?.trim();
     const artist = url.searchParams.get("artist")?.trim() ?? "";
     if (!query || query.length > 80 || artist.length > 80) return json({ error: "invalid_query" }, 400);
-    if (!allowUpstreamRequest(request, "music", 12)) return json({ error: "rate_limited" }, 429, { "retry-after": "60" });
+    if (!await allowUpstreamRequest(request, "music", 12)) return json({ error: "rate_limited" }, 429, { "retry-after": "60" });
     try {
-      const { tracks, blocked } = await gdSearch(query, 10);
+      const { tracks, blocked } = await gdSearch(query, 10, env);
       if (blocked) return json({ error: "music_upstream_limited" }, 429, { "retry-after": "300", msg: "音乐服务暂时限流，稍后再试" });
       if (!tracks.length) return json({ error: "music_search_failed", msg: "音乐搜索暂不可用，请稍后重试" }, 502, { "cache-control": "public, max-age=60" });
       const track = pickTrack(tracks, query, artist);
       if (!track) return json({ error: "music_not_found" }, 404, { "cache-control": "public, max-age=300" });
-      const playUrl = await gdPlayUrl(String(track.id));
+      const playUrl = await gdPlayUrl(String(track.id), env);
       const isCover = isCoverTrack(track, query, artist);
       return json({ track, playUrl, lyricId: String(track.lyric_id || track.id), isCover }, 200, { "cache-control": "public, max-age=300" });
     } catch { return json({ error: "music_unavailable" }, 502); }
@@ -1744,14 +1774,14 @@ async function route(request: Request, env: Env): Promise<Response> {
     const query = url.searchParams.get("q")?.trim();
     const artist = url.searchParams.get("artist")?.trim() ?? "";
     if (!query || query.length > 80 || artist.length > 80) return json({ error: "invalid_query" }, 400);
-    if (!allowUpstreamRequest(request, "music", 12)) return json({ error: "rate_limited" }, 429, { "retry-after": "60" });
+    if (!await allowUpstreamRequest(request, "music", 12)) return json({ error: "rate_limited" }, 429, { "retry-after": "60" });
     try {
-      const { tracks, blocked } = await gdSearch(query, 10);
+      const { tracks, blocked } = await gdSearch(query, 10, env);
       if (blocked) return json({ error: "music_upstream_limited" }, 429, { "retry-after": "300", msg: "歌词服务暂时限流，稍后再试" });
       if (!tracks.length) return json({ error: "music_search_failed", msg: "歌词搜索暂不可用，请稍后重试" }, 502, { "cache-control": "public, max-age=60" });
       const track = pickTrack(tracks, query, artist);
       if (!track) return json({ error: "music_not_found" }, 404, { "cache-control": "public, max-age=300" });
-      const result = await gdLyric(String(track.lyric_id || track.id));
+      const result = await gdLyric(String(track.lyric_id || track.id), env);
       if (!result) return json({ error: "lyric_not_found" }, 404, { "cache-control": "public, max-age=3600" });
       const lyric = stripLrc(result.lyric);
       const tlyric = stripLrc(result.tlyric);
@@ -1765,7 +1795,7 @@ async function route(request: Request, env: Env): Promise<Response> {
     if (!env.DB) return json({ error: "database_unavailable" }, 503);
     const user = await getUserFromToken(request, env.DB);
     if (!user) return json({ error: "authentication_required" }, 401);
-    if (!allowUpstreamRequest(request, "netease", 120)) return json({ error: "rate_limited" }, 429, { "retry-after": "60" });
+    if (!await allowUpstreamRequest(request, "netease", 120)) return json({ error: "rate_limited" }, 429, { "retry-after": "60" });
     try {
       if (url.pathname === "/api/netease/qr/issue" && request.method === "GET") {
         const { unikey, qrValue, ttl } = await neteaseQrIssue();
@@ -1823,7 +1853,7 @@ async function route(request: Request, env: Env): Promise<Response> {
     if (!env.DB) return json({ error: "database_unavailable" }, 503);
     const user = await getUserFromToken(request, env.DB);
     if (!user) return json({ error: "authentication_required" }, 401);
-    if (!allowUpstreamRequest(request, "douban", 120)) return json({ error: "rate_limited" }, 429, { "retry-after": "60" });
+    if (!await allowUpstreamRequest(request, "douban", 120)) return json({ error: "rate_limited" }, 429, { "retry-after": "60" });
     try {
       if (url.pathname === "/api/douban/qr/issue" && request.method === "GET") {
         const { code, qrImage, ttl } = await doubanQrIssue();
@@ -1864,7 +1894,7 @@ async function route(request: Request, env: Env): Promise<Response> {
     return json({ error: "not_found" }, 404);
   }
   if (url.pathname.startsWith("/api/import/")) {
-    if (!allowUpstreamRequest(request, "import", 8)) return json({ error: "rate_limited", msg: "导入过于频繁，请稍后再试" }, 429, { "retry-after": "600" });
+    if (!await allowUpstreamRequest(request, "import", 8)) return json({ error: "rate_limited", msg: "导入过于频繁，请稍后再试" }, 429, { "retry-after": "600" });
     return withSecurityHeaders(await importRoute(request, env));
   }
   if (url.pathname.startsWith("/api/plaza/") || url.pathname.startsWith("/api/comments/")) {
@@ -1877,15 +1907,34 @@ async function route(request: Request, env: Env): Promise<Response> {
   // Short-link sharing
   if (url.pathname === "/api/share" && request.method === "POST") {
     if (!env.DB) return json({ error: "database_unavailable" }, 503);
-    const body = await readJson(request);
+    assertSameOrigin(request);
+    if (!await allowUpstreamRequest(request, "share", 30)) return json({ error: "rate_limited" }, 429, { "retry-after": "60" });
+    const raw = await request.text();
+    if (new TextEncoder().encode(raw).byteLength > 512 * 1024) return json({ error: "profile_too_large" }, 413);
+    let body: JsonObject;
+    try {
+      const parsed: unknown = JSON.parse(raw);
+      if (!isObject(parsed)) throw new Error("not an object");
+      body = parsed;
+    } catch { return json({ error: "invalid_json" }, 400); }
+    if (!isObject(body.profile)) return json({ error: "invalid_profile" }, 400);
     // 有效期白名单（天），默认 30；不提供永久档（链接含完整排名，过期即失效）
     const SHARE_EXPIRY_DAYS = [7, 30, 90, 365];
     const expiresDays = typeof body.expires_days === "number" && (SHARE_EXPIRY_DAYS as number[]).includes(body.expires_days) ? body.expires_days : 30;
     const profileStr = JSON.stringify(body.profile);
-    if (profileStr.length > 512 * 1024) return json({ error: "profile_too_large" }, 400);
-    const code = crypto.randomUUID().replace(/-/g, "").slice(0, 8);
+    if (new TextEncoder().encode(profileStr).byteLength > 512 * 1024) return json({ error: "profile_too_large" }, 413);
+    const notesJson = isObject(body.notes) ? JSON.stringify(body.notes) : null;
     const expires = new Date(Date.now() + expiresDays * 24 * 60 * 60 * 1000).toISOString();
-    await env.DB.prepare("INSERT INTO shared_links (code, profile, notes, expires_at) VALUES (?, ?, ?, ?)").bind(code, profileStr, body.notes ? JSON.stringify(body.notes) : null, expires).run();
+    let code = "";
+    let inserted = false;
+    for (let attempt = 0; attempt < 3 && !inserted; attempt += 1) {
+      code = crypto.randomUUID().replace(/-/g, "").slice(0, 12);
+      try {
+        await env.DB.prepare("INSERT INTO shared_links (code, profile, notes, expires_at) VALUES (?, ?, ?, ?)").bind(code, profileStr, notesJson, expires).run();
+        inserted = true;
+      } catch { /* Retry a short-code collision. */ }
+    }
+    if (!inserted) return json({ error: "link_create_failed" }, 503);
     const origin = new URL(request.url).origin;
     return json({ code, url: `${origin}/share/${code}`, compareUrl: `${origin}/encounter?payload=${code}`, expires_days: expiresDays, expires_at: expires });
   }
@@ -1900,6 +1949,7 @@ async function route(request: Request, env: Env): Promise<Response> {
     return json(result, 200, { "cache-control": "public, max-age=3600" });
   }
   if (url.pathname === "/api/challenges" && request.method === "POST") {
+    if (!await allowUpstreamRequest(request, "challenge", 30)) return json({ error: "rate_limited" }, 429, { "retry-after": "60" });
     return createChallenge(request, env);
   }
   if (url.pathname.startsWith("/api/challenges/") && request.method === "GET") {

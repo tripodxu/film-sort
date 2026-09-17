@@ -32,7 +32,7 @@ npx wrangler d1 migrations apply film-sort --local
 npx wrangler d1 migrations apply film-sort --remote
 ```
 
-`wrangler.jsonc` 的 `d1_databases` binding 保持 `DB`。迁移 0001–0020 覆盖：匿名事件、挑战片单、账户体系（user_accounts/sessions/oauth/exchanges）、画像 v2 + 批注、云端清单、分享短链、广场（帖子/点赞/留言/楼中楼/编辑历史）、海报错误日志、Cookie 保险库、管理审计、性能索引、账户禁用态。
+`wrangler.jsonc` 的 `d1_databases` binding 保持 `DB`。迁移 0001–0021 覆盖：匿名事件、挑战片单、账户体系（user_accounts/sessions/oauth/exchanges）、画像 v2 + 批注、云端清单、分享短链、广场（帖子/点赞/留言/楼中楼/编辑历史）、海报错误日志、Cookie 保险库、管理审计、性能索引、账户禁用态。
 
 清理策略：Worker cron（每周一 03:00 UTC）自动清理 90 天前 `analytics_events`/`api_logs`、180 天前 `poster_errors`、过期的 `admin_sessions`/`user_sessions`/`oauth_exchanges`/`shared_links`。也可在 `/admin` 数据页签手动清理。
 

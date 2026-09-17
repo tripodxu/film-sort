@@ -70,7 +70,18 @@ export function parseProfile(value: unknown): ArtisticProfile {
 export function readProfile(storage: Storage): ArtisticProfile | null {
   try {
     const stored = storage.getItem(LIBRARY_KEY);
-    if (stored) return parseProfile(JSON.parse(stored));
+    if (stored) {
+      try {
+        return parseProfile(JSON.parse(stored));
+      } catch (e) {
+        console.error("[readProfile] parse failed; preserving raw data for recovery:", e);
+        try {
+          storage.setItem(`${LIBRARY_KEY}:recovery`, stored);
+          storage.removeItem(LIBRARY_KEY);
+        } catch { /* Keep the original value if the backup cannot be written. */ }
+        return null;
+      }
+    }
     // Migrate earlier single-medium exports by timestamp, never by storage key order.
     const legacy: RankingExport[] = [];
     for (let index = 0; index < storage.length; index++) {
@@ -151,6 +162,7 @@ export function mergeProfiles(cloud: ArtisticProfile, local: ArtisticProfile): A
 // ========== 合并维度：同一维度下多个榜单合并，同作品取最高名次 ==========
 
 export interface MergedItem {
+  key: string;
   title: string;
   bestRank: number;
   creator?: string;
@@ -183,6 +195,7 @@ export function mergeDimensionRankings(rankings: RankingExport[]): MergedDimensi
         }
       } else {
         byKey.set(key, {
+          key,
           title: item.title, bestRank: item.rank,
           creator: item.creator, year: item.year, id: item.id,
           sources: [{ collectionTitle: ranking.collectionTitle, rank: item.rank }],
@@ -229,6 +242,8 @@ function matchScore(a: MergedItem, b: MergedItem): number {
 // ========== 贪心匹配 ==========
 
 export interface MatchedItem {
+  ownKey: string;
+  peerKey: string;
   title: string;
   ownRank: number;
   peerRank: number;
@@ -276,8 +291,14 @@ function median(values: number[]): number | null {
 function greedyMatch(ownItems: MergedItem[], peerItems: MergedItem[]): MatchedItem[] {
   // 生成所有候选对及其评分
   const candidates: Array<{ oi: number; pi: number; score: number; rankDiff: number }> = [];
+  const peerByTitle = new Map<string, number[]>();
+  peerItems.forEach((item, index) => {
+    const title = normalizeTitle(item.title);
+    const indexes = peerByTitle.get(title);
+    if (indexes) indexes.push(index); else peerByTitle.set(title, [index]);
+  });
   for (let oi = 0; oi < ownItems.length; oi++) {
-    for (let pi = 0; pi < peerItems.length; pi++) {
+    for (const pi of peerByTitle.get(normalizeTitle(ownItems[oi].title)) ?? []) {
       const score = matchScore(ownItems[oi], peerItems[pi]);
       if (score >= 70) {
         candidates.push({ oi, pi, score, rankDiff: Math.abs(ownItems[oi].bestRank - peerItems[pi].bestRank) });
@@ -298,6 +319,7 @@ function greedyMatch(ownItems: MergedItem[], peerItems: MergedItem[]): MatchedIt
     usedPeer.add(c.pi);
     const o = ownItems[c.oi], p = peerItems[c.pi];
     matched.push({
+      ownKey: o.key, peerKey: p.key,
       title: o.title, ownRank: o.bestRank, peerRank: p.bestRank,
       difference: Math.abs(o.bestRank - p.bestRank), matchScore: c.score,
       ownSources: o.sources, peerSources: p.sources,
@@ -312,10 +334,10 @@ function greedyMatch(ownItems: MergedItem[], peerItems: MergedItem[]): MatchedIt
 
 export function compareDimensions(own: MergedDimension, peer: MergedDimension): DimensionComparison {
   const shared = greedyMatch(own.items, peer.items);
-  const matchedOwn = new Set(shared.map((s) => s.ownRank));
-  const matchedPeer = new Set(shared.map((s) => s.peerRank));
-  const onlyOwn = own.items.filter((item) => !matchedOwn.has(item.bestRank));
-  const onlyPeer = peer.items.filter((item) => !matchedPeer.has(item.bestRank));
+  const matchedOwn = new Set(shared.map((s) => s.ownKey));
+  const matchedPeer = new Set(shared.map((s) => s.peerKey));
+  const onlyOwn = own.items.filter((item) => !matchedOwn.has(item.key));
+  const onlyPeer = peer.items.filter((item) => !matchedPeer.has(item.key));
 
   // 序对一致率：多榜单合并取最优名次会产生并列（同为第1等），
   // 含并列的序对无法判定先后，剔除后再计算（否则相同画像会得到 <100% 的一致率）
@@ -368,8 +390,8 @@ export function compareDimensions(own: MergedDimension, peer: MergedDimension): 
   const kendallTau = n < 2 || !kendallDenom ? null : Math.round(((concordant - discordant) / kendallDenom + 1) * 50);
 
   // Top-5 集合 Jaccard（双方前五名的共同比例）
-  const ownTop = new Set(own.items.filter((m) => m.bestRank <= 5).map((m) => m.title));
-  const peerTop = new Set(peer.items.filter((m) => m.bestRank <= 5).map((m) => m.title));
+  const ownTop = new Set(own.items.filter((m) => m.bestRank <= 5).map((m) => m.key));
+  const peerTop = new Set(peer.items.filter((m) => m.bestRank <= 5).map((m) => m.key));
   const topInter = [...ownTop].filter((t) => peerTop.has(t)).length;
   const topUnion = new Set([...ownTop, ...peerTop]).size;
   const topJaccard = topUnion ? Math.round(100 * topInter / topUnion) : 0;

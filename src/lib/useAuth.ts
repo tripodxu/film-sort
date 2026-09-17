@@ -58,19 +58,32 @@ export function useAuth(deps: Omit<AuthDeps, 'setDraft'> & { setDraft?: (d: unkn
 
   const syncTimer = useRef<number | null>(null);
   const syncing = useRef(false);
+  const syncPending = useRef(false);
+  const syncKeepalivePending = useRef(false);
 
   const syncProfile = useCallback(async (keepalive: boolean) => {
     const d = depsRef.current;
     const token = stored("art-rank:account-token") ?? "";
     const profile = d.getProfile();
-    if (!token || !profile || syncing.current) return;
-    const next = d.namedProfile(); if (!next) return;
+    if (!token || !profile) return;
+    if (syncing.current) {
+      syncPending.current = true;
+      syncKeepalivePending.current ||= keepalive;
+      return;
+    }
     syncing.current = true;
     setSyncStatus("saving");
     try {
-      const hasAnyNotes = Object.keys(d.getNotes()).length > 0;
-      const ok = (await fetch("/api/account/profile", { method: "PUT", headers: { "content-type": "application/json", authorization: `Bearer ${token}` }, body: JSON.stringify({ profile: next, ...(hasAnyNotes ? { notes: d.getNotes() } : {}) }), keepalive })).ok;
-      setSyncStatus(ok ? "saved" : "error");
+      do {
+        syncPending.current = false;
+        const currentKeepalive = syncKeepalivePending.current || keepalive;
+        syncKeepalivePending.current = false;
+        const next = d.namedProfile(); if (!next) break;
+        const hasAnyNotes = Object.keys(d.getNotes()).length > 0;
+        const ok = (await fetch("/api/account/profile", { method: "PUT", headers: { "content-type": "application/json", authorization: `Bearer ${token}` }, body: JSON.stringify({ profile: next, ...(hasAnyNotes ? { notes: d.getNotes() } : {}) }), keepalive: currentKeepalive })).ok;
+        setSyncStatus(ok ? "saved" : "error");
+        if (!ok) break;
+      } while (syncPending.current);
     } catch { setSyncStatus("error"); }
     finally { syncing.current = false; }
   }, []);

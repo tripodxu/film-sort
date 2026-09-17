@@ -82,19 +82,36 @@ export function extractNeteaseLoginCookie(sources: Array<string | null | undefin
 
 // ===== Cookie 保险库（AES-GCM 加密，密钥存 admin_config，首次自动生成） =====
 
+function parseVaultKey(value: string | null | undefined): Uint8Array | null {
+  if (!value || !/^[0-9a-f]{64}$/i.test(value)) return null;
+  return Uint8Array.from({ length: 32 }, (_, i) => Number.parseInt(value.slice(i * 2, i * 2 + 2), 16));
+}
+
 async function vaultKey(env: Env): Promise<CryptoKey | null> {
   if (!env.DB) return null;
   const db = env.DB;
-  const stored = await db.prepare("SELECT value FROM admin_config WHERE key = 'cookie_enc_key'").first<{ value: string }>();
-  let rawKey: Uint8Array;
-  if (stored?.value) {
-    rawKey = Uint8Array.from({ length: stored.value.length / 2 }, (_, i) => Number.parseInt(stored.value.slice(i * 2, i * 2 + 2), 16));
-  } else {
-    rawKey = crypto.getRandomValues(new Uint8Array(32));
-    const hex = Array.from(rawKey, (b) => b.toString(16).padStart(2, "0")).join("");
-    await db.prepare("INSERT OR IGNORE INTO admin_config (key, value) VALUES ('cookie_enc_key', ?)").bind(hex).run();
+  // Prefer an environment secret. The legacy database key remains readable so
+  // existing encrypted cookies can still be decrypted during migration.
+  const envKey = parseVaultKey(env.COOKIE_ENC_KEY);
+  if (env.COOKIE_ENC_KEY && !envKey) return null;
+  let rawKey = envKey;
+  if (!rawKey) {
+    const readKey = () => db.prepare("SELECT value FROM admin_config WHERE key = 'cookie_enc_key'").first<{ value: string }>();
+    let stored = await readKey();
+    if (!parseVaultKey(stored?.value)) {
+      const generated = crypto.getRandomValues(new Uint8Array(32));
+      const hex = Array.from(generated, (b) => b.toString(16).padStart(2, "0")).join("");
+      await db.prepare("INSERT OR IGNORE INTO admin_config (key, value) VALUES ('cookie_enc_key', ?)").bind(hex).run();
+      // Another isolate may have won the insert; always use the value that is
+      // actually present after the atomic insert.
+      stored = await readKey();
+    }
+    rawKey = parseVaultKey(stored?.value);
   }
-  return crypto.subtle.importKey("raw", rawKey, { name: "AES-GCM" }, false, ["encrypt", "decrypt"]);
+  if (!rawKey) return null;
+  try {
+    return await crypto.subtle.importKey("raw", rawKey, { name: "AES-GCM" }, false, ["encrypt", "decrypt"]);
+  } catch { return null; }
 }
 
 export async function saveProviderCookie(env: Env, userId: number, provider: string, cookie: string): Promise<void> {

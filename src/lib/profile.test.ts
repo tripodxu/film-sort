@@ -229,6 +229,25 @@ describe("compareRankings", () => {
     expect(result.orderAgreement).toBe(100);
   });
 
+  it("keeps distinct tied works in onlyOwn instead of deduping by rank", () => {
+    const own = mergeDimensionRankings([
+      makeRanking({ collectionTitle: "榜A", items: [
+        { id: "a", title: "作品A", rank: 1 },
+        { id: "x", title: "作品X", rank: 2 },
+      ] }),
+      makeRanking({ collectionTitle: "榜B", items: [
+        { id: "b", title: "作品B", rank: 1 },
+        { id: "y", title: "作品Y", rank: 2 },
+      ] }),
+    ])!;
+    const peer = mergeDimensionRankings([
+      makeRanking({ collectionTitle: "对方榜", items: [{ id: "a-peer", title: "作品A", rank: 1 }] }),
+    ])!;
+    const result = compareDimensions(own, peer);
+    expect(result.shared.map((item) => item.title)).toEqual(["作品A"]);
+    expect(result.onlyOwn.map((item) => item.title).sort()).toEqual(["作品B", "作品X", "作品Y"]);
+  });
+
   it("identical rankings score high on all new metrics", () => {
     const own = makeRanking();
     const result = compareRankings(own, makeRanking());

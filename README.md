@@ -102,8 +102,8 @@ ART/RANK 把"从看过、读过、听过的作品里排出自己的 Top N"拆成
 
 | 按钮 | 链接格式 | 行为 |
 |------|----------|------|
-| **比较链接** | `/encounter?payload=<8位短码>` | 对方打开直接进入比较界面 |
-| **分享链接** | `/share/<8位短码>` | 对方打开进入查看页面，展示榜单内容 |
+| **比较链接** | `/encounter?payload=<8–12位短码>` | 对方打开直接进入比较界面 |
+| **分享链接** | `/share/<8–12位短码>` | 对方打开进入查看页面，展示榜单内容 |
 
 两种链接在「我的文化索引」和「相遇」页面均可生成，均包含批注数据。画像整体（多维度）分享按钮位于「我的文化索引」页面右上角（「分享链接」胶囊按钮，与「添加画像批注」并排），单个榜单的分享/比较链接在该榜单标题行操作区。「比较链接」按钮复制的是 `/encounter?payload=<短码>` 比较链接（对方打开直接进入比较界面），「分享链接」按钮复制的是 `/share/<短码>` 查看链接。
 
@@ -219,7 +219,7 @@ npx wrangler login
 npx wrangler d1 create film-sort
 # 记下 database_id，填入 wrangler.jsonc
 
-# 应用数据库迁移（0015 OAuth / 0016 审计 / 0017 海报 source / 0018 广场索引 / 0019 编辑历史 / 0020 Cookie 保险库）
+# 应用数据库迁移（0015 OAuth / 0016 审计 / 0017 海报 source / 0018 广场索引 / 0019 编辑历史 / 0020 Cookie 保险库 / 0021 云端清单 1000 件上限）
 npx wrangler d1 migrations apply film-sort --remote
 
 # 部署
@@ -239,6 +239,9 @@ npm run deploy
 | `GITHUB_CLIENT_SECRET` | 否 | GitHub OAuth 客户端密钥 |
 | `AI_API_KEY` | 否 | AI 解读服务密钥 |
 | `AI_API_URL` | 否 | 自定义 Anthropic 兼容接口地址 |
+| `COOKIE_ENC_KEY` | 否 | 网易云/豆瓣 Cookie 保险库的 64 位十六进制密钥；生产环境建议配置 |
+| `MUSIC_PROXY_URL` | 否 | Worker 使用的音乐上游代理地址，例如 Deno Deploy 地址 |
+| `MUSIC_PROXY_KEY` | 否 | 音乐代理共享密钥；与 Deno Deploy 的 `MUSIC_PROXY_KEY` 保持一致 |
 
 > 不要把密钥写入 `wrangler.jsonc`、前端代码或仓库。
 
@@ -472,7 +475,7 @@ film-sort3/
 - `movie.douban.com` 详情页被反爬拦截（302→sec.douban.com），电影详情改用 search.douban.com 搜索结果。
 - `music.douban.com` 无 suggest API，音乐封面依赖 Top250 索引和搜索。
 - 豆瓣可能随时调整反爬策略，需要持续监控。
-- 画像大小限制 512 KB，单榜单 2-300 件作品。
+- 画像大小限制 512 KB，单榜单最多 1000 件作品；广场帖子仍限制最多 300 件。
 
 ---
 

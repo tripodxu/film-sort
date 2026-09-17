@@ -51,9 +51,9 @@ describe("importCollection", () => {
     expect(() => importCollection("film", "龙猫")).toThrow();
   });
 
-  it("rejects more than 300 works", () => {
-    const list = Array.from({ length: 301 }, (_, i) => `作品${i}`).join("\n");
-    expect(() => importCollection("film", list)).toThrow();
+  it("rejects more than 1000 works", () => {
+    const list = Array.from({ length: 1001 }, (_, i) => `作品${i}`).join("\n");
+    expect(() => importCollection("film", list)).toThrow(/2 to 1000/);
   });
 
   it("rejects empty titles", () => {
