@@ -146,14 +146,18 @@ export function prefetchPosters(items: Array<{ work: Artwork; kind: MediaKind }>
   for (const { work, kind } of items) { if (kind === "film" || kind === "book" || kind === "music") void resolve(work, kind); }
 }
 
+// 豆瓣 CDN 对「无 Referer」的请求一律返回 418（响应体是 `cdn error 001`），
+// 而浏览器 <img> 无法伪造 Referer（本组件还显式设了 referrerPolicy="no-referrer"），
+// 所以豆瓣系图片必须走 worker 代理——worker/media.ts 的 buildHeaders() 会补上
+// `referer: https://movie.douban.com/`。其余 CDN 实测直连可用（Amazon 直连与代理
+// 返回字节数完全一致），保留直连以省掉一次跳转。
+const PROXY_REQUIRED_HOSTS = /^img\d+\.doubanio\.com$/;
+function proxiedImageUrl(url: string): string {
+  return `/api/image?url=${encodeURIComponent(url)}`;
+}
 function imageUrl(url: string): string {
-  try {
-    const parsed = new URL(url);
-    // CSP 已放行这些可信域的 img-src，直连即可，省一次 worker 代理跳转。
-    // 该白名单与 worker/media.ts 的 allowedImage() 保持一致。
-    return /^(?:img\d+\.doubanio\.com|m\.media-amazon\.com|ia\.media-imdb\.com|image\.tmdb\.org|[\w-]+\.music\.126\.net|(?:upload|thumb)\.wikimedia\.org|bkimg\.cdn\.bcebos\.com)$/.test(parsed.hostname)
-      ? url : `/api/image?url=${encodeURIComponent(url)}`;
-  } catch { return url; }
+  try { return PROXY_REQUIRED_HOSTS.test(new URL(url).hostname) ? proxiedImageUrl(url) : url; }
+  catch { return url; }
 }
 
 function reportImageFailure(work: Artwork, kind: MediaKind, url: string) {
@@ -176,6 +180,8 @@ export function Poster({ work, kind: rawKind, large = false }: { work: Artwork; 
     return resolveSync(work, kind) ?? [...(work.posterUrls ?? [])];
   });
   const [failed, setFailed] = useState<Set<string>>(() => new Set());
+  // 直连失败后改为走代理重试同一张图，再失败才换下一个候选。
+  const [proxyRetry, setProxyRetry] = useState<Set<string>>(() => new Set());
   const [imgLoaded, setImgLoaded] = useState(false);
   useEffect(() => {
     let active = true;
@@ -186,9 +192,18 @@ export function Poster({ work, kind: rawKind, large = false }: { work: Artwork; 
   }, [work.id, work.title, kind, large]);
   const urls = [...new Set([...resolved, ...(work.posterUrls ?? [])])];
   const url = urls.find((candidate) => !failed.has(candidate));
+  const src = url === undefined ? undefined : proxyRetry.has(url) ? proxiedImageUrl(url) : imageUrl(url);
   const Icon = { film: Film, book: BookOpen, music: Music2, other: Library }[kind];
   return <div className={`poster ${large ? "poster-large" : "poster-small"} poster-${kind}`}>
-    {url ? <><img src={imageUrl(url)} alt={`${work.title}${work.creator ? ` - ${work.creator}` : ""}${work.year ? ` (${work.year})` : ""}`} referrerPolicy="no-referrer" loading={large ? "eager" : "lazy"} onLoad={() => setImgLoaded(true)} onError={() => { reportImageFailure(work, kind, url); setFailed((previous) => new Set([...previous, url])); }} style={imgLoaded ? undefined : { opacity: 0 }} />{!imgLoaded && <div className="poster-loading"><Icon size={large ? 24 : 12} /></div>}</> :
+    {url && src ? <><img src={src} alt={`${work.title}${work.creator ? ` - ${work.creator}` : ""}${work.year ? ` (${work.year})` : ""}`} referrerPolicy="no-referrer" loading={large ? "eager" : "lazy"} onLoad={() => setImgLoaded(true)} onError={() => {
+      reportImageFailure(work, kind, url);
+      // 直连失败：先用 worker 代理重试同一张图；代理也失败才换下一个候选。
+      if (imageUrl(url) === url && !proxyRetry.has(url)) {
+        setProxyRetry((previous) => new Set([...previous, url]));
+        return;
+      }
+      setFailed((previous) => new Set([...previous, url]));
+    }} style={imgLoaded ? undefined : { opacity: 0 }} />{!imgLoaded && <div className="poster-loading"><Icon size={large ? 24 : 12} /></div>}</> :
       <div className="cover-fallback"><Icon size={large ? 36 : 16} />{large ? <span>{work.title}</span> : <span style={{ fontSize: 9, opacity: 0.7, lineHeight: 1.3, textAlign: "center", padding: "0 2px" }}>{work.title}</span>}</div>}
   </div>;
 }

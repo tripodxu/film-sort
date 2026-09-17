@@ -148,7 +148,9 @@ export async function upstream(url: string, retries = 2, cookie?: string | null)
   const requestHeaders = isDouban ? buildHeaders(url, isImage, cookie) : { "user-agent": nextUA(), "accept": "*/*" };
 
   for (let attempt = 0; attempt <= retries; attempt++) {
-    if (isDouban) await throttle(domain);
+    // 图片是 CDN 资源：真实浏览器本就并发拉取几十张，实测 12 张并发 169ms 全部 200。
+    // 节流只为避免抓取 HTML/API 时被豆瓣限流，用在图片上只会把画廊拖成每张 800ms。
+    if (isDouban && !isImage) await throttle(domain);
     try {
       const response = await fetch(url, {
         headers: requestHeaders,
