@@ -1,4 +1,5 @@
 import curatedPosters from "./imdb-posters.json";
+import { gdPicUrl, gdSearch, pickTracks, type GdProxyEnv } from "./gdstudio";
 
 export interface DoubanWork { id: string; title: string; year?: number; poster_url?: string; type?: "movie" | "book" | "music" }
 
@@ -558,37 +559,137 @@ async function searchCover(query: string, type: "movie" | "book" | "music"): Pro
   }
 }
 
-export async function resolvePosters(title: string, english: string, year?: number, type?: "movie" | "book" | "music") {
+interface WikiImagePage {
+  title?: string;
+  missing?: boolean;
+  original?: { source?: string };
+  thumbnail?: { source?: string };
+}
+
+function wikiImageUrl(page: WikiImagePage): string | undefined {
+  const raw = page.original?.source ?? page.thumbnail?.source;
+  return raw ? raw.replace(/^http:/, "https:") : undefined;
+}
+
+function scoreWikiImage(page: WikiImagePage, title: string, english: string): number {
+  const pageTitle = key(page.title ?? "");
+  const base = key(title);
+  const englishKey = key(english);
+  if (!pageTitle) return -1;
+  if (pageTitle === base || pageTitle === englishKey) return 10;
+  if (pageTitle.includes(base) || base.includes(pageTitle)) return 6;
+  if (englishKey && (pageTitle.includes(englishKey) || englishKey.includes(pageTitle))) return 5;
+  return -1;
+}
+
+async function queryWikiImages(lang: "zh" | "en", params: URLSearchParams, title: string, english: string): Promise<string[]> {
+  try {
+    const response = await fetch(`https://${lang}.wikipedia.org/w/api.php?${params}`, {
+      headers: { "user-agent": USER_AGENTS[0], "accept": "application/json" },
+      signal: AbortSignal.timeout(8000),
+    });
+    if (!response.ok) return [];
+    const data = await response.json() as { query?: { pages?: Record<string, WikiImagePage> } };
+    return Object.values(data.query?.pages ?? {})
+      .map((page) => ({ page, score: scoreWikiImage(page, title, english) }))
+      .filter((entry) => entry.score >= 0 && !!wikiImageUrl(entry.page))
+      .sort((a, b) => b.score - a.score)
+      .map((entry) => wikiImageUrl(entry.page)!)
+      .filter((url, index, urls) => urls.indexOf(url) === index)
+      .slice(0, 4);
+  } catch { return []; }
+}
+
+async function searchWikiPoster(title: string, english: string, type?: "movie" | "book" | "music"): Promise<string[]> {
+  const queries = [title, english].map((value) => value.trim()).filter(Boolean);
+  for (const lang of ["zh", "en"] as const) {
+    const typeHint = type ? TYPE_HINTS[type]?.[lang]?.[0] : undefined;
+    const exactTitles = [...new Set(queries.flatMap((value) => typeHint ? [value, `${value} (${typeHint})`, `${value}（${typeHint}）`] : [value]))];
+    const exactParams = new URLSearchParams({
+      action: "query", titles: exactTitles.join("|"), prop: "pageimages|info", piprop: "original|thumbnail", pithumbsize: "1200",
+      redirects: "1", converttitles: "1", format: "json", origin: "*",
+    });
+    const exact = await queryWikiImages(lang, exactParams, title, english);
+    if (exact.length) return exact;
+
+    for (const query of queries) {
+      const searchParams = new URLSearchParams({
+        action: "query", generator: "search", gsrsearch: typeHint ? `${query} ${typeHint}` : query, gsrnamespace: "0", gsrlimit: "5",
+        prop: "pageimages|info", piprop: "original|thumbnail", pithumbsize: "1200", redirects: "1", format: "json", origin: "*",
+      });
+      const found = await queryWikiImages(lang, searchParams, title, english);
+      if (found.length) return found;
+    }
+  }
+  return [];
+}
+
+async function searchNeteasePoster(title: string, env?: GdProxyEnv): Promise<string[]> {
+  // Priority 2: NetEase's public search returns album images without requiring
+  // a user cookie and is usually more accurate than a generic music search.
+  try {
+    const params = new URLSearchParams({ s: title, type: "100", offset: "0", total: "true", limit: "10" });
+    const response = await fetch("https://music.163.com/api/search/get/web?" + params.toString(), {
+      headers: { "user-agent": USER_AGENTS[0], "referer": "https://music.163.com/", "accept": "application/json" },
+      signal: AbortSignal.timeout(8000),
+    });
+    if (response.ok) {
+      const data = await response.json() as { result?: { songs?: Array<{ name?: string; album?: { picUrl?: string } }> } };
+      const want = key(title);
+      const song = (data.result?.songs ?? []).find((entry) => entry.album?.picUrl && entry.name && (key(entry.name) === want || key(entry.name).includes(want) || want.includes(key(entry.name))));
+      if (song?.album?.picUrl) return [song.album.picUrl.replace(/^http:/, "https:")];
+    }
+  } catch { /* Fall through to gd-proxy/gdstudio. */ }
+
+  // Priority 3: gd-proxy/gdstudio fallback.
+  const { tracks } = await gdSearch(title, 10, env);
+  for (const track of pickTracks(tracks, title, undefined, 5)) {
+    if (!track.pic_id) continue;
+    const url = await gdPicUrl(track.pic_id, env);
+    if (url) return [url.replace(/^http:/, "https:")];
+  }
+  return [];
+}
+
+export async function resolvePosters(title: string, english: string, year?: number, type?: "movie" | "book" | "music", env?: GdProxyEnv) {
+  let primary: string[] = [];
   if (type === "book") {
     const [suggestion, search] = await Promise.allSettled([doubanBookSuggest(title), searchCover(title, "book")]);
     const suggested = suggestion.status === "fulfilled" ? suggestion.value.find((item) => key(item.title) === key(title))?.poster_url : undefined;
     const searched = search.status === "fulfilled" ? search.value : undefined;
     if (!suggested && !searched && !bookPosterIndex.has(key(title))) await ensureBookIndex();
-    return [...new Set([
+    primary = [...new Set([
       ...(suggested ? doubanVariants(suggested) : []),
       ...(searched ? doubanVariants(searched) : []),
       ...(bookPosterIndex.has(key(title)) ? doubanVariants(bookPosterIndex.get(key(title))!) : []),
     ])];
-  }
-  if (type === "music") {
+  } else if (type === "music") {
     const [search] = await Promise.allSettled([searchCover(title, "music")]);
     const searched = search.status === "fulfilled" ? search.value : undefined;
     if (!searched && !musicPosterIndex.has(key(title))) await ensureMusicIndex();
-    return [...new Set([
+    primary = [...new Set([
       ...(searched ? doubanVariants(searched) : []),
       ...(musicPosterIndex.has(key(title)) ? doubanVariants(musicPosterIndex.get(key(title))!) : []),
     ])];
+  } else {
+    const [suggestion, imdb, search] = await Promise.allSettled([doubanSuggest(title), imdbPoster(title, english, year), searchCover(title, "movie")]);
+    const suggested = suggestion.status === "fulfilled" ? suggestion.value.find((item) => key(item.title) === key(title) && (!year || !item.year || item.year === year))?.poster_url : undefined;
+    const searched = search.status === "fulfilled" ? search.value : undefined;
+    if (!suggested && !searched && !posterIndex.has(key(title)) && !(imdb.status === "fulfilled" && imdb.value)) await ensureIndex();
+    primary = [...new Set([
+      ...(suggested ? doubanVariants(suggested) : []),
+      ...(searched ? doubanVariants(searched) : []),
+      ...(posterIndex.has(key(title)) ? doubanVariants(posterIndex.get(key(title))!) : []),
+      ...(imdb.status === "fulfilled" && imdb.value ? [imdb.value] : []),
+    ])];
   }
-  const [suggestion, imdb, search] = await Promise.allSettled([doubanSuggest(title), imdbPoster(title, english, year), searchCover(title, "movie")]);
-  const suggested = suggestion.status === "fulfilled" ? suggestion.value.find((item) => key(item.title) === key(title) && (!year || !item.year || item.year === year))?.poster_url : undefined;
-  const searched = search.status === "fulfilled" ? search.value : undefined;
-  if (!suggested && !searched && !posterIndex.has(key(title)) && !(imdb.status === "fulfilled" && imdb.value)) await ensureIndex();
-  return [...new Set([
-    ...(suggested ? doubanVariants(suggested) : []),
-    ...(searched ? doubanVariants(searched) : []),
-    ...(posterIndex.has(key(title)) ? doubanVariants(posterIndex.get(key(title))!) : []),
-    ...(imdb.status === "fulfilled" && imdb.value ? [imdb.value] : []),
-  ])];
+  if (primary.length) return primary;
+
+  // 当前源无结果时按 Wiki → 网易云/gd-proxy 逐级降级。
+  const wiki = await searchWikiPoster(title, english, type);
+  if (wiki.length) return wiki;
+  if (type === "music") return searchNeteasePoster(title, env);
+  return [];
 }
 
 // ===== Search List API =====

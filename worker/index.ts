@@ -1425,7 +1425,7 @@ async function route(request: Request, env: Env): Promise<Response> {
     const year = Number(url.searchParams.get("year")) || undefined;
     const type = url.searchParams.get("type") as "movie" | "book" | "music" | undefined;
     if (!title || title.length > 160 || english.length > 160 || (year !== undefined && (!Number.isInteger(year) || year < 1800 || year > 2200))) return json({ error: "invalid_query" }, 400);
-    const poster_urls = await resolvePosters(title, english, year, type);
+    const poster_urls = await resolvePosters(title, english, year, type, env);
     if (poster_urls.length === 0 && env.DB) {
       void env.DB.prepare("INSERT INTO poster_errors (title, media_type, error) VALUES (?, ?, ?)").bind(title, type ?? "movie", "no_poster_found").run().catch(() => {});
     }
