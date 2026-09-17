@@ -3,7 +3,7 @@ import { ArrowLeft, CloudDownload, CloudUpload, Github, Languages, UserRound, X 
 
 import { createRankingState, chooseSide, deferWork, deserializeRankingState, getCurrentComparison, getRankingProgress, getRankingResult, serializeRankingState, skipWork, undoLastAction, type RankingState } from "./lib/ranking";
 import { getCollectionsByKind, mediaLabels, type Artwork, type MediaCollection, type MediaKind } from "./data/media";
-import { compareDimensions, compareProfiles, compareRankings, LIBRARY_KEY, MAX_PROFILE_BYTES, mergeDimensionRankings, mergeProfiles, mergeRanking, parseProfile, profileText, readProfile, renameRanking, deleteRanking, reorderRanking, toRankedItems, type ArtisticProfile, type RankingExport, type RankedArtwork } from "./lib/profile";
+import { compareDimensions, compareProfiles, compareRankings, LIBRARY_KEY, MAX_PROFILE_BYTES, RECOVERY_KEY, mergeDimensionRankings, mergeProfiles, mergeRanking, parseProfile, profileText, readProfile, renameRanking, deleteRanking, reorderRanking, toRankedItems, type ArtisticProfile, type RankingExport, type RankedArtwork } from "./lib/profile";
 import { importCollection } from "./lib/collections";
 import { renderProfilePng, pngFileName, type ExportLayout } from "./lib/exportPng";
 import { FocusTrap } from "./components/FocusTrap";
@@ -95,7 +95,9 @@ export default function App() {
   const auth = useAuth({
     getProfile: () => profile, profile, getNotes: () => notes,
     namedProfile: () => { if (!profile) return null; const name = profileName.trim() || t("我的艺术人格", "My artistic profile"); return { ...profile, profileName: name, rankings: profile.rankings.map((entry) => ({ ...entry, profileName: name })) }; },
-    persist: (next) => { setProfile(next); setProfileName(next.profileName); setShareUrl(""); setQrUrl(""); try { localStorage.setItem(LIBRARY_KEY, JSON.stringify(next)); writeNotes(notes); } catch { setNotice(t("浏览器无法保存，请及时导出画像。", "Browser storage is unavailable. Export your profile to keep it.")); } },
+    // 复用下面唯一的 persist（含白名单清洗）：这里原本另写了一份 `JSON.stringify(next)`
+    // 直存的实现，绕过了可落库形状，也让排序完成路径把 posterUrls 写进了 localStorage。
+    persist,
     setNotes, setProfile, setPeer,
     setNotice, t,
   });
@@ -105,7 +107,8 @@ export default function App() {
     accountToken, profileName, view,
     getProfile: () => profile,
     getPeer: () => peer, getNotes: () => notes,
-    persist: (next) => { setProfile(next); setProfileName(next.profileName); setShareUrl(""); setQrUrl(""); try { localStorage.setItem(LIBRARY_KEY, JSON.stringify(next)); writeNotes(notes); } catch { setNotice(t("浏览器无法保存，请及时导出画像。", "Browser storage is unavailable. Export your profile to keep it.")); } },
+    // 同上：不再另写一份未清洗的 persist。
+    persist,
     setActiveKind, setProfileName, setNotice, navigateTo, setView: setView as (v: string) => void, t, label, locale,
   });
   const { kind, setKind, source, setSource, collection, setCollection, selected, setSelected, ranking, setRanking, draft, setDraft, topN, setTopN, seed, setSeed, customText, setCustomText, customItem, setCustomItem, customWorks, setCustomWorks, customDeselected, setCustomDeselected, importProgress, importCap, setImportCap, cloudCollections, doubanLimit, setDoubanLimit, search, setSearch, colCount, busy: sortingBusy, setBusy, comparison, progress, worksById, collections, chooseKind, searchWorks, addCustomWork, removeCustomWork, loadCustomWorks, saveCustomWorks, clearCustomWorks, openCollection, applyImportedWorks, importDoulist, importNeteasePlaylist, saveCollectionCloud, loadCloudCollections, deleteCloudCollection, changeCols, loadDouban, startRanking, act, resume, saveWithoutSorting } = sorting;
@@ -305,7 +308,8 @@ export default function App() {
   }
   function clearAllData() {
     setProfile(null); setDraft(null); setPeer(null); setPeerNotes({});
-    try { localStorage.removeItem(LIBRARY_KEY); localStorage.removeItem(DRAFT_KEY); localStorage.removeItem(PEER_KEY); } catch {}
+    // 备份键也要一起清掉，否则读取端会把「已清除」的画像从备份里再恢复回来。
+    try { localStorage.removeItem(LIBRARY_KEY); localStorage.removeItem(RECOVERY_KEY); localStorage.removeItem(DRAFT_KEY); localStorage.removeItem(PEER_KEY); } catch {}
     setNotice(t("本地数据已清除。", "Local data cleared."));
   }
   async function openArtworkDetail(work: RankedArtwork, detailKind: MediaKind) {

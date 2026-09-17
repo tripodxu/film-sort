@@ -10,6 +10,10 @@ import {
   mergeDimensionRankings,
   normalizeTitle,
   profileText,
+  readProfile,
+  toRankedItems,
+  LIBRARY_KEY,
+  RECOVERY_KEY,
   type ArtisticProfile,
   type RankingExport,
 } from "./profile";
@@ -77,16 +81,158 @@ describe("parseProfile", () => {
     expect(() => parseProfile({ version: 2, profileId: "x", profileName: "y", updatedAt: new Date().toISOString(), rankings: [] })).toThrow();
   });
 
-  it("rejects duplicate artwork", () => {
+  it("合并重复作品，而不是让整份画像失效", () => {
     const ranking = makeRanking({
       items: [
         { id: "a", title: "Same", rank: 1 },
         { id: "b", title: "Same", rank: 2 },
+        { id: "c", title: "Other", rank: 3 },
       ],
     });
     const profile = { version: 2, profileId: "x", profileName: "y", updatedAt: new Date().toISOString(), rankings: [ranking] };
-    // Same title + no year/creator = duplicate identity
+    // 同名同作者且都无年份 = 同一 identity：保留首次出现，rank 重排为 1..n。
+    // 旧版本在这里抛 Duplicate artwork，读取方随即删掉用户整份画像——
+    // 这正是「保存成功、刷新后榜单消失」的成因。
+    const parsed = parseProfile(profile);
+    expect(parsed.rankings[0].items).toEqual([
+      { id: "a", title: "Same", rank: 1 },
+      { id: "c", title: "Other", rank: 2 },
+    ]);
+  });
+
+  it("单条作品损坏只丢那一条，rank 自动补齐到 1..n", () => {
+    const ranking = makeRanking({
+      // 故意混入真实世界里会出现的脏数据，因此断言成 items 形状。
+      items: [
+        { id: "a", title: "A", rank: 1 },
+        { id: "b", title: "", rank: 2 },                 // 标题为空
+        { id: "c", title: "C", rank: 3, year: 9999 },    // 年份越界
+        "不是对象",
+        { id: "e", title: "E", rank: 5 },
+      ] as unknown as RankingExport["items"],
+    });
+    const parsed = parseProfile({ version: 2, profileId: "x", profileName: "y", updatedAt: new Date().toISOString(), rankings: [ranking] });
+    expect(parsed.rankings[0].items).toEqual([
+      { id: "a", title: "A", rank: 1 },
+      { id: "e", title: "E", rank: 2 },
+    ]);
+  });
+
+  it("同一 id 只保留首次出现", () => {
+    const ranking = makeRanking({ items: [{ id: "dup", title: "A", rank: 1 }, { id: "dup", title: "B", rank: 2 }] });
+    const parsed = parseProfile({ version: 2, profileId: "x", profileName: "y", updatedAt: new Date().toISOString(), rankings: [ranking] });
+    expect(parsed.rankings[0].items).toHaveLength(1);
+  });
+
+  it("一份榜单坏掉不连坐其它榜单", () => {
+    const good = makeRanking({ collectionTitle: "好的" });
+    const profile = {
+      version: 2, profileId: "x", profileName: "y", updatedAt: new Date().toISOString(),
+      rankings: [{ version: 1 }, good],
+    };
+    const parsed = parseProfile(profile);
+    expect(parsed.rankings).toHaveLength(1);
+    expect(parsed.rankings[0].collectionTitle).toBe("好的");
+  });
+
+  it("所有榜单都不可用时才抛错", () => {
+    const profile = { version: 2, profileId: "x", profileName: "y", updatedAt: new Date().toISOString(), rankings: [{ version: 1 }] };
     expect(() => parseProfile(profile)).toThrow();
+  });
+});
+
+describe("toRankedItems（唯一写入端入口）", () => {
+  it("去重 + 重排 rank + 补齐缺失的 id", () => {
+    const items = toRankedItems([
+      { id: "a", title: "A", rank: 7 },
+      { id: "b", title: "A", rank: 9 },       // 与上一条 identity 相同 → 合并
+      { title: "B", rank: 3 },                // 没有 id → 补齐
+      { title: "C", rank: 4, year: 2001 },
+      { title: "C", rank: 5, year: 2002 },    // 年份不同 → 保留
+    ]);
+    expect(items).toEqual([
+      { id: "a", title: "A", rank: 1 },
+      { id: "auto-2", title: "B", rank: 2 },
+      { id: "auto-3", title: "C", year: 2001, rank: 3 },
+      { id: "auto-4", title: "C", year: 2002, rank: 4 },
+    ]);
+  });
+
+  it("写入端产物一定可被读取端接受：150 首真实重复数据往返", () => {
+    // 逐字取自线上 GET /api/plaza/posts/32（该账号那份 150 首网易云歌单）里相撞的曲目：
+    // 同名同歌手、都没有年份，identity 完全相同。旧代码会把它们原样写进画像，
+    // 于是刷新时 parseRanking 抛 Duplicate artwork，readProfile 删掉整份数据。
+    const real = [
+      { id: "netease-85580", title: "童话", rank: 4, creator: "光良" },
+      { id: "netease-85491", title: "童话", rank: 32, creator: "光良" },
+      { id: "netease-5238221", title: "水手", rank: 12, creator: "郑智化" },
+      { id: "netease-190381", title: "水手", rank: 44, creator: "郑智化" },
+      { id: "netease-2083785152", title: "唯一", rank: 9, creator: "G.E.M.邓紫棋" },
+      { id: "netease-27483167", title: "唯一", rank: 64, creator: "王力宏" },
+    ];
+    const items = toRankedItems(real);
+    // 三对同名，其中两对同作者 → 合并 2 条；「唯一」作者不同 → 两条都留。
+    expect(items.map((item) => `${item.title}/${item.creator}`)).toEqual([
+      "童话/光良", "水手/郑智化", "唯一/G.E.M.邓紫棋", "唯一/王力宏",
+    ]);
+    expect(real.length - items.length).toBe(2);
+    // 关键断言：写入端的产物可以被读取端完整解析，往返无损（除被合并的重复项）。
+    const profile = { version: 2, profileId: "p", profileName: "n", updatedAt: new Date().toISOString(), rankings: [makeRanking({ kind: "music", items })] };
+    const parsed = parseProfile(profile);
+    expect(parsed.rankings[0].items).toEqual(items);
+  });
+
+  it("posterUrls 与未知字段仍然进不去库", () => {
+    expect(toRankedItems([{ id: "a", title: "A", rank: 1, posterUrls: ["https://x/1.jpg"], cacheKey: "k" }]))
+      .toEqual([{ id: "a", title: "A", rank: 1 }]);
+  });
+});
+
+/** readProfile 用的最小 Storage 替身。 */
+function memoryStorage(seed: Record<string, string> = {}): Storage {
+  const map = new Map(Object.entries(seed));
+  return {
+    get length() { return map.size; },
+    key: (index: number) => [...map.keys()][index] ?? null,
+    getItem: (key: string) => map.get(key) ?? null,
+    setItem: (key: string, value: string) => { map.set(key, value); },
+    removeItem: (key: string) => { map.delete(key); },
+    clear: () => { map.clear(); },
+  } as Storage;
+}
+
+describe("readProfile 绝不删除用户数据", () => {
+  const broken = "{ 这不是 JSON";
+
+  it("解析失败时保留原值，只额外留一份备份", () => {
+    const storage = memoryStorage({ [LIBRARY_KEY]: broken });
+    expect(readProfile(storage)).toBeNull();
+    expect(storage.getItem(LIBRARY_KEY)).toBe(broken);   // 旧版本会在这里 removeItem
+    expect(storage.getItem(RECOVERY_KEY)).toBe(broken);
+  });
+
+  it("主键缺失时从备份恢复，并把主键写回", () => {
+    const profile = { version: 2, profileId: "p", profileName: "n", updatedAt: new Date().toISOString(), rankings: [makeRanking()] };
+    const storage = memoryStorage({ [RECOVERY_KEY]: JSON.stringify(profile) });
+    const restored = readProfile(storage);
+    expect(restored?.rankings).toHaveLength(1);
+    expect(storage.getItem(LIBRARY_KEY)).toBe(JSON.stringify(profile));
+  });
+
+  it("备份也读不回来时安静返回，不抛错、不改动存储", () => {
+    const storage = memoryStorage({ [RECOVERY_KEY]: broken });
+    expect(readProfile(storage)).toBeNull();
+    expect(storage.getItem(RECOVERY_KEY)).toBe(broken);
+  });
+
+  it("坏主键不会覆盖已有的好备份", () => {
+    const profile = { version: 2, profileId: "p", profileName: "n", updatedAt: new Date().toISOString(), rankings: [makeRanking()] };
+    const goodBackup = JSON.stringify(profile);
+    const storage = memoryStorage({ [LIBRARY_KEY]: broken, [RECOVERY_KEY]: goodBackup });
+    // 主键读不回来 → 用备份兜底；坏主键原地保留，也不会把好备份顶掉。
+    expect(readProfile(storage)?.rankings).toHaveLength(1);
+    expect(storage.getItem(RECOVERY_KEY)).toBe(goodBackup);
+    expect(storage.getItem(LIBRARY_KEY)).toBe(broken);
   });
 });
 

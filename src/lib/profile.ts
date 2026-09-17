@@ -1,5 +1,5 @@
 import { mediaLabels, type Artwork, type MediaKind } from "../data/media";
-import { MAX_PAYLOAD_BYTES, toStoredWork, toStoredWorks } from "../../shared/storedItem";
+import { MAX_PAYLOAD_BYTES, toStoredWork, toStoredWorks, type StoredWork } from "../../shared/storedItem";
 
 export interface RankedArtwork extends Artwork { rank: number }
 export interface RankingExport {
@@ -20,43 +20,100 @@ export interface ArtisticProfile {
 }
 
 export const LIBRARY_KEY = "art-rank:library:v2";
+/**
+ * 解析失败时的备份键。
+ * 旧版本在解析失败时会**删除主键**并把原文丢到这里，于是"刷新后榜单消失"；
+ * 现在主键永不删除，读取端还会在解析放宽后从这个备份把画像恢复回来。
+ */
+export const RECOVERY_KEY = `${LIBRARY_KEY}:recovery`;
 /** 与 Worker 端共用同一个字节上限，避免两侧口径漂移。 */
 export const MAX_PROFILE_BYTES = MAX_PAYLOAD_BYTES;
+/** 单份榜单的作品上限；超出时截断并告警，而不是让整份画像失效。 */
+const MAX_RANKING_ITEMS = 1000;
+/** 画像里的榜单上限（产品限制），超出时保留前 N 份而不是整体作废。 */
+const MAX_RANKINGS = 20;
 const record = (value: unknown): value is Record<string, unknown> => typeof value === "object" && value !== null && !Array.isArray(value);
 const text = (value: unknown, max = 160): value is string => typeof value === "string" && value.trim().length > 0 && value.length <= max;
 export const normalizeTitle = (value: string) => value.normalize("NFKC").trim().toLocaleLowerCase().replace(/\s+/g, " ");
 const validDate = (value: unknown): value is string => typeof value === "string" && value.length < 40 && Number.isFinite(Date.parse(value));
 
 /**
- * 作品数组 → 可落库榜单条目。客户端唯一入口，内部就是 `shared/storedItem` 的
- * 白名单投影（与 Worker 端同一份实现）。
+ * 作品身份（**全仓唯一的去重口径**）：`标题|年份|作者` 的规范化形式。
  *
- * 断言只是因为 `RankedArtwork` 把 `id`/`rank` 标成必填，而白名单刻意允许
- * 「我的清单」那种无 rank 的形状；真实榜单条目两者都在。
+ * 读取端（parseRanking）、写入端（toRankedItems）、批量导入、云端清单
+ * 必须共用它。两侧口径漂移正是「保存成功、刷新后整份画像消失」的根因：
+ * 网易云导入不带年份，同名同歌手的曲目 identity 必然相撞，而写侧放行、读侧致命。
  */
-export const toRankedItems = (works: unknown): RankedArtwork[] => toStoredWorks(works) as RankedArtwork[];
+export const workIdentity = (title: string, year?: unknown, creator?: unknown): string =>
+  `${normalizeTitle(title)}|${year ?? ""}|${normalizeTitle(String(creator ?? ""))}`;
 
+/** 按 identity 去重，保留首次出现；返回新数组，不修改入参。 */
+export function dedupeByTitle<T extends { title: string; year?: unknown; creator?: unknown }>(works: readonly T[]): T[] {
+  const seen = new Set<string>();
+  const kept: T[] = [];
+  for (const work of works) {
+    const identity = workIdentity(work.title, work.year, work.creator);
+    if (seen.has(identity)) continue;
+    seen.add(identity);
+    kept.push(work);
+  }
+  return kept;
+}
+
+/**
+ * 作品数组 → 可落库榜单条目：白名单投影 → 按 identity 去重 → 补齐 id → 重排 rank。
+ *
+ * 这是**写入端唯一入口**。返回值保证满足 `parseRanking` 的全部约束
+ * （字段合法、rank 连续、无重复身份、id 存在），因此「写进去的一定读得出来」。
+ * 以前这里只做字段投影，重复曲目会原样落库，然后在下次读取时把整份画像带崩。
+ */
+export function toRankedItems(works: unknown): RankedArtwork[] {
+  const kept = dedupeByTitle(toStoredWorks(works));
+  // 断言只是因为 RankedArtwork 把 id/rank 标成必填；两者在这里都已补齐。
+  return kept.map((work, index) => ({ ...work, id: work.id ?? `auto-${index + 1}`, rank: index + 1 })) as RankedArtwork[];
+}
+
+/**
+ * 解析一份榜单。
+ *
+ * **宽容原则**：单条作品的问题只丢弃那一条，绝不让整份画像失效。
+ * 旧版本在这里抛 "Duplicate artwork" / "Ranks must be contiguous"，而读取方
+ * （readProfile）把任何异常都当成「本地数据损坏」并删掉用户的整份画像——
+ * 于是 150 首网易云歌单里几对同名同歌手（都无年份）的曲目会让刷新后的 /myself 清空。
+ */
 function parseRanking(value: unknown): RankingExport {
   if (!record(value) || value.version !== 1 || !text(value.profileId) || !text(value.profileName, 80) ||
     !text(value.collectionTitle) || !Object.hasOwn(mediaLabels, String(value.kind)) || !validDate(value.createdAt) ||
-    !Array.isArray(value.items) || value.items.length < 1 || value.items.length > 1000) throw new Error("Invalid ranking");
+    !Array.isArray(value.items) || value.items.length < 1) throw new Error("Invalid ranking");
   const ids = new Set<string>();
-  const titles = new Set<string>();
-  const ranks = new Set<number>();
-  const items = value.items.map((item): RankedArtwork => {
-    if (!record(item) || !text(item.id) || !text(item.title) || !Number.isInteger(item.rank) ||
-      Number(item.rank) < 1 || Number(item.rank) > (value.items as unknown[]).length || ids.has(item.id) || ranks.has(Number(item.rank)) ||
-      (item.creator !== undefined && !text(item.creator)) || (item.year !== undefined && (!Number.isInteger(item.year) || Number(item.year) < 1 || Number(item.year) > 2200))) throw new Error("Invalid artwork");
-    const identity = `${normalizeTitle(item.title)}|${item.year ?? ""}|${normalizeTitle(String(item.creator ?? ""))}`;
-    if (titles.has(identity)) throw new Error("Duplicate artwork");
-    ids.add(item.id); titles.add(identity); ranks.add(Number(item.rank));
-    // 唯一可落库形状：posterUrls 不在白名单里，本地重复的白名单随之删除。
-    // 海报由 Poster 组件按需解析，或由读取接口的旁路数组提供。
+  const identities = new Set<string>();
+  const ranked: Array<{ work: StoredWork; rank: number }> = [];
+  let skipped = 0;
+  for (const item of value.items.slice(0, MAX_RANKING_ITEMS) as unknown[]) {
+    const reject = () => { skipped += 1; };
+    if (!record(item) || !text(item.id) || !text(item.title) || !Number.isInteger(item.rank) || Number(item.rank) < 1 ||
+      ids.has(item.id) ||
+      (item.creator !== undefined && !text(item.creator)) ||
+      (item.year !== undefined && (!Number.isInteger(item.year) || Number(item.year) < 1 || Number(item.year) > 2200))) { reject(); continue; }
+    const identity = workIdentity(item.title, item.year, item.creator);
+    // 重复曲目：**合并**（保留首次出现），而不是作废整份榜单。
+    if (identities.has(identity)) { reject(); continue; }
     const stored = toStoredWork(item);
-    if (!stored) throw new Error("Invalid artwork");
-    return stored as RankedArtwork;
-  }).sort((a, b) => a.rank - b.rank);
-  if (items.some((item, index) => item.rank !== index + 1)) throw new Error("Ranks must be contiguous");
+    if (!stored) { reject(); continue; }
+    ids.add(item.id);
+    identities.add(identity);
+    ranked.push({ work: stored, rank: Number(item.rank) });
+  }
+  // 一条都没剩说明这份榜单确实不可用；此时跳过它比删掉整份画像更安全。
+  if (!ranked.length) throw new Error("Invalid ranking");
+  // 跳过/合并之后 rank 必然出现空档：按原 rank 排序后重排为 1..n，
+  // 让「读取结果」永远满足 rank 连续这一不变量。
+  ranked.sort((a, b) => a.rank - b.rank);
+  const items = ranked.map((entry, index) => ({ ...entry.work, rank: index + 1 })) as RankedArtwork[];
+  if (skipped || value.items.length > MAX_RANKING_ITEMS) {
+    console.warn(`[parseRanking] ${String(value.collectionTitle)}: merged or dropped ${skipped} item(s)`
+      + (value.items.length > MAX_RANKING_ITEMS ? `, truncated to ${MAX_RANKING_ITEMS}` : ""));
+  }
   return { version: 1, profileId: value.profileId, profileName: value.profileName, kind: value.kind as MediaKind, collectionTitle: value.collectionTitle, createdAt: value.createdAt, items };
 }
 
@@ -67,8 +124,15 @@ export function parseProfile(value: unknown): ArtisticProfile {
     return { version: 2, profileId: ranking.profileId, profileName: ranking.profileName, updatedAt: ranking.createdAt, rankings: [ranking] };
   }
   if (value.version !== 2 || !text(value.profileId) || !text(value.profileName, 80) || !validDate(value.updatedAt) ||
-    !Array.isArray(value.rankings) || value.rankings.length < 1 || value.rankings.length > 20) throw new Error("Invalid profile");
-  const rankings = value.rankings.map(parseRanking);
+    !Array.isArray(value.rankings) || value.rankings.length < 1) throw new Error("Invalid profile");
+  const rankings: RankingExport[] = [];
+  let skipped = Math.max(0, value.rankings.length - MAX_RANKINGS);
+  // 一份榜单坏掉不再连坐整份画像：能救回来的榜单全部保留。
+  for (const entry of value.rankings.slice(0, MAX_RANKINGS)) {
+    try { rankings.push(parseRanking(entry)); } catch { skipped += 1; }
+  }
+  if (!rankings.length) throw new Error("Invalid profile");
+  if (skipped) console.warn(`[parseProfile] skipped ${skipped} unusable ranking(s)`);
   return { version: 2, profileId: value.profileId, profileName: value.profileName, updatedAt: value.updatedAt, rankings };
 }
 
@@ -79,13 +143,28 @@ export function readProfile(storage: Storage): ArtisticProfile | null {
       try {
         return parseProfile(JSON.parse(stored));
       } catch (e) {
-        console.error("[readProfile] parse failed; preserving raw data for recovery:", e);
-        try {
-          storage.setItem(`${LIBRARY_KEY}:recovery`, stored);
-          storage.removeItem(LIBRARY_KEY);
-        } catch { /* Keep the original value if the backup cannot be written. */ }
-        return null;
+        // **绝不删除用户数据**。旧版本在这里 removeItem(LIBRARY_KEY)：任何一次解析
+        // 异常都会把整份画像从浏览器里抹掉（"刷新后榜单又消失了"就是它）。
+        // 现在原值原地保留，而且只用它填补**空着的**备份位，绝不覆盖已有的好备份。
+        console.error("[readProfile] stored profile could not be parsed; keeping it in place:", e);
+        if (!storage.getItem(RECOVERY_KEY)) {
+          try { storage.setItem(RECOVERY_KEY, stored); } catch { /* 备份失败不影响主流程。 */ }
+        }
       }
+    }
+    // 主键不可用（不存在或读不回来）时用备份兜底：旧版本正是「解析失败 → 删主键 →
+    // 留备份」，所以被它误删的画像在这里还能救回来。
+    const backup = storage.getItem(RECOVERY_KEY);
+    if (backup) {
+      try {
+        const restored = parseProfile(JSON.parse(backup));
+        if (!stored) {
+          // 主键是真的没了：把备份写回去，让后续 persist 有落点。
+          try { storage.setItem(LIBRARY_KEY, backup); } catch { /* 写回失败不影响本次使用。 */ }
+          console.warn("[readProfile] recovered profile from the recovery backup");
+        }
+        return restored;
+      } catch { /* 备份也读不回来：保持原样，继续走旧 key 迁移。 */ }
     }
     // Migrate earlier single-medium exports by timestamp, never by storage key order.
     const legacy: RankingExport[] = [];

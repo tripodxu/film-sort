@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useMemo } from "react";
 import { createRankingState, chooseSide, deferWork, deserializeRankingState, getCurrentComparison, getRankingProgress, getRankingResult, serializeRankingState, skipWork, undoLastAction, type RankingState } from "./ranking";
 import { getCollectionsByKind, mediaLabels, type Artwork, type MediaCollection, type MediaKind } from "../data/media";
-import { mergeRanking, toRankedItems, type ArtisticProfile, type RankingExport } from "./profile";
+import { dedupeByTitle, mergeRanking, toRankedItems, workIdentity, type ArtisticProfile, type RankingExport } from "./profile";
 import { track, type Locale } from "./utils";
 
 const DRAFT_KEY = "art-rank:draft:v2";
@@ -128,16 +128,21 @@ export function useSorting(deps: SortingDeps) {
     const d = depsRef.current;
     const kept = customWorks.filter((w) => !customDeselected.includes(w.id));
     if (!kept.length) { d.setNotice(d.t("清单为空。", "The list is empty.")); return; }
+    // 唯一可落库形状：白名单投影 + 按 identity 去重 + 重排 rank。
+    // 去重必须发生在写入侧，否则重复曲目会在下次读取时把整份画像带崩。
+    const items = toRankedItems(kept.map((w, i) => ({ ...w, rank: i + 1 })));
+    const merged = kept.length - items.length;
     const ranking: RankingExport = {
       version: 1, profileId: d.getProfile()?.profileId ?? crypto.randomUUID(), profileName: d.profileName.trim() || d.t("我的艺术人格", "My artistic profile"), kind,
       collectionTitle: `我的${mediaLabels[kind].label}清单`, createdAt: new Date().toISOString(),
-      // 唯一可落库形状：posterUrls 不在白名单里，因此这里不可能把海报地址写进画像。
-      items: toRankedItems(kept.map((w, i) => ({ ...w, rank: i + 1 }))),
+      items,
     };
     d.persist(mergeRanking(d.getProfile(), ranking));
     d.setActiveKind(kind);
     void saveCollectionCloudFn({ id: `custom-${kind}-${crypto.randomUUID()}`, kind, source: "custom", title: ranking.collectionTitle, description: "", topN: Math.min(10, kept.length), works: kept });
-    d.setNotice(d.t(`已保存 ${kept.length} 件作品为榜单（按导入顺序，未排序）。`, `Saved ${kept.length} works as a list (import order, unsorted).`));
+    d.setNotice(merged > 0
+      ? d.t(`已保存 ${items.length} 件作品为榜单（按导入顺序，未排序）；另有 ${merged} 件与前面的作品同名同作者，已自动合并。`, `Saved ${items.length} works (import order, unsorted); ${merged} duplicate(s) were merged.`)
+      : d.t(`已保存 ${items.length} 件作品为榜单（按导入顺序，未排序）。`, `Saved ${items.length} works as a list (import order, unsorted).`));
     d.navigateTo("profile");
   }
 
@@ -149,15 +154,19 @@ export function useSorting(deps: SortingDeps) {
     if (!collection) return;
     const kept = collection.works.filter((w) => selected.includes(w.id));
     if (kept.length < 1) { d.setNotice(d.t("请至少选择 1 件作品。", "Select at least 1 work.")); return; }
+    // 唯一可落库形状 + 按 identity 去重，见 saveCustomWorksFn 的说明。
+    const items = toRankedItems(kept.map((w, i) => ({ ...w, rank: i + 1 })));
+    const merged = kept.length - items.length;
     const ranking: RankingExport = {
       version: 1, profileId: d.getProfile()?.profileId ?? crypto.randomUUID(), profileName: d.profileName.trim() || d.t("我的艺术人格", "My artistic profile"), kind: collection.kind,
       collectionTitle: collection.title, createdAt: new Date().toISOString(),
-      // 唯一可落库形状：posterUrls 不在白名单里，因此这里不可能把海报地址写进画像。
-      items: toRankedItems(kept.map((w, i) => ({ ...w, rank: i + 1 }))),
+      items,
     };
     d.persist(mergeRanking(d.getProfile(), ranking));
     d.setActiveKind(collection.kind);
-    d.setNotice(d.t(`已保存 ${kept.length} 件作品为榜单（按清单顺序，未排序）。`, `Saved ${kept.length} works as a list (list order, unsorted).`));
+    d.setNotice(merged > 0
+      ? d.t(`已保存 ${items.length} 件作品为榜单（按清单顺序，未排序）；另有 ${merged} 件与前面的作品同名同作者，已自动合并。`, `Saved ${items.length} works (list order, unsorted); ${merged} duplicate(s) were merged.`)
+      : d.t(`已保存 ${items.length} 件作品为榜单（按清单顺序，未排序）。`, `Saved ${items.length} works as a list (list order, unsorted).`));
     d.navigateTo("profile");
   }
 
@@ -166,12 +175,20 @@ export function useSorting(deps: SortingDeps) {
     const normalized = works.map((w) => ({ id: w.id || `imp-${Math.random().toString(36).slice(2, 10)}`, title: w.title, creator: w.creator, year: w.year, posterUrls: w.posterUrls ?? (w.poster_url ? [w.poster_url] : undefined) })) as Array<Artwork & { type?: string }>;
     const matching = normalized.filter((w) => !w.type || w.type === kind);
     const others = normalized.length - matching.length;
-    setCustomWorks((cur) => { const seen = new Set(cur.map((w) => w.title)); return [...cur, ...matching.filter((w) => !seen.has(w.title))]; });
-    if (silent) return matching.length;
+    // **批内去重**：原先的 seen 只由「已有清单」构建，从不把本批已接受的作品加进去，
+    // 于是同一批导入里的同名曲目全部放行——150 首网易云歌单里出现两份「童话/光良」
+    // 就是这么来的（网易云导入不带 year，identity 少了唯一区分维度）。
+    // 口径与读写两侧共用 workIdentity，避免再次单侧漂移。
+    const unique = dedupeByTitle(matching);
+    setCustomWorks((cur) => {
+      const seen = new Set(cur.map((w) => workIdentity(w.title, w.year, w.creator)));
+      return [...cur, ...unique.filter((w) => !seen.has(workIdentity(w.title, w.year, w.creator)))];
+    });
+    if (silent) return unique.length;
     d.setNotice(others > 0
-      ? d.t(`已加入 ${matching.length} 件${d.label(kind)}作品；另有 ${others} 件其他媒介，切换媒介后可重新导入。`, `Added ${matching.length} ${d.label(kind)} works; ${others} other media — switch and re-import.`)
-      : d.t(`已加入 ${matching.length} 件作品。`, `Added ${matching.length} works.`));
-    return matching.length;
+      ? d.t(`已加入 ${unique.length} 件${d.label(kind)}作品；另有 ${others} 件其他媒介，切换媒介后可重新导入。`, `Added ${unique.length} ${d.label(kind)} works; ${others} other media — switch and re-import.`)
+      : d.t(`已加入 ${unique.length} 件作品。`, `Added ${unique.length} works.`));
+    return unique.length;
   }
 
   /** 分批导入引擎：按 offset/nextOffset 游标循环拉取，边拉边入清单并更新进度，直到达上限/无更多/出错 */
@@ -227,7 +244,10 @@ export function useSorting(deps: SortingDeps) {
     const token = depsRef.current.accountToken;
     if (!token) return;
     try {
-      const response = await fetch("/api/account/collections", { method: "POST", headers: { "content-type": "application/json", authorization: `Bearer ${token}` }, body: JSON.stringify({ kind: collectionToSave.kind, title: collectionToSave.title, description: collectionToSave.description, items: collectionToSave.works }) });
+      // 云端清单也按同一口径去重后再上传：历史清单里可能已经存了重复曲目
+      // （本轮事故的来源），顺手把库里那份也洗干净。
+      const items = dedupeByTitle(collectionToSave.works);
+      const response = await fetch("/api/account/collections", { method: "POST", headers: { "content-type": "application/json", authorization: `Bearer ${token}` }, body: JSON.stringify({ kind: collectionToSave.kind, title: collectionToSave.title, description: collectionToSave.description, items }) });
       if (response.ok) void loadCloudCollectionsFn();
     } catch { /* */ }
   }
@@ -238,7 +258,12 @@ export function useSorting(deps: SortingDeps) {
     try {
       const response = await fetch("/api/account/collections", { headers: { authorization: `Bearer ${token}` } });
       const data = response.ok ? await response.json() as { collections?: Array<{ id: number; kind: MediaKind; title: string; description: string; items: MediaCollection["works"] }> } : null;
-      setCloudCollections((data?.collections ?? []).map((item) => ({ remoteId: item.id, id: `cloud-${item.id}`, kind: item.kind, source: "custom", title: item.title, description: item.description, topN: Math.min(10, item.items.length), works: item.items })));
+      // 云端清单也要过一遍去重：历史清单里可能已经存了重复曲目（本轮事故的来源），
+      // 载入时合并，避免用户点进来又保存一次同样的坏数据。
+      setCloudCollections((data?.collections ?? []).map((item) => {
+        const works = dedupeByTitle(item.items ?? []);
+        return { remoteId: item.id, id: `cloud-${item.id}`, kind: item.kind, source: "custom", title: item.title, description: item.description, topN: Math.min(10, works.length), works };
+      }));
     } catch { setCloudCollections([]); }
   }
 
@@ -297,13 +322,22 @@ export function useSorting(deps: SortingDeps) {
     }
     setRanking(next);
     if (next.completed) {
+      // 排序结果同样必须走唯一的写入端入口：这里以前直接把 `{...worksById.get(id)!}`
+      // 塞进画像，既不做 identity 去重、也不做白名单投影——重复曲目会让整份画像
+      // 在下次读取时被判为损坏，posterUrls 也会绕过清洗写进 localStorage。
+      const items = toRankedItems(getRankingResult(next).flatMap((id, index) => {
+        const work = worksById.get(id);
+        return work ? [{ ...work, rank: index + 1 }] : [];
+      }));
       const result: RankingExport = {
         version: 1, profileId: crypto.randomUUID(), profileName: d.profileName.trim() || d.t("我的艺术人格", "My artistic profile"), kind: collection.kind,
         collectionTitle: collection.title, createdAt: new Date().toISOString(),
-        items: getRankingResult(next).map((id, index) => ({ ...worksById.get(id)!, rank: index + 1 })),
+        items,
       };
       d.persist(mergeRanking(d.getProfile(), result)); d.setActiveKind(result.kind); setDraft(null);
       try { localStorage.removeItem(DRAFT_KEY); } catch { /* */ }
+      const merged = getRankingResult(next).length - items.length;
+      if (merged > 0) d.setNotice(d.t(`排序完成，但清单里有 ${merged} 件作品同名同作者，已自动合并。`, `Ranking saved — ${merged} duplicate(s) were merged.`));
       d.navigateTo(d.getPeer() && collection.id.startsWith("peer-") ? "compare" : "profile");
       track("ranking_completed", { mode: kind, item_count: next.sourceIds.length, top_k: next.topN, comparison_count: next.comparisonCount });
     }

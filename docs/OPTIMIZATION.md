@@ -132,6 +132,35 @@ async function generateQR(url: string) {
 - 首页 3D 光球（OrbScene）已做 lazy load，但 CSS 中 `.orb-scene-fallback` 的背景色应与光球初始帧一致，避免闪烁
 - 考虑给首页加 `Suspense` fallback 的骨架屏
 
+### 2.5 画像读写的单侧校验（✅ 已修复）
+
+**现象**：云端清单（150 首网易云歌单）→「不排序直接成榜单」→ 跳转 `/myself` 能看到榜单，**刷新一次就整份画像消失**，且云端也恢复不回来。
+
+**根因**：写读两侧对"合法榜单"的定义不一致，且读侧的失败代价是删除用户数据。
+
+| 环节 | 旧行为 |
+|---|---|
+| 导入 | `applyImportedWorks` 的 `seen` 只由「已有清单」构建，**不加入本批已接受的作品** → 同一批里的同名曲目全部放行 |
+| 写入 | 三处保存路径只重排 `rank`，**不做 identity 去重** |
+| 读取 | `parseRanking` 遇重复判 `Duplicate artwork` 并 **throw**；`readProfile` 把任何异常当作"本地数据损坏"，把原文丢进 `:recovery` 后 **`removeItem(LIBRARY_KEY)`** → 整份画像消失（`parseProfile` 是整份画像一起校验，一份榜单坏掉会连坐全部） |
+| 云端 | 云端那份是同一份内存数据，`parseProfile` 同样抛错 → 换浏览器也恢复不出来 |
+
+网易云导入**不带 `year`**，而 identity 是 `标题|年份|作者`，于是「童话/光良」「水手/郑智化」「大城小爱/王力宏」「后来/刘若英」「绿光/孙燕姿」「广岛之恋/莫文蔚/张洪量」这类同名同歌手曲目必然相撞（线上帖子 32 里可逐条看到）。
+
+**修复**（口径收敛到唯一实现 + 读侧永不删数据）：
+
+| 位置 | 改动 |
+|---|---|
+| `profile.ts` `workIdentity()` | 全仓**唯一**的去重口径，读写两侧、导入、云端清单共用 |
+| `profile.ts` `toRankedItems()` | **写入端唯一入口**：白名单投影 → identity 去重 → 补齐 id → 重排 `rank`。返回值保证满足 `parseRanking` 的全部约束，即"写进去的一定读得出来" |
+| `profile.ts` `parseRanking()` | 单条作品的问题只丢那一条并重排 `rank`；重复曲目**合并**而非作废整份榜单 |
+| `profile.ts` `parseProfile()` | 一份榜单坏掉只跳过它，不再连坐整份画像 |
+| `profile.ts` `readProfile()` | **绝不删除用户数据**：主键原地保留，坏主键不覆盖已有好备份；主键真丢了时从 `:recovery` 自动恢复（旧版本误删的画像因此能救回来） |
+| `useSorting.ts` | 排序完成路径改走 `toRankedItems`（此前既不白名单也不去重，还会把 `posterUrls` 写进 localStorage）；导入、云端上传/下载均按同一口径去重；合并了重复项时**明确提示用户**而不是静默改数据 |
+| `App.tsx` | `useAuth` / `useSorting` 的 `persist` 不再各写一份未清洗实现，统一复用含白名单的 `persist`；清除数据时一并清掉备份键 |
+
+**回归护栏**：`src/lib/profile.test.ts` 用线上帖子 32 里真实相撞的曲目做 fixture，钉住「重复→合并、脏数据→单条丢弃、写入端产物必可被读取端接受、读取端永不删数据」。
+
 ---
 
 ## 3. 后端优化
