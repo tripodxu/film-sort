@@ -12,3 +12,5 @@ dist/
 docs/old/
 plaza.json
 _doulist_probe*
+.goatgauge-data/
+.zcode/
