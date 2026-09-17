@@ -102,32 +102,21 @@ async function generateQR(url: string) {
 
 ### 2.3 海报加载优化
 
-**现状**：每个 `Poster` 组件独立请求 `/api/posters`，`requests` Map 缓存在内存中，页面刷新后丢失。
+**现状**：✅ 前端部分已完成，服务端持久化收尾中。**完整方案见 [`PLAN-poster-pipeline.md`](./PLAN-poster-pipeline.md)。**
 
-**建议**：
-- 将海报 URL 缓存到 `sessionStorage`，跨组件和页面刷新共享
-- 或使用 IndexedDB 做持久化缓存（适合反复访问的场景）
-- 批量预取：在榜单选择页预取当前页面所有海报的 URL
+| 能力 | 实现 | 状态 |
+|------|------|------|
+| 批量解析 | `POST /api/posters/batch`，一次最多 300 首，回显 `keys` 保证位置对齐 | ✅ |
+| 客户端分块 | 批量上限 30（= 分页粒度），避免一次请求压垮上游 | ✅ |
+| 会话缓存 | `sessionStorage`（`art-rank:poster-cache`）+ 内存 `resolvedPosters` | ✅ |
+| 服务端缓存 | L1 isolate LRU（24h）+ L2 Edge Cache，键 `type\|title\|english\|year` | ✅ |
+| 分页懒加载 | `RankingDetail` 30 首/页 + 滚动续载 | ✅ |
+| 并发闸门 | 批量 fetch 在途 ≤ 8 | ✅ |
+| 持久化 | `poster_urls` 侧表（`migrations/0022`） | ⚠️ 见下 |
 
-```typescript
-// sessionStorage 缓存示例
-const POSTER_CACHE_KEY = "art-rank:poster-cache";
+**⚠️ 待处理（线上活跃风险）**：`attachStoredPosterUrls()` 会把海报地址**注回 `post.items`**，而 `plaza_posts` / `user_collections` / `share` 共 4 条写入路径没有剥离护栏 —— 作者编辑帖子即会把海报地址写回库，重演 512KB 故障（`51dfc8d` 修的就是这条链）。
 
-function getCachedPosters(key: string): string[] | null {
-  try {
-    const cache = JSON.parse(sessionStorage.getItem(POSTER_CACHE_KEY) ?? "{}");
-    return cache[key] ?? null;
-  } catch { return null; }
-}
-
-function setCachedPosters(key: string, urls: string[]) {
-  try {
-    const cache = JSON.parse(sessionStorage.getItem(POSTER_CACHE_KEY) ?? "{}");
-    cache[key] = urls;
-    sessionStorage.setItem(POSTER_CACHE_KEY, JSON.stringify(cache));
-  } catch { /* Ignore quota errors */ }
-}
-```
+**根因**：仓库里存在三套各写各的"可落库形状"，且体积判定口径不一致（`plaza.ts` 用 `raw.length`，其余用字节）。修法见 `PLAN-poster-pipeline.md` Phase 0。
 
 ### 2.4 首屏渲染
 
@@ -591,6 +580,13 @@ jobs:
 - [ ] other 类别的 /api/posters 解析路径未接维基（仅详情带图；搜索候选带图已可用）
 - [ ] 网易云扫码 risk 判定后 unikey 已销毁，「再试一次扫码」会重新签发——可保留原 unikey 轮询恢复窗口
 - [ ] doubanSearch 无 music suggest（/api/douban/music/suggest 缺失）
+
+### 海报管线（详见 [PLAN-poster-pipeline.md](./PLAN-poster-pipeline.md)）
+- [ ] **Phase 0（最高优先级）**：海报地址走旁路不进 `items` + 统一"可落库白名单"与唯一编码出口 + 静态守卫测试 —— 修当前线上活跃风险
+- [ ] Phase 1：批量/单条接口先查 `poster_urls` 再解析（命中即零回源）
+- [ ] Phase 2：失败分类（`throttled` 15s / `absent` 24h）+ 刷新即重试 + 批量失败入 `poster_errors`
+- [ ] Phase 3：`poster_misses` 失败队列 + cron 定时补温（让覆盖率无需人工访问即可收敛）
+- [ ] 统一 512KB 体积判定口径（`plaza.ts:121,169` 用 `raw.length`，其余用字节）
 
 ### 文档
 - [ ] FEATURES.md 的回归走查清单尚未做成可自动化脚本（Playwright）
