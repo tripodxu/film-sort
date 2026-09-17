@@ -87,35 +87,31 @@ function parseVaultKey(value: string | null | undefined): Uint8Array | null {
   return Uint8Array.from({ length: 32 }, (_, i) => Number.parseInt(value.slice(i * 2, i * 2 + 2), 16));
 }
 
-async function vaultKey(env: Env): Promise<CryptoKey | null> {
-  if (!env.DB) return null;
+async function vaultKeys(env: Env): Promise<CryptoKey[]> {
+  if (!env.DB) return [];
   const db = env.DB;
-  // Prefer an environment secret. The legacy database key remains readable so
-  // existing encrypted cookies can still be decrypted during migration.
   const envKey = parseVaultKey(env.COOKIE_ENC_KEY);
-  if (env.COOKIE_ENC_KEY && !envKey) return null;
-  let rawKey = envKey;
-  if (!rawKey) {
-    const readKey = () => db.prepare("SELECT value FROM admin_config WHERE key = 'cookie_enc_key'").first<{ value: string }>();
-    let stored = await readKey();
-    if (!parseVaultKey(stored?.value)) {
-      const generated = crypto.getRandomValues(new Uint8Array(32));
-      const hex = Array.from(generated, (b) => b.toString(16).padStart(2, "0")).join("");
-      await db.prepare("INSERT OR IGNORE INTO admin_config (key, value) VALUES ('cookie_enc_key', ?)").bind(hex).run();
-      // Another isolate may have won the insert; always use the value that is
-      // actually present after the atomic insert.
-      stored = await readKey();
-    }
-    rawKey = parseVaultKey(stored?.value);
+  if (env.COOKIE_ENC_KEY && !envKey) return [];
+  const readKey = () => db.prepare("SELECT value FROM admin_config WHERE key = 'cookie_enc_key'").first<{ value: string }>();
+  let legacyKey = parseVaultKey((await readKey())?.value);
+  if (!envKey && !legacyKey) {
+    const generated = crypto.getRandomValues(new Uint8Array(32));
+    const hex = Array.from(generated, (b) => b.toString(16).padStart(2, "0")).join("");
+    await db.prepare("INSERT OR IGNORE INTO admin_config (key, value) VALUES ('cookie_enc_key', ?)").bind(hex).run();
+    legacyKey = parseVaultKey((await readKey())?.value);
   }
-  if (!rawKey) return null;
-  try {
-    return await crypto.subtle.importKey("raw", rawKey, { name: "AES-GCM" }, false, ["encrypt", "decrypt"]);
-  } catch { return null; }
+  const rawKeys = [envKey, legacyKey].filter((key): key is Uint8Array => !!key);
+  const keys: CryptoKey[] = [];
+  for (const rawKey of rawKeys) {
+    try {
+      keys.push(await crypto.subtle.importKey("raw", rawKey, { name: "AES-GCM" }, false, ["encrypt", "decrypt"]));
+    } catch { /* try the next key */ }
+  }
+  return keys;
 }
 
 export async function saveProviderCookie(env: Env, userId: number, provider: string, cookie: string): Promise<void> {
-  const key = await vaultKey(env);
+  const [key] = await vaultKeys(env);
   if (!key || !env.DB) return;
   const iv = crypto.getRandomValues(new Uint8Array(12));
   const encrypted = await crypto.subtle.encrypt({ name: "AES-GCM", iv }, key, encoder.encode(cookie));
@@ -126,20 +122,21 @@ export async function saveProviderCookie(env: Env, userId: number, provider: str
 }
 
 export async function loadProviderCookie(env: Env, userId: number, provider: string): Promise<string | null> {
-  const key = await vaultKey(env);
-  if (!key || !env.DB) return null;
+  const keys = await vaultKeys(env);
+  if (!keys.length || !env.DB) return null;
   const row = await env.DB.prepare("SELECT data_encrypted FROM user_cookie_vault WHERE user_id = ? AND provider = ?").bind(userId, provider).first<{ data_encrypted: string }>();
   if (!row) return null;
   const [hex, ivHex] = row.data_encrypted.split("|");
   if (!hex || !ivHex) return null;
-  try {
-    const decrypted = await crypto.subtle.decrypt(
-      { name: "AES-GCM", iv: Uint8Array.from({ length: ivHex.length / 2 }, (_, i) => Number.parseInt(ivHex.slice(i * 2, i * 2 + 2), 16)) },
-      key,
-      Uint8Array.from({ length: hex.length / 2 }, (_, i) => Number.parseInt(hex.slice(i * 2, i * 2 + 2), 16)),
-    );
-    return new TextDecoder().decode(decrypted);
-  } catch { return null; }
+  const iv = Uint8Array.from({ length: ivHex.length / 2 }, (_, i) => Number.parseInt(ivHex.slice(i * 2, i * 2 + 2), 16));
+  const ciphertext = Uint8Array.from({ length: hex.length / 2 }, (_, i) => Number.parseInt(hex.slice(i * 2, i * 2 + 2), 16));
+  for (const key of keys) {
+    try {
+      const decrypted = await crypto.subtle.decrypt({ name: "AES-GCM", iv }, key, ciphertext);
+      return new TextDecoder().decode(decrypted);
+    } catch { /* Try the legacy database key after an env-key migration. */ }
+  }
+  return null;
 }
 
 export async function deleteProviderCookie(env: Env, userId: number, provider: string): Promise<void> {
