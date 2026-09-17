@@ -11,21 +11,6 @@
   </head>
   <body>
     <div id="root"></div>
-    <script>
-      // 主题预初始化：React 挂载前读取偏好，避免首帧闪烁（默认 modern = 现行深色）
-      try {
-        var t = localStorage.getItem("art-rank:theme") || "modern";
-        if (t !== "modern") document.documentElement.setAttribute("data-theme", t);
-      } catch (e) {}
-    </script>
     <script type="module" src="/src/main.tsx"></script>
-    <script>
-      // Service Worker 仅在生产域名注册：开发环境（localhost）不注册，避免 cache-first 缓存住未带 hash 的源码模块
-      if ('serviceWorker' in navigator && !['localhost', '127.0.0.1'].includes(location.hostname)) {
-        window.addEventListener('load', () => {
-          navigator.serviceWorker.register('/sw.js').catch(() => {});
-        });
-      }
-    </script>
   </body>
 </html>
