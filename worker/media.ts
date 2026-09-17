@@ -700,11 +700,10 @@ export async function resolvePosters(title: string, english: string, year?: numb
   }
   if (primary.length) return primary;
 
-  // 当前源无结果时按 Wiki → 网易云/gd-proxy 逐级降级。
+  // 当前源无结果时按 Wiki → 网易云/gd-proxy 逐级降级（对所有类型生效，避免特定类型漏掉降级）。
   const wiki = await searchWikiPoster(title, english, type, year);
   if (wiki.length) return wiki;
-  if (type === "music") return searchNeteasePoster(title, env);
-  return [];
+  return searchNeteasePoster(title, env);
 }
 
 // ===== Search List API =====
