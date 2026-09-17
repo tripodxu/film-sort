@@ -17,6 +17,81 @@ function nextUA(): string { return USER_AGENTS[uaIndex++ % USER_AGENTS.length]; 
 const lastRequestTime = new Map<string, number>();
 const MIN_DELAY_MS = 800;
 const cooldownMap = new Map<string, number>();
+// ===== 服务端海报缓存（两级）=====
+// L1 是 isolate 内的 Map（快、有界），L2 是 Edge Cache（跨 isolate/机房共享，
+// 且能在 isolate 回收后存活）。命中热门榜单时刷新页面仍能直接拿到结果，
+// 不必再走 Douban/Wiki/网易云。
+const POSTER_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
+// 未命中的结果只短暂缓存：上游恢复后无需等满一天。
+const POSTER_MISS_TTL_MS = 10 * 60 * 1000;
+const POSTER_CACHE_MAX_ENTRIES = 2000;
+const POSTER_EDGE_ORIGIN = "https://poster-cache.art-rank.internal";
+const posterCache = new Map<string, { urls: string[]; expiresAt: number }>();
+
+function posterCacheKey(title: string, english: string, type?: string, year?: number): string {
+  return (type ?? "movie") + "|" + key(title) + "|" + key(english) + "|" + (year ?? "");
+}
+
+/**
+ * Edge Cache 的键：对 `type|title|english|year` 取稳定摘要。
+ * WebCrypto 没有 MD5，用截断的 SHA-256（128 bit）等效替代，碰撞概率可忽略。
+ */
+async function posterDigest(cacheKey: string): Promise<string> {
+  const bytes = new TextEncoder().encode(cacheKey);
+  const digest = await crypto.subtle.digest("SHA-256", bytes);
+  return [...new Uint8Array(digest).slice(0, 16)].map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+
+function readIsolatePosterCache(cacheKey: string): string[] | null {
+  const entry = posterCache.get(cacheKey);
+  if (!entry) return null;
+  if (Date.now() > entry.expiresAt) { posterCache.delete(cacheKey); return null; }
+  // 重新插入以刷新 LRU 顺序，让真正冷门的 key 先被淘汰。
+  posterCache.delete(cacheKey);
+  posterCache.set(cacheKey, entry);
+  return entry.urls;
+}
+
+function writeIsolatePosterCache(cacheKey: string, urls: string[]): void {
+  posterCache.delete(cacheKey);
+  posterCache.set(cacheKey, { urls, expiresAt: Date.now() + (urls.length ? POSTER_CACHE_TTL_MS : POSTER_MISS_TTL_MS) });
+  while (posterCache.size > POSTER_CACHE_MAX_ENTRIES) {
+    const oldest = posterCache.keys().next();
+    if (oldest.done) break;
+    posterCache.delete(oldest.value);
+  }
+}
+
+/** Edge Cache 只在 Worker 运行时存在；测试/其他环境下降级为 null。 */
+function edgeCacheOrNull(): Cache | null {
+  try {
+    return (globalThis as { caches?: { default?: Cache } }).caches?.default ?? null;
+  } catch { return null; }
+}
+
+async function readEdgePosterCache(cacheKey: string): Promise<string[] | null> {
+  const cache = edgeCacheOrNull();
+  if (!cache) return null;
+  try {
+    const hit = await cache.match(`${POSTER_EDGE_ORIGIN}/${await posterDigest(cacheKey)}`);
+    if (!hit) return null;
+    const urls: unknown = await hit.json();
+    return Array.isArray(urls) && urls.every((url) => typeof url === "string") ? urls as string[] : null;
+  } catch { return null; }
+}
+
+async function writeEdgePosterCache(cacheKey: string, urls: string[]): Promise<void> {
+  const cache = edgeCacheOrNull();
+  if (!cache) return;
+  try {
+    const maxAge = (urls.length ? POSTER_CACHE_TTL_MS : POSTER_MISS_TTL_MS) / 1000;
+    await cache.put(
+      `${POSTER_EDGE_ORIGIN}/${await posterDigest(cacheKey)}`,
+      new Response(JSON.stringify(urls), { headers: { "content-type": "application/json", "cache-control": `max-age=${maxAge}` } }),
+    );
+  } catch { /* Edge Cache 是尽力而为，L1 仍然生效。 */ }
+}
+
 
 function getDomain(url: string): string {
   try { return new URL(url).hostname; } catch { return ""; }
@@ -666,7 +741,24 @@ async function searchNeteasePoster(title: string, env?: GdProxyEnv): Promise<str
   return [];
 }
 
-export async function resolvePosters(title: string, english: string, year?: number, type?: "movie" | "book" | "music", env?: GdProxyEnv) {
+/**
+ * 已缓存的查询直接返回；否则计算并写入两级缓存。
+ * 缓存键为 `type|title|english|year` 的规范化形式。
+ */
+export async function resolvePosters(title: string, english: string, year?: number, type?: "movie" | "book" | "music", env?: GdProxyEnv): Promise<string[]> {
+  const cacheKey = posterCacheKey(title, english, type, year);
+  const isolateHit = readIsolatePosterCache(cacheKey);
+  if (isolateHit) return isolateHit;
+  const edgeHit = await readEdgePosterCache(cacheKey);
+  if (edgeHit) { writeIsolatePosterCache(cacheKey, edgeHit); return edgeHit; }
+  const urls = await computePosters(title, english, year, type, env);
+  writeIsolatePosterCache(cacheKey, urls);
+  await writeEdgePosterCache(cacheKey, urls);
+  return urls;
+}
+
+/** 实际的多级回退解析：Douban → Wiki → 网易云/gd-proxy。不含缓存。 */
+async function computePosters(title: string, english: string, year?: number, type?: "movie" | "book" | "music", env?: GdProxyEnv): Promise<string[]> {
   let primary: string[] = [];
   if (type === "book") {
     const [suggestion, search] = await Promise.allSettled([doubanBookSuggest(title), searchCover(title, "book")]);
@@ -704,6 +796,54 @@ export async function resolvePosters(title: string, english: string, year?: numb
   const wiki = await searchWikiPoster(title, english, type, year);
   if (wiki.length) return wiki;
   return searchNeteasePoster(title, env);
+}
+
+/**
+ * 批量解析：以受限并发并行调用 resolvePosters，同一请求内重复的 key 只查一次。
+ * 返回值同时给出 map（`results`）与和入参等长的 key 序列（`keys`），
+ * 便于调用方按位置对齐，避免两端重新推导键时的规范化差异。
+ */
+export interface PosterBatchRequest {
+  title: string;
+  english?: string;
+  year?: number;
+  type?: "movie" | "book" | "music";
+}
+export interface PosterBatchResult {
+  [cacheKey: string]: string[];
+}
+export interface PosterBatchResponse {
+  results: PosterBatchResult;
+  keys: string[];
+}
+export async function resolvePostersBatch(
+  requests: PosterBatchRequest[],
+  env?: GdProxyEnv,
+  concurrency: number = 8
+): Promise<PosterBatchResponse> {
+  const results: PosterBatchResult = {};
+  const keys: string[] = [];
+  const pending = new Map<string, PosterBatchRequest>();
+  for (const request of requests) {
+    const ck = posterCacheKey(request.title, request.english ?? "", request.type, request.year);
+    keys.push(ck);
+    if (!pending.has(ck)) pending.set(ck, request);
+  }
+
+  const queue = [...pending];
+  let cursor = 0;
+  async function worker(): Promise<void> {
+    while (cursor < queue.length) {
+      const [ck, request] = queue[cursor++];
+      try { results[ck] = await resolvePosters(request.title, request.english ?? "", request.year, request.type, env); }
+      catch { results[ck] = []; }
+    }
+  }
+  const workers = Math.min(Math.max(1, concurrency), queue.length);
+  await Promise.all(Array.from({ length: workers }, () => worker()));
+  // 同一请求内重复但被折叠的 key 也要在 map 里出现，调用方按 keys 取值才不会落空。
+  for (const ck of keys) if (!(ck in results)) results[ck] = [];
+  return { results, keys };
 }
 
 // ===== Search List API =====

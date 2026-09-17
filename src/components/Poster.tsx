@@ -2,7 +2,97 @@ import { useEffect, useState } from "react";
 import { BookOpen, Film, Library, Music2 } from "lucide-react";
 import type { Artwork, MediaKind } from "../data/media";
 
+// ===== 并发闸门 =====
+// 单次 flush 只发一个请求，但多份榜单可能同时触发；把在途请求限制在 8 个以内。
+const MAX_CONCURRENT_REQUESTS = 8;
+let activeRequests = 0;
+const waitQueue: Array<() => void> = [];
+function acquireSlot(): Promise<void> {
+  if (activeRequests < MAX_CONCURRENT_REQUESTS) { activeRequests += 1; return Promise.resolve(); }
+  return new Promise<void>((resolve) => { waitQueue.push(resolve); });
+}
+function releaseSlot(): void {
+  const next = waitQueue.shift();
+  // 有等待者就把名额直接移交，避免 activeRequests 抖动。
+  if (next) next();
+  else activeRequests -= 1;
+}
+
+// ===== 批量取海报 =====
+// resolve() 只负责入队；短暂聚合后一次 POST /api/posters/batch。
+// 整份 150 首的榜单因此只需 1 次往返（逐条请求时是 6n 次）。
+const FLUSH_DELAY_MS = 50;
+const MAX_BATCH_SIZE = 300; // 与服务端 MAX_POSTER_BATCH_ITEMS 对齐
+const BATCH_TIMEOUT_MS = 30000;
+
+const TYPE_BY_KIND: Record<string, string> = { film: "movie", book: "book", music: "music", other: "movie" };
+
+interface BatchEntry {
+  work: Artwork;
+  kind: MediaKind;
+  resolveBatch: (urls: string[]) => void;
+}
+
+let batchTimer: ReturnType<typeof setTimeout> | null = null;
+const batchQueue: BatchEntry[] = [];
+
+function normalizeKey(value: string): string { return value.normalize("NFKC").trim().toLowerCase(); }
+
+/** 服务端缓存键的本地等价物，仅在服务端未回显 keys 时作为兜底。 */
+function batchKey(work: Artwork, kind: MediaKind): string {
+  return [TYPE_BY_KIND[kind] ?? "movie", normalizeKey(work.title), normalizeKey(work.subtitle ?? work.title), work.year ?? ""].join("|");
+}
+
+function flushBatch(): void {
+  if (batchTimer) { clearTimeout(batchTimer); batchTimer = null; }
+  if (!batchQueue.length) return;
+  const batch = batchQueue.splice(0, MAX_BATCH_SIZE);
+  // 超出单批上限的剩余项安排到下一轮，而不是丢给同一次请求。
+  if (batchQueue.length) batchTimer = setTimeout(flushBatch, 0);
+  void dispatchBatch(batch);
+}
+
+async function dispatchBatch(batch: BatchEntry[]): Promise<void> {
+  const items = batch.map((entry) => ({
+    title: entry.work.title,
+    english: entry.work.subtitle ?? entry.work.title,
+    year: entry.work.year,
+    type: TYPE_BY_KIND[entry.kind] ?? "movie",
+  }));
+
+  let results: Record<string, string[]> = {};
+  let keys: string[] | null = null;
+  try {
+    await acquireSlot();
+    try {
+      const response = await fetch("/api/posters/batch", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ items }),
+        signal: AbortSignal.timeout(BATCH_TIMEOUT_MS),
+      });
+      if (response.ok) {
+        const data = await response.json() as { results?: Record<string, string[]>; keys?: string[] };
+        results = data.results ?? {};
+        // 服务端回显与入参等长的 keys，按位置对齐可完全规避两端键推导不一致。
+        keys = Array.isArray(data.keys) && data.keys.length === batch.length ? data.keys : null;
+      }
+    } finally { releaseSlot(); }
+  } catch {
+    results = {};
+    keys = null;
+  }
+
+  batch.forEach((entry, index) => {
+    const key = keys?.[index] ?? batchKey(entry.work, entry.kind);
+    entry.resolveBatch(results[key] ?? []);
+  });
+}
+
 const requests = new Map<string, Promise<string[]>>();
+// 已解析结果的内存副本：让首帧同步拿到海报，不必等 Promise 的微任务。
+const resolvedPosters = new Map<string, string[]>();
+
 const reportedFailures = new Set<string>();
 const POSTER_CACHE_KEY = "art-rank:poster-cache";
 function readPosterCache(key: string): string[] | null {
@@ -24,33 +114,45 @@ function writePosterCache(key: string, urls: string[]) {
 function posterKey(work: Artwork, kind: MediaKind): string {
   return `${kind}|${work.title}|${work.subtitle ?? ""}|${work.year ?? ""}`;
 }
+
 function resolveSync(work: Artwork, kind: MediaKind): string[] | null {
   const key = posterKey(work, kind);
-  const req = requests.get(key);
-  if (req) { let result: string[] | null = null; req.then((urls) => { result = urls; }); return result; }
-  return readPosterCache(key);
+  return resolvedPosters.get(key) ?? readPosterCache(key);
 }
+
 function resolve(work: Artwork, kind: MediaKind): Promise<string[]> {
   const key = posterKey(work, kind);
-  let request = requests.get(key);
-  if (!request) {
-    const cached = readPosterCache(key);
-    if (cached) { request = Promise.resolve(cached); requests.set(key, request); return request; }
-    const type = kind === "book" ? "book" : kind === "music" ? "music" : "movie";
-    const params = new URLSearchParams({ v: "2", q: work.title, en: work.subtitle ?? work.title, type, ...(work.year ? { year: String(work.year) } : {}) });
-    request = fetch(`/api/posters?${params}`, { signal: AbortSignal.timeout(20000) })
-      .then(async (response) => response.ok ? await response.json() as { poster_urls?: string[] } : {})
-      .then((data) => { const urls = data.poster_urls ?? []; if (urls.length) writePosterCache(key, urls); return urls; }).catch(() => []);
-    requests.set(key, request);
+  const existing = requests.get(key);
+  if (existing) return existing;
+  const cached = readPosterCache(key);
+  if (cached) {
+    const done = Promise.resolve(cached);
+    requests.set(key, done);
+    resolvedPosters.set(key, cached);
+    return done;
   }
+  const request = new Promise<string[]>((resolveBatch) => {
+    batchQueue.push({ work, kind, resolveBatch });
+    if (batchTimer === null) batchTimer = setTimeout(flushBatch, FLUSH_DELAY_MS);
+  }).then((urls) => {
+    resolvedPosters.set(key, urls);
+    if (urls.length) writePosterCache(key, urls);
+    return urls;
+  });
+  requests.set(key, request);
   return request;
+}
+export function prefetchPosters(items: Array<{ work: Artwork; kind: MediaKind }>): void {
+  for (const { work, kind } of items) { if (kind === "film" || kind === "book" || kind === "music") void resolve(work, kind); }
 }
 
 function imageUrl(url: string): string {
   try {
     const parsed = new URL(url);
-    return /^(?:img\d+\.doubanio\.com|m\.media-amazon\.com|ia\.media-imdb\.com|image\.tmdb\.org|[\w-]+\.music\.126\.net|(?:upload|thumb)\.wikimedia\.org)$/.test(parsed.hostname)
-      ? `/api/image?url=${encodeURIComponent(url)}` : url;
+    // CSP 已放行这些可信域的 img-src，直连即可，省一次 worker 代理跳转。
+    // 该白名单与 worker/media.ts 的 allowedImage() 保持一致。
+    return /^(?:img\d+\.doubanio\.com|m\.media-amazon\.com|ia\.media-imdb\.com|image\.tmdb\.org|[\w-]+\.music\.126\.net|(?:upload|thumb)\.wikimedia\.org|bkimg\.cdn\.bcebos\.com)$/.test(parsed.hostname)
+      ? url : `/api/image?url=${encodeURIComponent(url)}`;
   } catch { return url; }
 }
 
@@ -81,7 +183,8 @@ export function Poster({ work, kind: rawKind, large = false }: { work: Artwork; 
       void resolve(work, kind).then((urls) => { if (active && urls.length) setResolved(urls); });
     }
     return () => { active = false; };
-  }, [work.id, work.title, kind, large]);  const urls = [...new Set([...resolved, ...(work.posterUrls ?? [])])];
+  }, [work.id, work.title, kind, large]);
+  const urls = [...new Set([...resolved, ...(work.posterUrls ?? [])])];
   const url = urls.find((candidate) => !failed.has(candidate));
   const Icon = { film: Film, book: BookOpen, music: Music2, other: Library }[kind];
   return <div className={`poster ${large ? "poster-large" : "poster-small"} poster-${kind}`}>

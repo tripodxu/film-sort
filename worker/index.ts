@@ -1,4 +1,4 @@
-import { doubanTop250, doubanSuggest, doubanBookTop250, doubanBookSuggest, doubanMusicTop250, doubanSearch, doubanBookDetail, doubanMovieDetail, doubanMusicDetail, fetchContentIntro, proxyImage, resolvePosters } from "./media";
+import { doubanTop250, doubanSuggest, doubanBookTop250, doubanBookSuggest, doubanMusicTop250, doubanSearch, doubanBookDetail, doubanMovieDetail, doubanMusicDetail, fetchContentIntro, proxyImage, resolvePosters, resolvePostersBatch, type PosterBatchRequest } from "./media";
 import { accountRoute, hashPasswordStrong, needsPasswordUpgrade, timingSafeEqual, verifyPassword } from "./account";
 import { getUserFromToken } from "./account";
 import { adminPlazaRoute, plazaRoute } from "./plaza";
@@ -87,9 +87,12 @@ const CHALLENGE_ID = /^mv-[a-z0-9]{12}$/;
 const MAX_REQUEST_BYTES = 48 * 1024;
 const MAX_EVENT_PAYLOAD_BYTES = 2 * 1024;
 const MAX_CHALLENGE_ITEMS = 300;
+// 批量海报：一次可提交整份榜单（300 首），独立于 48KB 的通用请求上限。
+const MAX_POSTER_BATCH_ITEMS = 300;
+const MAX_POSTER_BATCH_BYTES = 128 * 1024;
 const upstreamWindows = new Map<string, { startedAt: number; count: number }>();
 
-async function allowUpstreamRequest(request: Request, bucket: "ai" | "music" | "auth" | "share" | "import" | "netease" | "douban" | "other" | "events" | "challenge", limit: number): Promise<boolean> {
+async function allowUpstreamRequest(request: Request, bucket: "ai" | "music" | "auth" | "share" | "import" | "netease" | "douban" | "posters" | "other" | "events" | "challenge", limit: number): Promise<boolean> {
   const client = request.headers.get("cf-connecting-ip") ?? "anonymous";
   const key = `${bucket}:${client}`;
   const now = Date.now();
@@ -817,6 +820,30 @@ function isObject(value: unknown): value is JsonObject {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
+/**
+ * 宽松清洗批量海报请求：单条不合法只丢弃该条，不让整批（最多 300 首）失败。
+ * year 兼容字符串数字（广场帖子里的年份可能是字符串），归一化为 1800–2200 的整数。
+ */
+function sanitizePosterBatch(raw: readonly unknown[]): PosterBatchRequest[] {
+  const items: PosterBatchRequest[] = [];
+  const CONTROL_CHARS = /[\u0000-\u001f\u007f]/;
+  for (const entry of raw.slice(0, MAX_POSTER_BATCH_ITEMS)) {
+    if (!isObject(entry)) continue;
+    const title = typeof entry.title === "string" ? entry.title.trim() : "";
+    if (!title || title.length > 160 || CONTROL_CHARS.test(title)) continue;
+    const englishRaw = typeof entry.english === "string" ? entry.english.trim() : "";
+    const english = englishRaw && englishRaw.length <= 160 && !CONTROL_CHARS.test(englishRaw) ? englishRaw : undefined;
+    const yearRaw = entry.year;
+    const yearNumber = typeof yearRaw === "number" ? yearRaw
+      : typeof yearRaw === "string" && /^\d{4}$/.test(yearRaw.trim()) ? Number(yearRaw.trim())
+      : undefined;
+    const year = yearNumber !== undefined && Number.isInteger(yearNumber) && yearNumber >= 1800 && yearNumber <= 2200 ? yearNumber : undefined;
+    const type = entry.type === "book" || entry.type === "music" || entry.type === "movie" ? entry.type : undefined;
+    items.push({ title, english, year, type });
+  }
+  return items;
+}
+
 function cleanString(value: unknown, field: string, maxLength: number): string {
   if (typeof value !== "string") {
     throw new HttpError(400, "invalid_field", `${field} must be a string.`);
@@ -1430,6 +1457,21 @@ async function route(request: Request, env: Env): Promise<Response> {
       void env.DB.prepare("INSERT INTO poster_errors (title, media_type, error) VALUES (?, ?, ?)").bind(title, type ?? "movie", "no_poster_found").run().catch(() => {});
     }
     return json({ poster_urls }, 200, { "cache-control": `public, max-age=${poster_urls.length ? 86400 : 300}` });
+  }
+  if (url.pathname === "/api/posters/batch" && request.method === "POST") {
+    // 独立限流桶：批量解析的上游开销远大于单条查询，不该和试听共享 music 配额。
+    if (!await allowUpstreamRequest(request, "posters", 60)) return json({ error: "rate_limited" }, 429, { "retry-after": "600" });
+    const raw = await request.text();
+    if (new TextEncoder().encode(raw).byteLength > MAX_POSTER_BATCH_BYTES) return json({ error: "payload_too_large" }, 413);
+    let parsed: unknown;
+    try { parsed = JSON.parse(raw); } catch { return json({ error: "invalid_json" }, 400); }
+    if (!isObject(parsed) || !Array.isArray((parsed as { items?: unknown }).items)) return json({ error: "invalid_json" }, 400);
+    const items = sanitizePosterBatch((parsed as { items: unknown[] }).items);
+    if (items.length === 0) return json({ results: {}, keys: [] }, 200, { "cache-control": "public, max-age=300" });
+    const { results, keys } = await resolvePostersBatch(items, env);
+    // 真正的 1 天缓存发生在服务端（L1 isolate + L2 Edge Cache）；
+    // 这里只是顺带声明新鲜度，浏览器通常不缓存 POST 响应。
+    return json({ results, keys }, 200, { "cache-control": "private, max-age=86400" });
   }
   if (url.pathname === "/api/image" && request.method === "GET") return withSecurityHeaders(await proxyImage(url.searchParams.get("url") ?? ""));
 
