@@ -6,7 +6,7 @@ import { importRoute } from "./import";
 import { neteaseQrIssue, neteaseQrPoll, hasProviderCookie, deleteProviderCookie, saveProviderCookie, loadProviderCookie, neteaseUserId, neteaseAccountInfo, neteaseUserPlaylists } from "./netease";
 import { doubanQrIssue, doubanQrPoll, extractDoubanLoginCookie, doubanUserId, doubanAccountInfo } from "./douban";
 import { otherSearch, otherDetail } from "./other";
-import { gdSearch, gdPlayUrl, gdLyric, pickTrack, stripLrc, isCoverTrack } from "./gdstudio";
+import { gdSearch, gdPlayUrl, gdLyric, pickTracks, pickTrack, stripLrc, isCoverTrack } from "./gdstudio";
 import { recordAudit } from "./audit";
 
 export interface Env {
@@ -1762,9 +1762,12 @@ async function route(request: Request, env: Env): Promise<Response> {
       const { tracks, blocked } = await gdSearch(query, 10, env);
       if (blocked) return json({ error: "music_upstream_limited" }, 429, { "retry-after": "300", msg: "音乐服务暂时限流，稍后再试" });
       if (!tracks.length) return json({ error: "music_search_failed", msg: "音乐搜索暂不可用，请稍后重试" }, 502, { "cache-control": "public, max-age=60" });
-      const track = pickTrack(tracks, query, artist);
+      let track = null; let playUrl = "";
+      for (const candidate of pickTracks(tracks, query, artist, 3)) {
+        const candidateUrl = await gdPlayUrl(String(candidate.id), env);
+        if (candidateUrl) { track = candidate; playUrl = candidateUrl; break; }
+      }
       if (!track) return json({ error: "music_not_found" }, 404, { "cache-control": "public, max-age=300" });
-      const playUrl = await gdPlayUrl(String(track.id), env);
       const isCover = isCoverTrack(track, query, artist);
       return json({ track, playUrl, lyricId: String(track.lyric_id || track.id), isCover }, 200, { "cache-control": "public, max-age=300" });
     } catch { return json({ error: "music_unavailable" }, 502); }

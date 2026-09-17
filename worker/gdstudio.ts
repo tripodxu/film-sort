@@ -108,23 +108,27 @@ export async function gdSearch(name: string, count = 10, env?: GdProxyEnv): Prom
   return outcome;
 }
 
-/** 从搜索命中里挑最贴合歌手的曲目：歌名全等 + 艺人包含优先，其次歌名包含，最后第一条。 */
-export function pickTrack(tracks: GdTrack[], title: string, artist?: string): GdTrack | null {
-  if (!tracks.length) return null;
+/** 从搜索命中里按歌手/歌名匹配度排序，保留若干候选供播放链逐个尝试。 */
+export function pickTracks(tracks: GdTrack[], title: string, artist?: string, limit = 3): GdTrack[] {
+  if (!tracks.length) return [];
   const norm = (s: string) => s.normalize("NFKC").toLowerCase().replace(/[\s·．.、,，/()（）'’\-—_]/g, "");
   const wantTitle = norm(title);
   const wantArtist = artist ? norm(artist.split("/")[0].trim()) : "";
   const artistOf = (t: GdTrack) => norm(Array.isArray(t.artist) ? t.artist.join(" ") : String(t.artist ?? ""));
-  let best: GdTrack | null = null; let bestScore = -1;
-  for (const t of tracks) {
+  const scored = tracks.map((track, index) => {
     let score = 0;
-    const tName = norm(t.name);
+    const tName = norm(track.name);
     if (tName === wantTitle) score += 4;
     else if (tName.includes(wantTitle) || wantTitle.includes(tName)) score += 2;
-    if (wantArtist && (artistOf(t).includes(wantArtist) || wantArtist.includes(artistOf(t)))) score += 3;
-    if (score > bestScore) { best = t; bestScore = score; }
-  }
-  return bestScore > 0 ? best : tracks[0];
+    if (wantArtist && (artistOf(track).includes(wantArtist) || wantArtist.includes(artistOf(track)))) score += 3;
+    return { track, score, index };
+  }).sort((a, b) => b.score - a.score || a.index - b.index);
+  const matched = scored.filter((entry) => entry.score > 0).map((entry) => entry.track);
+  return (matched.length ? matched : tracks).slice(0, Math.max(1, limit));
+}
+
+export function pickTrack(tracks: GdTrack[], title: string, artist?: string): GdTrack | null {
+  return pickTracks(tracks, title, artist, 1)[0] ?? null;
 }
 
 /** 判断搜索匹配到的曲目是否为翻唱/改编版而非原版。 */
