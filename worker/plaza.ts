@@ -1,6 +1,7 @@
 import type { Env } from "./index";
 import { getUserFromToken, adminAuthLocal } from "./account";
 import { recordAudit } from "./audit";
+import { attachStoredPosterUrls } from "./posterStore";
 
 const json = (data: unknown, status = 200) => new Response(JSON.stringify(data), { status, headers: { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" } });
 
@@ -98,8 +99,15 @@ export async function plazaRoute(request: Request, env: Env): Promise<Response> 
       likedByMe = !!like;
     }
 
+    // 挂上已持久化的海报地址：命中后前端无需再自行解析海报（150 首的歌单
+    // 原本每次打开都要现解析 150 次，几乎必然被上游限流打回）。
+    const items = await attachStoredPosterUrls(
+      env.DB,
+      post.kind,
+      JSON.parse(String(post.items ?? "[]")) as Array<Record<string, unknown>>,
+    );
     return json({
-      post: { ...post, items: JSON.parse(String(post.items ?? "[]")), is_author: !!viewer && viewer.id === post.user_id, liked_by_me: likedByMe },
+      post: { ...post, items, is_author: !!viewer && viewer.id === post.user_id, liked_by_me: likedByMe },
       comments: comments.results ?? [],
     });
   }

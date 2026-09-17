@@ -1,4 +1,5 @@
-import { doubanTop250, doubanSuggest, doubanBookTop250, doubanBookSuggest, doubanMusicTop250, doubanSearch, doubanBookDetail, doubanMovieDetail, doubanMusicDetail, fetchContentIntro, proxyImage, resolvePosters, resolvePostersBatch, type PosterBatchRequest } from "./media";
+import { doubanTop250, doubanSuggest, doubanBookTop250, doubanBookSuggest, doubanMusicTop250, doubanSearch, doubanBookDetail, doubanMovieDetail, doubanMusicDetail, fetchContentIntro, proxyImage, resolvePosters, resolvePostersBatch, posterMediaKey, type PosterBatchRequest } from "./media";
+import { normalizePosterItem, saveResolvedPosters } from "./posterStore";
 import { accountRoute, hashPasswordStrong, needsPasswordUpgrade, timingSafeEqual, verifyPassword } from "./account";
 import { getUserFromToken } from "./account";
 import { adminPlazaRoute, plazaRoute } from "./plaza";
@@ -822,24 +823,16 @@ function isObject(value: unknown): value is JsonObject {
 
 /**
  * 宽松清洗批量海报请求：单条不合法只丢弃该条，不让整批（最多 300 首）失败。
- * year 兼容字符串数字（广场帖子里的年份可能是字符串），归一化为 1800–2200 的整数。
+ * 归一化逻辑与 posterStore 共用一份，保证键推导不会漂移。
  */
 function sanitizePosterBatch(raw: readonly unknown[]): PosterBatchRequest[] {
   const items: PosterBatchRequest[] = [];
-  const CONTROL_CHARS = /[\u0000-\u001f\u007f]/;
   for (const entry of raw.slice(0, MAX_POSTER_BATCH_ITEMS)) {
     if (!isObject(entry)) continue;
-    const title = typeof entry.title === "string" ? entry.title.trim() : "";
-    if (!title || title.length > 160 || CONTROL_CHARS.test(title)) continue;
-    const englishRaw = typeof entry.english === "string" ? entry.english.trim() : "";
-    const english = englishRaw && englishRaw.length <= 160 && !CONTROL_CHARS.test(englishRaw) ? englishRaw : undefined;
-    const yearRaw = entry.year;
-    const yearNumber = typeof yearRaw === "number" ? yearRaw
-      : typeof yearRaw === "string" && /^\d{4}$/.test(yearRaw.trim()) ? Number(yearRaw.trim())
-      : undefined;
-    const year = yearNumber !== undefined && Number.isInteger(yearNumber) && yearNumber >= 1800 && yearNumber <= 2200 ? yearNumber : undefined;
-    const type = entry.type === "book" || entry.type === "music" || entry.type === "movie" ? entry.type : undefined;
-    items.push({ title, english, year, type });
+    // 兼容未带 type 的旧客户端：缺省按 movie 处理，而不是丢弃整条。
+    const type = entry.type === "book" || entry.type === "music" || entry.type === "movie" ? entry.type : "movie";
+    const item = normalizePosterItem({ title: entry.title, english: entry.english, year: entry.year, type });
+    if (item) items.push(item);
   }
   return items;
 }
@@ -1453,6 +1446,7 @@ async function route(request: Request, env: Env): Promise<Response> {
     const type = url.searchParams.get("type") as "movie" | "book" | "music" | undefined;
     if (!title || title.length > 160 || english.length > 160 || (year !== undefined && (!Number.isInteger(year) || year < 1800 || year > 2200))) return json({ error: "invalid_query" }, 400);
     const poster_urls = await resolvePosters(title, english, year, type, env);
+    if (poster_urls.length) await saveResolvedPosters(env.DB, [{ key: posterMediaKey(title, english, type, year), urls: poster_urls }]);
     if (poster_urls.length === 0 && env.DB) {
       void env.DB.prepare("INSERT INTO poster_errors (title, media_type, error) VALUES (?, ?, ?)").bind(title, type ?? "movie", "no_poster_found").run().catch(() => {});
     }
@@ -1469,6 +1463,8 @@ async function route(request: Request, env: Env): Promise<Response> {
     const items = sanitizePosterBatch((parsed as { items: unknown[] }).items);
     if (items.length === 0) return json({ results: {}, keys: [] }, 200, { "cache-control": "public, max-age=300" });
     const { results, keys } = await resolvePostersBatch(items, env);
+    // 写穿：把这一批解析到的地址落库，同一榜单下次打开即可直接命中，无需再回源。
+    await saveResolvedPosters(env.DB, keys.map((key) => ({ key, urls: results[key] ?? [] })));
     // 真正的 1 天缓存发生在服务端（L1 isolate + L2 Edge Cache）；
     // 这里只是顺带声明新鲜度，浏览器通常不缓存 POST 响应。
     return json({ results, keys }, 200, { "cache-control": "private, max-age=86400" });

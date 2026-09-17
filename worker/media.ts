@@ -28,7 +28,12 @@ const POSTER_CACHE_MAX_ENTRIES = 2000;
 const POSTER_EDGE_ORIGIN = "https://poster-cache.art-rank.internal";
 const posterCache = new Map<string, { urls: string[]; expiresAt: number }>();
 
-function posterCacheKey(title: string, english: string, type?: string, year?: number): string {
+/**
+ * 海报条目的规范键：`type|title|english|year`（NFKC/去空白/小写）。
+ * 单条 route、批量 route、以及读取时挂载 posterUrls 三处必须共用本函数——
+ * 任何一处漂移都会变成「存了但取不到」。
+ */
+export function posterMediaKey(title: string, english: string, type?: string, year?: number): string {
   return (type ?? "movie") + "|" + key(title) + "|" + key(english) + "|" + (year ?? "");
 }
 
@@ -97,20 +102,29 @@ function getDomain(url: string): string {
   try { return new URL(url).hostname; } catch { return ""; }
 }
 
-async function throttle(domain: string): Promise<void> {
-  const now = Date.now();
-  // Per-domain cooldown
-  const cooldown = cooldownMap.get(domain) ?? 0;
-  if (now < cooldown) {
-    await new Promise(r => setTimeout(r, cooldown - now));
-  }
-  // Per-domain delay
-  const last = lastRequestTime.get(domain) ?? 0;
-  const elapsed = Date.now() - last;
-  if (elapsed < MIN_DELAY_MS) {
-    await new Promise(r => setTimeout(r, MIN_DELAY_MS - elapsed));
-  }
-  lastRequestTime.set(domain, Date.now());
+// 每个域一条串行链。原先的写法是 TOCTOU 竞态：N 个并发调用者都读到同一个
+// lastRequestTime，于是都只等同样一小会儿就同时发出去，节流实际上只对
+// 「顺序调用」生效——这正是并发批量被上游 418 打回、而单条查询永远成功的原因。
+const domainChains = new Map<string, Promise<void>>();
+
+// subject_search 是轻量 JSON 接口（实测 8 并发全部 200），不必按抓 HTML 页面的
+// 节奏（800ms）排队；其余豆瓣域维持原间隔以避开风控。
+const DOMAIN_MIN_DELAY_MS: Record<string, number> = { "search.douban.com": 200 };
+
+function throttle(domain: string): Promise<void> {
+  const previous = domainChains.get(domain) ?? Promise.resolve();
+  const next = previous.then(async () => {
+    const cooldown = cooldownMap.get(domain) ?? 0;
+    const now = Date.now();
+    if (now < cooldown) await new Promise((r) => setTimeout(r, cooldown - now));
+    const minDelay = DOMAIN_MIN_DELAY_MS[domain] ?? MIN_DELAY_MS;
+    const elapsed = Date.now() - (lastRequestTime.get(domain) ?? 0);
+    if (elapsed < minDelay) await new Promise((r) => setTimeout(r, minDelay - elapsed));
+    lastRequestTime.set(domain, Date.now());
+  });
+  // 链节内部只 await sleep，不会 reject；仍兜一层，避免万一污染后续调用者。
+  domainChains.set(domain, next.catch(() => undefined));
+  return next;
 }
 
 // Request headers per domain type
@@ -602,7 +616,7 @@ async function imdbPoster(title: string, english: string, year?: number): Promis
   }
 }
 
-async function searchCover(query: string, type: "movie" | "book" | "music"): Promise<string | undefined> {
+async function searchCover(query: string, type: "movie" | "book" | "music", attempt = 0): Promise<string | undefined> {
   try {
     const cat = type === "movie" ? "1002" : type === "book" ? "1001" : "1003";
     const url = `https://search.douban.com/${type}/subject_search?search_text=${encodeURIComponent(query)}&cat=${cat}`;
@@ -613,8 +627,11 @@ async function searchCover(query: string, type: "movie" | "book" | "music"): Pro
       redirect: "follow",
     });
     if (response.status === 403 || response.status === 418) {
-      cooldownMap.set("search.douban.com", Date.now() + 10000);
+      // 只做短冷却并重试一次。原先给整个域名设 10s 冷却：一首歌触发 418，
+      // 同一批次里剩下的全部被迫排队等冷却，等于连坐。
+      cooldownMap.set("search.douban.com", Date.now() + 1200);
       console.warn(`searchCover rate limited (${response.status})`);
+      if (attempt === 0) return searchCover(query, type, 1);
       return undefined;
     }
     if (!response.ok) return undefined;
@@ -748,7 +765,7 @@ async function searchNeteasePoster(title: string, env?: GdProxyEnv): Promise<str
  * 缓存键为 `type|title|english|year` 的规范化形式。
  */
 export async function resolvePosters(title: string, english: string, year?: number, type?: "movie" | "book" | "music", env?: GdProxyEnv): Promise<string[]> {
-  const cacheKey = posterCacheKey(title, english, type, year);
+  const cacheKey = posterMediaKey(title, english, type, year);
   const isolateHit = readIsolatePosterCache(cacheKey);
   if (isolateHit) return isolateHit;
   const edgeHit = await readEdgePosterCache(cacheKey);
@@ -827,7 +844,7 @@ export async function resolvePostersBatch(
   const keys: string[] = [];
   const pending = new Map<string, PosterBatchRequest>();
   for (const request of requests) {
-    const ck = posterCacheKey(request.title, request.english ?? "", request.type, request.year);
+    const ck = posterMediaKey(request.title, request.english ?? "", request.type, request.year);
     keys.push(ck);
     if (!pending.has(ck)) pending.set(ck, request);
   }

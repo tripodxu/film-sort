@@ -20,10 +20,12 @@ function releaseSlot(): void {
 
 // ===== 批量取海报 =====
 // resolve() 只负责入队；短暂聚合后一次 POST /api/posters/batch。
-// 整份 150 首的榜单因此只需 1 次往返（逐条请求时是 6n 次）。
+// 上限刻意压到 30（而不是服务端允许的 300）：豆瓣侧是限流上游，一次请求里
+// 塞太多首会把它打成 418，反而整批拿不到海报；配合榜单的分页懒加载，
+// 正常情况一页就是一次请求。
 const FLUSH_DELAY_MS = 50;
-const MAX_BATCH_SIZE = 300; // 与服务端 MAX_POSTER_BATCH_ITEMS 对齐
-const BATCH_TIMEOUT_MS = 30000;
+const MAX_BATCH_SIZE = 30;
+const BATCH_TIMEOUT_MS = 60000;
 
 const TYPE_BY_KIND: Record<string, string> = { film: "movie", book: "book", music: "music", other: "movie" };
 
@@ -183,13 +185,15 @@ export function Poster({ work, kind: rawKind, large = false }: { work: Artwork; 
   // 直连失败后改为走代理重试同一张图，再失败才换下一个候选。
   const [proxyRetry, setProxyRetry] = useState<Set<string>>(() => new Set());
   const [imgLoaded, setImgLoaded] = useState(false);
+  // 服务端已持久化海报地址的条目不再发起解析请求——这正是「每次浏览都现解析」的根治。
+  const hasStoredPosters = (work.posterUrls?.length ?? 0) > 0;
   useEffect(() => {
     let active = true;
-    if (kind === "film" || kind === "book" || kind === "music") {
+    if (!hasStoredPosters && (kind === "film" || kind === "book" || kind === "music")) {
       void resolve(work, kind).then((urls) => { if (active && urls.length) setResolved(urls); });
     }
     return () => { active = false; };
-  }, [work.id, work.title, kind, large]);
+  }, [work.id, work.title, kind, large, hasStoredPosters]);
   const urls = [...new Set([...resolved, ...(work.posterUrls ?? [])])];
   const url = urls.find((candidate) => !failed.has(candidate));
   const src = url === undefined ? undefined : proxyRetry.has(url) ? proxiedImageUrl(url) : imageUrl(url);
