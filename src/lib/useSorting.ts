@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useMemo } from "react";
 import { createRankingState, chooseSide, deferWork, deserializeRankingState, getCurrentComparison, getRankingProgress, getRankingResult, serializeRankingState, skipWork, undoLastAction, type RankingState } from "./ranking";
 import { getCollectionsByKind, mediaLabels, type Artwork, type MediaCollection, type MediaKind } from "../data/media";
-import { mergeRanking, type ArtisticProfile, type RankingExport } from "./profile";
+import { mergeRanking, toRankedItems, type ArtisticProfile, type RankingExport } from "./profile";
 import { track, type Locale } from "./utils";
 
 const DRAFT_KEY = "art-rank:draft:v2";
@@ -131,7 +131,8 @@ export function useSorting(deps: SortingDeps) {
     const ranking: RankingExport = {
       version: 1, profileId: d.getProfile()?.profileId ?? crypto.randomUUID(), profileName: d.profileName.trim() || d.t("我的艺术人格", "My artistic profile"), kind,
       collectionTitle: `我的${mediaLabels[kind].label}清单`, createdAt: new Date().toISOString(),
-      items: kept.map((w, i) => ({ id: w.id, title: w.title, rank: i + 1, ...(w.creator ? { creator: w.creator } : {}), ...(w.year ? { year: w.year } : {}), ...(w.subtitle ? { subtitle: w.subtitle } : {}) })),
+      // 唯一可落库形状：posterUrls 不在白名单里，因此这里不可能把海报地址写进画像。
+      items: toRankedItems(kept.map((w, i) => ({ ...w, rank: i + 1 }))),
     };
     d.persist(mergeRanking(d.getProfile(), ranking));
     d.setActiveKind(kind);
@@ -151,8 +152,8 @@ export function useSorting(deps: SortingDeps) {
     const ranking: RankingExport = {
       version: 1, profileId: d.getProfile()?.profileId ?? crypto.randomUUID(), profileName: d.profileName.trim() || d.t("我的艺术人格", "My artistic profile"), kind: collection.kind,
       collectionTitle: collection.title, createdAt: new Date().toISOString(),
-      // 只保留最小字段，去掉 posterUrls 避免画像过大（海报由 Poster 组件按需解析）
-      items: kept.map((w, i) => ({ id: w.id, title: w.title, rank: i + 1, ...(w.creator ? { creator: w.creator } : {}), ...(w.year ? { year: w.year } : {}), ...(w.subtitle ? { subtitle: w.subtitle } : {}) })),
+      // 唯一可落库形状：posterUrls 不在白名单里，因此这里不可能把海报地址写进画像。
+      items: toRankedItems(kept.map((w, i) => ({ ...w, rank: i + 1 }))),
     };
     d.persist(mergeRanking(d.getProfile(), ranking));
     d.setActiveKind(collection.kind);

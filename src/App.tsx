@@ -3,7 +3,7 @@ import { ArrowLeft, CloudDownload, CloudUpload, Github, Languages, UserRound, X 
 
 import { createRankingState, chooseSide, deferWork, deserializeRankingState, getCurrentComparison, getRankingProgress, getRankingResult, serializeRankingState, skipWork, undoLastAction, type RankingState } from "./lib/ranking";
 import { getCollectionsByKind, mediaLabels, type Artwork, type MediaCollection, type MediaKind } from "./data/media";
-import { compareDimensions, compareProfiles, compareRankings, LIBRARY_KEY, MAX_PROFILE_BYTES, mergeDimensionRankings, mergeProfiles, mergeRanking, parseProfile, profileText, readProfile, renameRanking, deleteRanking, reorderRanking, type ArtisticProfile, type RankingExport, type RankedArtwork } from "./lib/profile";
+import { compareDimensions, compareProfiles, compareRankings, LIBRARY_KEY, MAX_PROFILE_BYTES, mergeDimensionRankings, mergeProfiles, mergeRanking, parseProfile, profileText, readProfile, renameRanking, deleteRanking, reorderRanking, toRankedItems, type ArtisticProfile, type RankingExport, type RankedArtwork } from "./lib/profile";
 import { importCollection } from "./lib/collections";
 import { renderProfilePng, pngFileName, type ExportLayout } from "./lib/exportPng";
 import { FocusTrap } from "./components/FocusTrap";
@@ -132,8 +132,9 @@ export default function App() {
     setNoteModal(null);
   }
   function persist(next: ArtisticProfile) {
-    // 去掉 posterUrls 避免画像过大（海报由 Poster 组件按需解析）
-    const cleaned: ArtisticProfile = { ...next, rankings: next.rankings.map((r) => ({ ...r, items: r.items.map((item) => { const { posterUrls, ...rest } = item as RankedArtwork & { posterUrls?: readonly string[] }; return rest; }) })) };
+    // 复用唯一可落库形状（shared/storedItem.ts，经 profile.ts 的 toRankedItems）：
+    // posterUrls 与任何未知字段都由白名单挡住，不再依赖这里手写 destructure。
+    const cleaned: ArtisticProfile = { ...next, rankings: next.rankings.map((r) => ({ ...r, items: toRankedItems(r.items) })) };
     setProfile(cleaned); setProfileName(cleaned.profileName); setShareUrl(""); setQrUrl("");
     try {
       localStorage.setItem(LIBRARY_KEY, JSON.stringify(cleaned));

@@ -19,6 +19,9 @@ export function PlazaPostView({ postId, t, label, navigateTo, accountToken, acco
   const [commentBusy, setCommentBusy] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState(false);
   const [editItems, setEditItems] = useState<RankedArtwork[] | null>(null);
+  // 服务端旁路带来的海报地址（与 post.items 等长、按位置对齐）。
+  // **只用于渲染**：编辑流继续使用干净的 post.items，海报地址因此没有回写入口。
+  const [posterSideChannel, setPosterSideChannel] = useState<ReadonlyArray<string[] | null>>([]);
   const [editManual, setEditManual] = useState("");
   const [editHistory, setEditHistory] = useState<Array<{ id: number; action: string; detail: string | null; created_at: string }> | null>(null);
   const [editInfoOpen, setEditInfoOpen] = useState(false);
@@ -47,8 +50,9 @@ export function PlazaPostView({ postId, t, label, navigateTo, accountToken, acco
     try {
       const response = await fetch(`/api/plaza/posts/${postId}`, accountToken ? { headers: { authorization: `Bearer ${accountToken}` } } : undefined);
       if (!response.ok) throw new Error();
-      const data = await response.json() as { post: PlazaPost; comments: PlazaComment[] };
+      const data = await response.json() as { post: PlazaPost; posterUrls?: Array<string[] | null>; comments: PlazaComment[] };
       setPost(data.post);
+      setPosterSideChannel(Array.isArray(data.posterUrls) ? data.posterUrls : []);
       setComments(data.comments);
       setLikeCount(data.post.like_count);
       setLiked(!!data.post.liked_by_me);
@@ -142,7 +146,7 @@ export function PlazaPostView({ postId, t, label, navigateTo, accountToken, acco
 
   function useForSorting() {
     if (!post) return;
-    const works = post.items ?? post.top_items ?? [];
+    const works = displayItems.length ? displayItems : (post.top_items ?? []);
     if (!works.length) return;
     openCollection({
       id: `plaza-${post.id}`,
@@ -171,7 +175,7 @@ export function PlazaPostView({ postId, t, label, navigateTo, accountToken, acco
       navigateTo("compare");
       return;
     }
-    const works = post.items ?? [];
+    const works = displayItems;
     if (!works.length) return;
     const ranking: ArtisticProfile = {
       version: 2,
@@ -214,6 +218,15 @@ export function PlazaPostView({ postId, t, label, navigateTo, accountToken, acco
 
   const isProfilePost = post.post_type === "profile";
   const profileRankings = isProfilePost ? ((post.items ?? []) as unknown as ArtisticProfile["rankings"]) : [];
+  /**
+   * 渲染用作品列表：把服务端旁路数组按位置合并进来。
+   * 编辑流（startEdit / saveEdit）刻意使用干净的 `post.items` ——
+   * 只要它不含 posterUrls，写入路径就不可能重演 512KB 故障。
+   */
+  const displayItems: RankedArtwork[] = (post.items ?? []).map((work, index) => {
+    const urls = posterSideChannel[index];
+    return urls?.length ? { ...work, posterUrls: urls } : work;
+  });
   // 服务端按 token 判定作者身份（详情请求已带鉴权头）
   const isAuthor = !!(accountToken && post.is_author);
 
@@ -488,7 +501,7 @@ export function PlazaPostView({ postId, t, label, navigateTo, accountToken, acco
           <RankingDetail
             kind={post.kind as MediaKind}
             collectionTitle={post.collection_title}
-            items={post.items ?? []}
+            items={displayItems}
             notes={parsedNotes}
             kindLabel={label}
             onNoteView={openNoteView}

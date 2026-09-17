@@ -37,6 +37,8 @@ interface BatchEntry {
 
 let batchTimer: ReturnType<typeof setTimeout> | null = null;
 const batchQueue: BatchEntry[] = [];
+/** 本次页面加载是否已经发过第一批请求（决定是否带 retry）。 */
+let firstBatchDispatched = false;
 
 function normalizeKey(value: string): string { return value.normalize("NFKC").trim().toLowerCase(); }
 
@@ -62,6 +64,12 @@ async function dispatchBatch(batch: BatchEntry[]): Promise<void> {
     type: TYPE_BY_KIND[entry.kind] ?? "movie",
   }));
 
+  // 每次页面加载的**首次**批量带 retry：服务端据此绕过「被上游限流」的负缓存
+  // （正缓存与「确实没有海报」的负缓存仍然生效）。这样「刷新 = 真重试」是确定的，
+  // 不必碰运气等满 15 秒的短冷却窗口。
+  const retry = !firstBatchDispatched;
+  firstBatchDispatched = true;
+
   let results: Record<string, string[]> = {};
   let keys: string[] | null = null;
   try {
@@ -70,7 +78,7 @@ async function dispatchBatch(batch: BatchEntry[]): Promise<void> {
       const response = await fetch("/api/posters/batch", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ items }),
+        body: JSON.stringify(retry ? { items, retry: true } : { items }),
         signal: AbortSignal.timeout(BATCH_TIMEOUT_MS),
       });
       if (response.ok) {
@@ -137,8 +145,15 @@ function resolve(work: Artwork, kind: MediaKind): Promise<string[]> {
     batchQueue.push({ work, kind, resolveBatch });
     if (batchTimer === null) batchTimer = setTimeout(flushBatch, FLUSH_DELAY_MS);
   }).then((urls) => {
-    resolvedPosters.set(key, urls);
-    if (urls.length) writePosterCache(key, urls);
+    // 失败不再被页面会话记住：空结果不写内存副本、也不写 sessionStorage，
+    // 下一次挂载（翻页/刷新）会重新请求。原先空数组同样写进 resolvedPosters，
+    // 于是「这次没解析到」在整页生命周期内等于永久缺图。
+    if (urls.length) {
+      resolvedPosters.set(key, urls);
+      writePosterCache(key, urls);
+    } else {
+      requests.delete(key);
+    }
     return urls;
   });
   requests.set(key, request);

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { attachStoredPosterUrls, mediaTypeForKind, normalizePosterItem, normalizeYear, posterKeyFor, saveResolvedPosters } from "./posterStore";
+import { loadPosterUrls, mediaTypeForKind, normalizePosterItem, normalizeYear, posterKeyFor, resolveStoredPosterUrls, saveResolvedPosters } from "./posterStore";
 
 /**
  * 这些测试钉住的是一类具体的回归：同一条作品的海报地址，在「单条查询」
@@ -103,7 +103,7 @@ describe("写入键与读取键一致", () => {
 
   it("空串 subtitle 按空串参与键（?? 不拦空串），读写两侧用的是同一个表达式", () => {
     const subtitle = "";
-    // 前端 Poster.tsx 与 attachStoredPosterUrls 都写作 `subtitle ?? title`
+    // 前端 Poster.tsx 与 resolveStoredPosterUrls 都写作 `subtitle ?? title`
     const english = subtitle ?? "童话";
     expect(english).toBe("");
     expect(posterKeyFor({ title: "童话", english, type: "music" })).toBe("music|童话||");
@@ -129,37 +129,60 @@ function fakeDb(rows: Array<{ media_key: string; urls: string }>, onWrite?: (sql
   } as unknown as D1Database;
 }
 
-describe("attachStoredPosterUrls", () => {
+describe("resolveStoredPosterUrls（旁路数组，按位置对齐）", () => {
   const urls = ["https://img9.doubanio.com/view/photo/l/public/p1.webp"];
   const key = "music|童话|童话|";
   const db = fakeDb([{ media_key: key, urls: JSON.stringify(urls) }]);
 
-  it("命中时挂上 posterUrls", async () => {
-    const items = await attachStoredPosterUrls(db, "music", [{ title: "童话" }]);
-    expect(items[0].posterUrls).toEqual(urls);
+  it("命中时给出地址，未命中给 null，且长度与入参等长", async () => {
+    const items = [{ title: "童话" }, { title: "没存过的歌" }];
+    const resolved = await resolveStoredPosterUrls(db, "music", items);
+    expect(resolved).toHaveLength(items.length);
+    expect(resolved[0]).toEqual(urls);
+    expect(resolved[1]).toBeNull();
   });
 
-  it("未命中保持原样", async () => {
-    const items = await attachStoredPosterUrls(db, "music", [{ title: "没存过的歌" }]);
-    expect(items[0].posterUrls).toBeUndefined();
-  });
-
-  it("已有 posterUrls 的条目不被覆盖", async () => {
-    const mine = ["https://example.com/mine.jpg"];
-    const items = await attachStoredPosterUrls(db, "music", [{ title: "童话", posterUrls: mine }]);
-    expect(items[0].posterUrls).toEqual(mine);
-  });
-
-  it("other 媒介与无 DB 时直接原样返回", async () => {
+  it("**不**注入条目对象——这是 512KB 故障复发的结构性入口", async () => {
     const items = [{ title: "童话" }];
-    expect(await attachStoredPosterUrls(db, "other", items)).toEqual(items);
-    expect(await attachStoredPosterUrls(undefined, "music", items)).toEqual(items);
+    await resolveStoredPosterUrls(db, "music", items);
+    expect(items[0]).not.toHaveProperty("posterUrls");
+  });
+
+  it("条目自带的 posterUrls 不参与判定（读取端已不再关心它）", async () => {
+    const resolved = await resolveStoredPosterUrls(db, "music", [{ title: "童话" }]);
+    expect(resolved[0]).toEqual(urls);
+  });
+
+  it("other 媒介与无 DB 时返回等长的全 null 数组", async () => {
+    const items = [{ title: "童话" }];
+    expect(await resolveStoredPosterUrls(db, "other", items)).toEqual([null]);
+    expect(await resolveStoredPosterUrls(undefined, "music", items)).toEqual([null]);
+  });
+
+  it("空入参返回空数组", async () => {
+    expect(await resolveStoredPosterUrls(db, "music", [])).toEqual([]);
   });
 
   it("坏 JSON 行被忽略而不是抛错", async () => {
     const broken = fakeDb([{ media_key: key, urls: "{not json" }]);
-    const items = await attachStoredPosterUrls(broken, "music", [{ title: "童话" }]);
-    expect(items[0].posterUrls).toBeUndefined();
+    expect(await resolveStoredPosterUrls(broken, "music", [{ title: "童话" }])).toEqual([null]);
+  });
+});
+
+describe("loadPosterUrls（Phase 1 先查库用）", () => {
+  const db = fakeDb([
+    { media_key: "music|a|a|", urls: JSON.stringify(["https://x/1.webp"]) },
+    { media_key: "music|b|b|", urls: JSON.stringify(["https://x/2.webp"]) },
+  ]);
+
+  it("只返回命中的键", async () => {
+    const found = await loadPosterUrls(db, ["music|a|a|", "music|c|c|"]);
+    expect([...found.keys()]).toEqual(["music|a|a|"]);
+  });
+
+  it("缺表/无 DB 时返回空 map 而不是抛错（退化为旧行为）", async () => {
+    const failing = { prepare() { throw new Error("no such table: poster_urls"); } } as unknown as D1Database;
+    await expect(loadPosterUrls(failing, ["music|a|a|"])).resolves.toEqual(new Map());
   });
 });
 

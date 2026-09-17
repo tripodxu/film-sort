@@ -1,7 +1,8 @@
 import type { Env } from "./index";
 import { getUserFromToken, adminAuthLocal } from "./account";
 import { recordAudit } from "./audit";
-import { attachStoredPosterUrls } from "./posterStore";
+import { resolveStoredPosterUrls } from "./posterStore";
+import { MAX_PAYLOAD_BYTES, encodeStoredRankings, encodeStoredWorks, toStoredRankings, toStoredWorks } from "../shared/storedItem";
 
 const json = (data: unknown, status = 200) => new Response(JSON.stringify(data), { status, headers: { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" } });
 
@@ -99,15 +100,24 @@ export async function plazaRoute(request: Request, env: Env): Promise<Response> 
       likedByMe = !!like;
     }
 
-    // 挂上已持久化的海报地址：命中后前端无需再自行解析海报（150 首的歌单
-    // 原本每次打开都要现解析 150 次，几乎必然被上游限流打回）。
-    const items = await attachStoredPosterUrls(
-      env.DB,
-      post.kind,
-      JSON.parse(String(post.items ?? "[]")) as Array<Record<string, unknown>>,
-    );
+    // 海报地址走**旁路数组**，不再注入条目对象。
+    //
+    // 历史教训：曾经把 poster_urls 侧表的结果挂进 post.items，前端编辑帖子时
+    // `{...w}` 展开把 posterUrls 原样带回 body.items，PUT 又没有护栏，
+    // 于是海报地址重新进库、随覆盖率增长重演 512KB 故障（见
+    // docs/PLAN-poster-pipeline.md §4.3）。改成旁路后，编辑流只碰干净的
+    // post.items，泄漏路径从结构上消失，而不是靠「记得剥离」。
+    const rawItems: unknown[] = JSON.parse(String(post.items ?? "[]"));
+    const isProfilePost = post.post_type === "profile";
+    // 读取时也过一遍白名单：库里残留 posterUrls 的旧行读出来即干净，
+    // 客户端下一次保存就自动瘦身——不需要数据迁移脚本。
+    const works = isProfilePost ? [] : toStoredWorks(rawItems);
+    const posterUrls = await resolveStoredPosterUrls(env.DB, post.kind, works);
+    const items: unknown[] = isProfilePost ? toStoredRankings(rawItems) : works;
     return json({
       post: { ...post, items, is_author: !!viewer && viewer.id === post.user_id, liked_by_me: likedByMe },
+      // 与 items 等长、按位置对齐；null 表示该条没有已持久化的海报地址。
+      posterUrls,
       comments: comments.results ?? [],
     });
   }
@@ -118,7 +128,7 @@ export async function plazaRoute(request: Request, env: Env): Promise<Response> 
     if (!user) return json({ error: "authentication_required" }, 401);
 
     const raw = await request.text();
-    if (raw.length > 512 * 1024) return json({ error: "payload_too_large" }, 413);
+    if (new TextEncoder().encode(raw).byteLength > MAX_PAYLOAD_BYTES) return json({ error: "payload_too_large" }, 413);
     let body: Record<string, unknown>;
     try { body = JSON.parse(raw); } catch { return json({ error: "invalid_json" }, 400); }
 
@@ -141,15 +151,21 @@ export async function plazaRoute(request: Request, env: Env): Promise<Response> 
     if (postType === "profile" && body.items.some((item) => typeof item !== "object" || item === null || !Array.isArray((item as Record<string, unknown>).items))) {
       return json({ error: "invalid_items" }, 400);
     }
-    const itemCount = postType === "profile"
-      ? body.items.reduce((sum, r) => sum + (Array.isArray((r as Record<string, unknown>).items) ? (r as { items: unknown[] }).items.length : 0), 0)
-      : body.items.length;
+    // 唯一编码出口：白名单投影顺带剔除 posterUrls 与任何未知字段。
+    // 两种帖子形状不同（作品数组 vs 榜单数组），用错编码器会把整批数据判为非法，
+    // 所以这里必须按 postType 分支——这也是原先最容易漏掉的一处。
+    const encoded = postType === "profile" ? encodeStoredRankings(body.items) : encodeStoredWorks(body.items);
+    if (!encoded.ok) {
+      return encoded.error === "payload_too_large"
+        ? json({ error: "payload_too_large" }, 413)
+        : json({ error: "invalid_items" }, 400);
+    }
+    const itemCount = encoded.count;
     if (itemCount < 1 || itemCount > 300) return json({ error: "invalid_items" }, 400);
-    const itemsJson = JSON.stringify(body.items);
 
     const result = await env.DB.prepare(
       `INSERT INTO plaza_posts (user_id, post_type, kind, collection_title, description, items, notes, item_count, is_public) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
-    ).bind(user.id, postType, kind, collectionTitle, description, itemsJson, notes, itemCount, isPublic).run();
+    ).bind(user.id, postType, kind, collectionTitle, description, encoded.json, notes, itemCount, isPublic).run();
 
     return json({ id: result.meta.last_row_id, stored: true }, 201);
   }
@@ -161,12 +177,12 @@ export async function plazaRoute(request: Request, env: Env): Promise<Response> 
     if (!user) return json({ error: "authentication_required" }, 401);
 
     const postId = Number(postEditMatch[1]);
-    const existing = await env.DB.prepare("SELECT user_id FROM plaza_posts WHERE id = ?").bind(postId).first<{ user_id: number }>();
+    const existing = await env.DB.prepare("SELECT user_id, post_type FROM plaza_posts WHERE id = ?").bind(postId).first<{ user_id: number; post_type: string }>();
     if (!existing) return json({ error: "post_not_found" }, 404);
     if (existing.user_id !== user.id) return json({ error: "forbidden" }, 403);
 
     const raw = await request.text();
-    if (raw.length > 512 * 1024) return json({ error: "payload_too_large" }, 413);
+    if (new TextEncoder().encode(raw).byteLength > MAX_PAYLOAD_BYTES) return json({ error: "payload_too_large" }, 413);
     let body: Record<string, unknown>;
     try { body = JSON.parse(raw); } catch { return json({ error: "invalid_json" }, 400); }
 
@@ -177,12 +193,23 @@ export async function plazaRoute(request: Request, env: Env): Promise<Response> 
     const notes = cleanString(body.notes, 2000);
     const isPublic = body.is_public === undefined || body.is_public === null ? undefined : (body.is_public ? 1 : 0);
 
+    // 这里正是 512KB 故障的复发点：客户端编辑帖子时会把详情接口拿到的 items 原样
+    // 提交回来。只要详情接口不再把 posterUrls 注进 items（本文件 GET 分支已改为旁路），
+    // 再加上这里的白名单编码器，海报地址就没有任何入口。
     let itemsJson: string | undefined;
     let itemCount: number | undefined;
     if (Array.isArray(body.items)) {
       if (body.items.length < 1 || body.items.length > 300) return json({ error: "invalid_items" }, 400);
-      itemsJson = JSON.stringify(body.items);
-      itemCount = body.items.length;
+      const effectiveType = postType ?? existing.post_type;
+      const encoded = effectiveType === "profile" ? encodeStoredRankings(body.items) : encodeStoredWorks(body.items);
+      if (!encoded.ok) {
+        return encoded.error === "payload_too_large"
+          ? json({ error: "payload_too_large" }, 413)
+          : json({ error: "invalid_items" }, 400);
+      }
+      if (encoded.count < 1 || encoded.count > 300) return json({ error: "invalid_items" }, 400);
+      itemsJson = encoded.json;
+      itemCount = encoded.count;
     }
 
     // D1 bind 不接受 undefined：未提供的字段统一转 null，由 COALESCE 保留原值

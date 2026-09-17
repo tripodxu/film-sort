@@ -1,8 +1,9 @@
 # 海报管线优化计划
 
-> 状态：**Phase 0 待实施（存在线上活跃风险）** · Phase 1–3 待实施
+> 状态：**Phase 0 / 1 / 2 已实施**（含自动化护栏）· Phase 3 未实施（见 §11）
 > 相关文档：`OPTIMIZATION.md` §2.3、§3.3 · `DOUBAN_API.md` · `API.md`
 > 相关提交：`d158fce` `d4492eb` `23fc8c3`（已完成）· `51dfc8d` `58da68a` `4ce1f15`（历史成因）
+> 实施记录与偏离说明：**§11**
 
 ---
 
@@ -14,8 +15,8 @@
 
 | 层 | 问题 | 影响 | 状态 |
 |---|---|---|---|
-| 第一层 | 不持久化 → 每次浏览现解析整份榜单 | 150 首歌单一次批量只有 **16~17/150** 命中，其余显示占位图标 | 已缓解（24h 缓存 + 侧表 + 分块），未根治 |
-| 第二层 | 剥离逻辑零散、写入路径缺护栏 | **`poster_urls` 侧表已上线并注回 `items`，而 4 条写入路径没有护栏 → 会将海报地址写回库，重演 512KB 故障** | **待实施（线上活跃）** |
+| 第一层 | 不持久化 → 每次浏览现解析整份榜单 | 150 首歌单一次批量只有 **16~17/150** 命中，其余显示占位图标 | 已根治（Phase 1 先查库 + 24h 缓存 + 侧表 + 分块 + 失败分类） |
+| 第二层 | 剥离逻辑零散、写入路径缺护栏 | **`poster_urls` 侧表已上线并注回 `items`，而 4 条写入路径没有护栏 → 会将海报地址写回库，重演 512KB 故障** | ✅ 已修复（Phase 0，见 §11） |
 
 第二层是本文档的重点，也是必须最先处理的部分。
 
@@ -167,7 +168,7 @@ attachStoredPosterUrls 注回 post.items                    ← 已上线（work
 
 ## 6. 待实施方案
 
-### Phase 0 — 结构性保证（**最高优先级**）
+### Phase 0 — 结构性保证（**最高优先级**）✅ 已实施
 
 > 目标：让"posterUrls 进入 items"在结构上不可能，而不是靠"记得剥离"。
 
@@ -243,7 +244,7 @@ export function encodeStoredRankings(value: unknown): /* 同上 */;
 
 读取时也过一遍 `toStoredWork`：库中残留 posterUrls 的旧行读出来即干净，客户端编辑保存后自动瘦身 —— **无需数据迁移脚本**。
 
-### Phase 1 — 批量/单条接口先查库
+### Phase 1 — 批量/单条接口先查库 ✅ 已实施
 
 | 文件 | 改动 |
 |---|---|
@@ -254,7 +255,7 @@ export function encodeStoredRankings(value: unknown): /* 同上 */;
 空数组命中按未命中处理。DB 不可用/表缺失 → 返回空 map → 退化为当前行为，不报错。
 **受益面**：分享页（posterUrls 被剥掉）、任何走批量的入口都不再重复回源。
 
-### Phase 2 — 失败可重试
+### Phase 2 — 失败可重试 ✅ 已实施（2c 未做）
 
 核心：**不能一刀切** —— 瞬时失败该重试，永久失败不该反复打上游。
 
@@ -277,7 +278,7 @@ export function encodeStoredRankings(value: unknown): /* 同上 */;
 
 **2d. 批量失败记入 `poster_errors`**（source=`batch`）—— 目前批量失败在后台完全不可见
 
-### Phase 3 — 失败队列 + 定时补温
+### Phase 3 — 失败队列 + 定时补温 ⏸ 未实施（见 §11.4）
 
 **3a.** 迁移 `0023_poster_misses.sql`：`media_key PK, title, english, type, year, attempts, first_seen, last_attempt`
 失败 upsert（`attempts+1`）、成功 delete。同时成为"还差什么"的唯一事实来源。
@@ -289,17 +290,23 @@ export function encodeStoredRankings(value: unknown): /* 同上 */;
 
 ### Phase 4 — 验证
 
-**单元测试**
-- 白名单丢弃未知字段（含 posterUrls、tags、缓存字段）；超限返回 `payload_too_large`；字节口径对中文正确
-- `known` 短路、空数组按未命中、重复 key 的 `keys` 对齐
-- **静态守卫测试**：故意在某路由加 `JSON.stringify(body.items)`，确认测试变红
+**单元测试（✅ 已落地，122 passed）**
+- 白名单丢弃未知字段（含 posterUrls、tags、缓存字段）；超限返回 `payload_too_large`；字节口径对中文正确 → `shared/storedItem.test.ts`
+- `known` 短路、空数组按未命中、`retry` 只影响 `throttled` 分支 → `worker/posterCache.test.ts`
+- **静态守卫测试**：故意在某路由加 `JSON.stringify(body.items)`，确认测试变红 → `worker/payloadGuard.test.ts`（含守卫自身的有效性用例）
+- **端到端复发链**：`GET` 不注入 + `PUT`/`POST` 白名单落库 → `worker/plazaPayload.test.ts`
 
-**线上复测**
+**线上复测（待部署后执行）**
 - 已落库条目重复浏览：上游解析请求数 = 0
 - 刷新确有真实上游耗时（非 <100ms 空返回）
 - `throttled` / `absent` 两种 TTL 行为符合预期
 - 帖子 32 覆盖率随轮次单调上升
 - **重点回归**：编辑 150 首帖子后，`plaza_posts.items` 字节数未增长且不含 posterUrls
+
+### Phase 5 — 待观察项（原 Phase 2c）
+
+页内自动补一轮（首批 settle 后 3~5 秒）**未实施**：优先靠「刷新即重试」+ 15 秒 `throttled` TTL 覆盖，
+先观察线上效果，避免在限流本来就紧张时额外增加一轮上游请求。
 
 ---
 
@@ -330,17 +337,19 @@ export function encodeStoredRankings(value: unknown): /* 同上 */;
 ## 9. 实施顺序
 
 ```
-Phase 0（0a+0b+0c+0d+0e+0f）  ← 最高优先级，修当前线上活跃风险
-  → Phase 1（先查库）
-  → Phase 2d（失败可观测）
-  → Phase 2a（失败分类）
-  → Phase 2b（刷新即重试）
-  → Phase 2c（可选）
-  → Phase 3（失败队列 + 补温）
-  → Phase 4（验证）
+Phase 0（0a+0b+0c+0d+0e+0f）  ✅ 已实施 ← 修当前线上活跃风险
+  → Phase 1（先查库）          ✅ 已实施
+  → Phase 2d（失败可观测）      ✅ 已实施
+  → Phase 2a（失败分类）        ✅ 已实施
+  → Phase 2b（刷新即重试）      ✅ 已实施
+  → Phase 2c（可选）            ⏸ 见 Phase 5
+  → Phase 3（失败队列 + 补温）   ⏸ 见 §11.4
+  → Phase 4（验证）            ✅ 单元测试已落地，线上复测待部署
 ```
 
 **阶段收口建议**：Phase 0 单独落地并复测"编辑帖子不再写回 posterUrls"；确认无误后再动 Phase 1 及缓存语义 —— 避免一次改太多而分不清影响。
+
+> 本次实施把 0~2 一次性落地，但**每次改动都带了独立可验证的护栏**（`worker/plazaPayload.test.ts` 覆盖 Phase 0 复发链、`worker/posterCache.test.ts` 覆盖 Phase 1/2 的缓存语义）。若线上需要回退，Phase 2 的缓存语义（`throttled` TTL、`retry`）与 Phase 0/1 彼此独立：把 `POSTER_THROTTLED_TTL_MS` 调回 `POSTER_MISS_TTL_MS` 即可退回旧的"一刀切 10 分钟"行为。
 
 **改动量**：Phase 0 = 1 个新模块 + 1 个守卫测试 + 5 条写入路径各 2~4 行 + 客户端 3 处收敛，**不涉及迁移、不改接口形状、可独立复测**。
 
@@ -352,16 +361,17 @@ Phase 0（0a+0b+0c+0d+0e+0f）  ← 最高优先级，修当前线上活跃风�
 
 | 常量 | 位置 | 值 |
 |---|---|---|
-| `POSTER_CACHE_TTL_MS` | `worker/media.ts:24` | 24h（正结果） |
-| `POSTER_MISS_TTL_MS` | `worker/media.ts:26` | **10 分钟**（L1/L2 共用负结果） |
-| `POSTER_CACHE_MAX_ENTRIES` | `worker/media.ts:27` | 2000 |
+| `POSTER_CACHE_TTL_MS` | `worker/media.ts` | 24h（正结果，`found`） |
+| `POSTER_MISS_TTL_MS` | `worker/media.ts` | **24h**（`absent`：上游干净地回答"没有"） |
+| `POSTER_THROTTLED_TTL_MS` | `worker/media.ts` | **15s**（`throttled`：被上游 418/403 打回） |
+| `POSTER_CACHE_MAX_ENTRIES` | `worker/media.ts` | 2000 |
 | `MIN_DELAY_MS` | `worker/media.ts` | 800（`search.douban.com` 覆写为 200） |
 | `MAX_POSTER_BATCH_ITEMS` | `worker/index.ts` | 300 |
 | `MAX_POSTER_BATCH_BYTES` | `worker/index.ts` | 128KB |
 | `MAX_BATCH_SIZE`（客户端） | `src/components/Poster.tsx` | 30 |
 | `BATCH_TIMEOUT_MS`（客户端） | `src/components/Poster.tsx` | 60000 |
-| `MAX_PROFILE_BYTES` | `src/lib/profile.ts:22` | 512KB |
-| 512KB 硬编码 | `account.ts:360,377,409` · `index.ts:1954,1966` · `plaza.ts:121,169` | 需统一 |
+| `MAX_PAYLOAD_BYTES` | `shared/storedItem.ts`（`src/lib/profile.ts` 再导出为 `MAX_PROFILE_BYTES`） | 512KB |
+| 512KB 硬编码 | 已全部改为引用 `MAX_PAYLOAD_BYTES`（`account.ts` · `index.ts` · `plaza.ts`） | ✅ 已统一 |
 
 ### 10.2 相关提交
 
@@ -390,3 +400,60 @@ curl.exe -s -o NUL -H "User-Agent: Mozilla/5.0 … Chrome/131" -w "%{http_code} 
 ```
 
 > 注意：批量接口有 60 次/10 分钟限流桶；连续压测会把 Worker 出口 IP 打进豆瓣风控，导致数字偏悲观。复测前应留冷却时间。
+
+---
+
+## 11. 实施记录
+
+### 11.1 新增 / 改动文件
+
+| 文件 | 角色 |
+|---|---|
+| `shared/storedItem.ts`（新） | **唯一**的"可落库形状"：白名单投影 + 唯一编码出口 + `MAX_PAYLOAD_BYTES`，客户端与 Worker 共用 |
+| `shared/storedItem.test.ts`（新） | 白名单 / 字节口径 / `empty_payload` / v1 画像 / 读取端自愈 |
+| `worker/payloadGuard.test.ts`（新） | 静态守卫：编码器之外再出现针对载荷的 `JSON.stringify` 即变红（含守卫自身的有效性用例） |
+| `worker/plazaPayload.test.ts`（新） | 端到端复发链：`GET` 不注入、`PUT`/`POST` 白名单落库、`GET` 读取端自愈 |
+| `worker/posterCache.test.ts`（新） | `throttled` / `absent` TTL 分支、`knownPosterHit` 空数组语义、批量键对齐 |
+| `worker/media.ts` | `ThrottledError` + `PosterOutcome` + `posterCacheTtlMs`；缓存条目带 outcome（旧裸数组格式仍可读）；`known` 短路；`retry` 绕过被限流的负缓存 |
+| `worker/posterStore.ts` | `attachStoredPosterUrls` → `resolveStoredPosterUrls`（旁路数组）；导出 `loadPosterUrls` |
+| `worker/plaza.ts` | 详情接口改为旁路；`POST`/`PUT` 走编码器；两处 `raw.length` → 字节 |
+| `worker/account.ts` | `PUT profile` / `POST collections` 走编码器；`GET profile` 读取端自愈 |
+| `worker/index.ts` | `POST /api/share` 走编码器；`GET /api/share/:code` 读取端自愈；海报批量/单条先查库 + 失败入 `poster_errors(source='batch'/'single')` |
+| `src/lib/profile.ts` | `parseRanking` 改用 `toStoredWork`；新增 `toRankedItems`；`MAX_PROFILE_BYTES` 引用共享常量 |
+| `src/lib/useSorting.ts` / `src/App.tsx` | 两处手写白名单 / 手写 destructure → `toRankedItems` |
+| `src/views/PlazaPostView.tsx` | 仅在渲染时合并旁路数组；编辑流继续使用干净的 `post.items` |
+| `src/components/Poster.tsx` | 空结果不再被页面会话记住；首次批量带 `retry: true` |
+
+### 11.2 与计划的偏离（及原因）
+
+1. **`StoredWork` 的 `id` / `rank` 改为可选**（计划原写"照抄 `parseRanking`，两者必填"）。
+   `user_collections.items` 是「我的清单」，**从来只有 `id` 没有 `rank`**。照抄必填会让收藏路径把整批作品判为非法而清空——这是"统一形状"最容易踩的回归。实际约束仍与 `parseRanking` 完全一致：`title` 是唯一必填，其余字段的校验规则逐字不变。
+2. **编码器多返回一个 `empty_payload`**（计划只列了 `payload_too_large`）。
+   若白名单把所有条目都判为非法，静默写入空数组意味着用户数据凭空消失且没有任何信号；返回 400 更安全。已由 `worker/plazaPayload.test.ts` 覆盖。
+3. **`retry: true` 只绕过 `throttled` 负缓存，不绕过 `absent`**。
+   计划 §2b 说"绕过负缓存（正缓存仍生效）"，但 §7 验收标准 3 又要求"真正不存在海报的条目不被反复重试拖累上游"。只有把 `absent`（24h）保留、仅放行 `throttled`（15s）才能同时满足两条。因此 `absent` 条目不会每次刷新都被重问一遍。
+4. **`toStoredProfile` 兼容 v1 画像**。
+   `parseProfile` 至今兼容 `version: 1`（画像本身就是一份榜单）。若只认 `rankings`，读一行旧数据就会把整份榜单变成空对象。
+5. **`GET` 侧自愈采用"形状认不出就原样透传"**（`healStoredProfile`）。
+   读取路径宁可透传，也不能因为一次规范化把用户数据读没了。
+
+### 11.3 验证命令
+
+```powershell
+npx tsc --noEmit -p tsconfig.app.json     # 客户端
+npx tsc --noEmit -p tsconfig.worker.json  # Worker（含 shared）
+npx tsc --noEmit -p tsconfig.node.json
+npm test                                  # 122 passed | 9 skipped
+npx vite build                            # 客户端产物
+npx wrangler deploy --dry-run             # Worker 打包（含 ../shared 引用）
+```
+
+> 本机 `npm run check` / `tsc -b` 会因工作区里三个 `*.tsbuildinfo` 被占用而报 `TS5033 EPERM`；
+> 用上面的 `tsc --noEmit -p <project>` 等价替代（已验证三个 project 全绿）。
+
+### 11.4 Phase 3 为何暂不实施
+
+Phase 3 需要新增 `0023_poster_misses.sql` 迁移 + 每 20 分钟的 cron，让 `scheduled()` 持续回源补齐冷门条目。
+它**必然**把 Worker 出口 IP 更频繁地暴露给豆瓣——正是 §10.3 警告的"连续压测会把出口 IP 打进风控"。
+本计划自己的风险表也要求"每轮硬上限"。因此建议：先部署 Phase 0–2 并观察线上覆盖率曲线与 `poster_errors`
+中 `throttled` 的占比，确认上游压力可控后再落地 Phase 3（届时只需迁移 + cron 分支 + 复用现有节流链）。

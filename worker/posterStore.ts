@@ -95,7 +95,13 @@ export async function saveResolvedPosters(
   }
 }
 
-async function loadPosterUrls(db: D1Database, keys: string[]): Promise<Map<string, string[]>> {
+/**
+ * 读取已持久化的海报地址。导出供批量/单条路由「先查库」使用（Phase 1）。
+ *
+ * 表缺失或 DB 不可用时返回空 map —— 退化为「每次都回源」的旧行为，而不是报错，
+ * 这样迁移未落地的环境不会整体失效。
+ */
+export async function loadPosterUrls(db: D1Database, keys: string[]): Promise<Map<string, string[]>> {
   const found = new Map<string, string[]>();
   const unique = [...new Set(keys)];
   const CHUNK = 90; // 保守：低于 SQLite 的绑定变量上限
@@ -118,30 +124,30 @@ async function loadPosterUrls(db: D1Database, keys: string[]): Promise<Map<strin
 }
 
 /**
- * 给一批作品挂上已持久化的海报地址；命中后前端不必再调 /api/posters/batch。
- * 本身已带 posterUrls 的条目原样保留。
+ * 给一批作品解析已持久化的海报地址，返回**与入参等长的旁路数组**；
+ * 某条为 `null` 表示没有已落库地址，由前端自行解析。
+ *
+ * 刻意不再把结果注入条目对象：`{...item, posterUrls}` 会让前端编辑帖子时
+ * 把海报地址原样提交回写入路径，重演 512KB 故障
+ * （见 docs/PLAN-poster-pipeline.md §4.3）。
  */
-export async function attachStoredPosterUrls(
+export async function resolveStoredPosterUrls(
   db: D1Database | undefined,
   kind: unknown,
-  items: Array<Record<string, unknown>>,
-): Promise<Array<Record<string, unknown>>> {
-  if (!db || !items.length) return items;
+  items: ReadonlyArray<{ title?: unknown; subtitle?: unknown; year?: unknown }>,
+): Promise<Array<string[] | null>> {
+  const none = items.map(() => null);
+  if (!db || !items.length) return none;
   const type = mediaTypeForKind(kind);
-  if (!type) return items;
+  if (!type) return none;
   const keyByIndex = new Map<number, string>();
   items.forEach((item, index) => {
     // 前端发送的 english 是 `subtitle ?? title`，这里必须完全一致。
     const key = posterKeyFor({ title: item.title, english: item.subtitle ?? item.title, type, year: item.year });
     if (key) keyByIndex.set(index, key);
   });
-  if (!keyByIndex.size) return items;
+  if (!keyByIndex.size) return none;
   const stored = await loadPosterUrls(db, [...keyByIndex.values()]);
-  if (!stored.size) return items;
-  return items.map((item, index) => {
-    const existing = Array.isArray(item.posterUrls) ? item.posterUrls : [];
-    if (existing.length) return item;
-    const urls = stored.get(keyByIndex.get(index) ?? "");
-    return urls ? { ...item, posterUrls: urls } : item;
-  });
+  if (!stored.size) return none;
+  return items.map((_, index) => stored.get(keyByIndex.get(index) ?? "") ?? null);
 }

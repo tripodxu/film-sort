@@ -1,5 +1,6 @@
 import type { Env } from "./index";
 import { recordAudit } from "./audit";
+import { MAX_PAYLOAD_BYTES, encodeStoredProfile, encodeStoredWorks, healStoredProfile } from "../shared/storedItem";
 
 const encoder = new TextEncoder();
 const json = (data: unknown, status = 200) => new Response(JSON.stringify(data), { status, headers: { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" } });
@@ -347,7 +348,8 @@ export async function accountRoute(request: Request, env: Env): Promise<Response
     if (row?.notes) { try { notes = JSON.parse(row.notes); } catch { /* ignore */ } }
     let profileData: unknown = null;
     if (row?.profile) {
-      try { profileData = JSON.parse(row.profile); } catch { profileData = null; }
+      // 读取端自愈：旧行可能残留 posterUrls，过一遍白名单即干净；形状不认识时原样透传。
+      try { profileData = healStoredProfile(JSON.parse(row.profile)); } catch { profileData = null; }
     }
     return json({ email: user.email, nickname: account?.nickname ?? user.email.split("@")[0], profile: profileData, notes, updatedAt: row?.updated_at ?? null });
   }
@@ -357,26 +359,22 @@ export async function accountRoute(request: Request, env: Env): Promise<Response
     const user = await getUserFromToken(request, env.DB);
     if (!user) return json({ error: "authentication_required" }, 401);
     const raw = await request.text();
-    if (encoder.encode(raw).byteLength > 512 * 1024) return json({ error: "payload_too_large" }, 413);
+    if (encoder.encode(raw).byteLength > MAX_PAYLOAD_BYTES) return json({ error: "payload_too_large" }, 413);
     let profile: unknown; let notes: unknown;
     try { const body = JSON.parse(raw); profile = body.profile; notes = body.notes; } catch { return json({ error: "invalid_json" }, 400); }
     if (!profile || typeof profile !== "object" || Array.isArray(profile)) return json({ error: "invalid_profile" }, 400);
-    // 去掉 posterUrls 避免画像过大（海报由前端 Poster 组件按需解析）
-    const p = profile as Record<string, unknown>;
-    if (Array.isArray(p.rankings)) {
-      for (const ranking of p.rankings) {
-        if (ranking && Array.isArray((ranking as Record<string, unknown>).items)) {
-          for (const item of (ranking as Record<string, unknown>).items as Record<string, unknown>[]) {
-            if (item && Array.isArray(item.posterUrls)) delete item.posterUrls;
-          }
-        }
-      }
+    // 唯一编码出口：白名单投影会顺带剔除 posterUrls 与任何未知字段
+    // （见 shared/storedItem.ts）。不要再在这里写 delete item.posterUrls——
+    // 漏掉一处没有任何信号，这正是补丁反复出现的原因。
+    const encoded = encodeStoredProfile(profile);
+    if (!encoded.ok) {
+      return encoded.error === "payload_too_large"
+        ? json({ error: "profile_too_large", msg: "画像数据过大，请减少作品数量。" }, 413)
+        : json({ error: "invalid_profile" }, 400);
     }
     const notesJson = notes && typeof notes === "object" && !Array.isArray(notes) ? JSON.stringify(notes) : null;
-    const profileJson = JSON.stringify(profile);
-    if (encoder.encode(profileJson).byteLength > 512 * 1024) return json({ error: "profile_too_large", msg: "画像数据过大，请减少作品数量。" }, 413);
     await env.DB.prepare("INSERT INTO user_profiles_v2 (user_id, profile, notes) VALUES (?, ?, ?) ON CONFLICT(user_id) DO UPDATE SET profile = excluded.profile, notes = COALESCE(excluded.notes, user_profiles_v2.notes), updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')")
-      .bind(user.id, profileJson, notesJson).run();
+      .bind(user.id, encoded.json, notesJson).run();
     return json({ stored: true });
   }
 
@@ -405,9 +403,14 @@ export async function accountRoute(request: Request, env: Env): Promise<Response
     const body = await request.json().catch(() => null) as Record<string, unknown> | null;
     const collection = validateCollectionBody(body);
     if (!collection) return json({ error: "invalid_collection" }, 400);
-    const itemsJson = JSON.stringify(collection.items);
-    if (encoder.encode(itemsJson).byteLength > 512 * 1024) return json({ error: "payload_too_large" }, 413);
-    const result = await env.DB.prepare("INSERT INTO user_collections (user_id, kind, title, description, items, item_count) VALUES (?, ?, ?, ?, ?, ?)").bind(user.id, collection.kind, collection.title, collection.description, itemsJson, collection.items.length).run();
+    // 唯一编码出口：收藏清单是「无 rank 的作品数组」，白名单同样只留可落库字段。
+    const encoded = encodeStoredWorks(collection.items);
+    if (!encoded.ok) {
+      return encoded.error === "payload_too_large"
+        ? json({ error: "payload_too_large" }, 413)
+        : json({ error: "invalid_collection" }, 400);
+    }
+    const result = await env.DB.prepare("INSERT INTO user_collections (user_id, kind, title, description, items, item_count) VALUES (?, ?, ?, ?, ?, ?)").bind(user.id, collection.kind, collection.title, collection.description, encoded.json, encoded.count).run();
     return json({ id: result.meta.last_row_id, stored: true }, 201);
   }
 

@@ -1,5 +1,6 @@
 import { doubanTop250, doubanSuggest, doubanBookTop250, doubanBookSuggest, doubanMusicTop250, doubanSearch, doubanBookDetail, doubanMovieDetail, doubanMusicDetail, fetchContentIntro, proxyImage, resolvePosters, resolvePostersBatch, posterMediaKey, type PosterBatchRequest } from "./media";
-import { normalizePosterItem, saveResolvedPosters } from "./posterStore";
+import { loadPosterUrls, normalizePosterItem, saveResolvedPosters } from "./posterStore";
+import { MAX_PAYLOAD_BYTES, encodeStoredProfile, healStoredProfile } from "../shared/storedItem";
 import { accountRoute, hashPasswordStrong, needsPasswordUpgrade, timingSafeEqual, verifyPassword } from "./account";
 import { getUserFromToken } from "./account";
 import { adminPlazaRoute, plazaRoute } from "./plaza";
@@ -1445,10 +1446,13 @@ async function route(request: Request, env: Env): Promise<Response> {
     const year = Number(url.searchParams.get("year")) || undefined;
     const type = url.searchParams.get("type") as "movie" | "book" | "music" | undefined;
     if (!title || title.length > 160 || english.length > 160 || (year !== undefined && (!Number.isInteger(year) || year < 1800 || year > 2200))) return json({ error: "invalid_query" }, 400);
-    const poster_urls = await resolvePosters(title, english, year, type, env);
-    if (poster_urls.length) await saveResolvedPosters(env.DB, [{ key: posterMediaKey(title, english, type, year), urls: poster_urls }]);
-    if (poster_urls.length === 0 && env.DB) {
-      void env.DB.prepare("INSERT INTO poster_errors (title, media_type, error) VALUES (?, ?, ?)").bind(title, type ?? "movie", "no_poster_found").run().catch(() => {});
+    // Phase 1：先查库。已落库的条目直接返回，不再回源。
+    const cacheKey = posterMediaKey(title, english, type, year);
+    const stored = env.DB ? (await loadPosterUrls(env.DB, [cacheKey])).get(cacheKey) : undefined;
+    const poster_urls = stored?.length ? stored : await resolvePosters(title, english, year, type, env);
+    if (!stored?.length && poster_urls.length) await saveResolvedPosters(env.DB, [{ key: cacheKey, urls: poster_urls }]);
+    if (!stored?.length && poster_urls.length === 0 && env.DB) {
+      void env.DB.prepare("INSERT INTO poster_errors (title, media_type, error, source) VALUES (?, ?, ?, ?)").bind(title, type ?? "movie", "no_poster_found", "single").run().catch(() => {});
     }
     return json({ poster_urls }, 200, { "cache-control": `public, max-age=${poster_urls.length ? 86400 : 300}` });
   }
@@ -1462,9 +1466,33 @@ async function route(request: Request, env: Env): Promise<Response> {
     if (!isObject(parsed) || !Array.isArray((parsed as { items?: unknown }).items)) return json({ error: "invalid_json" }, 400);
     const items = sanitizePosterBatch((parsed as { items: unknown[] }).items);
     if (items.length === 0) return json({ results: {}, keys: [] }, 200, { "cache-control": "public, max-age=300" });
-    const { results, keys } = await resolvePostersBatch(items, env);
-    // 写穿：把这一批解析到的地址落库，同一榜单下次打开即可直接命中，无需再回源。
-    await saveResolvedPosters(env.DB, keys.map((key) => ({ key, urls: results[key] ?? [] })));
+    // Phase 1：先算出这一批的键，再一次性查库，命中项短路掉上游。
+    const batchKeys = items.map((item) => posterMediaKey(item.title, item.english ?? "", item.type, item.year));
+    const known = env.DB ? await loadPosterUrls(env.DB, batchKeys) : undefined;
+    // 客户端在每次页面加载的首次批量带 retry：绕过「被限流」的负缓存，
+    // 让「刷新 = 真重试」是确定的（正缓存与「确实没有」的负缓存仍然生效）。
+    const retry = (parsed as { retry?: unknown }).retry === true;
+    const { results, keys, outcomes } = await resolvePostersBatch(items, env, 8, known, { retry });
+    // 写穿：只把**新解析到**的地址落库（已知命中项不必重写）。
+    await saveResolvedPosters(env.DB, keys
+      .filter((key) => !known?.get(key)?.length)
+      .map((key) => ({ key, urls: results[key] ?? [] })));
+    // 批量失败原先在后台完全不可见——这里落一条 poster_errors(source=batch)，
+    // 且严格限量（每请求最多 10 条），避免把 D1 写成热点。
+    if (env.DB) {
+      const failures = keys.map((key, index) => ({ key, item: items[index] }))
+        .filter(({ key }) => !(results[key]?.length))
+        .slice(0, 10);
+      if (failures.length) {
+        const statement = env.DB.prepare("INSERT INTO poster_errors (title, media_type, error, source) VALUES (?, ?, ?, ?)");
+        void env.DB.batch(failures.map(({ key, item }) => statement.bind(
+          (item?.title ?? key).slice(0, 160),
+          item?.type ?? "movie",
+          outcomes[key] === "throttled" ? "throttled" : "no_poster_found",
+          "batch",
+        ))).catch(() => undefined);
+      }
+    }
     // 真正的 1 天缓存发生在服务端（L1 isolate + L2 Edge Cache）；
     // 这里只是顺带声明新鲜度，浏览器通常不缓存 POST 响应。
     return json({ results, keys }, 200, { "cache-control": "private, max-age=86400" });
@@ -1951,7 +1979,7 @@ async function route(request: Request, env: Env): Promise<Response> {
     assertSameOrigin(request);
     if (!await allowUpstreamRequest(request, "share", 30)) return json({ error: "rate_limited" }, 429, { "retry-after": "60" });
     const raw = await request.text();
-    if (new TextEncoder().encode(raw).byteLength > 512 * 1024) return json({ error: "profile_too_large" }, 413);
+    if (new TextEncoder().encode(raw).byteLength > MAX_PAYLOAD_BYTES) return json({ error: "profile_too_large" }, 413);
     let body: JsonObject;
     try {
       const parsed: unknown = JSON.parse(raw);
@@ -1962,8 +1990,14 @@ async function route(request: Request, env: Env): Promise<Response> {
     // 有效期白名单（天），默认 30；不提供永久档（链接含完整排名，过期即失效）
     const SHARE_EXPIRY_DAYS = [7, 30, 90, 365];
     const expiresDays = typeof body.expires_days === "number" && (SHARE_EXPIRY_DAYS as number[]).includes(body.expires_days) ? body.expires_days : 30;
-    const profileStr = JSON.stringify(body.profile);
-    if (new TextEncoder().encode(profileStr).byteLength > 512 * 1024) return json({ error: "profile_too_large" }, 413);
+    // 唯一编码出口：白名单投影剔除 posterUrls 与任何未知字段（共享链接同样会进库）。
+    const encoded = encodeStoredProfile(body.profile);
+    if (!encoded.ok) {
+      return encoded.error === "payload_too_large"
+        ? json({ error: "profile_too_large" }, 413)
+        : json({ error: "invalid_profile" }, 400);
+    }
+    const profileStr = encoded.json;
     const notesJson = isObject(body.notes) ? JSON.stringify(body.notes) : null;
     const expires = new Date(Date.now() + expiresDays * 24 * 60 * 60 * 1000).toISOString();
     let code = "";
@@ -1985,7 +2019,8 @@ async function route(request: Request, env: Env): Promise<Response> {
     if (!code || code.length > 20) return json({ error: "invalid_code" }, 400);
     const row = await env.DB.prepare("SELECT profile, notes, expires_at FROM shared_links WHERE code = ? AND expires_at > datetime('now')").bind(code).first<{ profile: string; notes: string | null; expires_at: string }>();
     if (!row) return json({ error: "link_expired_or_not_found" }, 404);
-    const result: Record<string, unknown> = { profile: JSON.parse(row.profile), expires_at: row.expires_at };
+    // 读取端自愈：旧链接里的画像可能残留 posterUrls（见 shared/storedItem.ts）。
+    const result: Record<string, unknown> = { profile: healStoredProfile(JSON.parse(row.profile)), expires_at: row.expires_at };
     if (row.notes) { try { result.notes = JSON.parse(row.notes); } catch { /* ignore */ } }
     return json(result, 200, { "cache-control": "public, max-age=3600" });
   }

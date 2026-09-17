@@ -22,11 +22,36 @@ const cooldownMap = new Map<string, number>();
 // 且能在 isolate 回收后存活）。命中热门榜单时刷新页面仍能直接拿到结果，
 // 不必再走 Douban/Wiki/网易云。
 const POSTER_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
-// 未命中的结果只短暂缓存：上游恢复后无需等满一天。
-const POSTER_MISS_TTL_MS = 10 * 60 * 1000;
+// 失败必须分两类，不能一刀切：
+//   throttled —— 上游瞬时限流（豆瓣 418/403）：刷新就该重试，所以 TTL 极短；
+//   absent    —— 上游干净地回答「没有这张图」：反复打上游没有意义，TTL 放长。
+// 原先两者共用 10 分钟：瞬时失败要等满 10 分钟才可能恢复，而真正没有海报的条目
+// 又每 10 分钟被重新问一遍上游——两头都错。
+const POSTER_THROTTLED_TTL_MS = 15 * 1000;
+const POSTER_MISS_TTL_MS = 24 * 60 * 60 * 1000;
 const POSTER_CACHE_MAX_ENTRIES = 2000;
 const POSTER_EDGE_ORIGIN = "https://poster-cache.art-rank.internal";
-const posterCache = new Map<string, { urls: string[]; expiresAt: number }>();
+
+/** 一次解析的结果分类（决定负缓存 TTL，也用于把失败写进 poster_errors）。 */
+export type PosterOutcome = "found" | "absent" | "throttled";
+
+/**
+ * 上游瞬时限流。必须与「上游回答没有」区分开——两者的负缓存 TTL 相差
+ * 三个数量级（15 秒 vs 24 小时），混为一谈会让瞬时失败变成长时间缺图。
+ */
+export class ThrottledError extends Error {
+  constructor(message = "upstream_throttled") { super(message); this.name = "ThrottledError"; }
+}
+
+/** outcome → 缓存 TTL。抽成纯函数，便于单测把两条分支钉住。 */
+export function posterCacheTtlMs(outcome: PosterOutcome): number {
+  if (outcome === "found") return POSTER_CACHE_TTL_MS;
+  if (outcome === "throttled") return POSTER_THROTTLED_TTL_MS;
+  return POSTER_MISS_TTL_MS;
+}
+
+interface PosterCacheEntry { urls: string[]; outcome: PosterOutcome }
+const posterCache = new Map<string, PosterCacheEntry & { expiresAt: number }>();
 
 /**
  * 海报条目的规范键：`type|title|english|year`（NFKC/去空白/小写）。
@@ -47,19 +72,19 @@ async function posterDigest(cacheKey: string): Promise<string> {
   return [...new Uint8Array(digest).slice(0, 16)].map((b) => b.toString(16).padStart(2, "0")).join("");
 }
 
-function readIsolatePosterCache(cacheKey: string): string[] | null {
+function readIsolatePosterCache(cacheKey: string): PosterCacheEntry | null {
   const entry = posterCache.get(cacheKey);
   if (!entry) return null;
   if (Date.now() > entry.expiresAt) { posterCache.delete(cacheKey); return null; }
   // 重新插入以刷新 LRU 顺序，让真正冷门的 key 先被淘汰。
   posterCache.delete(cacheKey);
   posterCache.set(cacheKey, entry);
-  return entry.urls;
+  return { urls: entry.urls, outcome: entry.outcome };
 }
 
-function writeIsolatePosterCache(cacheKey: string, urls: string[]): void {
+function writeIsolatePosterCache(cacheKey: string, entry: PosterCacheEntry): void {
   posterCache.delete(cacheKey);
-  posterCache.set(cacheKey, { urls, expiresAt: Date.now() + (urls.length ? POSTER_CACHE_TTL_MS : POSTER_MISS_TTL_MS) });
+  posterCache.set(cacheKey, { ...entry, expiresAt: Date.now() + posterCacheTtlMs(entry.outcome) });
   while (posterCache.size > POSTER_CACHE_MAX_ENTRIES) {
     const oldest = posterCache.keys().next();
     if (oldest.done) break;
@@ -74,25 +99,39 @@ function edgeCacheOrNull(): Cache | null {
   } catch { return null; }
 }
 
-async function readEdgePosterCache(cacheKey: string): Promise<string[] | null> {
+async function readEdgePosterCache(cacheKey: string): Promise<PosterCacheEntry | null> {
   const cache = edgeCacheOrNull();
   if (!cache) return null;
   try {
     const hit = await cache.match(`${POSTER_EDGE_ORIGIN}/${await posterDigest(cacheKey)}`);
     if (!hit) return null;
-    const urls: unknown = await hit.json();
-    return Array.isArray(urls) && urls.every((url) => typeof url === "string") ? urls as string[] : null;
+    const raw: unknown = await hit.json();
+    // 兼容上一版写入的「裸数组」格式：按长度推断 outcome，与旧语义完全一致，
+    // 已存在的边缘缓存不会因为改格式而失效。
+    if (Array.isArray(raw)) return parseEdgeEntry({ urls: raw });
+    return parseEdgeEntry(raw);
   } catch { return null; }
 }
 
-async function writeEdgePosterCache(cacheKey: string, urls: string[]): Promise<void> {
+function parseEdgeEntry(raw: unknown): PosterCacheEntry | null {
+  if (!raw || typeof raw !== "object") return null;
+  const entry = raw as { urls?: unknown; outcome?: unknown };
+  if (!Array.isArray(entry.urls) || !entry.urls.every((url) => typeof url === "string")) return null;
+  const urls = entry.urls as string[];
+  const outcome: PosterOutcome = entry.outcome === "found" || entry.outcome === "throttled" || entry.outcome === "absent"
+    ? entry.outcome
+    : (urls.length ? "found" : "absent");
+  return { urls, outcome };
+}
+
+async function writeEdgePosterCache(cacheKey: string, entry: PosterCacheEntry): Promise<void> {
   const cache = edgeCacheOrNull();
   if (!cache) return;
   try {
-    const maxAge = (urls.length ? POSTER_CACHE_TTL_MS : POSTER_MISS_TTL_MS) / 1000;
+    const maxAge = posterCacheTtlMs(entry.outcome) / 1000;
     await cache.put(
       `${POSTER_EDGE_ORIGIN}/${await posterDigest(cacheKey)}`,
-      new Response(JSON.stringify(urls), { headers: { "content-type": "application/json", "cache-control": `max-age=${maxAge}` } }),
+      new Response(JSON.stringify(entry), { headers: { "content-type": "application/json", "cache-control": `max-age=${maxAge}` } }),
     );
   } catch { /* Edge Cache 是尽力而为，L1 仍然生效。 */ }
 }
@@ -632,7 +671,10 @@ async function searchCover(query: string, type: "movie" | "book" | "music", atte
       cooldownMap.set("search.douban.com", Date.now() + 1200);
       console.warn(`searchCover rate limited (${response.status})`);
       if (attempt === 0) return searchCover(query, type, 1);
-      return undefined;
+      // 重试后仍被限流：抛出而不是返回 undefined。调用方据此把这次结果标成
+      // `throttled`（15 秒负缓存），而不是当作「上游没有这张图」（24 小时负缓存）。
+      // 返回 undefined 会让瞬时失败被记成永久缺失，这正是「刷新也补不回来」的成因。
+      throw new ThrottledError(`searchCover rate limited (${response.status})`);
     }
     if (!response.ok) return undefined;
     const html = await response.text();
@@ -763,24 +805,56 @@ async function searchNeteasePoster(title: string, env?: GdProxyEnv): Promise<str
 /**
  * 已缓存的查询直接返回；否则计算并写入两级缓存。
  * 缓存键为 `type|title|english|year` 的规范化形式。
+ *
+ * `opts.retry`：绕过**被限流**的负缓存（正缓存与「确实没有」的负缓存仍生效）。
+ * 前端在每次页面加载的首次批量带上它，让「刷新 = 真重试」是确定的，
+ * 而不是碰运气等满 15 秒窗口；同时不会让真正不存在海报的条目每次被重问一遍。
  */
-export async function resolvePosters(title: string, english: string, year?: number, type?: "movie" | "book" | "music", env?: GdProxyEnv): Promise<string[]> {
+export async function resolvePosters(
+  title: string,
+  english: string,
+  year?: number,
+  type?: "movie" | "book" | "music",
+  env?: GdProxyEnv,
+  opts?: { retry?: boolean },
+): Promise<string[]> {
+  return (await resolvePosterEntry(title, english, year, type, env, opts)).urls;
+}
+
+async function resolvePosterEntry(
+  title: string,
+  english: string,
+  year?: number,
+  type?: "movie" | "book" | "music",
+  env?: GdProxyEnv,
+  opts?: { retry?: boolean },
+): Promise<PosterCacheEntry> {
   const cacheKey = posterMediaKey(title, english, type, year);
   const isolateHit = readIsolatePosterCache(cacheKey);
-  if (isolateHit) return isolateHit;
-  const edgeHit = await readEdgePosterCache(cacheKey);
-  if (edgeHit) { writeIsolatePosterCache(cacheKey, edgeHit); return edgeHit; }
-  const urls = await computePosters(title, english, year, type, env);
-  writeIsolatePosterCache(cacheKey, urls);
-  await writeEdgePosterCache(cacheKey, urls);
-  return urls;
+  const cached = isolateHit ?? await readEdgePosterCache(cacheKey);
+  if (cached && !(opts?.retry === true && cached.outcome === "throttled")) {
+    // 只把 Edge Cache 的结果回填 L1（与旧行为一致）。命中 L1 时**不**重写：
+    // 否则每次浏览都会把负缓存的 TTL 顺延，等于让「确实没有海报」永久缓存下去。
+    if (!isolateHit) writeIsolatePosterCache(cacheKey, cached);
+    return cached;
+  }
+  const entry = await computePosters(title, english, year, type, env);
+  writeIsolatePosterCache(cacheKey, entry);
+  await writeEdgePosterCache(cacheKey, entry);
+  return entry;
 }
 
 /** 实际的多级回退解析：Douban → Wiki → 网易云/gd-proxy。不含缓存。 */
-async function computePosters(title: string, english: string, year?: number, type?: "movie" | "book" | "music", env?: GdProxyEnv): Promise<string[]> {
+async function computePosters(title: string, english: string, year?: number, type?: "movie" | "book" | "music", env?: GdProxyEnv): Promise<PosterCacheEntry> {
   let primary: string[] = [];
+  // 只有回退链彻底没结果时，这个标记才决定「记成瞬时失败还是永久缺失」。
+  let throttled = false;
+  const noteThrottle = (...settled: Array<PromiseSettledResult<unknown>>) => {
+    for (const result of settled) if (result.status === "rejected" && result.reason instanceof ThrottledError) throttled = true;
+  };
   if (type === "book") {
     const [suggestion, search] = await Promise.allSettled([doubanBookSuggest(title), searchCover(title, "book")]);
+    noteThrottle(suggestion, search);
     const suggested = suggestion.status === "fulfilled" ? suggestion.value.find((item) => key(item.title) === key(title))?.poster_url : undefined;
     const searched = search.status === "fulfilled" ? search.value : undefined;
     if (!suggested && !searched && !bookPosterIndex.has(key(title))) await ensureBookIndex();
@@ -791,6 +865,7 @@ async function computePosters(title: string, english: string, year?: number, typ
     ])];
   } else if (type === "music") {
     const [search] = await Promise.allSettled([searchCover(title, "music")]);
+    noteThrottle(search);
     const searched = search.status === "fulfilled" ? search.value : undefined;
     if (!searched && !musicPosterIndex.has(key(title))) await ensureMusicIndex();
     primary = [...new Set([
@@ -799,6 +874,7 @@ async function computePosters(title: string, english: string, year?: number, typ
     ])];
   } else {
     const [suggestion, imdb, search] = await Promise.allSettled([doubanSuggest(title), imdbPoster(title, english, year), searchCover(title, "movie")]);
+    noteThrottle(suggestion, imdb, search);
     const suggested = suggestion.status === "fulfilled" ? suggestion.value.find((item) => key(item.title) === key(title) && (!year || !item.year || item.year === year))?.poster_url : undefined;
     const searched = search.status === "fulfilled" ? search.value : undefined;
     if (!suggested && !searched && !posterIndex.has(key(title)) && !(imdb.status === "fulfilled" && imdb.value)) await ensureIndex();
@@ -809,12 +885,14 @@ async function computePosters(title: string, english: string, year?: number, typ
       ...(imdb.status === "fulfilled" && imdb.value ? [imdb.value] : []),
     ])];
   }
-  if (primary.length) return primary;
+  if (primary.length) return { urls: primary, outcome: "found" };
 
   // 当前源无结果时按 Wiki → 网易云/gd-proxy 逐级降级（对所有类型生效，避免特定类型漏掉降级）。
   const wiki = await searchWikiPoster(title, english, type, year);
-  if (wiki.length) return wiki;
-  return searchNeteasePoster(title, env);
+  if (wiki.length) return { urls: wiki, outcome: "found" };
+  const netease = await searchNeteasePoster(title, env);
+  if (netease.length) return { urls: netease, outcome: "found" };
+  return { urls: [], outcome: throttled ? "throttled" : "absent" };
 }
 
 /**
@@ -834,19 +912,41 @@ export interface PosterBatchResult {
 export interface PosterBatchResponse {
   results: PosterBatchResult;
   keys: string[];
+  /** 每个 key 的结果分类；路由据此把批量失败写进 poster_errors（原先批量失败完全不可见）。 */
+  outcomes: Record<string, PosterOutcome>;
 }
+/**
+ * 已知结果能否用于短路。
+ * **空数组按未命中处理**——空结果本来就不落库（见 posterStore.saveResolvedPosters），
+ * 上游恢复后不应因为一条空记录而长期显示无海报。
+ */
+export function knownPosterHit(known: ReadonlyMap<string, string[]> | undefined, key: string): string[] | null {
+  const stored = known?.get(key);
+  return stored?.length ? stored : null;
+}
+
+/**
+ * @param known 已知的持久化结果（来自 `poster_urls` 侧表）。命中即短路，不再回源。
+ * @param opts.retry 见 resolvePosters。
+ */
 export async function resolvePostersBatch(
   requests: PosterBatchRequest[],
   env?: GdProxyEnv,
-  concurrency: number = 8
+  concurrency: number = 8,
+  known?: ReadonlyMap<string, string[]>,
+  opts?: { retry?: boolean },
 ): Promise<PosterBatchResponse> {
   const results: PosterBatchResult = {};
+  const outcomes: Record<string, PosterOutcome> = {};
   const keys: string[] = [];
   const pending = new Map<string, PosterBatchRequest>();
   for (const request of requests) {
     const ck = posterMediaKey(request.title, request.english ?? "", request.type, request.year);
     keys.push(ck);
-    if (!pending.has(ck)) pending.set(ck, request);
+    if (ck in results || pending.has(ck)) continue;
+    const stored = knownPosterHit(known, ck);
+    if (stored) { results[ck] = stored; outcomes[ck] = "found"; continue; }
+    pending.set(ck, request);
   }
 
   const queue = [...pending];
@@ -854,15 +954,24 @@ export async function resolvePostersBatch(
   async function worker(): Promise<void> {
     while (cursor < queue.length) {
       const [ck, request] = queue[cursor++];
-      try { results[ck] = await resolvePosters(request.title, request.english ?? "", request.year, request.type, env); }
-      catch { results[ck] = []; }
+      try {
+        const entry = await resolvePosterEntry(request.title, request.english ?? "", request.year, request.type, env, opts);
+        results[ck] = entry.urls;
+        outcomes[ck] = entry.outcome;
+      } catch {
+        // 未预期的异常（网络/解析）按瞬时失败处理：短 TTL，下次刷新会重试。
+        results[ck] = [];
+        outcomes[ck] = "throttled";
+      }
     }
   }
   const workers = Math.min(Math.max(1, concurrency), queue.length);
   await Promise.all(Array.from({ length: workers }, () => worker()));
   // 同一请求内重复但被折叠的 key 也要在 map 里出现，调用方按 keys 取值才不会落空。
-  for (const ck of keys) if (!(ck in results)) results[ck] = [];
-  return { results, keys };
+  for (const ck of keys) {
+    if (!(ck in results)) { results[ck] = []; outcomes[ck] = "absent"; }
+  }
+  return { results, keys, outcomes };
 }
 
 // ===== Search List API =====

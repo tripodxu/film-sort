@@ -1,4 +1,5 @@
 import { mediaLabels, type Artwork, type MediaKind } from "../data/media";
+import { MAX_PAYLOAD_BYTES, toStoredWork, toStoredWorks } from "../../shared/storedItem";
 
 export interface RankedArtwork extends Artwork { rank: number }
 export interface RankingExport {
@@ -19,15 +20,21 @@ export interface ArtisticProfile {
 }
 
 export const LIBRARY_KEY = "art-rank:library:v2";
-export const MAX_PROFILE_BYTES = 512 * 1024;
+/** 与 Worker 端共用同一个字节上限，避免两侧口径漂移。 */
+export const MAX_PROFILE_BYTES = MAX_PAYLOAD_BYTES;
 const record = (value: unknown): value is Record<string, unknown> => typeof value === "object" && value !== null && !Array.isArray(value);
 const text = (value: unknown, max = 160): value is string => typeof value === "string" && value.trim().length > 0 && value.length <= max;
 export const normalizeTitle = (value: string) => value.normalize("NFKC").trim().toLocaleLowerCase().replace(/\s+/g, " ");
 const validDate = (value: unknown): value is string => typeof value === "string" && value.length < 40 && Number.isFinite(Date.parse(value));
-const validUrl = (value: unknown): value is string => {
-  if (typeof value !== "string" || value.length > 2048) return false;
-  try { const url = new URL(value); return url.protocol === "https:" && !url.username && !url.password; } catch { return false; }
-};
+
+/**
+ * 作品数组 → 可落库榜单条目。客户端唯一入口，内部就是 `shared/storedItem` 的
+ * 白名单投影（与 Worker 端同一份实现）。
+ *
+ * 断言只是因为 `RankedArtwork` 把 `id`/`rank` 标成必填，而白名单刻意允许
+ * 「我的清单」那种无 rank 的形状；真实榜单条目两者都在。
+ */
+export const toRankedItems = (works: unknown): RankedArtwork[] => toStoredWorks(works) as RankedArtwork[];
 
 function parseRanking(value: unknown): RankingExport {
   if (!record(value) || value.version !== 1 || !text(value.profileId) || !text(value.profileName, 80) ||
@@ -43,13 +50,11 @@ function parseRanking(value: unknown): RankingExport {
     const identity = `${normalizeTitle(item.title)}|${item.year ?? ""}|${normalizeTitle(String(item.creator ?? ""))}`;
     if (titles.has(identity)) throw new Error("Duplicate artwork");
     ids.add(item.id); titles.add(identity); ranks.add(Number(item.rank));
-    return {
-      id: item.id, title: item.title.trim(), rank: Number(item.rank),
-      ...(item.creator ? { creator: String(item.creator) } : {}),
-      ...(item.year ? { year: Number(item.year) } : {}),
-      ...(text(item.subtitle) ? { subtitle: item.subtitle } : {}),
-      ...(Array.isArray(item.posterUrls) ? { posterUrls: item.posterUrls.filter(validUrl).slice(0, 8) } : {}),
-    };
+    // 唯一可落库形状：posterUrls 不在白名单里，本地重复的白名单随之删除。
+    // 海报由 Poster 组件按需解析，或由读取接口的旁路数组提供。
+    const stored = toStoredWork(item);
+    if (!stored) throw new Error("Invalid artwork");
+    return stored as RankedArtwork;
   }).sort((a, b) => a.rank - b.rank);
   if (items.some((item, index) => item.rank !== index + 1)) throw new Error("Ranks must be contiguous");
   return { version: 1, profileId: value.profileId, profileName: value.profileName, kind: value.kind as MediaKind, collectionTitle: value.collectionTitle, createdAt: value.createdAt, items };

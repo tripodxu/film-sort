@@ -102,21 +102,29 @@ async function generateQR(url: string) {
 
 ### 2.3 海报加载优化
 
-**现状**：✅ 前端部分已完成，服务端持久化收尾中。**完整方案见 [`PLAN-poster-pipeline.md`](./PLAN-poster-pipeline.md)。**
+**现状**：✅ 前端与服务端均已完成。**完整方案见 [`PLAN-poster-pipeline.md`](./PLAN-poster-pipeline.md)。**
 
 | 能力 | 实现 | 状态 |
 |------|------|------|
 | 批量解析 | `POST /api/posters/batch`，一次最多 300 首，回显 `keys` 保证位置对齐 | ✅ |
 | 客户端分块 | 批量上限 30（= 分页粒度），避免一次请求压垮上游 | ✅ |
-| 会话缓存 | `sessionStorage`（`art-rank:poster-cache`）+ 内存 `resolvedPosters` | ✅ |
-| 服务端缓存 | L1 isolate LRU（24h）+ L2 Edge Cache，键 `type\|title\|english\|year` | ✅ |
+| 会话缓存 | `sessionStorage`（`art-rank:poster-cache`）+ 内存 `resolvedPosters`（只记成功结果） | ✅ |
+| 服务端缓存 | L1 isolate LRU + L2 Edge Cache，键 `type\|title\|english\|year`；`found` 24h / `absent` 24h / `throttled` 15s | ✅ |
 | 分页懒加载 | `RankingDetail` 30 首/页 + 滚动续载 | ✅ |
 | 并发闸门 | 批量 fetch 在途 ≤ 8 | ✅ |
-| 持久化 | `poster_urls` 侧表（`migrations/0022`） | ⚠️ 见下 |
+| 持久化 | `poster_urls` 侧表（`migrations/0022`），读取时走**旁路数组** | ✅ |
+| 先查库 | 批量/单条路由先算键 → `loadPosterUrls` → 命中即短路，不再回源 | ✅ |
+| 刷新即重试 | 每次页面加载首次批量带 `retry: true`，服务端据此绕过被限流的负缓存 | ✅ |
+| 失败可观测 | 批量失败写入 `poster_errors(source = 'batch'/'single')` | ✅ |
 
-**⚠️ 待处理（线上活跃风险）**：`attachStoredPosterUrls()` 会把海报地址**注回 `post.items`**，而 `plaza_posts` / `user_collections` / `share` 共 4 条写入路径没有剥离护栏 —— 作者编辑帖子即会把海报地址写回库，重演 512KB 故障（`51dfc8d` 修的就是这条链）。
+**已修复（原线上活跃风险）**：`attachStoredPosterUrls()` 曾把海报地址**注回 `post.items`**，而 `plaza_posts` / `user_collections` / `share` 等写入路径没有剥离护栏 —— 作者编辑一次帖子即会把海报地址写回库，重演 512KB 故障（`51dfc8d` 修的就是这条链）。
 
-**根因**：仓库里存在三套各写各的"可落库形状"，且体积判定口径不一致（`plaza.ts` 用 `raw.length`，其余用字节）。修法见 `PLAN-poster-pipeline.md` Phase 0。
+**根因与修法**：仓库里曾存在三套各写各的"可落库形状"，且体积判定口径不一致（`plaza.ts` 用 `raw.length`，其余用字节）。Phase 0 把语义收敛为唯一实现 `shared/storedItem.ts`（客户端与 Worker 共用）：
+
+- **白名单投影**而非 `delete posterUrls`：未知字段默认进不了库；
+- **唯一编码出口** `encodeStoredWorks / encodeStoredRankings / encodeStoredProfile`，统一按 UTF-8 字节判定，5 条写入路径全部改走它；
+- **读取端自愈**：库中残留 posterUrls 的旧行读出来即干净，无需迁移脚本；
+- **静态护栏** `worker/payloadGuard.test.ts`：编码器之外再出现针对载荷的 `JSON.stringify` 直接让测试变红。
 
 ### 2.4 首屏渲染
 
@@ -188,7 +196,7 @@ Top250 内存 Map + 15 分钟 TTL 对当前流量已足够。D1 高频写入已�
 | 资源 | 当前 | 建议 |
 |------|------|------|
 | Top250 索引 | Worker 内存 Map（15 分钟） | 改用 Cloudflare Cache API，跨实例共享 |
-| 海报 URL | 无服务端缓存 | `/api/posters` 响应加 `Cache-Control: public, max-age=86400` |
+| 海报 URL | ✅ L1 isolate LRU + L2 Edge Cache（`found`/`absent` 24h、`throttled` 15s）+ 单条响应 `max-age=86400` | 已落地，无需变更 |
 | AI insights | 无缓存 | 基于 summary hash 缓存 1 小时（`Cache API`） |
 | 图片代理 | Edge Cache 24h | 已合理，无需变更 |
 
@@ -582,11 +590,11 @@ jobs:
 - [ ] doubanSearch 无 music suggest（/api/douban/music/suggest 缺失）
 
 ### 海报管线（详见 [PLAN-poster-pipeline.md](./PLAN-poster-pipeline.md)）
-- [ ] **Phase 0（最高优先级）**：海报地址走旁路不进 `items` + 统一"可落库白名单"与唯一编码出口 + 静态守卫测试 —— 修当前线上活跃风险
-- [ ] Phase 1：批量/单条接口先查 `poster_urls` 再解析（命中即零回源）
-- [ ] Phase 2：失败分类（`throttled` 15s / `absent` 24h）+ 刷新即重试 + 批量失败入 `poster_errors`
-- [ ] Phase 3：`poster_misses` 失败队列 + cron 定时补温（让覆盖率无需人工访问即可收敛）
-- [ ] 统一 512KB 体积判定口径（`plaza.ts:121,169` 用 `raw.length`，其余用字节）
+- [x] **Phase 0（最高优先级）**：海报地址走旁路不进 `items` + 统一"可落库白名单"与唯一编码出口 + 静态守卫测试 —— 修当前线上活跃风险
+- [x] Phase 1：批量/单条接口先查 `poster_urls` 再解析（命中即零回源）
+- [x] Phase 2：失败分类（`throttled` 15s / `absent` 24h）+ 刷新即重试 + 批量失败入 `poster_errors`
+- [ ] Phase 3：`poster_misses` 失败队列 + cron 定时补温（让覆盖率无需人工访问即可收敛）—— 需要新增迁移与 cron，且会持续占用 Worker 出口 IP，**建议在线上观察 Phase 1/2 效果后再落地**
+- [x] 统一 512KB 体积判定口径（`plaza.ts` 两处 `raw.length` 已改为 UTF-8 字节）
 
 ### 文档
 - [ ] FEATURES.md 的回归走查清单尚未做成可自动化脚本（Playwright）
