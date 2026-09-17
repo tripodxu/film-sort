@@ -1769,7 +1769,7 @@ async function route(request: Request, env: Env): Promise<Response> {
       }
       if (!track) return json({ error: "music_not_found" }, 404, { "cache-control": "public, max-age=300" });
       const isCover = isCoverTrack(track, query, artist);
-      return json({ track, playUrl, lyricId: String(track.lyric_id || track.id), isCover }, 200, { "cache-control": "public, max-age=300" });
+      return json({ track, playUrl, lyricId: String(track.lyric_id || track.id), isCover }, 200, { "cache-control": "no-store" });
     } catch { return json({ error: "music_unavailable" }, 502); }
   }
   // 歌词：按歌曲名（+可选歌手）解析曲目后返回 LRC 剥离时间轴的纯文本
@@ -1982,7 +1982,7 @@ export default {
     let error: string | undefined;
 
     try {
-      const cacheable = request.method === "GET" && ["/api/douban/top250", "/api/douban/suggest", "/api/posters", "/api/image", "/api/music/play"].includes(path);
+      const cacheable = request.method === "GET" && ["/api/douban/top250", "/api/douban/suggest", "/api/posters", "/api/image"].includes(path);
       if (cacheable) {
         const edgeCache = (caches as unknown as { default: Cache }).default;
         const hit = await edgeCache.match(request);
