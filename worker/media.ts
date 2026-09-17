@@ -561,6 +561,8 @@ async function searchCover(query: string, type: "movie" | "book" | "music"): Pro
 
 interface WikiImagePage {
   title?: string;
+  extract?: string;
+  description?: string;
   missing?: boolean;
   original?: { source?: string };
   thumbnail?: { source?: string };
@@ -571,18 +573,30 @@ function wikiImageUrl(page: WikiImagePage): string | undefined {
   return raw ? raw.replace(/^http:/, "https:") : undefined;
 }
 
-function scoreWikiImage(page: WikiImagePage, title: string, english: string): number {
+function scoreWikiImage(page: WikiImagePage, title: string, english: string, type?: "movie" | "book" | "music", year?: string): number {
   const pageTitle = key(page.title ?? "");
   const base = key(title);
   const englishKey = key(english);
   if (!pageTitle) return -1;
-  if (pageTitle === base || pageTitle === englishKey) return 10;
-  if (pageTitle.includes(base) || base.includes(pageTitle)) return 6;
-  if (englishKey && (pageTitle.includes(englishKey) || englishKey.includes(pageTitle))) return 5;
-  return -1;
+  const text = `${page.extract ?? ""} ${page.description ?? ""}`.trim();
+  const declared = text ? declareType(text) : null;
+  const hasTypeWord = !!type && !!text && !!TYPE_WORDS[type]?.test(text);
+  let score = 0;
+  if (pageTitle === base || pageTitle === englishKey) score += 4;
+  else if (pageTitle.includes(base) || base.includes(pageTitle)) score += 2;
+  else if (englishKey && (pageTitle.includes(englishKey) || englishKey.includes(pageTitle))) score += 1;
+  else return -1;
+  if (type) {
+    if (declared && declared !== type) return -1;
+    if (declared === type) score += 8;
+    else if (hasTypeWord) score += 3;
+    else score -= 6;
+  }
+  if (year && text.includes(year)) score += 2;
+  return score;
 }
 
-async function queryWikiImages(lang: "zh" | "en", params: URLSearchParams, title: string, english: string): Promise<string[]> {
+async function queryWikiImages(lang: "zh" | "en", params: URLSearchParams, title: string, english: string, type?: "movie" | "book" | "music", year?: string): Promise<string[]> {
   try {
     const response = await fetch(`https://${lang}.wikipedia.org/w/api.php?${params}`, {
       headers: { "user-agent": USER_AGENTS[0], "accept": "application/json" },
@@ -591,7 +605,7 @@ async function queryWikiImages(lang: "zh" | "en", params: URLSearchParams, title
     if (!response.ok) return [];
     const data = await response.json() as { query?: { pages?: Record<string, WikiImagePage> } };
     return Object.values(data.query?.pages ?? {})
-      .map((page) => ({ page, score: scoreWikiImage(page, title, english) }))
+      .map((page) => ({ page, score: scoreWikiImage(page, title, english, type, year) }))
       .filter((entry) => entry.score >= 0 && !!wikiImageUrl(entry.page))
       .sort((a, b) => b.score - a.score)
       .map((entry) => wikiImageUrl(entry.page)!)
@@ -600,24 +614,25 @@ async function queryWikiImages(lang: "zh" | "en", params: URLSearchParams, title
   } catch { return []; }
 }
 
-async function searchWikiPoster(title: string, english: string, type?: "movie" | "book" | "music"): Promise<string[]> {
+async function searchWikiPoster(title: string, english: string, type?: "movie" | "book" | "music", year?: number): Promise<string[]> {
   const queries = [title, english].map((value) => value.trim()).filter(Boolean);
   for (const lang of ["zh", "en"] as const) {
     const typeHint = type ? TYPE_HINTS[type]?.[lang]?.[0] : undefined;
     const exactTitles = [...new Set(queries.flatMap((value) => typeHint ? [value, `${value} (${typeHint})`, `${value}（${typeHint}）`] : [value]))];
     const exactParams = new URLSearchParams({
-      action: "query", titles: exactTitles.join("|"), prop: "pageimages|info", piprop: "original|thumbnail", pithumbsize: "1200",
-      redirects: "1", converttitles: "1", format: "json", origin: "*",
+      action: "query", titles: exactTitles.join("|"), prop: "pageimages|info|extracts", piprop: "original|thumbnail", pithumbsize: "1200",
+      exintro: "true", explaintext: "true", exlimit: "20", redirects: "1", converttitles: "1", format: "json", origin: "*",
     });
-    const exact = await queryWikiImages(lang, exactParams, title, english);
+    const exact = await queryWikiImages(lang, exactParams, title, english, type, year ? String(year) : undefined);
     if (exact.length) return exact;
 
     for (const query of queries) {
       const searchParams = new URLSearchParams({
         action: "query", generator: "search", gsrsearch: typeHint ? `${query} ${typeHint}` : query, gsrnamespace: "0", gsrlimit: "5",
-        prop: "pageimages|info", piprop: "original|thumbnail", pithumbsize: "1200", redirects: "1", format: "json", origin: "*",
+        prop: "pageimages|info|extracts", piprop: "original|thumbnail", pithumbsize: "1200", exintro: "true", explaintext: "true",
+        exlimit: "5", redirects: "1", format: "json", origin: "*",
       });
-      const found = await queryWikiImages(lang, searchParams, title, english);
+      const found = await queryWikiImages(lang, searchParams, title, english, type, year ? String(year) : undefined);
       if (found.length) return found;
     }
   }
@@ -686,7 +701,7 @@ export async function resolvePosters(title: string, english: string, year?: numb
   if (primary.length) return primary;
 
   // 当前源无结果时按 Wiki → 网易云/gd-proxy 逐级降级。
-  const wiki = await searchWikiPoster(title, english, type);
+  const wiki = await searchWikiPoster(title, english, type, year);
   if (wiki.length) return wiki;
   if (type === "music") return searchNeteasePoster(title, env);
   return [];
