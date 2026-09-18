@@ -1,5 +1,19 @@
 import { useEffect, useRef, useState } from "react";
-import { ArrowDown, ArrowLeft, ArrowUp, Eye, EyeOff, GripVertical, Heart, MessageCircle, PenLine, Play, Plus, Trash2, Send } from "lucide-react";
+import {
+  ArrowDown,
+  ArrowLeft,
+  ArrowUp,
+  Eye,
+  EyeOff,
+  GripVertical,
+  Heart,
+  MessageCircle,
+  PenLine,
+  Play,
+  Plus,
+  Trash2,
+  Send,
+} from "lucide-react";
 import { Poster } from "../components/Poster";
 import { RankingDetail } from "../components/RankingDetail";
 import { ExpandableNote } from "../components/ExpandableNote";
@@ -8,7 +22,21 @@ import type { PlazaPostViewProps, PlazaPost, PlazaComment } from "./types";
 import type { MediaKind } from "../data/media";
 import type { ArtisticProfile, RankedArtwork } from "../lib/profile";
 
-export function PlazaPostView({ postId, t, label, navigateTo, accountToken, accountNickname, openCollection, profile, setNotice, setPeer, notes, openArtworkDetail, openNoteView }: PlazaPostViewProps) {
+export function PlazaPostView({
+  postId,
+  t,
+  label,
+  navigateTo,
+  accountToken,
+  accountNickname,
+  openCollection,
+  profile,
+  setNotice,
+  setPeer,
+  notes,
+  openArtworkDetail,
+  openNoteView,
+}: PlazaPostViewProps) {
   const [post, setPost] = useState<PlazaPost | null>(null);
   const [comments, setComments] = useState<PlazaComment[]>([]);
   const [loading, setLoading] = useState(true);
@@ -23,7 +51,12 @@ export function PlazaPostView({ postId, t, label, navigateTo, accountToken, acco
   // **只用于渲染**：编辑流继续使用干净的 post.items，海报地址因此没有回写入口。
   const [posterSideChannel, setPosterSideChannel] = useState<ReadonlyArray<string[] | null>>([]);
   const [editManual, setEditManual] = useState("");
-  const [editHistory, setEditHistory] = useState<Array<{ id: number; action: string; detail: string | null; created_at: string }> | null>(null);
+  const [editHistory, setEditHistory] = useState<Array<{
+    id: number;
+    action: string;
+    detail: string | null;
+    created_at: string;
+  }> | null>(null);
   const [editInfoOpen, setEditInfoOpen] = useState(false);
   const [infoDesc, setInfoDesc] = useState("");
   const [editDesc, setEditDesc] = useState("");
@@ -37,20 +70,31 @@ export function PlazaPostView({ postId, t, label, navigateTo, accountToken, acco
     try {
       const raw = typeof post.notes === "string" ? JSON.parse(post.notes) : post.notes;
       return raw && typeof raw === "object" ? raw : {};
-    } catch { return {}; }
+    } catch {
+      return {};
+    }
   })();
   const [replyTo, setReplyTo] = useState<number | null>(null);
   const [replyText, setReplyText] = useState("");
 
-  useEffect(() => { void loadPost(); }, [postId]);
+  useEffect(() => {
+    void loadPost();
+  }, [postId]);
 
   async function loadPost() {
     setLoading(true);
     setError("");
     try {
-      const response = await fetch(`/api/plaza/posts/${postId}`, accountToken ? { headers: { authorization: `Bearer ${accountToken}` } } : undefined);
+      const response = await fetch(
+        `/api/plaza/posts/${postId}`,
+        accountToken ? { headers: { authorization: `Bearer ${accountToken}` } } : undefined,
+      );
       if (!response.ok) throw new Error();
-      const data = await response.json() as { post: PlazaPost; posterUrls?: Array<string[] | null>; comments: PlazaComment[] };
+      const data = (await response.json()) as {
+        post: PlazaPost;
+        posterUrls?: Array<string[] | null>;
+        comments: PlazaComment[];
+      };
       setPost(data.post);
       setPosterSideChannel(Array.isArray(data.posterUrls) ? data.posterUrls : []);
       setComments(data.comments);
@@ -73,9 +117,9 @@ export function PlazaPostView({ postId, t, label, navigateTo, accountToken, acco
         method: "POST",
         headers: { authorization: `Bearer ${accountToken}` },
       });
-      const data = await response.json() as { liked: boolean };
+      const data = (await response.json()) as { liked: boolean };
       setLiked(data.liked);
-      setLikeCount((prev) => data.liked ? prev + 1 : Math.max(0, prev - 1));
+      setLikeCount((prev) => (data.liked ? prev + 1 : Math.max(0, prev - 1)));
     } catch {
       setNotice(t("操作失败，请重试。", "Action failed. Please retry."));
     }
@@ -96,18 +140,23 @@ export function PlazaPostView({ postId, t, label, navigateTo, accountToken, acco
         body: JSON.stringify({ content, parent_id: parentId || null }),
       });
       if (!response.ok) throw new Error();
-      const data = await response.json() as { id: number };
-      setComments((prev) => [...prev, {
-        id: data.id,
-        post_id: postId,
-        user_id: 0,
-        content,
-        parent_id: parentId || null,
-        created_at: new Date().toISOString(),
-        nickname: accountNickname || t("我", "Me"),
-      }]);
-      if (parentId) { setReplyTo(null); setReplyText(""); }
-      else setCommentText("");
+      const data = (await response.json()) as { id: number };
+      setComments((prev) => [
+        ...prev,
+        {
+          id: data.id,
+          post_id: postId,
+          user_id: 0,
+          content,
+          parent_id: parentId || null,
+          created_at: new Date().toISOString(),
+          nickname: accountNickname || t("我", "Me"),
+        },
+      ]);
+      if (parentId) {
+        setReplyTo(null);
+        setReplyText("");
+      } else setCommentText("");
     } catch {
       setNotice(t("评论发送失败，请重试。", "Failed to post comment. Please retry."));
     } finally {
@@ -144,7 +193,9 @@ export function PlazaPostView({ postId, t, label, navigateTo, accountToken, acco
     }
   }
 
-  function useForSorting() {
+  // 原名 useForSorting —— 内部没有任何 Hook，只是 `use` 前缀造成了误导，
+  // 并且让 rules-of-hooks 把它当成在事件处理器里调用的 Hook。
+  function sortWithPost() {
     if (!post) return;
     const works = displayItems.length ? displayItems : (post.top_items ?? []);
     if (!works.length) return;
@@ -168,10 +219,15 @@ export function PlazaPostView({ postId, t, label, navigateTo, accountToken, acco
         profileId: crypto.randomUUID(),
         profileName: post.nickname || t("匿名用户", "Anonymous"),
         updatedAt: post.updated_at,
-        rankings: profileRankings.map((entry) => ({ ...entry, profileId: entry.profileId || crypto.randomUUID() })),
+        rankings: profileRankings.map((entry) => ({
+          ...entry,
+          profileId: entry.profileId || crypto.randomUUID(),
+        })),
       };
       setPeer(profilePeer);
-      try { localStorage.setItem("art-rank:peer:v2", JSON.stringify(profilePeer)); } catch {}
+      try {
+        localStorage.setItem("art-rank:peer:v2", JSON.stringify(profilePeer));
+      } catch {}
       navigateTo("compare");
       return;
     }
@@ -182,18 +238,22 @@ export function PlazaPostView({ postId, t, label, navigateTo, accountToken, acco
       profileId: crypto.randomUUID(),
       profileName: post.nickname || t("匿名用户", "Anonymous"),
       updatedAt: post.updated_at,
-      rankings: [{
-        version: 1,
-        profileId: crypto.randomUUID(),
-        profileName: post.nickname || t("匿名用户", "Anonymous"),
-        kind: post.kind as MediaKind,
-        collectionTitle: post.collection_title,
-        createdAt: post.created_at,
-        items: works.map((item, idx) => ({ ...item, rank: item.rank || idx + 1 })),
-      }],
+      rankings: [
+        {
+          version: 1,
+          profileId: crypto.randomUUID(),
+          profileName: post.nickname || t("匿名用户", "Anonymous"),
+          kind: post.kind as MediaKind,
+          collectionTitle: post.collection_title,
+          createdAt: post.created_at,
+          items: works.map((item, idx) => ({ ...item, rank: item.rank || idx + 1 })),
+        },
+      ],
     };
     setPeer(ranking);
-    try { localStorage.setItem("art-rank:peer:v2", JSON.stringify(ranking)); } catch {}
+    try {
+      localStorage.setItem("art-rank:peer:v2", JSON.stringify(ranking));
+    } catch {}
     navigateTo("compare");
   }
 
@@ -208,7 +268,9 @@ export function PlazaPostView({ postId, t, label, navigateTo, accountToken, acco
   if (error || !post) {
     return (
       <div className="empty-state" style={{ padding: 60 }}>
-        <p style={{ color: "var(--red)", marginBottom: 12 }}>{error || t("帖子不存在。", "Post not found.")}</p>
+        <p style={{ color: "var(--red)", marginBottom: 12 }}>
+          {error || t("帖子不存在。", "Post not found.")}
+        </p>
         <button className="button secondary" onClick={() => navigateTo("plaza")}>
           {t("返回广场", "Back to plaza")}
         </button>
@@ -217,7 +279,9 @@ export function PlazaPostView({ postId, t, label, navigateTo, accountToken, acco
   }
 
   const isProfilePost = post.post_type === "profile";
-  const profileRankings = isProfilePost ? ((post.items ?? []) as unknown as ArtisticProfile["rankings"]) : [];
+  const profileRankings = isProfilePost
+    ? ((post.items ?? []) as unknown as ArtisticProfile["rankings"])
+    : [];
   /**
    * 渲染用作品列表：把服务端旁路数组按位置合并进来。
    * 编辑流（startEdit / saveEdit）刻意使用干净的 `post.items` ——
@@ -230,7 +294,12 @@ export function PlazaPostView({ postId, t, label, navigateTo, accountToken, acco
   // 服务端按 token 判定作者身份（详情请求已带鉴权头）
   const isAuthor = !!(accountToken && post.is_author);
 
-  function openCollectionFromRanking(kind: MediaKind, title: string, works: RankedArtwork[], key: string) {
+  function openCollectionFromRanking(
+    kind: MediaKind,
+    title: string,
+    works: RankedArtwork[],
+    key: string,
+  ) {
     openCollection({
       id: `plaza-${post!.id}-${key}`,
       kind,
@@ -268,28 +337,57 @@ export function PlazaPostView({ postId, t, label, navigateTo, accountToken, acco
         body.items = profile.rankings;
         body.item_count = profile.rankings.reduce((sum, r) => sum + r.items.length, 0);
         body.notes = notes && Object.keys(notes).length > 0 ? notes : null;
-        body.edits = [{ action: "sync", detail: t("同步当前画像数据", "Synced current profile data") }];
+        body.edits = [
+          { action: "sync", detail: t("同步当前画像数据", "Synced current profile data") },
+        ];
       }
-      const response = await fetch(`/api/plaza/posts/${postId}`, { method: "PUT", headers: { "content-type": "application/json", authorization: `Bearer ${accountToken}` }, body: JSON.stringify(body) });
+      const response = await fetch(`/api/plaza/posts/${postId}`, {
+        method: "PUT",
+        headers: { "content-type": "application/json", authorization: `Bearer ${accountToken}` },
+        body: JSON.stringify(body),
+      });
       if (!response.ok) throw new Error();
       setEditInfoOpen(false);
       setSyncProfileData(false);
       setNotice(t("帖子信息已更新。", "Post info updated."));
       await loadPost();
-    } catch { setNotice(t("保存失败，请重试。", "Failed to save. Please retry.")); }
-    finally { setCommentBusy(false); }
+    } catch {
+      setNotice(t("保存失败，请重试。", "Failed to save. Please retry."));
+    } finally {
+      setCommentBusy(false);
+    }
   }
 
   async function handleToggleVisibility() {
     if (!post) return;
     const makePublic = !post.is_public;
-    if (!confirm(makePublic ? t("恢复公开展示该帖子？", "Restore this post to public?") : t("隐藏该帖子？其他用户将无法看到，仅你自己可见。", "Hide this post? Others will not see it."))) return;
+    if (
+      !confirm(
+        makePublic
+          ? t("恢复公开展示该帖子？", "Restore this post to public?")
+          : t(
+              "隐藏该帖子？其他用户将无法看到，仅你自己可见。",
+              "Hide this post? Others will not see it.",
+            ),
+      )
+    )
+      return;
     try {
-      const response = await fetch(`/api/plaza/posts/${postId}/visibility`, { method: "POST", headers: { "content-type": "application/json", authorization: `Bearer ${accountToken}` }, body: JSON.stringify({ is_public: makePublic }) });
+      const response = await fetch(`/api/plaza/posts/${postId}/visibility`, {
+        method: "POST",
+        headers: { "content-type": "application/json", authorization: `Bearer ${accountToken}` },
+        body: JSON.stringify({ is_public: makePublic }),
+      });
       if (!response.ok) throw new Error();
-      setNotice(makePublic ? t("帖子已恢复公开展示。", "Post restored.") : t("帖子已隐藏，仅你自己可见。", "Post hidden — only you can see it."));
+      setNotice(
+        makePublic
+          ? t("帖子已恢复公开展示。", "Post restored.")
+          : t("帖子已隐藏，仅你自己可见。", "Post hidden — only you can see it."),
+      );
       await loadPost();
-    } catch { setNotice(t("操作失败，请重试。", "Action failed. Please retry.")); }
+    } catch {
+      setNotice(t("操作失败，请重试。", "Action failed. Please retry."));
+    }
   }
   function moveEditItem(from: number, to: number) {
     setEditItems((cur) => {
@@ -331,7 +429,16 @@ export function PlazaPostView({ postId, t, label, navigateTo, accountToken, acco
     if (!clean) return;
     setEditItems((cur) => {
       if (!cur || cur.some((w) => w.title === clean)) return cur;
-      return [...cur, { id: `pe-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`, title: clean, rank: cur.length + 1, ...(creator ? { creator } : {}), ...(year ? { year } : {}) }];
+      return [
+        ...cur,
+        {
+          id: `pe-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+          title: clean,
+          rank: cur.length + 1,
+          ...(creator ? { creator } : {}),
+          ...(year ? { year } : {}),
+        },
+      ];
     });
   }
   function parseEditManual() {
@@ -341,9 +448,15 @@ export function PlazaPostView({ postId, t, label, navigateTo, accountToken, acco
       let creator: string | undefined;
       let year: number | undefined;
       const yearMatch = s.match(/[（(](\d{4})[）)]\s*$/);
-      if (yearMatch && yearMatch.index !== undefined) { year = Number(yearMatch[1]); s = s.slice(0, yearMatch.index).trim(); }
+      if (yearMatch && yearMatch.index !== undefined) {
+        year = Number(yearMatch[1]);
+        s = s.slice(0, yearMatch.index).trim();
+      }
       const dashIdx = s.indexOf(" - ");
-      if (dashIdx > 0) { creator = s.slice(dashIdx + 3).trim(); s = s.slice(0, dashIdx).trim(); }
+      if (dashIdx > 0) {
+        creator = s.slice(dashIdx + 3).trim();
+        s = s.slice(0, dashIdx).trim();
+      }
       addEditWork(s, creator, year);
     });
     setEditManual("");
@@ -355,23 +468,44 @@ export function PlazaPostView({ postId, t, label, navigateTo, accountToken, acco
       const before = (post.items ?? []).map((w) => w.title);
       const after = editItems.map((w) => w.title);
       const edits: Array<{ action: string; detail: string }> = [];
-      for (const title of before) if (!after.includes(title)) edits.push({ action: "remove", detail: title });
-      for (const title of after) if (!before.includes(title)) edits.push({ action: "add", detail: title });
-      if (!edits.length && JSON.stringify(before) !== JSON.stringify(after)) edits.push({ action: "reorder", detail: t("调整作品顺序", "Reordered works") });
-      const response = await fetch(`/api/plaza/posts/${postId}`, { method: "PUT", headers: { "content-type": "application/json", authorization: `Bearer ${accountToken}` }, body: JSON.stringify({ items: editItems, item_count: editItems.length, description: editDesc.trim() || null, edits }) });
+      for (const title of before)
+        if (!after.includes(title)) edits.push({ action: "remove", detail: title });
+      for (const title of after)
+        if (!before.includes(title)) edits.push({ action: "add", detail: title });
+      if (!edits.length && JSON.stringify(before) !== JSON.stringify(after))
+        edits.push({ action: "reorder", detail: t("调整作品顺序", "Reordered works") });
+      const response = await fetch(`/api/plaza/posts/${postId}`, {
+        method: "PUT",
+        headers: { "content-type": "application/json", authorization: `Bearer ${accountToken}` },
+        body: JSON.stringify({
+          items: editItems,
+          item_count: editItems.length,
+          description: editDesc.trim() || null,
+          edits,
+        }),
+      });
       if (!response.ok) throw new Error();
       setEditItems(null);
       setNotice(t("帖子已更新。", "Post updated."));
       await loadPost();
-    } catch { setNotice(t("保存失败，请重试。", "Failed to save. Please retry.")); }
-    finally { setCommentBusy(false); }
+    } catch {
+      setNotice(t("保存失败，请重试。", "Failed to save. Please retry."));
+    } finally {
+      setCommentBusy(false);
+    }
   }
   async function openEditHistory() {
     try {
-      const response = await fetch(`/api/plaza/posts/${postId}/edits`, { headers: { authorization: `Bearer ${accountToken}` } });
-      const data = await response.json() as { edits?: Array<{ id: number; action: string; detail: string | null; created_at: string }> };
+      const response = await fetch(`/api/plaza/posts/${postId}/edits`, {
+        headers: { authorization: `Bearer ${accountToken}` },
+      });
+      const data = (await response.json()) as {
+        edits?: Array<{ id: number; action: string; detail: string | null; created_at: string }>;
+      };
       if (response.ok) setEditHistory(data.edits ?? []);
-    } catch { setNotice(t("编辑历史加载失败。", "Failed to load edit history.")); }
+    } catch {
+      setNotice(t("编辑历史加载失败。", "Failed to load edit history."));
+    }
   }
 
   return (
@@ -381,52 +515,166 @@ export function PlazaPostView({ postId, t, label, navigateTo, accountToken, acco
         post.collection_title,
         `${post.nickname || t("匿名用户", "Anonymous")} / ${isProfilePost ? t("画像", "Profile") : label(post.kind as MediaKind)} / ${post.item_count} ${t("件作品", "works")}`,
       )}
-      {post.description && <p style={{ fontSize: 14, color: "var(--muted)", marginBottom: 16, lineHeight: 1.7 }}>{post.description}</p>}
+      {post.description && (
+        <p style={{ fontSize: 14, color: "var(--muted)", marginBottom: 16, lineHeight: 1.7 }}>
+          {post.description}
+        </p>
+      )}
 
       {isAuthor && !post.is_public && (
-        <div style={{ display: "flex", alignItems: "center", gap: 8, margin: "0 0 16px", padding: "10px 14px", borderRadius: 10, background: "color-mix(in srgb,var(--warn) 6%,transparent)", border: "1px solid color-mix(in srgb,var(--warn) 35%,transparent)", fontSize: 12, color: "var(--yellow)" }}>
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 8,
+            margin: "0 0 16px",
+            padding: "10px 14px",
+            borderRadius: 10,
+            background: "color-mix(in srgb,var(--warn) 6%,transparent)",
+            border: "1px solid color-mix(in srgb,var(--warn) 35%,transparent)",
+            fontSize: 12,
+            color: "var(--yellow)",
+          }}
+        >
           <EyeOff size={14} style={{ flexShrink: 0 }} />
-          {t("该帖子已隐藏，其他用户无法看到（仅你可见），可随时恢复。", "Hidden — only you can see this post. Restore anytime.")}
+          {t(
+            "该帖子已隐藏，其他用户无法看到（仅你可见），可随时恢复。",
+            "Hidden — only you can see this post. Restore anytime.",
+          )}
         </div>
       )}
 
       {/* Edit timestamp marker (public); full history is author-only */}
       {(post.edit_count ?? 0) > 0 && (
-        <p className="mini-note" style={{ fontSize: 12, color: "var(--muted)", margin: "-8px 0 14px", display: "flex", gap: 10, alignItems: "center" }}>
-          <span>✏️ {t("最后编辑于", "Last edited")} {post.last_edited_at ? new Date(post.last_edited_at).toLocaleString() : "-"}（{(post.edit_count ?? 0)} {t("次", "times")}）</span>
+        <p
+          className="mini-note"
+          style={{
+            fontSize: 12,
+            color: "var(--muted)",
+            margin: "-8px 0 14px",
+            display: "flex",
+            gap: 10,
+            alignItems: "center",
+          }}
+        >
+          <span>
+            ✏️ {t("最后编辑于", "Last edited")}{" "}
+            {post.last_edited_at ? new Date(post.last_edited_at).toLocaleString() : "-"}（
+            {post.edit_count ?? 0} {t("次", "times")}）
+          </span>
           {isAuthor && (
-            <button className="text-button" onClick={() => { setEditHistory(editHistory ? null : []); void openEditHistory(); }} style={{ fontSize: 12 }}>
+            <button
+              className="text-button"
+              onClick={() => {
+                setEditHistory(editHistory ? null : []);
+                void openEditHistory();
+              }}
+              style={{ fontSize: 12 }}
+            >
               {editHistory ? t("收起历史", "Hide history") : t("编辑历史", "Edit history")}
             </button>
           )}
         </p>
       )}
       {editHistory && isAuthor && (
-        <div style={{ margin: "0 0 16px", padding: "12px 16px", border: "1px solid var(--line)", borderRadius: 10, fontSize: 12 }}>
-          {editHistory.length ? editHistory.map((e) => (
-            <div key={e.id} style={{ display: "flex", gap: 10, padding: "5px 0", borderBottom: "1px solid var(--line)" }}>
-              <span className="badge badge-visit" style={{ flexShrink: 0 }}>{e.action}</span>
-              <span style={{ flex: 1, minWidth: 0, overflowWrap: "anywhere" }}>{e.detail}</span>
-              <span style={{ color: "var(--muted)", flexShrink: 0, whiteSpace: "nowrap" }}>{new Date(e.created_at).toLocaleString()}</span>
-            </div>
-          )) : <p style={{ color: "var(--muted)", margin: 0 }}>…</p>}
+        <div
+          style={{
+            margin: "0 0 16px",
+            padding: "12px 16px",
+            border: "1px solid var(--line)",
+            borderRadius: 10,
+            fontSize: 12,
+          }}
+        >
+          {editHistory.length ? (
+            editHistory.map((e) => (
+              <div
+                key={e.id}
+                style={{
+                  display: "flex",
+                  gap: 10,
+                  padding: "5px 0",
+                  borderBottom: "1px solid var(--line)",
+                }}
+              >
+                <span className="badge badge-visit" style={{ flexShrink: 0 }}>
+                  {e.action}
+                </span>
+                <span style={{ flex: 1, minWidth: 0, overflowWrap: "anywhere" }}>{e.detail}</span>
+                <span style={{ color: "var(--muted)", flexShrink: 0, whiteSpace: "nowrap" }}>
+                  {new Date(e.created_at).toLocaleString()}
+                </span>
+              </div>
+            ))
+          ) : (
+            <p style={{ color: "var(--muted)", margin: 0 }}>…</p>
+          )}
         </div>
       )}
 
       {editInfoOpen && isAuthor && (
-        <div style={{ padding: 16, border: "1px solid var(--line)", borderRadius: 12, marginBottom: 16, display: "grid", gap: 10 }}>
-          <div className="section-heading" style={{ margin: 0 }}><h2>{t("编辑帖子信息", "Edit post info")}</h2></div>
+        <div
+          style={{
+            padding: 16,
+            border: "1px solid var(--line)",
+            borderRadius: 12,
+            marginBottom: 16,
+            display: "grid",
+            gap: 10,
+          }}
+        >
+          <div className="section-heading" style={{ margin: 0 }}>
+            <h2>{t("编辑帖子信息", "Edit post info")}</h2>
+          </div>
           <label style={{ fontSize: 12, color: "var(--muted)" }}>{t("描述", "Description")}</label>
-          <textarea value={infoDesc} onChange={(e) => setInfoDesc(e.target.value)} rows={3} placeholder={t("介绍这份榜单或画像…（可选）", "Describe this ranking or profile… (optional)")} style={{ minHeight: 70, fontSize: 13 }} />
+          <textarea
+            value={infoDesc}
+            onChange={(e) => setInfoDesc(e.target.value)}
+            rows={3}
+            placeholder={t(
+              "介绍这份榜单或画像…（可选）",
+              "Describe this ranking or profile… (optional)",
+            )}
+            style={{ minHeight: 70, fontSize: 13 }}
+          />
           {isProfilePost && profile && (
-            <label style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 13, cursor: "pointer" }}>
-              <input type="checkbox" checked={syncProfileData} onChange={(e) => setSyncProfileData(e.target.checked)} style={{ flexShrink: 0 }} />
-              {t("同时用我当前的画像数据覆盖帖子内容（榜单/作品/批注）", "Also overwrite post content with my current profile")}
+            <label
+              style={{
+                display: "flex",
+                gap: 8,
+                alignItems: "center",
+                fontSize: 13,
+                cursor: "pointer",
+              }}
+            >
+              <input
+                type="checkbox"
+                checked={syncProfileData}
+                onChange={(e) => setSyncProfileData(e.target.checked)}
+                style={{ flexShrink: 0 }}
+              />
+              {t(
+                "同时用我当前的画像数据覆盖帖子内容（榜单/作品/批注）",
+                "Also overwrite post content with my current profile",
+              )}
             </label>
           )}
           <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
-            <button className="button secondary" onClick={() => setEditInfoOpen(false)} style={{ minHeight: 34 }}>{t("取消", "Cancel")}</button>
-            <button className="button primary" disabled={commentBusy} onClick={() => void saveEditInfo()} style={{ minHeight: 34 }}>{commentBusy ? t("保存中…", "Saving…") : t("保存", "Save")}</button>
+            <button
+              className="button secondary"
+              onClick={() => setEditInfoOpen(false)}
+              style={{ minHeight: 34 }}
+            >
+              {t("取消", "Cancel")}
+            </button>
+            <button
+              className="button primary"
+              disabled={commentBusy}
+              onClick={() => void saveEditInfo()}
+              style={{ minHeight: 34 }}
+            >
+              {commentBusy ? t("保存中…", "Saving…") : t("保存", "Save")}
+            </button>
           </div>
         </div>
       )}
@@ -434,7 +682,13 @@ export function PlazaPostView({ postId, t, label, navigateTo, accountToken, acco
       {/* Unified ranking detail (same component as share page & compare detail) */}
       {editItems !== null && isAuthor && !isProfilePost ? (
         <div className="plaza-post-detail">
-          <div className="section-heading"><h2>{t("编辑榜单作品", "Edit works")}</h2><span>{t("拖拽或用 ↑↓ 调整顺序", "Drag or use ↑↓ to reorder")} · {t(`${editItems.length} 件`, `${editItems.length} works`)}</span></div>
+          <div className="section-heading">
+            <h2>{t("编辑榜单作品", "Edit works")}</h2>
+            <span>
+              {t("拖拽或用 ↑↓ 调整顺序", "Drag or use ↑↓ to reorder")} ·{" "}
+              {t(`${editItems.length} 件`, `${editItems.length} works`)}
+            </span>
+          </div>
           <ol className="ranking-list reorder-list">
             {editItems.map((work, idx) => (
               <li
@@ -446,28 +700,114 @@ export function PlazaPostView({ postId, t, label, navigateTo, accountToken, acco
                 onDragOver={(e) => handleEditDragOver(e, idx)}
                 onDrop={(e) => handleEditDrop(e, idx)}
               >
-                <span className="reorder-handle"><GripVertical size={16} /></span>
+                <span className="reorder-handle">
+                  <GripVertical size={16} />
+                </span>
                 <span className="row-number">{String(idx + 1).padStart(2, "0")}</span>
                 <Poster work={work} kind={post.kind as MediaKind} />
-                <div><strong>{work.title}</strong><small>{work.creator} {work.year}</small></div>
+                <div>
+                  <strong>{work.title}</strong>
+                  <small>
+                    {work.creator} {work.year}
+                  </small>
+                </div>
                 <div style={{ display: "flex", gap: 2, marginLeft: "auto", flexShrink: 0 }}>
-                  <button className="icon-button" title={t("上移", "Move up")} disabled={idx === 0} onClick={() => moveEditItem(idx, idx - 1)} style={{ width: 28, height: 28 }}><ArrowUp size={14} /></button>
-                  <button className="icon-button" title={t("下移", "Move down")} disabled={idx === editItems.length - 1} onClick={() => moveEditItem(idx, idx + 1)} style={{ width: 28, height: 28 }}><ArrowDown size={14} /></button>
-                  <button className="icon-button" title={t("移除", "Remove")} disabled={editItems.length <= 1} onClick={() => setEditItems((cur) => (cur ?? []).filter((_, i) => i !== idx))} style={{ width: 28, height: 28, color: "var(--red)", opacity: editItems.length <= 1 ? 0.3 : 1 }}><Trash2 size={14} /></button>
+                  <button
+                    className="icon-button"
+                    title={t("上移", "Move up")}
+                    disabled={idx === 0}
+                    onClick={() => moveEditItem(idx, idx - 1)}
+                    style={{ width: 28, height: 28 }}
+                  >
+                    <ArrowUp size={14} />
+                  </button>
+                  <button
+                    className="icon-button"
+                    title={t("下移", "Move down")}
+                    disabled={idx === editItems.length - 1}
+                    onClick={() => moveEditItem(idx, idx + 1)}
+                    style={{ width: 28, height: 28 }}
+                  >
+                    <ArrowDown size={14} />
+                  </button>
+                  <button
+                    className="icon-button"
+                    title={t("移除", "Remove")}
+                    disabled={editItems.length <= 1}
+                    onClick={() => setEditItems((cur) => (cur ?? []).filter((_, i) => i !== idx))}
+                    style={{
+                      width: 28,
+                      height: 28,
+                      color: "var(--red)",
+                      opacity: editItems.length <= 1 ? 0.3 : 1,
+                    }}
+                  >
+                    <Trash2 size={14} />
+                  </button>
                 </div>
               </li>
             ))}
           </ol>
-          <div style={{ display: "grid", gap: 10, marginTop: 16, padding: 16, border: "1px solid var(--line)", borderRadius: 12 }}>
-            <label style={{ fontSize: 12, color: "var(--muted)" }}>{t("描述", "Description")}</label>
-            <textarea value={editDesc} onChange={(e) => setEditDesc(e.target.value)} rows={2} placeholder={t("介绍这份榜单…（可选）", "Describe this ranking… (optional)")} style={{ minHeight: 60, fontSize: 13 }} />
-            <label style={{ fontSize: 12, color: "var(--muted)" }}>{t("添加作品（每行一件，支持「标题 - 创作者（年份）」）", "Add works (one per line: Title - Creator (Year))")}</label>
-            <textarea value={editManual} onChange={(e) => setEditManual(e.target.value)} rows={3} style={{ minHeight: 70, fontSize: 13 }} />
+          <div
+            style={{
+              display: "grid",
+              gap: 10,
+              marginTop: 16,
+              padding: 16,
+              border: "1px solid var(--line)",
+              borderRadius: 12,
+            }}
+          >
+            <label style={{ fontSize: 12, color: "var(--muted)" }}>
+              {t("描述", "Description")}
+            </label>
+            <textarea
+              value={editDesc}
+              onChange={(e) => setEditDesc(e.target.value)}
+              rows={2}
+              placeholder={t("介绍这份榜单…（可选）", "Describe this ranking… (optional)")}
+              style={{ minHeight: 60, fontSize: 13 }}
+            />
+            <label style={{ fontSize: 12, color: "var(--muted)" }}>
+              {t(
+                "添加作品（每行一件，支持「标题 - 创作者（年份）」）",
+                "Add works (one per line: Title - Creator (Year))",
+              )}
+            </label>
+            <textarea
+              value={editManual}
+              onChange={(e) => setEditManual(e.target.value)}
+              rows={3}
+              style={{ minHeight: 70, fontSize: 13 }}
+            />
             <div style={{ display: "flex", gap: 8 }}>
-              <button className="button secondary" onClick={parseEditManual} style={{ minHeight: 34 }}><Plus size={14} />{t("加入榜单", "Add to list")}</button>
+              <button
+                className="button secondary"
+                onClick={parseEditManual}
+                style={{ minHeight: 34 }}
+              >
+                <Plus size={14} />
+                {t("加入榜单", "Add to list")}
+              </button>
               <div style={{ flex: 1 }} />
-              <button className="button secondary" onClick={() => { setEditItems(null); setEditHistory(null); }} style={{ minHeight: 34 }}>{t("取消", "Cancel")}</button>
-              <button className="button primary" disabled={commentBusy} onClick={() => void saveEdit()} style={{ minHeight: 34 }}>{commentBusy ? t("保存中…", "Saving…") : t("保存", "Save")}</button>
+              <button
+                className="button secondary"
+                onClick={() => {
+                  setEditItems(null);
+                  setEditHistory(null);
+                }}
+                style={{ minHeight: 34 }}
+              >
+                {t("取消", "Cancel")}
+              </button>
+              <button
+                className="button primary"
+                disabled={commentBusy}
+                onClick={() => void saveEdit()}
+                style={{ minHeight: 34 }}
+              >
+                {commentBusy ? t("保存中…", "Saving…") : t("保存", "Save")}
+              </button>
             </div>
           </div>
         </div>
@@ -483,15 +823,23 @@ export function PlazaPostView({ postId, t, label, navigateTo, accountToken, acco
                 kindLabel={label}
                 onNoteView={openNoteView}
                 onArtworkClick={openArtworkDetail}
-                headerExtra={(
+                headerExtra={
                   <button
                     className="text-button"
-                    onClick={() => openCollectionFromRanking(entry.kind, entry.collectionTitle, entry.items, `${entry.kind}-${idx}`)}
+                    onClick={() =>
+                      openCollectionFromRanking(
+                        entry.kind,
+                        entry.collectionTitle,
+                        entry.items,
+                        `${entry.kind}-${idx}`,
+                      )
+                    }
                     style={{ fontSize: 12, color: "var(--accent)", flexShrink: 0 }}
                   >
-                    <Play size={12} />{t("用此榜单排序", "Sort with this")}
+                    <Play size={12} />
+                    {t("用此榜单排序", "Sort with this")}
                   </button>
-                )}
+                }
               />
             </section>
           ))}
@@ -521,39 +869,87 @@ export function PlazaPostView({ postId, t, label, navigateTo, accountToken, acco
           {t("赞", "Like")} ({likeCount})
         </button>
         {!isProfilePost && (
-          <button className="button primary" onClick={useForSorting} style={{ minHeight: 38, fontSize: 13 }}>
+          <button
+            className="button primary"
+            onClick={sortWithPost}
+            style={{ minHeight: 38, fontSize: 13 }}
+          >
             <Play size={15} />
             {t("用此榜单排序", "Sort with this")}
           </button>
         )}
-        <button className="button secondary" onClick={compareWithMe} style={{ minHeight: 38, fontSize: 13 }}>
-          {isAuthor ? t("与曾经的我比较", "Compare with my past self") : t("与我比较", "Compare with me")}
+        <button
+          className="button secondary"
+          onClick={compareWithMe}
+          style={{ minHeight: 38, fontSize: 13 }}
+        >
+          {isAuthor
+            ? t("与曾经的我比较", "Compare with my past self")
+            : t("与我比较", "Compare with me")}
         </button>
         {isAuthor && !isProfilePost && editItems === null && (
-          <button className="button secondary" onClick={startEdit} style={{ minHeight: 38, fontSize: 13 }}>
+          <button
+            className="button secondary"
+            onClick={startEdit}
+            style={{ minHeight: 38, fontSize: 13 }}
+          >
             <PenLine size={15} />
             {t("编辑榜单", "Edit works")}
           </button>
         )}
         {isAuthor && (isProfilePost || editItems !== null) && (
-          <button className="button secondary" onClick={startEditInfo} style={{ minHeight: 38, fontSize: 13 }}>
+          <button
+            className="button secondary"
+            onClick={startEditInfo}
+            style={{ minHeight: 38, fontSize: 13 }}
+          >
             <PenLine size={15} />
             {isProfilePost ? t("编辑信息", "Edit info") : t("编辑描述", "Edit description")}
           </button>
         )}
         {isAuthor && (
-          <button className="button secondary" onClick={() => void handleToggleVisibility()} style={{ minHeight: 38, fontSize: 13 }}>
-            {post.is_public ? <><EyeOff size={15} />{t("隐藏", "Hide")}</> : <><Eye size={15} />{t("恢复公开", "Restore")}</>}
+          <button
+            className="button secondary"
+            onClick={() => void handleToggleVisibility()}
+            style={{ minHeight: 38, fontSize: 13 }}
+          >
+            {post.is_public ? (
+              <>
+                <EyeOff size={15} />
+                {t("隐藏", "Hide")}
+              </>
+            ) : (
+              <>
+                <Eye size={15} />
+                {t("恢复公开", "Restore")}
+              </>
+            )}
           </button>
         )}
       </div>
 
       {/* Profile-level note (profile posts) */}
-      {isProfilePost && Object.entries(parsedNotes).filter(([key]) => key.startsWith("profile:")).map(([key, text]) => (
-        <div key={key} style={{ margin: "0 0 16px", padding: "12px 16px", borderRadius: 10, background: "color-mix(in srgb,var(--music) 5%,transparent)", borderLeft: "2px solid color-mix(in srgb,var(--accent) 20%,transparent)" }}>
-          <ExpandableNote text={text} onView={openNoteView ? (t2) => openNoteView(post.collection_title, t2) : undefined} style={{ margin: 0 }} />
-        </div>
-      ))}
+      {isProfilePost &&
+        Object.entries(parsedNotes)
+          .filter(([key]) => key.startsWith("profile:"))
+          .map(([key, text]) => (
+            <div
+              key={key}
+              style={{
+                margin: "0 0 16px",
+                padding: "12px 16px",
+                borderRadius: 10,
+                background: "color-mix(in srgb,var(--music) 5%,transparent)",
+                borderLeft: "2px solid color-mix(in srgb,var(--accent) 20%,transparent)",
+              }}
+            >
+              <ExpandableNote
+                text={text}
+                onView={openNoteView ? (t2) => openNoteView(post.collection_title, t2) : undefined}
+                style={{ margin: 0 }}
+              />
+            </div>
+          ))}
 
       {/* Author actions */}
       {isAuthor && (
@@ -569,7 +965,9 @@ export function PlazaPostView({ postId, t, label, navigateTo, accountToken, acco
             </button>
           ) : (
             <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-              <span style={{ fontSize: 13, color: "var(--muted)" }}>{t("确认删除？", "Confirm delete?")}</span>
+              <span style={{ fontSize: 13, color: "var(--muted)" }}>
+                {t("确认删除？", "Confirm delete?")}
+              </span>
               <button
                 className="button primary"
                 onClick={() => void handleDeletePost()}
@@ -590,14 +988,30 @@ export function PlazaPostView({ postId, t, label, navigateTo, accountToken, acco
       )}
 
       {/* Comment section */}
-      <section className="plaza-post-comments" style={{ marginTop: 24, paddingTop: 20, borderTop: "1px solid var(--line)" }}>
-        <h3 style={{ fontSize: 14, fontWeight: 600, marginBottom: 16, color: "var(--muted)", display: "flex", alignItems: "center", gap: 8 }}>
+      <section
+        className="plaza-post-comments"
+        style={{ marginTop: 24, paddingTop: 20, borderTop: "1px solid var(--line)" }}
+      >
+        <h3
+          style={{
+            fontSize: 14,
+            fontWeight: 600,
+            marginBottom: 16,
+            color: "var(--muted)",
+            display: "flex",
+            alignItems: "center",
+            gap: 8,
+          }}
+        >
           <MessageCircle size={15} />
           {t("评论", "Comments")} ({comments.length})
         </h3>
 
         {comments.length === 0 && (
-          <p className="empty-state" style={{ fontSize: 13, color: "var(--muted)", marginBottom: 16 }}>
+          <p
+            className="empty-state"
+            style={{ fontSize: 13, color: "var(--muted)", marginBottom: 16 }}
+          >
             {t("暂无评论，来说点什么吧。", "No comments yet. Be the first to share your thoughts.")}
           </p>
         )}
@@ -607,28 +1021,73 @@ export function PlazaPostView({ postId, t, label, navigateTo, accountToken, acco
           const roots = comments.filter((c) => !c.parent_id);
           const repliesOf = (parentId: number) => comments.filter((c) => c.parent_id === parentId);
           const renderComment = (comment: PlazaComment, depth: number) => (
-            <div key={comment.id} className="comment-item" style={depth > 0 ? { marginLeft: 24, borderLeft: "2px solid var(--line)", paddingLeft: 12 } : undefined}>
+            <div
+              key={comment.id}
+              className="comment-item"
+              style={
+                depth > 0
+                  ? { marginLeft: 24, borderLeft: "2px solid var(--line)", paddingLeft: 12 }
+                  : undefined
+              }
+            >
               <div className="comment-item-header">
-                <span className="comment-author">{comment.nickname || t("匿名用户", "Anonymous")}</span>
-                <span className="comment-time">{new Date(comment.created_at).toLocaleString()}</span>
+                <span className="comment-author">
+                  {comment.nickname || t("匿名用户", "Anonymous")}
+                </span>
+                <span className="comment-time">
+                  {new Date(comment.created_at).toLocaleString()}
+                </span>
               </div>
               <p className="comment-content">{comment.content}</p>
               <div style={{ display: "flex", gap: 8, marginTop: 4 }}>
                 {accountToken && (
-                  <button className="text-button" onClick={() => { setReplyTo(replyTo === comment.id ? null : comment.id); setReplyText(""); }} style={{ fontSize: 11, color: "var(--accent)" }}>
+                  <button
+                    className="text-button"
+                    onClick={() => {
+                      setReplyTo(replyTo === comment.id ? null : comment.id);
+                      setReplyText("");
+                    }}
+                    style={{ fontSize: 11, color: "var(--accent)" }}
+                  >
                     {replyTo === comment.id ? t("取消回复", "Cancel reply") : t("回复", "Reply")}
                   </button>
                 )}
                 {accountToken && comment.nickname === accountNickname && (
-                  <button className="text-button" onClick={() => void handleDeleteComment(comment.id)} style={{ fontSize: 11, color: "var(--muted)" }}>
+                  <button
+                    className="text-button"
+                    onClick={() => void handleDeleteComment(comment.id)}
+                    style={{ fontSize: 11, color: "var(--muted)" }}
+                  >
                     {t("删除", "Delete")}
                   </button>
                 )}
               </div>
               {replyTo === comment.id && (
                 <div style={{ marginTop: 8, display: "flex", gap: 8 }}>
-                  <input type="text" value={replyText} onChange={(e) => setReplyText(e.target.value)} placeholder={t("写下你的回复…", "Write your reply…")} maxLength={500} style={{ fontSize: 12, padding: "6px 10px", minHeight: "auto", flex: 1 }} autoFocus onKeyDown={(e) => { if (e.key === "Enter") void handleAddComment(comment.id); if (e.key === "Escape") { setReplyTo(null); setReplyText(""); } }} />
-                  <button className="button primary" disabled={commentBusy || !replyText.trim()} onClick={() => void handleAddComment(comment.id)} style={{ minHeight: 32, fontSize: 12, paddingInline: 12 }}>{t("回复", "Reply")}</button>
+                  <input
+                    type="text"
+                    value={replyText}
+                    onChange={(e) => setReplyText(e.target.value)}
+                    placeholder={t("写下你的回复…", "Write your reply…")}
+                    maxLength={500}
+                    style={{ fontSize: 12, padding: "6px 10px", minHeight: "auto", flex: 1 }}
+                    autoFocus
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") void handleAddComment(comment.id);
+                      if (e.key === "Escape") {
+                        setReplyTo(null);
+                        setReplyText("");
+                      }
+                    }}
+                  />
+                  <button
+                    className="button primary"
+                    disabled={commentBusy || !replyText.trim()}
+                    onClick={() => void handleAddComment(comment.id)}
+                    style={{ minHeight: 32, fontSize: 12, paddingInline: 12 }}
+                  >
+                    {t("回复", "Reply")}
+                  </button>
                 </div>
               )}
               {repliesOf(comment.id).map((reply) => renderComment(reply, depth + 1))}
@@ -668,7 +1127,11 @@ export function PlazaPostView({ postId, t, label, navigateTo, accountToken, acco
 
       {/* Back */}
       <div style={{ marginTop: 32 }}>
-        <button className="button secondary" onClick={() => navigateTo("plaza")} style={{ minHeight: 34 }}>
+        <button
+          className="button secondary"
+          onClick={() => navigateTo("plaza")}
+          style={{ minHeight: 34 }}
+        >
           <ArrowLeft size={15} />
           {t("返回广场", "Back to plaza")}
         </button>

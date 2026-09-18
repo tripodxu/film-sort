@@ -1,5 +1,14 @@
 import { useEffect, useRef, useState } from "react";
-import { ChevronRight, Globe, Heart, MessageCircle, PenLine, Play, Search, Send } from "lucide-react";
+import {
+  ChevronRight,
+  Globe,
+  Heart,
+  MessageCircle,
+  PenLine,
+  Play,
+  Search,
+  Send,
+} from "lucide-react";
 import { Poster } from "../components/Poster";
 import type { PlazaViewProps, PlazaPost } from "./types";
 import type { MediaKind } from "../data/media";
@@ -17,7 +26,14 @@ const SORT_OPTIONS: Array<{ value: string; zh: string; en: string }> = [
   { value: "hottest", zh: "最热", en: "Hottest" },
 ];
 
-export function PlazaView({ t, label, navigateTo, accountToken, openCollection, profile }: PlazaViewProps) {
+export function PlazaView({
+  t,
+  label,
+  navigateTo,
+  accountToken,
+  openCollection,
+  profile,
+}: PlazaViewProps) {
   const [posts, setPosts] = useState<PlazaPost[]>([]);
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
@@ -27,11 +43,25 @@ export function PlazaView({ t, label, navigateTo, accountToken, openCollection, 
   const [kindFilter, setKindFilter] = useState("");
   const [sort, setSort] = useState<"newest" | "hottest">("newest");
   const [search, setSearch] = useState("");
-  const [colCount, setColCount] = useState<number>(() => { try { return Number(localStorage.getItem("art-rank:plaza-cols")) || 2; } catch { return 2; } });
+  const [colCount, setColCount] = useState<number>(() => {
+    try {
+      return Number(localStorage.getItem("art-rank:plaza-cols")) || 2;
+    } catch {
+      return 2;
+    }
+  });
 
-  useEffect(() => { void loadPosts(1, kindFilter, sort, search); }, [kindFilter]);
+  useEffect(() => {
+    void loadPosts(1, kindFilter, sort, search);
+  }, [kindFilter]);
 
-  async function loadPosts(p: number, kind: string, sortKey: "newest" | "hottest" = "newest", q = "", append = false) {
+  async function loadPosts(
+    p: number,
+    kind: string,
+    sortKey: "newest" | "hottest" = "newest",
+    q = "",
+    append = false,
+  ) {
     if (p === 1 && !append) setInitialLoading(true);
     setLoading(true);
     setError("");
@@ -39,9 +69,12 @@ export function PlazaView({ t, label, navigateTo, accountToken, openCollection, 
       const params = new URLSearchParams({ page: String(p), limit: "20", kind });
       if (sortKey === "hottest") params.set("sort", "hottest");
       if (q.trim()) params.set("q", q.trim());
-      const response = await fetch(`/api/plaza/posts?${params}`, accountToken ? { headers: { authorization: `Bearer ${accountToken}` } } : undefined);
+      const response = await fetch(
+        `/api/plaza/posts?${params}`,
+        accountToken ? { headers: { authorization: `Bearer ${accountToken}` } } : undefined,
+      );
       if (!response.ok) throw new Error();
-      const data = await response.json() as { posts: PlazaPost[]; total: number };
+      const data = (await response.json()) as { posts: PlazaPost[]; total: number };
       if (append) setPosts((prev) => [...prev, ...data.posts]);
       else setPosts(data.posts);
       setTotal(data.total);
@@ -65,10 +98,15 @@ export function PlazaView({ t, label, navigateTo, accountToken, openCollection, 
 
   function changeCols(n: number) {
     setColCount(n);
-    try { localStorage.setItem("art-rank:plaza-cols", String(n)); } catch {}
+    try {
+      localStorage.setItem("art-rank:plaza-cols", String(n));
+    } catch {}
   }
 
-  function useForSorting(post: PlazaPost) {
+  // 原名 useForSorting —— 但它内部没有任何 Hook，只是一个事件处理器。
+  // `use` 前缀会让 lint 与读者都把它当自定义 Hook，而它实际是在 onClick 里
+  // 被调用的（rules-of-hooks 因此报错）。这属于命名误导，改名为普通动词。
+  function sortWithPost(post: PlazaPost) {
     const works = post.top_items?.length ? post.top_items : (post.items ?? []);
     openCollection({
       id: `plaza-${post.id}`,
@@ -89,9 +127,13 @@ export function PlazaView({ t, label, navigateTo, accountToken, openCollection, 
     if (!hasMore || loading || initialLoading) return;
     const el = sentinelRef.current;
     if (!el) return;
-    const observer = new IntersectionObserver((entries) => {
-      if (entries[0].isIntersecting && !loading) void loadPosts(page + 1, kindFilter, sort, search, true);
-    }, { rootMargin: "400px" });
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting && !loading)
+          void loadPosts(page + 1, kindFilter, sort, search, true);
+      },
+      { rootMargin: "400px" },
+    );
     observer.observe(el);
     return () => observer.disconnect();
   }, [hasMore, loading, initialLoading, page, kindFilter, sort, search]);
@@ -116,7 +158,12 @@ export function PlazaView({ t, label, navigateTo, accountToken, openCollection, 
           <span>{t("广场", "PLAZA")}</span>
         </div>
         <h1>{t("文化广场", "Culture Plaza")}</h1>
-        <p>{t("发现他人的品味，找到灵感。在这里浏览、点赞、留言，或用他人的榜单开始你自己的排序。", "Discover others' tastes, find inspiration. Browse, like, comment, or start your own ranking from theirs.")}</p>
+        <p>
+          {t(
+            "发现他人的品味，找到灵感。在这里浏览、点赞、留言，或用他人的榜单开始你自己的排序。",
+            "Discover others' tastes, find inspiration. Browse, like, comment, or start your own ranking from theirs.",
+          )}
+        </p>
       </div>
 
       {/* Ability selector */}
@@ -128,7 +175,10 @@ export function PlazaView({ t, label, navigateTo, accountToken, openCollection, 
             role="tab"
             aria-selected={kindFilter === item.value}
             aria-label={t(item.zh, item.en)}
-            onClick={() => { setKindFilter(item.value); setPosts([]); }}
+            onClick={() => {
+              setKindFilter(item.value);
+              setPosts([]);
+            }}
           >
             <span className="plaza-ability-label">{t(item.zh, item.en)}</span>
           </button>
@@ -157,10 +207,20 @@ export function PlazaView({ t, label, navigateTo, accountToken, openCollection, 
               placeholder={t("搜索榜单 / 作者", "Search title / author")}
               value={search}
               onChange={(event) => setSearch(event.target.value)}
-              onKeyDown={(event) => { if (event.key === "Enter") applySearch(); }}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") applySearch();
+              }}
               style={{ minHeight: 30, padding: "4px 8px", fontSize: 12 }}
             />
-            {search && <button className="text-button" onClick={applySearch} style={{ minHeight: 24, fontSize: 11, padding: "0 4px" }}>{t("搜索", "Search")}</button>}
+            {search && (
+              <button
+                className="text-button"
+                onClick={applySearch}
+                style={{ minHeight: 24, fontSize: 11, padding: "0 4px" }}
+              >
+                {t("搜索", "Search")}
+              </button>
+            )}
           </label>
         </div>
         <div className="plaza-toolbar-right">
@@ -182,7 +242,9 @@ export function PlazaView({ t, label, navigateTo, accountToken, openCollection, 
           {Array.from({ length: 6 }).map((_, i) => (
             <div key={i} className="plaza-sticker plaza-skeleton">
               <div className="plaza-skeleton-posters">
-                <div className="plaza-skeleton-img" /><div className="plaza-skeleton-img" /><div className="plaza-skeleton-img" />
+                <div className="plaza-skeleton-img" />
+                <div className="plaza-skeleton-img" />
+                <div className="plaza-skeleton-img" />
               </div>
               <div className="plaza-skeleton-info">
                 <div className="plaza-skeleton-line" style={{ width: "70%" }} />
@@ -197,7 +259,10 @@ export function PlazaView({ t, label, navigateTo, accountToken, openCollection, 
       {error && (
         <div className="empty-state" style={{ padding: 40 }}>
           <p style={{ color: "var(--red)", marginBottom: 12 }}>{error}</p>
-          <button className="button secondary" onClick={() => void loadPosts(1, kindFilter, sort, search)}>
+          <button
+            className="button secondary"
+            onClick={() => void loadPosts(1, kindFilter, sort, search)}
+          >
             {t("重试", "Retry")}
           </button>
         </div>
@@ -206,7 +271,9 @@ export function PlazaView({ t, label, navigateTo, accountToken, openCollection, 
       {/* Empty state — only after initial load completes */}
       {!initialLoading && !loading && !error && posts.length === 0 && (
         <div className="empty-state" style={{ padding: 40 }}>
-          <p style={{ marginBottom: 12 }}>{t("广场还没有内容，快来发布第一个吧！", "The plaza is empty. Be the first to post!")}</p>
+          <p style={{ marginBottom: 12 }}>
+            {t("广场还没有内容，快来发布第一个吧！", "The plaza is empty. Be the first to post!")}
+          </p>
           {accountToken && (
             <button className="button primary" onClick={() => navigateTo("profile")}>
               {t("去发布", "Go post")}
@@ -219,35 +286,90 @@ export function PlazaView({ t, label, navigateTo, accountToken, openCollection, 
       {!initialLoading && posts.length > 0 && (
         <div className="plaza-grid" style={{ "--plaza-cols": colCount } as React.CSSProperties}>
           {posts.map((post) => (
-            <div key={post.id} className={`plaza-sticker ${colCount >= 4 ? "plaza-sticker-compact" : ""}`} onClick={() => navigateTo(`plazaPost:${post.id}`)} role="button" tabIndex={0} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); navigateTo(`plazaPost:${post.id}`); } }}>
+            <div
+              key={post.id}
+              className={`plaza-sticker ${colCount >= 4 ? "plaza-sticker-compact" : ""}`}
+              onClick={() => navigateTo(`plazaPost:${post.id}`)}
+              role="button"
+              tabIndex={0}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault();
+                  navigateTo(`plazaPost:${post.id}`);
+                }
+              }}
+            >
               <div className="plaza-sticker-posters">
                 {(post.top_items ?? post.items ?? []).slice(0, 3).map((work, idx) => (
                   <div key={work.id} className="plaza-sticker-poster">
-                    <span className="plaza-sticker-medal" aria-hidden="true">{idx === 0 ? "🥇" : idx === 1 ? "🥈" : "🥉"}</span>
+                    <span className="plaza-sticker-medal" aria-hidden="true">
+                      {idx === 0 ? "🥇" : idx === 1 ? "🥈" : "🥉"}
+                    </span>
                     <Poster work={work} kind={(post.kind ?? "other") as MediaKind} />
                   </div>
                 ))}
               </div>
               <div className="plaza-sticker-info">
                 <h3 className="plaza-sticker-title">{post.collection_title}</h3>
-                {(post.note_count ?? 0) > 0 && <span style={{ fontSize: 10, color: "var(--accent)", opacity: 0.7 }}>📝 {post.note_count}{t("条批注", " notes")}</span>}
+                {(post.note_count ?? 0) > 0 && (
+                  <span style={{ fontSize: 10, color: "var(--accent)", opacity: 0.7 }}>
+                    📝 {post.note_count}
+                    {t("条批注", " notes")}
+                  </span>
+                )}
                 <div className="plaza-sticker-meta">
-                  <span className="plaza-sticker-author">{post.nickname || t("匿名用户", "Anonymous")}</span>
-                  <span className={`plaza-sticker-kind kind-${post.kind}`}>{post.post_type === "profile" ? t("画像", "Profile") : label(post.kind as MediaKind)}</span>
-                  <span className="plaza-sticker-count">{post.item_count} {t("件", "works")}</span>
-                  <time className="plaza-sticker-time" dateTime={post.created_at} title={new Date(post.created_at).toLocaleString()}>{formatPlazaTime(post.created_at)}</time>
+                  <span className="plaza-sticker-author">
+                    {post.nickname || t("匿名用户", "Anonymous")}
+                  </span>
+                  <span className={`plaza-sticker-kind kind-${post.kind}`}>
+                    {post.post_type === "profile"
+                      ? t("画像", "Profile")
+                      : label(post.kind as MediaKind)}
+                  </span>
+                  <span className="plaza-sticker-count">
+                    {post.item_count} {t("件", "works")}
+                  </span>
+                  <time
+                    className="plaza-sticker-time"
+                    dateTime={post.created_at}
+                    title={new Date(post.created_at).toLocaleString()}
+                  >
+                    {formatPlazaTime(post.created_at)}
+                  </time>
                 </div>
                 {post.description && <p className="plaza-sticker-desc">{post.description}</p>}
                 <div className="plaza-sticker-stats">
-                  <span><Heart size={12} /> {post.like_count}</span>
-                  <span><MessageCircle size={12} /> {post.comment_count}</span>
+                  <span>
+                    <Heart size={12} /> {post.like_count}
+                  </span>
+                  <span>
+                    <MessageCircle size={12} /> {post.comment_count}
+                  </span>
                 </div>
               </div>
               <div className="plaza-sticker-actions">
                 {post.is_author && (
-                  <button className="plaza-sticker-btn" onClick={(e) => { e.stopPropagation(); navigateTo(`plazaPost:${post.id}`); }} title={t("管理我的帖子", "Manage my post")}><PenLine size={14} /></button>
+                  <button
+                    className="plaza-sticker-btn"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      navigateTo(`plazaPost:${post.id}`);
+                    }}
+                    title={t("管理我的帖子", "Manage my post")}
+                  >
+                    <PenLine size={14} />
+                  </button>
                 )}
-                <button className="plaza-sticker-btn" onClick={(e) => { e.stopPropagation(); useForSorting(post); }} title={t("用此榜单排序", "Sort with this")}><Play size={14} /></button>
+                <button
+                  className="plaza-sticker-btn"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    sortWithPost(post);
+                  }}
+                  title={t("用此榜单排序", "Sort with this")}
+                >
+                  <Play size={14} />
+                </button>
                 <ChevronRight size={16} className="plaza-sticker-arrow" />
               </div>
             </div>
@@ -288,7 +410,11 @@ export function PlazaView({ t, label, navigateTo, accountToken, openCollection, 
 
       {/* Back */}
       <div style={{ marginTop: 8 }}>
-        <button className="button secondary" onClick={() => navigateTo("home")} style={{ minHeight: 34 }}>
+        <button
+          className="button secondary"
+          onClick={() => navigateTo("home")}
+          style={{ minHeight: 34 }}
+        >
           {t("返回首页", "Back home")}
         </button>
       </div>
