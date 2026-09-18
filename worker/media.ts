@@ -844,7 +844,14 @@ async function resolvePosterEntry(
   return entry;
 }
 
-/** 实际的多级回退解析：Douban → Wiki → 网易云/gd-proxy。不含缓存。 */
+/**
+ * 实际的多级回退解析，不含缓存。
+ *
+ * 取图优先级：**能直连的 CDN 优先，需要代理的豆瓣垫后**。
+ *  - 音乐：网易云 CDN（`p*.music.126.net`，直连）→ 豆瓣 → 维基
+ *  - 电影/书籍：豆瓣（准确度优先）→ 维基 → 网易云/gd-proxy
+ * 理由见 music 分支内的注释；返回数组的顺序就是前端尝试顺序。
+ */
 async function computePosters(title: string, english: string, year?: number, type?: "movie" | "book" | "music", env?: GdProxyEnv): Promise<PosterCacheEntry> {
   let primary: string[] = [];
   // 只有回退链彻底没结果时，这个标记才决定「记成瞬时失败还是永久缺失」。
@@ -864,14 +871,26 @@ async function computePosters(title: string, english: string, year?: number, typ
       ...(bookPosterIndex.has(key(title)) ? doubanVariants(bookPosterIndex.get(key(title))!) : []),
     ])];
   } else if (type === "music") {
-    const [search] = await Promise.allSettled([searchCover(title, "music")]);
+    // 取图优先级（音乐）：**网易云 CDN 直出 → 豆瓣（需 /api/image 代理）**。
+    //
+    // 网易云封面是 `p*.music.126.net`：CSP 已放行、浏览器可直连、不占豆瓣的抓取配额，
+    // 也不受豆瓣 418 风控影响；豆瓣封面必须由 Worker 带 Referer 代理，且在并发批量下
+    // 会被 418 打回。两者**并行**取（不增加豆瓣请求数——原来音乐就是每次都查豆瓣，
+    // 现在只是把网易云从"最后一档兜底"提到"第一张候选"），返回数组顺序即展示顺序，
+    // 第一张加载失败时 Poster 组件会自然降级到下一张（豆瓣/维基）。
+    const [netease, search] = await Promise.allSettled([
+      searchNeteasePoster(title, env),
+      searchCover(title, "music"),
+    ]);
     noteThrottle(search);
     const searched = search.status === "fulfilled" ? search.value : undefined;
     if (!searched && !musicPosterIndex.has(key(title))) await ensureMusicIndex();
-    primary = [...new Set([
+    const direct = netease.status === "fulfilled" ? netease.value : [];
+    const proxied = [
       ...(searched ? doubanVariants(searched) : []),
       ...(musicPosterIndex.has(key(title)) ? doubanVariants(musicPosterIndex.get(key(title))!) : []),
-    ])];
+    ];
+    primary = [...new Set([...direct, ...proxied])];
   } else {
     const [suggestion, imdb, search] = await Promise.allSettled([doubanSuggest(title), imdbPoster(title, english, year), searchCover(title, "movie")]);
     noteThrottle(suggestion, imdb, search);
@@ -890,8 +909,11 @@ async function computePosters(title: string, english: string, year?: number, typ
   // 当前源无结果时按 Wiki → 网易云/gd-proxy 逐级降级（对所有类型生效，避免特定类型漏掉降级）。
   const wiki = await searchWikiPoster(title, english, type, year);
   if (wiki.length) return { urls: wiki, outcome: "found" };
-  const netease = await searchNeteasePoster(title, env);
-  if (netease.length) return { urls: netease, outcome: "found" };
+  // music 的网易云档已经在上面并行取过（且是第一候选），这里不再重复请求。
+  if (type !== "music") {
+    const netease = await searchNeteasePoster(title, env);
+    if (netease.length) return { urls: netease, outcome: "found" };
+  }
   return { urls: [], outcome: throttled ? "throttled" : "absent" };
 }
 

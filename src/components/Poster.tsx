@@ -209,7 +209,11 @@ export function Poster({ work, kind: rawKind, large = false }: { work: Artwork; 
     }
     return () => { active = false; };
   }, [work.id, work.title, kind, large, hasStoredPosters]);
-  const urls = [...new Set([...resolved, ...(work.posterUrls ?? [])])];
+  // 候选顺序 = 尝试顺序。**作品自带的封面排在前面**：导入网易云时拿到的是
+  // `p*.music.126.net`（CSP 已放行、浏览器直连、不经 Worker、不占豆瓣抓取配额），
+  // 比"解析出来的"豆瓣封面（必须走 /api/image 补 Referer，否则 418）更快也更稳；
+  // 自带封面加载失败时，后面解析来的候选会依次顶上。
+  const urls = [...new Set([...(work.posterUrls ?? []), ...resolved])];
   const url = urls.find((candidate) => !failed.has(candidate));
   const src = url === undefined ? undefined : proxyRetry.has(url) ? proxiedImageUrl(url) : imageUrl(url);
   const Icon = { film: Film, book: BookOpen, music: Music2, other: Library }[kind];
