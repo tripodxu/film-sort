@@ -30,8 +30,14 @@ describe("白名单字段集", () => {
 
   it("未知的本地渲染字段默认进不了库（不需要记得加护栏）", () => {
     const stored = toStoredWork({
-      id: "a", title: "T", rank: 1,
-      cacheKey: "k", thumbnail: "t", loading: true, posterUrls: ["https://x/1.jpg"], tags: ["x"],
+      id: "a",
+      title: "T",
+      rank: 1,
+      cacheKey: "k",
+      thumbnail: "t",
+      loading: true,
+      posterUrls: ["https://x/1.jpg"],
+      tags: ["x"],
     });
     expect(stored).toEqual({ id: "a", title: "T", rank: 1 });
   });
@@ -39,9 +45,23 @@ describe("白名单字段集", () => {
 
 describe("toStoredWork", () => {
   it("保留全部合法字段，顺序与 parseRanking 原有字面量一致", () => {
-    const stored = toStoredWork({ id: "i", title: " 活着 ", rank: 3, creator: "余华", year: 1993, subtitle: "To Live" });
+    const stored = toStoredWork({
+      id: "i",
+      title: " 活着 ",
+      rank: 3,
+      creator: "余华",
+      year: 1993,
+      subtitle: "To Live",
+    });
     expect(Object.keys(stored!)).toEqual(["id", "title", "rank", "creator", "year", "subtitle"]);
-    expect(stored).toEqual({ id: "i", title: "活着", rank: 3, creator: "余华", year: 1993, subtitle: "To Live" });
+    expect(stored).toEqual({
+      id: "i",
+      title: "活着",
+      rank: 3,
+      creator: "余华",
+      year: 1993,
+      subtitle: "To Live",
+    });
   });
 
   it("title 是唯一必填项：缺失/空/超长都返回 null", () => {
@@ -55,8 +75,16 @@ describe("toStoredWork", () => {
   });
 
   it("rank 可选——「我的清单」的收藏项从来没有 rank", () => {
-    expect(toStoredWork({ id: "custom-0", title: "A", year: 2000 })).toEqual({ id: "custom-0", title: "A", year: 2000 });
-    expect(toStoredWork({ id: "a", title: "A", rank: 2 })).toEqual({ id: "a", title: "A", rank: 2 });
+    expect(toStoredWork({ id: "custom-0", title: "A", year: 2000 })).toEqual({
+      id: "custom-0",
+      title: "A",
+      year: 2000,
+    });
+    expect(toStoredWork({ id: "a", title: "A", rank: 2 })).toEqual({
+      id: "a",
+      title: "A",
+      rank: 2,
+    });
   });
 
   it("脏可选项按字段丢弃，而不是把整条作品打回", () => {
@@ -70,8 +98,9 @@ describe("toStoredWork", () => {
   });
 
   it("toStoredWorks 丢弃非法条目而不是让整批失败", () => {
-    expect(toStoredWorks([{ title: "A" }, null, { title: "" }, "x", { title: "B", posterUrls: ["u"] }]))
-      .toEqual([{ title: "A" }, { title: "B" }]);
+    expect(
+      toStoredWorks([{ title: "A" }, null, { title: "" }, "x", { title: "B", posterUrls: ["u"] }]),
+    ).toEqual([{ title: "A" }, { title: "B" }]);
     expect(toStoredWorks("不是数组")).toEqual([]);
   });
 });
@@ -79,40 +108,79 @@ describe("toStoredWork", () => {
 describe("toStoredRankings / toStoredProfile", () => {
   it("榜单元数据按白名单保留，items 逐层收敛", () => {
     const ranking = toStoredRanking({
-      version: 1, profileId: "p", profileName: "n", kind: "film", collectionTitle: "c", createdAt: "2024-01-01T00:00:00Z",
-      topN: 8, description: "本地字段",
+      version: 1,
+      profileId: "p",
+      profileName: "n",
+      kind: "film",
+      collectionTitle: "c",
+      createdAt: "2024-01-01T00:00:00Z",
+      topN: 8,
+      description: "本地字段",
       items: [{ id: "a", title: "A", rank: 1, posterUrls: ["https://x/1.jpg"] }],
     });
     expect(ranking).not.toBeNull();
-    expect(Object.keys(ranking!)).toEqual(["version", "profileId", "profileName", "kind", "collectionTitle", "createdAt", "items"]);
+    expect(Object.keys(ranking!)).toEqual([
+      "version",
+      "profileId",
+      "profileName",
+      "kind",
+      "collectionTitle",
+      "createdAt",
+      "items",
+    ]);
     expect(ranking!.items).toEqual([{ id: "a", title: "A", rank: 1 }]);
   });
 
   it("没有 items 数组的榜单被判为非法并丢弃", () => {
     expect(toStoredRanking({ kind: "film" })).toBeNull();
-    expect(toStoredRankings([{ kind: "film" }, { kind: "book", items: [{ title: "B", rank: 1 }] }]))
-      .toEqual([{ kind: "book", items: [{ title: "B", rank: 1 }] }]);
+    expect(
+      toStoredRankings([{ kind: "film" }, { kind: "book", items: [{ title: "B", rank: 1 }] }]),
+    ).toEqual([{ kind: "book", items: [{ title: "B", rank: 1 }] }]);
   });
 
   it("画像顶层元数据走白名单，rankings[].items[] 逐层收敛", () => {
     const profile = toStoredProfile({
-      version: 2, profileId: "p", profileName: "n", updatedAt: "2024-01-01T00:00:00Z",
+      version: 2,
+      profileId: "p",
+      profileName: "n",
+      updatedAt: "2024-01-01T00:00:00Z",
       draft: { local: true },
-      rankings: [{ version: 1, kind: "music", items: [{ id: "a", title: "A", rank: 1, posterUrls: ["u"] }] }],
+      rankings: [
+        { version: 1, kind: "music", items: [{ id: "a", title: "A", rank: 1, posterUrls: ["u"] }] },
+      ],
     });
     expect(profile).not.toBeNull();
-    expect(Object.keys(profile!)).toEqual(["version", "profileId", "profileName", "updatedAt", "rankings"]);
+    expect(Object.keys(profile!)).toEqual([
+      "version",
+      "profileId",
+      "profileName",
+      "updatedAt",
+      "rankings",
+    ]);
     expect(JSON.stringify(profile)).not.toContain("posterUrls");
   });
 
   it("v1 画像（本身就是一份榜单）不会被当成 v2 而丢掉整份榜单", () => {
     const v1 = {
-      version: 1, profileId: "p", profileName: "n", kind: "music", collectionTitle: "c", createdAt: "2024-01-01T00:00:00Z",
+      version: 1,
+      profileId: "p",
+      profileName: "n",
+      kind: "music",
+      collectionTitle: "c",
+      createdAt: "2024-01-01T00:00:00Z",
       items: [{ id: "a", title: "A", rank: 1, posterUrls: ["u"] }],
     };
     const stored = toStoredProfile(v1);
     expect(stored).not.toBeNull();
-    expect(Object.keys(stored!)).toEqual(["version", "profileId", "profileName", "kind", "collectionTitle", "createdAt", "items"]);
+    expect(Object.keys(stored!)).toEqual([
+      "version",
+      "profileId",
+      "profileName",
+      "kind",
+      "collectionTitle",
+      "createdAt",
+      "items",
+    ]);
     expect((stored as { items: unknown[] }).items).toEqual([{ id: "a", title: "A", rank: 1 }]);
     expect(JSON.stringify(stored)).not.toContain("posterUrls");
   });
@@ -127,8 +195,13 @@ describe("toStoredRankings / toStoredProfile", () => {
 describe("healStoredProfile（读取端自愈）", () => {
   it("清除旧行里残留的 posterUrls", () => {
     const healed = healStoredProfile({
-      version: 2, profileId: "p", profileName: "n", updatedAt: "2024-01-01T00:00:00Z",
-      rankings: [{ version: 1, kind: "film", items: [{ id: "a", title: "A", rank: 1, posterUrls: ["u"] }] }],
+      version: 2,
+      profileId: "p",
+      profileName: "n",
+      updatedAt: "2024-01-01T00:00:00Z",
+      rankings: [
+        { version: 1, kind: "film", items: [{ id: "a", title: "A", rank: 1, posterUrls: ["u"] }] },
+      ],
     });
     expect(JSON.stringify(healed)).not.toContain("posterUrls");
   });
@@ -142,7 +215,10 @@ describe("healStoredProfile（读取端自愈）", () => {
 
 describe("编码出口", () => {
   it("encodeStoredWorks 只在有内容时成功", () => {
-    const ok = encodeStoredWorks([{ title: "A", posterUrls: ["u"] }, { title: "B", rank: 2 }]);
+    const ok = encodeStoredWorks([
+      { title: "A", posterUrls: ["u"] },
+      { title: "B", rank: 2 },
+    ]);
     expect(ok.ok).toBe(true);
     if (!ok.ok) return;
     expect(ok.count).toBe(2);
@@ -153,12 +229,19 @@ describe("编码出口", () => {
   it("全部条目非法时返回 empty_payload，而不是默默写入空数组", () => {
     // 静默写入空数组意味着用户数据凭空消失且没有任何信号——必须让调用方返回 400。
     expect(encodeStoredWorks([])).toEqual({ ok: false, error: "empty_payload" });
-    expect(encodeStoredWorks([{ posterUrls: ["u"] }, "x", null])).toEqual({ ok: false, error: "empty_payload" });
+    expect(encodeStoredWorks([{ posterUrls: ["u"] }, "x", null])).toEqual({
+      ok: false,
+      error: "empty_payload",
+    });
     expect(encodeStoredRankings([{ kind: "film" }])).toEqual({ ok: false, error: "empty_payload" });
   });
 
   it("超限返回 payload_too_large", () => {
-    const works = Array.from({ length: 40 }, (_, i) => ({ id: `id-${i}`, title: "标题".repeat(20), rank: i + 1 }));
+    const works = Array.from({ length: 40 }, (_, i) => ({
+      id: `id-${i}`,
+      title: "标题".repeat(20),
+      rank: i + 1,
+    }));
     expect(encodeStoredWorks(works, 256)).toEqual({ ok: false, error: "payload_too_large" });
     expect(encodeStoredWorks(works, MAX_PAYLOAD_BYTES).ok).toBe(true);
   });
@@ -175,7 +258,13 @@ describe("编码出口", () => {
 
   it("count 是作品总数：profile 帖的 item_count 不能用榜单个数", () => {
     const rankings = [
-      { kind: "film", items: [{ title: "A", rank: 1 }, { title: "B", rank: 2 }] },
+      {
+        kind: "film",
+        items: [
+          { title: "A", rank: 1 },
+          { title: "B", rank: 2 },
+        ],
+      },
       { kind: "book", items: [{ title: "C", rank: 1 }] },
     ];
     const encoded = encodeStoredRankings(rankings);
@@ -184,7 +273,13 @@ describe("编码出口", () => {
     expect(encoded.count).toBe(3);
     expect(countStoredWorks(rankings.map((r) => toStoredRanking(r)!))).toBe(3);
 
-    const profile = encodeStoredProfile({ version: 2, profileId: "p", profileName: "n", updatedAt: "2024-01-01T00:00:00Z", rankings });
+    const profile = encodeStoredProfile({
+      version: 2,
+      profileId: "p",
+      profileName: "n",
+      updatedAt: "2024-01-01T00:00:00Z",
+      rankings,
+    });
     expect(profile.ok).toBe(true);
     if (!profile.ok) return;
     expect(profile.count).toBe(3);

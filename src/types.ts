@@ -45,4 +45,3 @@ export interface RankingResult {
 }
 
 export const localize = (text: LocalizedText, locale: Locale): string => text[locale];
-

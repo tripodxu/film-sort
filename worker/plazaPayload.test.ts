@@ -34,7 +34,9 @@ function fakeDb(options: FakeDbOptions): D1Database {
             first: async () => {
               if (/FROM user_sessions/.test(sql)) return options.user ?? null;
               if (/SELECT user_id, post_type FROM plaza_posts/.test(sql)) {
-                return options.post ? { user_id: options.post.user_id, post_type: options.post.post_type } : null;
+                return options.post
+                  ? { user_id: options.post.user_id, post_type: options.post.post_type }
+                  : null;
               }
               if (/FROM plaza_posts p/.test(sql)) return options.post ?? null;
               return null;
@@ -43,7 +45,10 @@ function fakeDb(options: FakeDbOptions): D1Database {
               if (/FROM poster_urls/.test(sql)) return { results: options.posterRows ?? [] };
               return { results: [] };
             },
-            run: async () => { writes.push({ sql, args }); return { success: true, meta: { last_row_id: 1 } }; },
+            run: async () => {
+              writes.push({ sql, args });
+              return { success: true, meta: { last_row_id: 1 } };
+            },
           };
         },
       };
@@ -54,17 +59,30 @@ function fakeDb(options: FakeDbOptions): D1Database {
   } as unknown as D1Database;
 }
 
-const env = (db: D1Database): Env => ({ DB: db } as unknown as Env);
+const env = (db: D1Database): Env => ({ DB: db }) as unknown as Env;
 
 describe("GET /api/plaza/posts/:id —— 海报地址走旁路，不再注入 items", () => {
   it("条目的 posterUrls 不会出现在 post.items 里", async () => {
-    const post = { id: 32, user_id: 1, post_type: "ranking", kind: "music", is_public: 1, items: JSON.stringify([{ id: "a", title: "童话", rank: 1 }]) };
+    const post = {
+      id: 32,
+      user_id: 1,
+      post_type: "ranking",
+      kind: "music",
+      is_public: 1,
+      items: JSON.stringify([{ id: "a", title: "童话", rank: 1 }]),
+    };
     const db = fakeDb({
       post,
       posterRows: [{ media_key: "music|童话|童话|", urls: JSON.stringify([LEGACY_URL]) }],
     });
-    const response = await plazaRoute(new Request("https://example.com/api/plaza/posts/32"), env(db));
-    const body = await response.json() as { post: { items: Array<Record<string, unknown>> }; posterUrls: Array<string[] | null> };
+    const response = await plazaRoute(
+      new Request("https://example.com/api/plaza/posts/32"),
+      env(db),
+    );
+    const body = (await response.json()) as {
+      post: { items: Array<Record<string, unknown>> };
+      posterUrls: Array<string[] | null>;
+    };
 
     expect(body.post.items).toEqual([{ id: "a", title: "童话", rank: 1 }]);
     expect(body.post.items[0]).not.toHaveProperty("posterUrls");
@@ -74,11 +92,20 @@ describe("GET /api/plaza/posts/:id —— 海报地址走旁路，不再注入 i
 
   it("库里残留 posterUrls 的旧行读出来即干净（读取端自愈，无需迁移脚本）", async () => {
     const post = {
-      id: 32, user_id: 1, post_type: "ranking", kind: "music", is_public: 1,
-      items: JSON.stringify([{ id: "a", title: "童话", rank: 1, posterUrls: [LEGACY_URL], cacheKey: "本地字段" }]),
+      id: 32,
+      user_id: 1,
+      post_type: "ranking",
+      kind: "music",
+      is_public: 1,
+      items: JSON.stringify([
+        { id: "a", title: "童话", rank: 1, posterUrls: [LEGACY_URL], cacheKey: "本地字段" },
+      ]),
     };
-    const response = await plazaRoute(new Request("https://example.com/api/plaza/posts/32"), env(fakeDb({ post })));
-    const body = await response.json() as { post: { items: Array<Record<string, unknown>> } };
+    const response = await plazaRoute(
+      new Request("https://example.com/api/plaza/posts/32"),
+      env(fakeDb({ post })),
+    );
+    const body = (await response.json()) as { post: { items: Array<Record<string, unknown>> } };
 
     expect(body.post.items).toEqual([{ id: "a", title: "童话", rank: 1 }]);
     expect(JSON.stringify(body.post)).not.toContain("posterUrls");
@@ -87,11 +114,29 @@ describe("GET /api/plaza/posts/:id —— 海报地址走旁路，不再注入 i
 
   it("profile 帖的 items 是榜单数组，按榜单白名单收敛", async () => {
     const post = {
-      id: 7, user_id: 1, post_type: "profile", kind: null, is_public: 1,
-      items: JSON.stringify([{ version: 1, kind: "film", collectionTitle: "c", createdAt: "2024-01-01T00:00:00Z", items: [{ id: "a", title: "A", rank: 1, posterUrls: [LEGACY_URL] }] }]),
+      id: 7,
+      user_id: 1,
+      post_type: "profile",
+      kind: null,
+      is_public: 1,
+      items: JSON.stringify([
+        {
+          version: 1,
+          kind: "film",
+          collectionTitle: "c",
+          createdAt: "2024-01-01T00:00:00Z",
+          items: [{ id: "a", title: "A", rank: 1, posterUrls: [LEGACY_URL] }],
+        },
+      ]),
     };
-    const response = await plazaRoute(new Request("https://example.com/api/plaza/posts/7"), env(fakeDb({ post })));
-    const body = await response.json() as { post: { items: Array<{ items: Array<Record<string, unknown>> }> }; posterUrls: unknown[] };
+    const response = await plazaRoute(
+      new Request("https://example.com/api/plaza/posts/7"),
+      env(fakeDb({ post })),
+    );
+    const body = (await response.json()) as {
+      post: { items: Array<{ items: Array<Record<string, unknown>> }> };
+      posterUrls: unknown[];
+    };
 
     expect(body.post.items[0].items).toEqual([{ id: "a", title: "A", rank: 1 }]);
     expect(body.posterUrls).toEqual([]);
@@ -103,7 +148,11 @@ describe("PUT /api/plaza/posts/:id —— 编辑帖子不可能把海报地址�
 
   it("body.items 里夹带 posterUrls 也会被白名单剔除", async () => {
     const writes: Array<{ sql: string; args: unknown[] }> = [];
-    const db = fakeDb({ user: { id: 1, email: "a@b.c" }, post: { user_id: 1, post_type: "ranking" }, writes });
+    const db = fakeDb({
+      user: { id: 1, email: "a@b.c" },
+      post: { user_id: 1, post_type: "ranking" },
+      writes,
+    });
     const request = new Request("https://example.com/api/plaza/posts/32", {
       method: "PUT",
       headers: { "content-type": "application/json", authorization: `Bearer ${token}` },
@@ -123,13 +172,20 @@ describe("PUT /api/plaza/posts/:id —— 编辑帖子不可能把海报地址�
     const itemsJson = String(update!.args[4]);
     expect(itemsJson).not.toContain("posterUrls");
     expect(itemsJson).not.toContain("cacheKey");
-    expect(JSON.parse(itemsJson)).toEqual([{ id: "a", title: "童话", rank: 1 }, { id: "b", title: "此情可待", rank: 2 }]);
+    expect(JSON.parse(itemsJson)).toEqual([
+      { id: "a", title: "童话", rank: 1 },
+      { id: "b", title: "此情可待", rank: 2 },
+    ]);
     expect(update!.args[6]).toBe(2);
   });
 
   it("全部条目非法时返回 400，而不是把 items 写成空数组", async () => {
     const writes: Array<{ sql: string; args: unknown[] }> = [];
-    const db = fakeDb({ user: { id: 1, email: "a@b.c" }, post: { user_id: 1, post_type: "ranking" }, writes });
+    const db = fakeDb({
+      user: { id: 1, email: "a@b.c" },
+      post: { user_id: 1, post_type: "ranking" },
+      writes,
+    });
     const request = new Request("https://example.com/api/plaza/posts/32", {
       method: "PUT",
       headers: { "content-type": "application/json", authorization: `Bearer ${token}` },
@@ -144,14 +200,29 @@ describe("PUT /api/plaza/posts/:id —— 编辑帖子不可能把海报地址�
   it("POST /api/plaza/posts 的 ranking / profile 两种形状都不会漏掉海报地址", async () => {
     for (const [postType, items] of [
       ["ranking", [{ id: "a", title: "A", rank: 1, posterUrls: [LEGACY_URL] }]],
-      ["profile", [{ version: 1, kind: "film", collectionTitle: "c", items: [{ id: "a", title: "A", rank: 1, posterUrls: [LEGACY_URL] }] }]],
+      [
+        "profile",
+        [
+          {
+            version: 1,
+            kind: "film",
+            collectionTitle: "c",
+            items: [{ id: "a", title: "A", rank: 1, posterUrls: [LEGACY_URL] }],
+          },
+        ],
+      ],
     ] as const) {
       const writes: Array<{ sql: string; args: unknown[] }> = [];
       const db = fakeDb({ user: { id: 1, email: "a@b.c" }, writes });
       const request = new Request("https://example.com/api/plaza/posts", {
         method: "POST",
         headers: { "content-type": "application/json", authorization: `Bearer ${token}` },
-        body: JSON.stringify({ post_type: postType, kind: postType === "profile" ? null : "music", collection_title: "c", items }),
+        body: JSON.stringify({
+          post_type: postType,
+          kind: postType === "profile" ? null : "music",
+          collection_title: "c",
+          items,
+        }),
       });
       const response = await plazaRoute(request, env(db));
       expect(response.status, `${postType} 应当被接受`).toBe(201);

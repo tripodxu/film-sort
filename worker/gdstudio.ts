@@ -24,7 +24,10 @@ const COOLDOWN_MS = 60_000;
 
 function isCoolingDown(): boolean {
   if (Date.now() < cooldownUntil) return true;
-  if (cooldownUntil && Date.now() >= cooldownUntil) { cooldownUntil = 0; consecutiveFailures = 0; }
+  if (cooldownUntil && Date.now() >= cooldownUntil) {
+    cooldownUntil = 0;
+    consecutiveFailures = 0;
+  }
   return false;
 }
 
@@ -36,49 +39,77 @@ function budgetLeft(): boolean {
   return true;
 }
 
-function buildApiRequest(params: Record<string, string>, env?: GdProxyEnv): { url: URL; headers: Record<string, string> } {
+function buildApiRequest(
+  params: Record<string, string>,
+  env?: GdProxyEnv,
+): { url: URL; headers: Record<string, string> } {
   const url = new URL(env?.MUSIC_PROXY_URL?.trim() || API_BASE);
   for (const [k, v] of Object.entries(params)) url.searchParams.set(k, v);
   return { url, headers: env?.MUSIC_PROXY_KEY ? { "x-proxy-key": env.MUSIC_PROXY_KEY } : {} };
 }
 
-interface CacheEntry { value: unknown; expires: number }
+interface CacheEntry {
+  value: unknown;
+  expires: number;
+}
 function makeCache(ttlMs: number) {
   const store = new Map<string, CacheEntry>();
   return {
     get(key: string): unknown | undefined {
       const hit = store.get(key);
       if (!hit) return undefined;
-      if (Date.now() > hit.expires) { store.delete(key); return undefined; }
+      if (Date.now() > hit.expires) {
+        store.delete(key);
+        return undefined;
+      }
       return hit.value;
     },
     set(key: string, value: unknown) {
-      if (store.size >= CACHE_MAX) { const oldest = store.keys().next().value as string | undefined; if (oldest !== undefined) store.delete(oldest); }
+      if (store.size >= CACHE_MAX) {
+        const oldest = store.keys().next().value as string | undefined;
+        if (oldest !== undefined) store.delete(oldest);
+      }
       store.set(key, { value, expires: Date.now() + ttlMs });
     },
   };
 }
-const searchCache = makeCache(10 * 60 * 1000);      // 搜索结果 10 分钟
-const playCache = makeCache(30 * 60 * 1000);        // 签名播放链约 1 小时过期，缓存 30 分钟
-const picCache = makeCache(50 * 60 * 1000);         // 签名封面链同理，留余量
-const lyricCache = makeCache(24 * 60 * 60 * 1000);  // 歌词几乎不变
+const searchCache = makeCache(10 * 60 * 1000); // 搜索结果 10 分钟
+const playCache = makeCache(30 * 60 * 1000); // 签名播放链约 1 小时过期，缓存 30 分钟
+const picCache = makeCache(50 * 60 * 1000); // 签名封面链同理，留余量
+const lyricCache = makeCache(24 * 60 * 60 * 1000); // 歌词几乎不变
 
-export interface GdTrack { id: string; name: string; artist: string[] | string; album?: string; pic_id?: string; lyric_id?: string }
+export interface GdTrack {
+  id: string;
+  name: string;
+  artist: string[] | string;
+  album?: string;
+  pic_id?: string;
+  lyric_id?: string;
+}
 
 /** 带重试的搜索：首次失败自动重试一次，仅在连续失败达阈值时标记 blocked。 */
-async function gdApiWithRetry(params: Record<string, string>, env?: GdProxyEnv): Promise<{ result: unknown | null; blocked: boolean }> {
+async function gdApiWithRetry(
+  params: Record<string, string>,
+  env?: GdProxyEnv,
+): Promise<{ result: unknown | null; blocked: boolean }> {
   if (isCoolingDown()) return { result: null, blocked: true };
   if (!budgetLeft()) return { result: null, blocked: true };
   const request = buildApiRequest(params, env);
   for (let attempt = 0; attempt < 2; attempt++) {
     try {
-      const response = await fetch(request.url, { headers: request.headers, signal: AbortSignal.timeout(10000) });
+      const response = await fetch(request.url, {
+        headers: request.headers,
+        signal: AbortSignal.timeout(10000),
+      });
       if (response.ok) {
-        consecutiveFailures = 0; cooldownUntil = 0;
+        consecutiveFailures = 0;
+        cooldownUntil = 0;
         return { result: await response.json(), blocked: false };
       }
-    } catch { /* timeout or network error */ }
-    if (attempt === 0) await new Promise(r => setTimeout(r, 500));
+    } catch {
+      /* timeout or network error */
+    }
+    if (attempt === 0) await new Promise((r) => setTimeout(r, 500));
   }
   consecutiveFailures++;
   if (consecutiveFailures >= FAILURE_THRESHOLD) cooldownUntil = Date.now() + COOLDOWN_MS;
@@ -90,16 +121,28 @@ async function gdApi(params: Record<string, string>, env?: GdProxyEnv): Promise<
   if (isCoolingDown() || !budgetLeft()) return null;
   const request = buildApiRequest(params, env);
   try {
-    const response = await fetch(request.url, { headers: request.headers, signal: AbortSignal.timeout(10000) });
-    if (response.ok) { consecutiveFailures = 0; cooldownUntil = 0; return await response.json(); }
-  } catch { /* */ }
+    const response = await fetch(request.url, {
+      headers: request.headers,
+      signal: AbortSignal.timeout(10000),
+    });
+    if (response.ok) {
+      consecutiveFailures = 0;
+      cooldownUntil = 0;
+      return await response.json();
+    }
+  } catch {
+    /* */
+  }
   return null;
 }
 
 /** 搜索缓存键。窥视与写入必须共用，否则限流判断会与实际缓存对不上。 */
 const searchKey = (name: string, count: number) => `${name}|${count}`;
 
-export interface GdSearchOutcome { tracks: GdTrack[]; blocked: boolean }
+export interface GdSearchOutcome {
+  tracks: GdTrack[];
+  blocked: boolean;
+}
 
 /** 同步窥视搜索缓存（不触发上游）。 */
 function cachedSearch(name: string, count: number): GdSearchOutcome | undefined {
@@ -107,12 +150,21 @@ function cachedSearch(name: string, count: number): GdSearchOutcome | undefined 
 }
 
 /** 搜索曲目。count≤30；失败返回 []（预算耗尽时 blocked=true，网络失败 blocked=false）。 */
-export async function gdSearch(name: string, count = 10, env?: GdProxyEnv): Promise<GdSearchOutcome> {
+export async function gdSearch(
+  name: string,
+  count = 10,
+  env?: GdProxyEnv,
+): Promise<GdSearchOutcome> {
   const key = searchKey(name, count);
   const hit = cachedSearch(name, count);
   if (hit) return hit;
-  const { result: raw, blocked } = await gdApiWithRetry({ types: "search", source: SOURCE, name, count: String(count), pages: "1" }, env);
-  const tracks = Array.isArray(raw) ? (raw as GdTrack[]).filter((t) => t && typeof t.id === "string" && typeof t.name === "string") : [];
+  const { result: raw, blocked } = await gdApiWithRetry(
+    { types: "search", source: SOURCE, name, count: String(count), pages: "1" },
+    env,
+  );
+  const tracks = Array.isArray(raw)
+    ? (raw as GdTrack[]).filter((t) => t && typeof t.id === "string" && typeof t.name === "string")
+    : [];
   const outcome: GdSearchOutcome = { tracks, blocked: blocked && tracks.length === 0 };
   // 只缓存**结构性正确**的响应。上游偶尔会回 200 + 非数组（错误 JSON / 拦截页），
   // 把它当"没有结果"缓存 10 分钟，会让这首曲子在这 10 分钟里一直"搜不到"。
@@ -129,10 +181,10 @@ export async function gdSearch(name: string, count = 10, env?: GdProxyEnv): Prom
  */
 export function playNeedsUpstream(title: string, artist?: string): boolean {
   const hit = cachedSearch(title, 10);
-  if (!hit) return true;                                    // 搜索未命中 → 必然打上游
+  if (!hit) return true; // 搜索未命中 → 必然打上游
   const first = pickTracks(hit.tracks, title, artist, 3)[0];
-  if (!first) return false;                                 // 命中缓存且无候选 → 直接 404，零上游
-  return !playCache.get(String(first.id));                   // 首候选的播放链没缓存 → 要打上游
+  if (!first) return false; // 命中缓存且无候选 → 直接 404，零上游
+  return !playCache.get(String(first.id)); // 首候选的播放链没缓存 → 要打上游
 }
 
 /** 同上，歌词：曲目与歌词都命中缓存时零上游。 */
@@ -151,19 +203,37 @@ export function lyricNeedsUpstream(title: string, artist?: string): boolean {
  * 时上游会连带返回同歌手的《第一次》，拿它当候选等于播放一首无关的歌。一条歌名都对不上
  * 就返回空——宁可告诉用户"没找到"，也不播错歌、也不给错封面。
  */
-export function pickTracks(tracks: GdTrack[], title: string, artist?: string, limit = 3): GdTrack[] {
+export function pickTracks(
+  tracks: GdTrack[],
+  title: string,
+  artist?: string,
+  limit = 3,
+): GdTrack[] {
   if (!tracks.length) return [];
-  const norm = (s: string) => s.normalize("NFKC").toLowerCase().replace(/[\s·．.、,，/()（）'’\-—_]/g, "");
+  const norm = (s: string) =>
+    s
+      .normalize("NFKC")
+      .toLowerCase()
+      .replace(/[\s·．.、,，/()（）'’\-—_]/g, "");
   const wantTitle = norm(title);
   if (!wantTitle) return [];
   const wantArtist = artist ? norm(artist.split("/")[0].trim()) : "";
-  const artistOf = (t: GdTrack) => norm(Array.isArray(t.artist) ? t.artist.join(" ") : String(t.artist ?? ""));
-  const scored = tracks.map((track, index) => {
-    const tName = norm(track.name);
-    let score = tName === wantTitle ? 4 : (tName.includes(wantTitle) || wantTitle.includes(tName) ? 2 : 0);
-    if (score > 0 && wantArtist && (artistOf(track).includes(wantArtist) || wantArtist.includes(artistOf(track)))) score += 3;
-    return { track, score, index };
-  }).filter((entry) => entry.score > 0)
+  const artistOf = (t: GdTrack) =>
+    norm(Array.isArray(t.artist) ? t.artist.join(" ") : String(t.artist ?? ""));
+  const scored = tracks
+    .map((track, index) => {
+      const tName = norm(track.name);
+      let score =
+        tName === wantTitle ? 4 : tName.includes(wantTitle) || wantTitle.includes(tName) ? 2 : 0;
+      if (
+        score > 0 &&
+        wantArtist &&
+        (artistOf(track).includes(wantArtist) || wantArtist.includes(artistOf(track)))
+      )
+        score += 3;
+      return { track, score, index };
+    })
+    .filter((entry) => entry.score > 0)
     .sort((a, b) => b.score - a.score || a.index - b.index);
   return scored.slice(0, Math.max(1, limit)).map((entry) => entry.track);
 }
@@ -175,16 +245,23 @@ export function pickTrack(tracks: GdTrack[], title: string, artist?: string): Gd
 /** 判断搜索匹配到的曲目是否为翻唱/改编版而非原版。 */
 export function isCoverTrack(track: GdTrack, title: string, artist?: string): boolean {
   const name = track.name;
-  const coverHints = /翻唱|cover|女声版|男声版|dj版|live|钢琴版|纯音乐|吉他版|深情版|翻弹|remix|伴奏|钢琴曲|古筝版|小提琴版|acoustic|instrumental|demo|试听版|雨下整夜版|纯净甜美版|压抑/i;
+  const coverHints =
+    /翻唱|cover|女声版|男声版|dj版|live|钢琴版|纯音乐|吉他版|深情版|翻弹|remix|伴奏|钢琴曲|古筝版|小提琴版|acoustic|instrumental|demo|试听版|雨下整夜版|纯净甜美版|压抑/i;
   if (coverHints.test(name)) return true;
   const bracket = name.match(/[（(]([^)）]+)[)）]/);
   if (bracket && coverHints.test(bracket[1])) return true;
   // 歌名中括号内容（如"七里香 (女声版)"）
   if (artist) {
     const wantArtist = artist.split("/")[0].trim();
-    const trackArtists = Array.isArray(track.artist) ? track.artist.join(" ") : String(track.artist ?? "");
+    const trackArtists = Array.isArray(track.artist)
+      ? track.artist.join(" ")
+      : String(track.artist ?? "");
     const norm = (s: string) => s.normalize("NFKC").toLowerCase().replace(/\s/g, "");
-    if (wantArtist && !norm(trackArtists).includes(norm(wantArtist)) && !norm(wantArtist).includes(norm(trackArtists))) {
+    if (
+      wantArtist &&
+      !norm(trackArtists).includes(norm(wantArtist)) &&
+      !norm(wantArtist).includes(norm(trackArtists))
+    ) {
       // 仅当搜索结果中没有任何匹配原唱时才标记为翻唱
       // （由调用方在所有 tracks 层面判断，此处仅做单条判断）
       return true;
@@ -198,7 +275,8 @@ export async function gdPlayUrl(trackId: string, env?: GdProxyEnv): Promise<stri
   const hit = playCache.get(trackId);
   if (hit) return hit as string;
   const raw = await gdApi({ types: "url", source: SOURCE, id: trackId, br: "320" }, env);
-  const url = raw && typeof (raw as { url?: unknown }).url === "string" ? (raw as { url: string }).url : "";
+  const url =
+    raw && typeof (raw as { url?: unknown }).url === "string" ? (raw as { url: string }).url : "";
   if (url) playCache.set(trackId, url);
   return url;
 }
@@ -208,13 +286,17 @@ export async function gdPicUrl(picId: string, env?: GdProxyEnv): Promise<string>
   const hit = picCache.get(picId);
   if (hit) return hit as string;
   const raw = await gdApi({ types: "pic", source: SOURCE, id: picId, size: "500" }, env);
-  const url = raw && typeof (raw as { url?: unknown }).url === "string" ? (raw as { url: string }).url : "";
+  const url =
+    raw && typeof (raw as { url?: unknown }).url === "string" ? (raw as { url: string }).url : "";
   if (url) picCache.set(picId, url);
   return url;
 }
 
 /** LRC 歌词（原语 + 可选译文）。lyric_id 通常等于曲目 id。 */
-export async function gdLyric(lyricId: string, env?: GdProxyEnv): Promise<{ lyric: string; tlyric: string } | null> {
+export async function gdLyric(
+  lyricId: string,
+  env?: GdProxyEnv,
+): Promise<{ lyric: string; tlyric: string } | null> {
   const hit = lyricCache.get(lyricId);
   if (hit) return hit as { lyric: string; tlyric: string };
   const raw = await gdApi({ types: "lyric", source: SOURCE, id: lyricId }, env);

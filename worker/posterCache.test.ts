@@ -47,7 +47,12 @@ describe("resolvePostersBatch", () => {
       { title: "童话", type: "music" as const },
       { title: "童话", type: "music" as const },
     ];
-    const { results, keys, outcomes } = await resolvePostersBatch(requests, undefined, 8, new Map([[key, urls]]));
+    const { results, keys, outcomes } = await resolvePostersBatch(
+      requests,
+      undefined,
+      8,
+      new Map([[key, urls]]),
+    );
     expect(keys).toEqual([key, key]);
     expect(results[key]).toEqual(urls);
     expect(outcomes[key]).toBe("found");

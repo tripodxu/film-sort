@@ -7,7 +7,8 @@ export const fileInput = (
   importProfile: (file: File, target: "own" | "peer") => void,
 ): ReactNode => (
   <label className="button secondary file-button">
-    <Upload size={16} />{text}
+    <Upload size={16} />
+    {text}
     <input
       aria-label={text}
       type="file"

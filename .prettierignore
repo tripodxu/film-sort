@@ -1,0 +1,29 @@
+# 构建产物与本机工具目录
+node_modules
+dist
+.wrangler
+coverage
+.goatgauge-data
+.zcode
+.mimocode
+.localappdata
+.npm-cache
+
+# 锁文件与大体量数据文件（格式化它们只会制造无意义的巨量 diff）
+package-lock.json
+src/data/*.json
+worker/imdb-posters.json
+.github
+
+# 文档是散文，宽度交给手写；Prettier 只负责代码
+docs
+*.md
+
+# 主样式表刻意不格式化。Prettier 的 CSS 打印器会做 5 类等价归一化
+# （逗号后补空格、小数补前导零、组合器两侧补空格、属性选择器值补引号、
+#  括号内媒体特征名后补空格）——这些都无害，但它还会把 `content:"\25B8"`
+# 改写成 `content:" \25B8 "`：按 CSS 转义规则，转义后的那个空格会被当作
+# 终止符吃掉，于是字符串凭空多出一个前导空格，折叠标记会真的位移。
+# 只为了把 `--bg:#x` 改成 `--bg: #x` 而引入一次 1276 节点的重排并附赠一个
+# 真实视觉改动，不划算。
+src/styles.css

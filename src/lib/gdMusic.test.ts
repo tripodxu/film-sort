@@ -11,10 +11,19 @@ import { buildLyricLines, gdLyric, gdPlay } from "./gdMusic";
  */
 
 function stub(status: number, body: unknown, headers: Record<string, string> = {}) {
-  vi.stubGlobal("fetch", async () => new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json", ...headers } }));
+  vi.stubGlobal(
+    "fetch",
+    async () =>
+      new Response(JSON.stringify(body), {
+        status,
+        headers: { "content-type": "application/json", ...headers },
+      }),
+  );
 }
 
-afterEach(() => { vi.unstubAllGlobals(); });
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
 
 describe("gdPlay 的失败分类", () => {
   it("本机触发限流：reason=rate_limited，并带上服务端的重试秒数", async () => {
@@ -52,7 +61,9 @@ describe("gdPlay 的失败分类", () => {
   });
 
   it("网络异常也归类为 unavailable，而不是抛出", async () => {
-    vi.stubGlobal("fetch", async () => { throw new TypeError("network down"); });
+    vi.stubGlobal("fetch", async () => {
+      throw new TypeError("network down");
+    });
     const result = await gdPlay("童话");
     expect(result.ok).toBe(false);
     if (result.ok) return;
@@ -60,7 +71,11 @@ describe("gdPlay 的失败分类", () => {
   });
 
   it("成功时返回播放链，且 audio 主机在 media-src 白名单内（*.music.126.net）", async () => {
-    stub(200, { track: { id: "85580", name: "童话", artist: ["光良"] }, playUrl: "https://m801.music.126.net/x/y.mp3", isCover: false });
+    stub(200, {
+      track: { id: "85580", name: "童话", artist: ["光良"] },
+      playUrl: "https://m801.music.126.net/x/y.mp3",
+      isCover: false,
+    });
     const result = await gdPlay("童话", "光良");
     expect(result.ok).toBe(true);
     if (!result.ok) return;
@@ -93,7 +108,12 @@ describe("gdLyric 的失败分类", () => {
   });
 
   it("带回译文时界面能拿到（不再被丢掉）", async () => {
-    stub(200, { title: "Yellow", artist: "Coldplay", lyric: "Look at the stars", tlyric: "抬头看星星" });
+    stub(200, {
+      title: "Yellow",
+      artist: "Coldplay",
+      lyric: "Look at the stars",
+      tlyric: "抬头看星星",
+    });
     const result = await gdLyric("Yellow", "Coldplay");
     expect(result.ok).toBe(true);
     if (!result.ok) return;
@@ -110,7 +130,9 @@ describe("buildLyricLines：原文与译文的行对齐", () => {
   });
 
   it("行数一致时逐行配对", () => {
-    expect(buildLyricLines("Look at the stars\nAnd everything you do", "抬头看星星\n你做的每一件事")).toEqual([
+    expect(
+      buildLyricLines("Look at the stars\nAnd everything you do", "抬头看星星\n你做的每一件事"),
+    ).toEqual([
       { text: "Look at the stars", translation: "抬头看星星" },
       { text: "And everything you do", translation: "你做的每一件事" },
     ]);

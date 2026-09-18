@@ -11,6 +11,9 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "check": "tsc -b --pretty false",
+    "lint": "eslint .",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
     "deploy": "npm run build && wrangler d1 migrations apply film-sort --remote && wrangler deploy",
     "worker:dev": "npm run build && wrangler dev"
   },
@@ -30,7 +33,11 @@
     "@types/react-dom": "^19.0.2",
     "@types/three": "^0.185.4",
     "@vitejs/plugin-react": "^4.3.4",
+    "eslint": "^9.39.4",
+    "eslint-plugin-react-hooks": "^5.2.0",
+    "prettier": "^3.9.8",
     "typescript": "~5.7.2",
+    "typescript-eslint": "^8.70.0",
     "vite": "^6.0.5",
     "vitest": "^2.1.8",
     "wrangler": "^4.35.0"

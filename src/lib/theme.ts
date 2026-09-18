@@ -19,11 +19,17 @@ export function readTheme(): ThemeId {
   try {
     const v = localStorage.getItem(THEME_KEY) ?? "";
     return isTheme(v) ? v : "modern";
-  } catch { return "modern"; }
+  } catch {
+    return "modern";
+  }
 }
 
 export function applyTheme(id: ThemeId) {
-  try { localStorage.setItem(THEME_KEY, id); } catch { /* 隐私模式 */ }
+  try {
+    localStorage.setItem(THEME_KEY, id);
+  } catch {
+    /* 隐私模式 */
+  }
   if (id === "modern") document.documentElement.removeAttribute("data-theme");
   else document.documentElement.setAttribute("data-theme", id);
   // theme-color meta 跟随 --bg 实际渲染色

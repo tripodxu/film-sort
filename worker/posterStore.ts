@@ -35,10 +35,18 @@ function cleanText(value: unknown, maxLength: number): string | undefined {
 
 /** year 兼容字符串数字（广场帖子的 JSON 里可能是字符串），归一化为 1800–2200。 */
 export function normalizeYear(value: unknown): number | undefined {
-  const asNumber = typeof value === "number" ? value
-    : typeof value === "string" && /^\d{4}$/.test(value.trim()) ? Number(value.trim())
+  const asNumber =
+    typeof value === "number"
+      ? value
+      : typeof value === "string" && /^\d{4}$/.test(value.trim())
+        ? Number(value.trim())
+        : undefined;
+  return asNumber !== undefined &&
+    Number.isInteger(asNumber) &&
+    asNumber >= 1800 &&
+    asNumber <= 2200
+    ? asNumber
     : undefined;
-  return asNumber !== undefined && Number.isInteger(asNumber) && asNumber >= 1800 && asNumber <= 2200 ? asNumber : undefined;
 }
 
 /**
@@ -46,16 +54,27 @@ export function normalizeYear(value: unknown): number | undefined {
  * 唯一实现：单条查询、批量查询、读取时挂载 posterUrls 三处共用，
  * 避免键推导漂移导致「存了但取不到」。
  */
-export function normalizePosterItem(raw: { title?: unknown; english?: unknown; year?: unknown; type?: unknown }): NormalizedPosterItem | null {
+export function normalizePosterItem(raw: {
+  title?: unknown;
+  english?: unknown;
+  year?: unknown;
+  type?: unknown;
+}): NormalizedPosterItem | null {
   const title = cleanText(raw.title, 160);
   if (!title) return null;
-  const type = raw.type === "book" || raw.type === "music" || raw.type === "movie" ? raw.type : null;
+  const type =
+    raw.type === "book" || raw.type === "music" || raw.type === "movie" ? raw.type : null;
   if (!type) return null;
   return { title, english: cleanText(raw.english, 160) ?? "", type, year: normalizeYear(raw.year) };
 }
 
 /** 一条作品的持久化键；不合法或无需解析的条目返回 null。 */
-export function posterKeyFor(raw: { title?: unknown; english?: unknown; year?: unknown; type?: unknown }): string | null {
+export function posterKeyFor(raw: {
+  title?: unknown;
+  english?: unknown;
+  year?: unknown;
+  type?: unknown;
+}): string | null {
   const item = normalizePosterItem(raw);
   return item ? posterMediaKey(item.title, item.english, item.type, item.year) : null;
 }
@@ -64,10 +83,14 @@ function parseUrls(raw: unknown): string[] | null {
   if (typeof raw !== "string") return null;
   try {
     const parsed: unknown = JSON.parse(raw);
-    return Array.isArray(parsed) && parsed.length > 0 && parsed.every((url) => typeof url === "string")
-      ? parsed as string[]
+    return Array.isArray(parsed) &&
+      parsed.length > 0 &&
+      parsed.every((url) => typeof url === "string")
+      ? (parsed as string[])
       : null;
-  } catch { return null; }
+  } catch {
+    return null;
+  }
 }
 
 /**
@@ -85,10 +108,16 @@ export async function saveResolvedPosters(
   }
   if (!deduped.size) return;
   try {
-    await db.batch([...deduped].map(([key, urls]) => db.prepare(
-      "INSERT INTO poster_urls (media_key, urls, updated_at) VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')) " +
-      "ON CONFLICT(media_key) DO UPDATE SET urls = excluded.urls, updated_at = excluded.updated_at",
-    ).bind(key, JSON.stringify(urls))));
+    await db.batch(
+      [...deduped].map(([key, urls]) =>
+        db
+          .prepare(
+            "INSERT INTO poster_urls (media_key, urls, updated_at) VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')) " +
+              "ON CONFLICT(media_key) DO UPDATE SET urls = excluded.urls, updated_at = excluded.updated_at",
+          )
+          .bind(key, JSON.stringify(urls)),
+      ),
+    );
   } catch (error) {
     // 迁移尚未应用到某个环境时不要让主流程 500。
     console.error("saveResolvedPosters failed:", error instanceof Error ? error.message : error);
@@ -101,16 +130,22 @@ export async function saveResolvedPosters(
  * 表缺失或 DB 不可用时返回空 map —— 退化为「每次都回源」的旧行为，而不是报错，
  * 这样迁移未落地的环境不会整体失效。
  */
-export async function loadPosterUrls(db: D1Database, keys: string[]): Promise<Map<string, string[]>> {
+export async function loadPosterUrls(
+  db: D1Database,
+  keys: string[],
+): Promise<Map<string, string[]>> {
   const found = new Map<string, string[]>();
   const unique = [...new Set(keys)];
   const CHUNK = 90; // 保守：低于 SQLite 的绑定变量上限
   for (let i = 0; i < unique.length; i += CHUNK) {
     const slice = unique.slice(i, i + CHUNK);
     try {
-      const rows = await db.prepare(
-        `SELECT media_key, urls FROM poster_urls WHERE media_key IN (${slice.map(() => "?").join(", ")})`,
-      ).bind(...slice).all<{ media_key: string; urls: string }>();
+      const rows = await db
+        .prepare(
+          `SELECT media_key, urls FROM poster_urls WHERE media_key IN (${slice.map(() => "?").join(", ")})`,
+        )
+        .bind(...slice)
+        .all<{ media_key: string; urls: string }>();
       for (const row of rows.results ?? []) {
         const urls = parseUrls(row.urls);
         if (urls) found.set(row.media_key, urls);
@@ -143,7 +178,12 @@ export async function resolveStoredPosterUrls(
   const keyByIndex = new Map<number, string>();
   items.forEach((item, index) => {
     // 前端发送的 english 是 `subtitle ?? title`，这里必须完全一致。
-    const key = posterKeyFor({ title: item.title, english: item.subtitle ?? item.title, type, year: item.year });
+    const key = posterKeyFor({
+      title: item.title,
+      english: item.subtitle ?? item.title,
+      type,
+      year: item.year,
+    });
     if (key) keyByIndex.set(index, key);
   });
   if (!keyByIndex.size) return none;

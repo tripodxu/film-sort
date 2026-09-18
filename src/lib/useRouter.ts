@@ -1,10 +1,18 @@
 import { useState, useEffect, useRef } from "react";
 
-export type View = "home" | "source" | "setup" | "sorting" | "profile" | "compare" | "share" | "plaza" | "plazaPost";
+export type View =
+  "home" | "source" | "setup" | "sorting" | "profile" | "compare" | "share" | "plaza" | "plazaPost";
 
 const VIEW_PATH: Record<View, string> = {
-  home: "/", source: "/catalog/source", setup: "/catalog/setup", sorting: "/catalog/sorting",
-  profile: "/myself", compare: "/encounter", share: "/share", plaza: "/plaza", plazaPost: "/plaza/0",
+  home: "/",
+  source: "/catalog/source",
+  setup: "/catalog/setup",
+  sorting: "/catalog/sorting",
+  profile: "/myself",
+  compare: "/encounter",
+  share: "/share",
+  plaza: "/plaza",
+  plazaPost: "/plaza/0",
 };
 
 export function pathToView(p: string): View | null {
@@ -20,9 +28,10 @@ export function useRouter() {
   const [plazaPostId, setPlazaPostId] = useState<number>(0);
 
   function navigateTo(nextViewOrPlaza: View | string) {
-    const nextView = (typeof nextViewOrPlaza === "string" && nextViewOrPlaza.startsWith("plazaPost:"))
-      ? "plazaPost" as View
-      : nextViewOrPlaza as View;
+    const nextView =
+      typeof nextViewOrPlaza === "string" && nextViewOrPlaza.startsWith("plazaPost:")
+        ? ("plazaPost" as View)
+        : (nextViewOrPlaza as View);
     if (nextView === "plazaPost" && typeof nextViewOrPlaza === "string") {
       const id = Number(nextViewOrPlaza.split(":")[1]) || 0;
       setPlazaPostId(id);
@@ -64,7 +73,9 @@ export function useRouter() {
     return () => window.removeEventListener("popstate", onPopState);
   }, []);
 
-  useEffect(() => { window.scrollTo({ top: 0, behavior: "smooth" }); }, [view]);
+  useEffect(() => {
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }, [view]);
 
   return { view, setView, navigateTo, plazaPostId };
 }

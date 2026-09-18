@@ -16,7 +16,7 @@ export function FocusTrap({ children, onEscape }: { children: ReactNode; onEscap
       if (e.key !== "Tab") return;
 
       const focusable = el!.querySelectorAll<HTMLElement>(
-        'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+        'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
       );
       if (focusable.length === 0) return;
 
@@ -38,7 +38,7 @@ export function FocusTrap({ children, onEscape }: { children: ReactNode; onEscap
 
     // Focus first focusable element
     const firstFocusable = el.querySelector<HTMLElement>(
-      'button:not([disabled]), [href], input:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+      'button:not([disabled]), [href], input:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
     );
     firstFocusable?.focus();
 

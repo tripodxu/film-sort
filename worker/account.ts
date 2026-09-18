@@ -1,16 +1,28 @@
 import type { Env } from "./index";
 import { recordAudit } from "./audit";
-import { MAX_PAYLOAD_BYTES, encodeStoredProfile, encodeStoredWorks, healStoredProfile } from "../shared/storedItem";
+import {
+  MAX_PAYLOAD_BYTES,
+  encodeStoredProfile,
+  encodeStoredWorks,
+  healStoredProfile,
+} from "../shared/storedItem";
 
 const encoder = new TextEncoder();
-const json = (data: unknown, status = 200) => new Response(JSON.stringify(data), { status, headers: { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" } });
+const json = (data: unknown, status = 200) =>
+  new Response(JSON.stringify(data), {
+    status,
+    headers: { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" },
+  });
 const redirect = (url: string) => new Response(null, { status: 302, headers: { location: url } });
 
 export async function adminAuthLocal(request: Request, db: D1Database): Promise<boolean> {
   const auth = request.headers.get("authorization");
   const token = auth?.startsWith("Bearer ") ? auth.slice(7) : null;
   if (!token || token.length < 32) return false;
-  const session = await db.prepare("SELECT token FROM admin_sessions WHERE token = ? AND expires_at > datetime('now')").bind(token).first();
+  const session = await db
+    .prepare("SELECT token FROM admin_sessions WHERE token = ? AND expires_at > datetime('now')")
+    .bind(token)
+    .first();
   return !!session;
 }
 
@@ -35,8 +47,14 @@ export async function hashPasswordStrong(password: string): Promise<string> {
 }
 
 async function pbkdf2(password: string, salt: Uint8Array, iterations: number): Promise<string> {
-  const key = await crypto.subtle.importKey("raw", encoder.encode(password), "PBKDF2", false, ["deriveBits"]);
-  const bits = await crypto.subtle.deriveBits({ name: "PBKDF2", hash: "SHA-256", salt, iterations }, key, 256);
+  const key = await crypto.subtle.importKey("raw", encoder.encode(password), "PBKDF2", false, [
+    "deriveBits",
+  ]);
+  const bits = await crypto.subtle.deriveBits(
+    { name: "PBKDF2", hash: "SHA-256", salt, iterations },
+    key,
+    256,
+  );
   return toHex(bits);
 }
 
@@ -47,14 +65,20 @@ export function timingSafeEqual(a: string, b: string): boolean {
   return diff === 0;
 }
 
-export async function verifyPassword(password: string, stored: string | null | undefined): Promise<boolean> {
+export async function verifyPassword(
+  password: string,
+  stored: string | null | undefined,
+): Promise<boolean> {
   if (!stored) return false;
   if (stored.startsWith("pbkdf2$")) {
     const [, iterationText, saltHex, hashHex] = stored.split("$");
     const iterations = Number(iterationText);
     if (!Number.isInteger(iterations) || iterations < 1 || iterations > 2_000_000) return false;
-    if (!/^[0-9a-f]+$/.test(saltHex) || saltHex.length % 2 !== 0 || !/^[0-9a-f]{64}$/.test(hashHex)) return false;
-    const salt = Uint8Array.from({ length: saltHex.length / 2 }, (_, i) => Number.parseInt(saltHex.slice(i * 2, i * 2 + 2), 16));
+    if (!/^[0-9a-f]+$/.test(saltHex) || saltHex.length % 2 !== 0 || !/^[0-9a-f]{64}$/.test(hashHex))
+      return false;
+    const salt = Uint8Array.from({ length: saltHex.length / 2 }, (_, i) =>
+      Number.parseInt(saltHex.slice(i * 2, i * 2 + 2), 16),
+    );
     return timingSafeEqual(await pbkdf2(password, salt, iterations), hashHex);
   }
   return timingSafeEqual(await hashPassword(password), stored);
@@ -65,68 +89,136 @@ export function needsPasswordUpgrade(stored: string | null | undefined): boolean
 }
 
 function generateToken(): string {
-  return Array.from(crypto.getRandomValues(new Uint8Array(32)), b => b.toString(16).padStart(2, "0")).join("");
+  return Array.from(crypto.getRandomValues(new Uint8Array(32)), (b) =>
+    b.toString(16).padStart(2, "0"),
+  ).join("");
 }
 
 function cleanString(value: unknown, max: number): string | null {
   if (typeof value !== "string") return null;
   const cleaned = value.trim();
-  return (!cleaned || cleaned.length > max || /[\u0000-\u001f\u007f]/.test(cleaned)) ? null : cleaned;
+  return !cleaned || cleaned.length > max || /[\u0000-\u001f\u007f]/.test(cleaned) ? null : cleaned;
 }
 
 function isValidEmail(email: string): boolean {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
 }
 
-function validateCollectionBody(body: Record<string, unknown> | null): { kind: "film" | "book" | "music" | "other"; title: string; description: string; items: unknown[] } | null {
+function validateCollectionBody(body: Record<string, unknown> | null): {
+  kind: "film" | "book" | "music" | "other";
+  title: string;
+  description: string;
+  items: unknown[];
+} | null {
   const kind = body?.kind;
   const title = cleanString(body?.title, 160);
   const description = cleanString(body?.description, 500) ?? "";
   const items = body?.items;
-  if ((kind !== "film" && kind !== "book" && kind !== "music" && kind !== "other") || !title || !Array.isArray(items) || items.length < 2 || items.length > 1000) return null;
-  if (items.some((item) => typeof item !== "object" || item === null || typeof (item as Record<string, unknown>).title !== "string" || String((item as Record<string, unknown>).title).trim().length === 0 || String((item as Record<string, unknown>).title).length > 160)) return null;
+  if (
+    (kind !== "film" && kind !== "book" && kind !== "music" && kind !== "other") ||
+    !title ||
+    !Array.isArray(items) ||
+    items.length < 2 ||
+    items.length > 1000
+  )
+    return null;
+  if (
+    items.some(
+      (item) =>
+        typeof item !== "object" ||
+        item === null ||
+        typeof (item as Record<string, unknown>).title !== "string" ||
+        String((item as Record<string, unknown>).title).trim().length === 0 ||
+        String((item as Record<string, unknown>).title).length > 160,
+    )
+  )
+    return null;
   return { kind, title, description, items };
 }
 
-export async function getUserFromToken(request: Request, db: D1Database): Promise<{ id: number; email: string } | null> {
+export async function getUserFromToken(
+  request: Request,
+  db: D1Database,
+): Promise<{ id: number; email: string } | null> {
   const auth = request.headers.get("authorization");
   const token = auth?.startsWith("Bearer ") ? auth.slice(7) : null;
   if (!token || token.length < 32) return null;
-  return await db.prepare(
-    "SELECT u.id, u.email FROM user_sessions s JOIN user_accounts u ON s.user_id = u.id WHERE s.token = ? AND s.expires_at > datetime('now') AND u.disabled_at IS NULL"
-  ).bind(token).first<{ id: number; email: string }>() ?? null;
+  return (
+    (await db
+      .prepare(
+        "SELECT u.id, u.email FROM user_sessions s JOIN user_accounts u ON s.user_id = u.id WHERE s.token = ? AND s.expires_at > datetime('now') AND u.disabled_at IS NULL",
+      )
+      .bind(token)
+      .first<{ id: number; email: string }>()) ?? null
+  );
 }
 
-async function createSession(db: D1Database, userId: number): Promise<{ token: string; expires: string }> {
+async function createSession(
+  db: D1Database,
+  userId: number,
+): Promise<{ token: string; expires: string }> {
   const token = generateToken();
   const expires = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
-  await db.prepare("INSERT INTO user_sessions (token, user_id, expires_at) VALUES (?, ?, ?)").bind(token, userId, expires).run();
+  await db
+    .prepare("INSERT INTO user_sessions (token, user_id, expires_at) VALUES (?, ?, ?)")
+    .bind(token, userId, expires)
+    .run();
   await db.prepare("DELETE FROM user_sessions WHERE expires_at < datetime('now')").run();
   return { token, expires };
 }
 
-async function findOrCreateOAuthUser(db: D1Database, provider: string, providerId: string, email: string, nickname?: string): Promise<number> {
+async function findOrCreateOAuthUser(
+  db: D1Database,
+  provider: string,
+  providerId: string,
+  email: string,
+  nickname?: string,
+): Promise<number> {
   // Check if this OAuth account already exists
-  const existing = await db.prepare("SELECT user_id FROM user_oauth WHERE provider = ? AND provider_id = ?").bind(provider, providerId).first<{ user_id: number }>();
+  const existing = await db
+    .prepare("SELECT user_id FROM user_oauth WHERE provider = ? AND provider_id = ?")
+    .bind(provider, providerId)
+    .first<{ user_id: number }>();
   if (existing) {
     // Update nickname if provided
-    if (nickname) await db.prepare("UPDATE user_accounts SET nickname = ? WHERE id = ? AND (nickname IS NULL OR nickname = '')").bind(nickname, existing.user_id).run();
+    if (nickname)
+      await db
+        .prepare(
+          "UPDATE user_accounts SET nickname = ? WHERE id = ? AND (nickname IS NULL OR nickname = '')",
+        )
+        .bind(nickname, existing.user_id)
+        .run();
     return existing.user_id;
   }
 
   // Check if email already exists
-  const user = await db.prepare("SELECT id FROM user_accounts WHERE email = ?").bind(email).first<{ id: number }>();
+  const user = await db
+    .prepare("SELECT id FROM user_accounts WHERE email = ?")
+    .bind(email)
+    .first<{ id: number }>();
   let userId: number;
   if (user) {
     userId = user.id;
-    if (nickname) await db.prepare("UPDATE user_accounts SET nickname = ? WHERE id = ? AND (nickname IS NULL OR nickname = '')").bind(nickname, userId).run();
+    if (nickname)
+      await db
+        .prepare(
+          "UPDATE user_accounts SET nickname = ? WHERE id = ? AND (nickname IS NULL OR nickname = '')",
+        )
+        .bind(nickname, userId)
+        .run();
   } else {
-    const result = await db.prepare("INSERT INTO user_accounts (email, password_hash, nickname) VALUES (?, '', ?)").bind(email, nickname ?? null).run();
+    const result = await db
+      .prepare("INSERT INTO user_accounts (email, password_hash, nickname) VALUES (?, '', ?)")
+      .bind(email, nickname ?? null)
+      .run();
     userId = result.meta.last_row_id as number;
   }
 
   // Link OAuth account
-  await db.prepare("INSERT OR IGNORE INTO user_oauth (user_id, provider, provider_id) VALUES (?, ?, ?)").bind(userId, provider, providerId).run();
+  await db
+    .prepare("INSERT OR IGNORE INTO user_oauth (user_id, provider, provider_id) VALUES (?, ?, ?)")
+    .bind(userId, provider, providerId)
+    .run();
   return userId;
 }
 
@@ -181,33 +273,53 @@ export async function accountRoute(request: Request, env: Env): Promise<Response
 
   // POST /api/account/register
   if (path === "/api/account/register" && request.method === "POST") {
-    const body = await request.json().catch(() => null) as Record<string, unknown> | null;
+    const body = (await request.json().catch(() => null)) as Record<string, unknown> | null;
     const email = cleanString(body?.email, 160);
     const password = cleanString(body?.password, 128);
     const nickname = cleanString(body?.nickname, 40);
     if (!email || !isValidEmail(email)) return json({ error: "invalid_email" }, 400);
-    if (!password || password.length < 6) return json({ error: "invalid_password", msg: "密码至少6位" }, 400);
-    if (!nickname || nickname.length < 1) return json({ error: "invalid_nickname", msg: "昵称必填" }, 400);
-    const existing = await env.DB.prepare("SELECT id FROM user_accounts WHERE email = ?").bind(email).first();
+    if (!password || password.length < 6)
+      return json({ error: "invalid_password", msg: "密码至少6位" }, 400);
+    if (!nickname || nickname.length < 1)
+      return json({ error: "invalid_nickname", msg: "昵称必填" }, 400);
+    const existing = await env.DB.prepare("SELECT id FROM user_accounts WHERE email = ?")
+      .bind(email)
+      .first();
     if (existing) return json({ error: "email_exists" }, 409);
     const hash = await hashPasswordStrong(password);
-    const result = await env.DB.prepare("INSERT INTO user_accounts (email, password_hash, nickname) VALUES (?, ?, ?)").bind(email, hash, nickname).run();
+    const result = await env.DB.prepare(
+      "INSERT INTO user_accounts (email, password_hash, nickname) VALUES (?, ?, ?)",
+    )
+      .bind(email, hash, nickname)
+      .run();
     const session = await createSession(env.DB, result.meta.last_row_id as number);
     return json({ ...session, email, nickname });
   }
 
   // POST /api/account/login
   if (path === "/api/account/login" && request.method === "POST") {
-    const body = await request.json().catch(() => null) as Record<string, unknown> | null;
+    const body = (await request.json().catch(() => null)) as Record<string, unknown> | null;
     const email = cleanString(body?.email, 160);
     const password = cleanString(body?.password, 128);
     if (!email || !password) return json({ error: "missing_fields" }, 400);
-    const user = await env.DB.prepare("SELECT id, password_hash, nickname, disabled_at FROM user_accounts WHERE email = ?").bind(email).first<{ id: number; password_hash: string; nickname: string | null; disabled_at: string | null }>();
+    const user = await env.DB.prepare(
+      "SELECT id, password_hash, nickname, disabled_at FROM user_accounts WHERE email = ?",
+    )
+      .bind(email)
+      .first<{
+        id: number;
+        password_hash: string;
+        nickname: string | null;
+        disabled_at: string | null;
+      }>();
     if (user?.disabled_at) return json({ error: "account_disabled" }, 403);
-    if (!user || !(await verifyPassword(password, user.password_hash))) return json({ error: "invalid_credentials" }, 401);
+    if (!user || !(await verifyPassword(password, user.password_hash)))
+      return json({ error: "invalid_credentials" }, 401);
     if (needsPasswordUpgrade(user.password_hash)) {
       await env.DB.prepare("UPDATE user_accounts SET password_hash = ? WHERE id = ?")
-        .bind(await hashPasswordStrong(password), user.id).run().catch(() => undefined);
+        .bind(await hashPasswordStrong(password), user.id)
+        .run()
+        .catch(() => undefined);
     }
     const session = await createSession(env.DB, user.id);
     return json({ ...session, email, nickname: user.nickname ?? email.split("@")[0] });
@@ -232,11 +344,14 @@ export async function accountRoute(request: Request, env: Env): Promise<Response
   // POST /api/account/oauth/exchange — trade a one-time code (from the OAuth redirect) for the session token
   if (path === "/api/account/oauth/exchange" && request.method === "POST") {
     if (!env.DB) return json({ error: "database_unavailable" }, 503);
-    const body = await request.json().catch(() => null) as Record<string, unknown> | null;
+    const body = (await request.json().catch(() => null)) as Record<string, unknown> | null;
     const exchangeCode = cleanString(body?.code, 80);
     if (!exchangeCode) return json({ error: "invalid_code" }, 400);
-    const row = await env.DB.prepare("SELECT token, email, nickname FROM oauth_exchanges WHERE code = ? AND expires_at > datetime('now')")
-      .bind(exchangeCode).first<{ token: string; email: string; nickname: string | null }>();
+    const row = await env.DB.prepare(
+      "SELECT token, email, nickname FROM oauth_exchanges WHERE code = ? AND expires_at > datetime('now')",
+    )
+      .bind(exchangeCode)
+      .first<{ token: string; email: string; nickname: string | null }>();
     if (!row) return json({ error: "invalid_code" }, 404);
     await env.DB.prepare("DELETE FROM oauth_exchanges WHERE code = ?").bind(exchangeCode).run();
     return json({ token: row.token, email: row.email, nickname: row.nickname ?? undefined });
@@ -267,7 +382,7 @@ export async function accountRoute(request: Request, env: Env): Promise<Response
         method: "POST",
         headers: {
           "content-type": "application/x-www-form-urlencoded",
-          "accept": "application/json",
+          accept: "application/json",
           ...(providerKey === "github" ? { "user-agent": "film-sort" } : {}),
         },
         body: new URLSearchParams({
@@ -278,7 +393,7 @@ export async function accountRoute(request: Request, env: Env): Promise<Response
           redirect_uri: `${url.origin}/api/account/oauth/callback`,
         }),
       });
-      const tokenData = await tokenResponse.json() as { access_token?: string; error?: string };
+      const tokenData = (await tokenResponse.json()) as { access_token?: string; error?: string };
       if (!tokenData.access_token) throw new Error(tokenData.error ?? "No access token");
 
       // Fetch user info
@@ -295,21 +410,42 @@ export async function accountRoute(request: Request, env: Env): Promise<Response
 
       // Get nickname from provider data
       const raw = userData as Record<string, unknown>;
-      const providerNickname = (providerKey === "google" ? raw.name : raw.login) as string | undefined;
-      const nickname = providerNickname && providerNickname.length > 0 ? providerNickname : parsed.email.split("@")[0];
+      const providerNickname = (providerKey === "google" ? raw.name : raw.login) as
+        string | undefined;
+      const nickname =
+        providerNickname && providerNickname.length > 0
+          ? providerNickname
+          : parsed.email.split("@")[0];
 
       // Find or create user
-      const userId = await findOrCreateOAuthUser(env.DB, providerKey, parsed.id, parsed.email, nickname);
+      const userId = await findOrCreateOAuthUser(
+        env.DB,
+        providerKey,
+        parsed.id,
+        parsed.email,
+        nickname,
+      );
       const session = await createSession(env.DB, userId);
 
       // Hand the session to the frontend via a one-time exchange code so the token never lands in the URL.
       const exchangeCode = generateToken();
-      await env.DB.prepare("INSERT INTO oauth_exchanges (code, token, email, nickname, expires_at) VALUES (?, ?, ?, ?, ?)")
-        .bind(exchangeCode, session.token, parsed.email, nickname, new Date(Date.now() + 5 * 60 * 1000).toISOString()).run();
+      await env.DB.prepare(
+        "INSERT INTO oauth_exchanges (code, token, email, nickname, expires_at) VALUES (?, ?, ?, ?, ?)",
+      )
+        .bind(
+          exchangeCode,
+          session.token,
+          parsed.email,
+          nickname,
+          new Date(Date.now() + 5 * 60 * 1000).toISOString(),
+        )
+        .run();
       return redirect(`/?oauth_code=${exchangeCode}`);
     } catch (error) {
       console.error(`OAuth ${providerKey} failed:`, error);
-      return redirect(`/?account=error&msg=${encodeURIComponent(error instanceof Error ? error.message : "OAuth failed")}`);
+      return redirect(
+        `/?account=error&msg=${encodeURIComponent(error instanceof Error ? error.message : "OAuth failed")}`,
+      );
     }
   }
 
@@ -334,7 +470,10 @@ export async function accountRoute(request: Request, env: Env): Promise<Response
     if (providerKey === "google") authUrl.searchParams.set("access_type", "offline");
 
     const response = redirect(authUrl.toString());
-    response.headers.set("set-cookie", `oauth_state=${providerKey}:${state}; Path=/api/account; HttpOnly; Secure; SameSite=Lax; Max-Age=600`);
+    response.headers.set(
+      "set-cookie",
+      `oauth_state=${providerKey}:${state}; Path=/api/account; HttpOnly; Secure; SameSite=Lax; Max-Age=600`,
+    );
     return response;
   }
 
@@ -342,16 +481,38 @@ export async function accountRoute(request: Request, env: Env): Promise<Response
   if (path === "/api/account/profile" && request.method === "GET") {
     const user = await getUserFromToken(request, env.DB);
     if (!user) return json({ error: "authentication_required" }, 401);
-    const account = await env.DB.prepare("SELECT nickname FROM user_accounts WHERE id = ?").bind(user.id).first<{ nickname: string | null }>();
-    const row = await env.DB.prepare("SELECT profile, notes, updated_at FROM user_profiles_v2 WHERE user_id = ? LIMIT 1").bind(user.id).first<{ profile: string; notes: string | null; updated_at: string }>();
+    const account = await env.DB.prepare("SELECT nickname FROM user_accounts WHERE id = ?")
+      .bind(user.id)
+      .first<{ nickname: string | null }>();
+    const row = await env.DB.prepare(
+      "SELECT profile, notes, updated_at FROM user_profiles_v2 WHERE user_id = ? LIMIT 1",
+    )
+      .bind(user.id)
+      .first<{ profile: string; notes: string | null; updated_at: string }>();
     let notes: Record<string, string> = {};
-    if (row?.notes) { try { notes = JSON.parse(row.notes); } catch { /* ignore */ } }
+    if (row?.notes) {
+      try {
+        notes = JSON.parse(row.notes);
+      } catch {
+        /* ignore */
+      }
+    }
     let profileData: unknown = null;
     if (row?.profile) {
       // 读取端自愈：旧行可能残留 posterUrls，过一遍白名单即干净；形状不认识时原样透传。
-      try { profileData = healStoredProfile(JSON.parse(row.profile)); } catch { profileData = null; }
+      try {
+        profileData = healStoredProfile(JSON.parse(row.profile));
+      } catch {
+        profileData = null;
+      }
     }
-    return json({ email: user.email, nickname: account?.nickname ?? user.email.split("@")[0], profile: profileData, notes, updatedAt: row?.updated_at ?? null });
+    return json({
+      email: user.email,
+      nickname: account?.nickname ?? user.email.split("@")[0],
+      profile: profileData,
+      notes,
+      updatedAt: row?.updated_at ?? null,
+    });
   }
 
   // PUT /api/account/profile
@@ -359,10 +520,19 @@ export async function accountRoute(request: Request, env: Env): Promise<Response
     const user = await getUserFromToken(request, env.DB);
     if (!user) return json({ error: "authentication_required" }, 401);
     const raw = await request.text();
-    if (encoder.encode(raw).byteLength > MAX_PAYLOAD_BYTES) return json({ error: "payload_too_large" }, 413);
-    let profile: unknown; let notes: unknown;
-    try { const body = JSON.parse(raw); profile = body.profile; notes = body.notes; } catch { return json({ error: "invalid_json" }, 400); }
-    if (!profile || typeof profile !== "object" || Array.isArray(profile)) return json({ error: "invalid_profile" }, 400);
+    if (encoder.encode(raw).byteLength > MAX_PAYLOAD_BYTES)
+      return json({ error: "payload_too_large" }, 413);
+    let profile: unknown;
+    let notes: unknown;
+    try {
+      const body = JSON.parse(raw);
+      profile = body.profile;
+      notes = body.notes;
+    } catch {
+      return json({ error: "invalid_json" }, 400);
+    }
+    if (!profile || typeof profile !== "object" || Array.isArray(profile))
+      return json({ error: "invalid_profile" }, 400);
     // 唯一编码出口：白名单投影会顺带剔除 posterUrls 与任何未知字段
     // （见 shared/storedItem.ts）。不要再在这里写 delete item.posterUrls——
     // 漏掉一处没有任何信号，这正是补丁反复出现的原因。
@@ -372,9 +542,13 @@ export async function accountRoute(request: Request, env: Env): Promise<Response
         ? json({ error: "profile_too_large", msg: "画像数据过大，请减少作品数量。" }, 413)
         : json({ error: "invalid_profile" }, 400);
     }
-    const notesJson = notes && typeof notes === "object" && !Array.isArray(notes) ? JSON.stringify(notes) : null;
-    await env.DB.prepare("INSERT INTO user_profiles_v2 (user_id, profile, notes) VALUES (?, ?, ?) ON CONFLICT(user_id) DO UPDATE SET profile = excluded.profile, notes = COALESCE(excluded.notes, user_profiles_v2.notes), updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')")
-      .bind(user.id, encoded.json, notesJson).run();
+    const notesJson =
+      notes && typeof notes === "object" && !Array.isArray(notes) ? JSON.stringify(notes) : null;
+    await env.DB.prepare(
+      "INSERT INTO user_profiles_v2 (user_id, profile, notes) VALUES (?, ?, ?) ON CONFLICT(user_id) DO UPDATE SET profile = excluded.profile, notes = COALESCE(excluded.notes, user_profiles_v2.notes), updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')",
+    )
+      .bind(user.id, encoded.json, notesJson)
+      .run();
     return json({ stored: true });
   }
 
@@ -382,10 +556,13 @@ export async function accountRoute(request: Request, env: Env): Promise<Response
   if (path === "/api/account/nickname" && request.method === "PUT") {
     const user = await getUserFromToken(request, env.DB);
     if (!user) return json({ error: "authentication_required" }, 401);
-    const body = await request.json().catch(() => null) as Record<string, unknown> | null;
+    const body = (await request.json().catch(() => null)) as Record<string, unknown> | null;
     const nickname = cleanString(body?.nickname, 40);
-    if (!nickname || nickname.length < 1) return json({ error: "invalid_nickname", msg: "昵称必填" }, 400);
-    await env.DB.prepare("UPDATE user_accounts SET nickname = ? WHERE id = ?").bind(nickname, user.id).run();
+    if (!nickname || nickname.length < 1)
+      return json({ error: "invalid_nickname", msg: "昵称必填" }, 400);
+    await env.DB.prepare("UPDATE user_accounts SET nickname = ? WHERE id = ?")
+      .bind(nickname, user.id)
+      .run();
     return json({ ok: true, nickname });
   }
 
@@ -393,14 +570,23 @@ export async function accountRoute(request: Request, env: Env): Promise<Response
   if (path === "/api/account/collections" && request.method === "GET") {
     const user = await getUserFromToken(request, env.DB);
     if (!user) return json({ error: "authentication_required" }, 401);
-    const rows = await env.DB.prepare("SELECT id, kind, title, description, item_count, items, created_at, updated_at FROM user_collections WHERE user_id = ? ORDER BY updated_at DESC LIMIT 100").bind(user.id).all();
-    return json({ collections: (rows.results ?? []).map((row) => ({ ...row, items: JSON.parse(String((row as Record<string, unknown>).items ?? "[]")) })) });
+    const rows = await env.DB.prepare(
+      "SELECT id, kind, title, description, item_count, items, created_at, updated_at FROM user_collections WHERE user_id = ? ORDER BY updated_at DESC LIMIT 100",
+    )
+      .bind(user.id)
+      .all();
+    return json({
+      collections: (rows.results ?? []).map((row) => ({
+        ...row,
+        items: JSON.parse(String((row as Record<string, unknown>).items ?? "[]")),
+      })),
+    });
   }
 
   if (path === "/api/account/collections" && request.method === "POST") {
     const user = await getUserFromToken(request, env.DB);
     if (!user) return json({ error: "authentication_required" }, 401);
-    const body = await request.json().catch(() => null) as Record<string, unknown> | null;
+    const body = (await request.json().catch(() => null)) as Record<string, unknown> | null;
     const collection = validateCollectionBody(body);
     if (!collection) return json({ error: "invalid_collection" }, 400);
     // 唯一编码出口：收藏清单是「无 rank 的作品数组」，白名单同样只留可落库字段。
@@ -410,7 +596,18 @@ export async function accountRoute(request: Request, env: Env): Promise<Response
         ? json({ error: "payload_too_large" }, 413)
         : json({ error: "invalid_collection" }, 400);
     }
-    const result = await env.DB.prepare("INSERT INTO user_collections (user_id, kind, title, description, items, item_count) VALUES (?, ?, ?, ?, ?, ?)").bind(user.id, collection.kind, collection.title, collection.description, encoded.json, encoded.count).run();
+    const result = await env.DB.prepare(
+      "INSERT INTO user_collections (user_id, kind, title, description, items, item_count) VALUES (?, ?, ?, ?, ?, ?)",
+    )
+      .bind(
+        user.id,
+        collection.kind,
+        collection.title,
+        collection.description,
+        encoded.json,
+        encoded.count,
+      )
+      .run();
     return json({ id: result.meta.last_row_id, stored: true }, 201);
   }
 
@@ -418,28 +615,65 @@ export async function accountRoute(request: Request, env: Env): Promise<Response
   if (collectionMatch && request.method === "DELETE") {
     const user = await getUserFromToken(request, env.DB);
     if (!user) return json({ error: "authentication_required" }, 401);
-    await env.DB.prepare("DELETE FROM user_collections WHERE id = ? AND user_id = ?").bind(Number(collectionMatch[1]), user.id).run();
+    await env.DB.prepare("DELETE FROM user_collections WHERE id = ? AND user_id = ?")
+      .bind(Number(collectionMatch[1]), user.id)
+      .run();
     return json({ ok: true });
   }
 
   // GET /api/admin/accounts/:id/detail — 用户完整数据（画像/批注/清单/会话/OAuth），供后台画像查看
   const detailMatch = path.match(/^\/api\/admin\/accounts\/(\d+)\/detail$/);
   if (detailMatch && request.method === "GET") {
-    if (!env.DB || !await adminAuthLocal(request, env.DB)) return json({ error: "auth_required" }, 401);
+    if (!env.DB || !(await adminAuthLocal(request, env.DB)))
+      return json({ error: "auth_required" }, 401);
     const userId = Number(detailMatch[1]);
-    const account = await env.DB.prepare("SELECT id, email, nickname, disabled_at, created_at FROM user_accounts WHERE id = ?").bind(userId).first<{ id: number; email: string; nickname: string | null; disabled_at: string | null; created_at: string }>();
+    const account = await env.DB.prepare(
+      "SELECT id, email, nickname, disabled_at, created_at FROM user_accounts WHERE id = ?",
+    )
+      .bind(userId)
+      .first<{
+        id: number;
+        email: string;
+        nickname: string | null;
+        disabled_at: string | null;
+        created_at: string;
+      }>();
     if (!account) return json({ error: "account_not_found" }, 404);
     const [sessions, oauth, profileRow, collections, plazaCount] = await Promise.all([
-      env.DB.prepare("SELECT COUNT(*) AS c FROM user_sessions WHERE user_id = ? AND expires_at > datetime('now')").bind(userId).first<{ c: number }>(),
+      env.DB.prepare(
+        "SELECT COUNT(*) AS c FROM user_sessions WHERE user_id = ? AND expires_at > datetime('now')",
+      )
+        .bind(userId)
+        .first<{ c: number }>(),
       env.DB.prepare("SELECT provider FROM user_oauth WHERE user_id = ?").bind(userId).all(),
-      env.DB.prepare("SELECT profile, notes, updated_at FROM user_profiles_v2 WHERE user_id = ?").bind(userId).first<{ profile: string; notes: string | null; updated_at: string }>(),
-      env.DB.prepare("SELECT id, kind, title, description, item_count, created_at, updated_at FROM user_collections WHERE user_id = ? ORDER BY updated_at DESC").bind(userId).all(),
-      env.DB.prepare("SELECT COUNT(*) AS c FROM plaza_posts WHERE user_id = ?").bind(userId).first<{ c: number }>(),
+      env.DB.prepare("SELECT profile, notes, updated_at FROM user_profiles_v2 WHERE user_id = ?")
+        .bind(userId)
+        .first<{ profile: string; notes: string | null; updated_at: string }>(),
+      env.DB.prepare(
+        "SELECT id, kind, title, description, item_count, created_at, updated_at FROM user_collections WHERE user_id = ? ORDER BY updated_at DESC",
+      )
+        .bind(userId)
+        .all(),
+      env.DB.prepare("SELECT COUNT(*) AS c FROM plaza_posts WHERE user_id = ?")
+        .bind(userId)
+        .first<{ c: number }>(),
     ]);
     let profile: unknown = null;
-    if (profileRow?.profile) { try { profile = JSON.parse(profileRow.profile); } catch { profile = null; } }
+    if (profileRow?.profile) {
+      try {
+        profile = JSON.parse(profileRow.profile);
+      } catch {
+        profile = null;
+      }
+    }
     let notes: Record<string, string> = {};
-    if (profileRow?.notes) { try { notes = JSON.parse(profileRow.notes) ?? {}; } catch { notes = {}; } }
+    if (profileRow?.notes) {
+      try {
+        notes = JSON.parse(profileRow.notes) ?? {};
+      } catch {
+        notes = {};
+      }
+    }
     return json({
       account,
       active_sessions: sessions?.c ?? 0,
@@ -454,21 +688,31 @@ export async function accountRoute(request: Request, env: Env): Promise<Response
 
   // GET /api/admin/accounts — list all accounts (admin only)
   if (path === "/api/admin/accounts" && request.method === "GET") {
-    if (!env.DB || !await adminAuthLocal(request, env.DB)) return json({ error: "auth_required" }, 401);
-    const accounts = await env.DB.prepare("SELECT id, email, nickname, disabled_at, created_at FROM user_accounts ORDER BY created_at DESC LIMIT 100").all();
+    if (!env.DB || !(await adminAuthLocal(request, env.DB)))
+      return json({ error: "auth_required" }, 401);
+    const accounts = await env.DB.prepare(
+      "SELECT id, email, nickname, disabled_at, created_at FROM user_accounts ORDER BY created_at DESC LIMIT 100",
+    ).all();
     return json({ accounts: accounts.results ?? [] });
   }
 
   // DELETE /api/admin/accounts/:id — delete account (admin only)
   const deleteMatch = path.match(/^\/api\/admin\/accounts\/(\d+)$/);
   if (deleteMatch && request.method === "DELETE") {
-    if (!env.DB || !await adminAuthLocal(request, env.DB)) return json({ error: "auth_required" }, 401);
+    if (!env.DB || !(await adminAuthLocal(request, env.DB)))
+      return json({ error: "auth_required" }, 401);
     const userId = Number(deleteMatch[1]);
     await env.DB.batch([
       // 广场内容引用 user_accounts(id)：须先清该用户的帖子/历史/评论/点赞，再删账户
-      env.DB.prepare("DELETE FROM plaza_post_edits WHERE post_id IN (SELECT id FROM plaza_posts WHERE user_id = ?)").bind(userId),
-      env.DB.prepare("DELETE FROM plaza_likes WHERE user_id = ? OR post_id IN (SELECT id FROM plaza_posts WHERE user_id = ?)").bind(userId, userId),
-      env.DB.prepare("DELETE FROM plaza_comments WHERE user_id = ? OR post_id IN (SELECT id FROM plaza_posts WHERE user_id = ?)").bind(userId, userId),
+      env.DB.prepare(
+        "DELETE FROM plaza_post_edits WHERE post_id IN (SELECT id FROM plaza_posts WHERE user_id = ?)",
+      ).bind(userId),
+      env.DB.prepare(
+        "DELETE FROM plaza_likes WHERE user_id = ? OR post_id IN (SELECT id FROM plaza_posts WHERE user_id = ?)",
+      ).bind(userId, userId),
+      env.DB.prepare(
+        "DELETE FROM plaza_comments WHERE user_id = ? OR post_id IN (SELECT id FROM plaza_posts WHERE user_id = ?)",
+      ).bind(userId, userId),
       env.DB.prepare("DELETE FROM plaza_posts WHERE user_id = ?").bind(userId),
       env.DB.prepare("DELETE FROM user_cookie_vault WHERE user_id = ?").bind(userId),
       env.DB.prepare("DELETE FROM user_sessions WHERE user_id = ?").bind(userId),
@@ -483,44 +727,67 @@ export async function accountRoute(request: Request, env: Env): Promise<Response
 
   const disableMatch = path.match(/^\/api\/admin\/accounts\/(\d+)\/(disable|restore)$/);
   if (disableMatch && request.method === "POST") {
-    if (!env.DB || !await adminAuthLocal(request, env.DB)) return json({ error: "auth_required" }, 401);
+    if (!env.DB || !(await adminAuthLocal(request, env.DB)))
+      return json({ error: "auth_required" }, 401);
     const userId = Number(disableMatch[1]);
     if (disableMatch[2] === "disable") {
       await env.DB.batch([
-        env.DB.prepare("UPDATE user_accounts SET disabled_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ?").bind(userId),
+        env.DB.prepare(
+          "UPDATE user_accounts SET disabled_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ?",
+        ).bind(userId),
         env.DB.prepare("DELETE FROM user_sessions WHERE user_id = ?").bind(userId),
       ]);
     } else {
-      await env.DB.prepare("UPDATE user_accounts SET disabled_at = NULL WHERE id = ?").bind(userId).run();
+      await env.DB.prepare("UPDATE user_accounts SET disabled_at = NULL WHERE id = ?")
+        .bind(userId)
+        .run();
     }
-    await recordAudit(env, `account:${disableMatch[2]}`, `${disableMatch[2] === "disable" ? "禁用" : "恢复"}账户 #${userId}`, request);
+    await recordAudit(
+      env,
+      `account:${disableMatch[2]}`,
+      `${disableMatch[2] === "disable" ? "禁用" : "恢复"}账户 #${userId}`,
+      request,
+    );
     return json({ ok: true, disabled: disableMatch[2] === "disable" });
   }
 
   const profileDeleteMatch = path.match(/^\/api\/admin\/accounts\/(\d+)\/(profile|collections)$/);
   if (profileDeleteMatch && request.method === "DELETE") {
-    if (!env.DB || !await adminAuthLocal(request, env.DB)) return json({ error: "auth_required" }, 401);
+    if (!env.DB || !(await adminAuthLocal(request, env.DB)))
+      return json({ error: "auth_required" }, 401);
     const userId = Number(profileDeleteMatch[1]);
     const table = profileDeleteMatch[2] === "profile" ? "user_profiles_v2" : "user_collections";
     await env.DB.prepare(`DELETE FROM ${table} WHERE user_id = ?`).bind(userId).run();
-    await recordAudit(env, `account:delete_${profileDeleteMatch[2]}`, `删除账户 #${userId} 的${profileDeleteMatch[2] === "profile" ? "画像" : "云端清单"}`, request);
+    await recordAudit(
+      env,
+      `account:delete_${profileDeleteMatch[2]}`,
+      `删除账户 #${userId} 的${profileDeleteMatch[2] === "profile" ? "画像" : "云端清单"}`,
+      request,
+    );
     return json({ ok: true });
   }
 
   // POST /api/admin/accounts/:id/reset-password — reset password (admin only)
   const resetMatch = path.match(/^\/api\/admin\/accounts\/(\d+)\/reset-password$/);
   if (resetMatch && request.method === "POST") {
-    if (!env.DB || !await adminAuthLocal(request, env.DB)) return json({ error: "auth_required" }, 401);
+    if (!env.DB || !(await adminAuthLocal(request, env.DB)))
+      return json({ error: "auth_required" }, 401);
     const userId = Number(resetMatch[1]);
-    const body = await request.json().catch(() => null) as Record<string, unknown> | null;
+    const body = (await request.json().catch(() => null)) as Record<string, unknown> | null;
     const newPassword = cleanString(body?.password, 128);
-    if (!newPassword || newPassword.length < 6) return json({ error: "invalid_password", msg: "密码至少6位" }, 400);
+    if (!newPassword || newPassword.length < 6)
+      return json({ error: "invalid_password", msg: "密码至少6位" }, 400);
     const hash = await hashPasswordStrong(newPassword);
     await env.DB.batch([
       env.DB.prepare("UPDATE user_accounts SET password_hash = ? WHERE id = ?").bind(hash, userId),
       env.DB.prepare("DELETE FROM user_sessions WHERE user_id = ?").bind(userId),
     ]);
-    await recordAudit(env, "account:reset_password", `重置账户 #${userId} 的密码并强制下线`, request);
+    await recordAudit(
+      env,
+      "account:reset_password",
+      `重置账户 #${userId} 的密码并强制下线`,
+      request,
+    );
     return json({ ok: true });
   }
 

@@ -8,8 +8,13 @@ const MAX_CONCURRENT_REQUESTS = 8;
 let activeRequests = 0;
 const waitQueue: Array<() => void> = [];
 function acquireSlot(): Promise<void> {
-  if (activeRequests < MAX_CONCURRENT_REQUESTS) { activeRequests += 1; return Promise.resolve(); }
-  return new Promise<void>((resolve) => { waitQueue.push(resolve); });
+  if (activeRequests < MAX_CONCURRENT_REQUESTS) {
+    activeRequests += 1;
+    return Promise.resolve();
+  }
+  return new Promise<void>((resolve) => {
+    waitQueue.push(resolve);
+  });
 }
 function releaseSlot(): void {
   const next = waitQueue.shift();
@@ -27,7 +32,12 @@ const FLUSH_DELAY_MS = 50;
 const MAX_BATCH_SIZE = 30;
 const BATCH_TIMEOUT_MS = 60000;
 
-const TYPE_BY_KIND: Record<string, string> = { film: "movie", book: "book", music: "music", other: "movie" };
+const TYPE_BY_KIND: Record<string, string> = {
+  film: "movie",
+  book: "book",
+  music: "music",
+  other: "movie",
+};
 
 interface BatchEntry {
   work: Artwork;
@@ -40,15 +50,25 @@ const batchQueue: BatchEntry[] = [];
 /** 本次页面加载是否已经发过第一批请求（决定是否带 retry）。 */
 let firstBatchDispatched = false;
 
-function normalizeKey(value: string): string { return value.normalize("NFKC").trim().toLowerCase(); }
+function normalizeKey(value: string): string {
+  return value.normalize("NFKC").trim().toLowerCase();
+}
 
 /** 服务端缓存键的本地等价物，仅在服务端未回显 keys 时作为兜底。 */
 function batchKey(work: Artwork, kind: MediaKind): string {
-  return [TYPE_BY_KIND[kind] ?? "movie", normalizeKey(work.title), normalizeKey(work.subtitle ?? work.title), work.year ?? ""].join("|");
+  return [
+    TYPE_BY_KIND[kind] ?? "movie",
+    normalizeKey(work.title),
+    normalizeKey(work.subtitle ?? work.title),
+    work.year ?? "",
+  ].join("|");
 }
 
 function flushBatch(): void {
-  if (batchTimer) { clearTimeout(batchTimer); batchTimer = null; }
+  if (batchTimer) {
+    clearTimeout(batchTimer);
+    batchTimer = null;
+  }
   if (!batchQueue.length) return;
   const batch = batchQueue.splice(0, MAX_BATCH_SIZE);
   // 超出单批上限的剩余项安排到下一轮，而不是丢给同一次请求。
@@ -82,12 +102,17 @@ async function dispatchBatch(batch: BatchEntry[]): Promise<void> {
         signal: AbortSignal.timeout(BATCH_TIMEOUT_MS),
       });
       if (response.ok) {
-        const data = await response.json() as { results?: Record<string, string[]>; keys?: string[] };
+        const data = (await response.json()) as {
+          results?: Record<string, string[]>;
+          keys?: string[];
+        };
         results = data.results ?? {};
         // 服务端回显与入参等长的 keys，按位置对齐可完全规避两端键推导不一致。
         keys = Array.isArray(data.keys) && data.keys.length === batch.length ? data.keys : null;
       }
-    } finally { releaseSlot(); }
+    } finally {
+      releaseSlot();
+    }
   } catch {
     results = {};
     keys = null;
@@ -106,7 +131,12 @@ const resolvedPosters = new Map<string, string[]>();
 const reportedFailures = new Set<string>();
 const POSTER_CACHE_KEY = "art-rank:poster-cache";
 function readPosterCache(key: string): string[] | null {
-  try { const cache = JSON.parse(sessionStorage.getItem(POSTER_CACHE_KEY) ?? "{}"); return cache[key] ?? null; } catch { return null; }
+  try {
+    const cache = JSON.parse(sessionStorage.getItem(POSTER_CACHE_KEY) ?? "{}");
+    return cache[key] ?? null;
+  } catch {
+    return null;
+  }
 }
 const POSTER_CACHE_MAX = 500;
 function writePosterCache(key: string, urls: string[]) {
@@ -119,7 +149,9 @@ function writePosterCache(key: string, urls: string[]) {
     }
     cache[key] = urls;
     sessionStorage.setItem(POSTER_CACHE_KEY, JSON.stringify(cache));
-  } catch { /* Quota exceeded — silently skip */ }
+  } catch {
+    /* Quota exceeded — silently skip */
+  }
 }
 function posterKey(work: Artwork, kind: MediaKind): string {
   return `${kind}|${work.title}|${work.subtitle ?? ""}|${work.year ?? ""}`;
@@ -160,7 +192,9 @@ function resolve(work: Artwork, kind: MediaKind): Promise<string[]> {
   return request;
 }
 export function prefetchPosters(items: Array<{ work: Artwork; kind: MediaKind }>): void {
-  for (const { work, kind } of items) { if (kind === "film" || kind === "book" || kind === "music") void resolve(work, kind); }
+  for (const { work, kind } of items) {
+    if (kind === "film" || kind === "book" || kind === "music") void resolve(work, kind);
+  }
 }
 
 // 豆瓣 CDN 对「无 Referer」的请求一律返回 418（响应体是 `cdn error 001`），
@@ -173,8 +207,11 @@ function proxiedImageUrl(url: string): string {
   return `/api/image?url=${encodeURIComponent(url)}`;
 }
 function imageUrl(url: string): string {
-  try { return PROXY_REQUIRED_HOSTS.test(new URL(url).hostname) ? proxiedImageUrl(url) : url; }
-  catch { return url; }
+  try {
+    return PROXY_REQUIRED_HOSTS.test(new URL(url).hostname) ? proxiedImageUrl(url) : url;
+  } catch {
+    return url;
+  }
 }
 
 function reportImageFailure(work: Artwork, kind: MediaKind, url: string) {
@@ -189,7 +226,15 @@ function reportImageFailure(work: Artwork, kind: MediaKind, url: string) {
   }).catch(() => undefined);
 }
 
-export function Poster({ work, kind: rawKind, large = false }: { work: Artwork; kind: MediaKind; large?: boolean }) {
+export function Poster({
+  work,
+  kind: rawKind,
+  large = false,
+}: {
+  work: Artwork;
+  kind: MediaKind;
+  large?: boolean;
+}) {
   // 未知/空媒介（如画像帖整体卡）一律按 other 兜底：图标查表不会得到 undefined
   const kind = rawKind === "film" || rawKind === "book" || rawKind === "music" ? rawKind : "other";
   const [resolved, setResolved] = useState<string[]>(() => {
@@ -205,9 +250,13 @@ export function Poster({ work, kind: rawKind, large = false }: { work: Artwork; 
   useEffect(() => {
     let active = true;
     if (!hasStoredPosters && (kind === "film" || kind === "book" || kind === "music")) {
-      void resolve(work, kind).then((urls) => { if (active && urls.length) setResolved(urls); });
+      void resolve(work, kind).then((urls) => {
+        if (active && urls.length) setResolved(urls);
+      });
     }
-    return () => { active = false; };
+    return () => {
+      active = false;
+    };
   }, [work.id, work.title, kind, large, hasStoredPosters]);
   // 候选顺序 = 尝试顺序。**作品自带的封面排在前面**：导入网易云时拿到的是
   // `p*.music.126.net`（CSP 已放行、浏览器直连、不经 Worker、不占豆瓣抓取配额），
@@ -215,18 +264,56 @@ export function Poster({ work, kind: rawKind, large = false }: { work: Artwork; 
   // 自带封面加载失败时，后面解析来的候选会依次顶上。
   const urls = [...new Set([...(work.posterUrls ?? []), ...resolved])];
   const url = urls.find((candidate) => !failed.has(candidate));
-  const src = url === undefined ? undefined : proxyRetry.has(url) ? proxiedImageUrl(url) : imageUrl(url);
+  const src =
+    url === undefined ? undefined : proxyRetry.has(url) ? proxiedImageUrl(url) : imageUrl(url);
   const Icon = { film: Film, book: BookOpen, music: Music2, other: Library }[kind];
-  return <div className={`poster ${large ? "poster-large" : "poster-small"} poster-${kind}`}>
-    {url && src ? <><img src={src} alt={`${work.title}${work.creator ? ` - ${work.creator}` : ""}${work.year ? ` (${work.year})` : ""}`} referrerPolicy="no-referrer" loading={large ? "eager" : "lazy"} onLoad={() => setImgLoaded(true)} onError={() => {
-      reportImageFailure(work, kind, url);
-      // 直连失败：先用 worker 代理重试同一张图；代理也失败才换下一个候选。
-      if (imageUrl(url) === url && !proxyRetry.has(url)) {
-        setProxyRetry((previous) => new Set([...previous, url]));
-        return;
-      }
-      setFailed((previous) => new Set([...previous, url]));
-    }} style={imgLoaded ? undefined : { opacity: 0 }} />{!imgLoaded && <div className="poster-loading"><Icon size={large ? 24 : 12} /></div>}</> :
-      <div className="cover-fallback"><Icon size={large ? 36 : 16} />{large ? <span>{work.title}</span> : <span style={{ fontSize: 9, opacity: 0.7, lineHeight: 1.3, textAlign: "center", padding: "0 2px" }}>{work.title}</span>}</div>}
-  </div>;
+  return (
+    <div className={`poster ${large ? "poster-large" : "poster-small"} poster-${kind}`}>
+      {url && src ? (
+        <>
+          <img
+            src={src}
+            alt={`${work.title}${work.creator ? ` - ${work.creator}` : ""}${work.year ? ` (${work.year})` : ""}`}
+            referrerPolicy="no-referrer"
+            loading={large ? "eager" : "lazy"}
+            onLoad={() => setImgLoaded(true)}
+            onError={() => {
+              reportImageFailure(work, kind, url);
+              // 直连失败：先用 worker 代理重试同一张图；代理也失败才换下一个候选。
+              if (imageUrl(url) === url && !proxyRetry.has(url)) {
+                setProxyRetry((previous) => new Set([...previous, url]));
+                return;
+              }
+              setFailed((previous) => new Set([...previous, url]));
+            }}
+            style={imgLoaded ? undefined : { opacity: 0 }}
+          />
+          {!imgLoaded && (
+            <div className="poster-loading">
+              <Icon size={large ? 24 : 12} />
+            </div>
+          )}
+        </>
+      ) : (
+        <div className="cover-fallback">
+          <Icon size={large ? 36 : 16} />
+          {large ? (
+            <span>{work.title}</span>
+          ) : (
+            <span
+              style={{
+                fontSize: 9,
+                opacity: 0.7,
+                lineHeight: 1.3,
+                textAlign: "center",
+                padding: "0 2px",
+              }}
+            >
+              {work.title}
+            </span>
+          )}
+        </div>
+      )}
+    </div>
+  );
 }

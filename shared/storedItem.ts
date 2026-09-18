@@ -45,7 +45,14 @@ export interface StoredWork {
 export const STORED_WORK_FIELDS = ["id", "title", "rank", "creator", "year", "subtitle"] as const;
 
 /** 榜单元数据白名单，与 `RankingExport` 逐字对应（不做增删）。 */
-export const RANKING_META_FIELDS = ["version", "profileId", "profileName", "kind", "collectionTitle", "createdAt"] as const;
+export const RANKING_META_FIELDS = [
+  "version",
+  "profileId",
+  "profileName",
+  "kind",
+  "collectionTitle",
+  "createdAt",
+] as const;
 
 /** 画像元数据白名单，与 `ArtisticProfile` 逐字对应（不做增删）。 */
 export const PROFILE_META_FIELDS = ["version", "profileId", "profileName", "updatedAt"] as const;
@@ -109,9 +116,19 @@ export function toStoredWork(value: unknown): StoredWork | null {
   const work = {} as StoredWork;
   if (text(value.id, MAX_ID)) work.id = value.id;
   work.title = value.title.trim();
-  if (Number.isInteger(value.rank) && (value.rank as number) >= 1 && (value.rank as number) <= MAX_RANK) work.rank = value.rank as number;
+  if (
+    Number.isInteger(value.rank) &&
+    (value.rank as number) >= 1 &&
+    (value.rank as number) <= MAX_RANK
+  )
+    work.rank = value.rank as number;
   if (text(value.creator)) work.creator = value.creator;
-  if (Number.isInteger(value.year) && (value.year as number) >= 1 && (value.year as number) <= MAX_YEAR) work.year = value.year as number;
+  if (
+    Number.isInteger(value.year) &&
+    (value.year as number) >= 1 &&
+    (value.year as number) <= MAX_YEAR
+  )
+    work.year = value.year as number;
   if (text(value.subtitle)) work.subtitle = value.subtitle;
   return work;
 }
@@ -208,7 +225,10 @@ export function encodeStoredWorks(value: unknown, limit = MAX_PAYLOAD_BYTES): St
 }
 
 /** 唯一能产出「可落库榜单数组」字符串的出口。 */
-export function encodeStoredRankings(value: unknown, limit = MAX_PAYLOAD_BYTES): StoredEncodeResult {
+export function encodeStoredRankings(
+  value: unknown,
+  limit = MAX_PAYLOAD_BYTES,
+): StoredEncodeResult {
   const rankings = toStoredRankings(value);
   return encode(rankings, countStoredWorks(rankings), limit);
 }

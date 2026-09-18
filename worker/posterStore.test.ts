@@ -1,5 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { loadPosterUrls, mediaTypeForKind, normalizePosterItem, normalizeYear, posterKeyFor, resolveStoredPosterUrls, saveResolvedPosters } from "./posterStore";
+import {
+  loadPosterUrls,
+  mediaTypeForKind,
+  normalizePosterItem,
+  normalizeYear,
+  posterKeyFor,
+  resolveStoredPosterUrls,
+  saveResolvedPosters,
+} from "./posterStore";
 
 /**
  * 这些测试钉住的是一类具体的回归：同一条作品的海报地址，在「单条查询」
@@ -49,8 +57,14 @@ describe("normalizePosterItem", () => {
   });
 
   it("保留合法条目", () => {
-    expect(normalizePosterItem({ title: " 童话 ", english: " Fairy Tale ", year: "2005", type: "music" }))
-      .toEqual({ title: "童话", english: "Fairy Tale", type: "music", year: 2005 });
+    expect(
+      normalizePosterItem({
+        title: " 童话 ",
+        english: " Fairy Tale ",
+        year: "2005",
+        type: "music",
+      }),
+    ).toEqual({ title: "童话", english: "Fairy Tale", type: "music", year: 2005 });
   });
 });
 
@@ -63,12 +77,15 @@ describe("posterKeyFor 的键等价性", () => {
   });
 
   it("大小写与全角差异被 NFKC/小写抹平", () => {
-    expect(posterKeyFor({ title: "Ｌéon", english: "LÉON", type: "movie" }))
-      .toBe(posterKeyFor({ title: "Léon", english: "léon", type: "movie" }));
+    expect(posterKeyFor({ title: "Ｌéon", english: "LÉON", type: "movie" })).toBe(
+      posterKeyFor({ title: "Léon", english: "léon", type: "movie" }),
+    );
   });
 
   it("缺年份的键尾为空", () => {
-    expect(posterKeyFor({ title: "童话", english: "童话", type: "music" })).toBe("music|童话|童话|");
+    expect(posterKeyFor({ title: "童话", english: "童话", type: "music" })).toBe(
+      "music|童话|童话|",
+    );
   });
 
   it("不合法条目没有键", () => {
@@ -78,7 +95,10 @@ describe("posterKeyFor 的键等价性", () => {
 });
 
 // 前端 Poster.tsx 发送的批量条目形状：english = subtitle ?? title。
-function clientBatchItem(item: { title: string; subtitle?: string; year?: number | string }, kind: string) {
+function clientBatchItem(
+  item: { title: string; subtitle?: string; year?: number | string },
+  kind: string,
+) {
   const type = mediaTypeForKind(kind);
   return { title: item.title, english: item.subtitle ?? item.title, year: item.year, type };
 }
@@ -93,9 +113,19 @@ describe("写入键与读取键一致", () => {
     ];
     for (const { kind, item } of cases) {
       const type = mediaTypeForKind(kind)!;
-      const readKey = posterKeyFor({ title: item.title, english: item.subtitle ?? item.title, type, year: item.year });
+      const readKey = posterKeyFor({
+        title: item.title,
+        english: item.subtitle ?? item.title,
+        type,
+        year: item.year,
+      });
       const sent = clientBatchItem(item, kind);
-      const sentKey = posterKeyFor({ title: sent.title, english: sent.english, type: sent.type, year: sent.year });
+      const sentKey = posterKeyFor({
+        title: sent.title,
+        english: sent.english,
+        type: sent.type,
+        year: sent.year,
+      });
       expect(readKey).not.toBeNull();
       expect(readKey).toBe(sentKey);
     }
@@ -111,14 +141,20 @@ describe("写入键与读取键一致", () => {
 });
 
 // 极简 D1 替身：只实现 posterStore 用到的那条链路。
-function fakeDb(rows: Array<{ media_key: string; urls: string }>, onWrite?: (sql: string, args: unknown[]) => void): D1Database {
+function fakeDb(
+  rows: Array<{ media_key: string; urls: string }>,
+  onWrite?: (sql: string, args: unknown[]) => void,
+): D1Database {
   return {
     prepare(sql: string) {
       return {
         bind(...args: unknown[]) {
           return {
             all: async () => ({ results: rows.filter((row) => args.includes(row.media_key)) }),
-            run: async () => { onWrite?.(sql, args); return { success: true }; },
+            run: async () => {
+              onWrite?.(sql, args);
+              return { success: true };
+            },
           };
         },
       };
@@ -181,7 +217,11 @@ describe("loadPosterUrls（Phase 1 先查库用）", () => {
   });
 
   it("缺表/无 DB 时返回空 map 而不是抛错（退化为旧行为）", async () => {
-    const failing = { prepare() { throw new Error("no such table: poster_urls"); } } as unknown as D1Database;
+    const failing = {
+      prepare() {
+        throw new Error("no such table: poster_urls");
+      },
+    } as unknown as D1Database;
     await expect(loadPosterUrls(failing, ["music|a|a|"])).resolves.toEqual(new Map());
   });
 });
@@ -202,8 +242,16 @@ describe("saveResolvedPosters", () => {
   });
 
   it("缺表/无 DB 时不抛错，不影响主流程", async () => {
-    await expect(saveResolvedPosters(undefined, [{ key: "k", urls: ["u"] }])).resolves.toBeUndefined();
-    const failing = { prepare() { throw new Error("no such table: poster_urls"); } } as unknown as D1Database;
-    await expect(saveResolvedPosters(failing, [{ key: "k", urls: ["u"] }])).resolves.toBeUndefined();
+    await expect(
+      saveResolvedPosters(undefined, [{ key: "k", urls: ["u"] }]),
+    ).resolves.toBeUndefined();
+    const failing = {
+      prepare() {
+        throw new Error("no such table: poster_urls");
+      },
+    } as unknown as D1Database;
+    await expect(
+      saveResolvedPosters(failing, [{ key: "k", urls: ["u"] }]),
+    ).resolves.toBeUndefined();
   });
 });

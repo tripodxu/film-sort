@@ -94,7 +94,10 @@ describe("importCollection", () => {
   it("sets topN to min(10, works.length)", () => {
     const small = importCollection("film", "A\nB\nC");
     expect(small.topN).toBe(3);
-    const large = importCollection("film", Array.from({ length: 20 }, (_, i) => `作品${i}`).join("\n"));
+    const large = importCollection(
+      "film",
+      Array.from({ length: 20 }, (_, i) => `作品${i}`).join("\n"),
+    );
     expect(large.topN).toBe(10);
   });
 });

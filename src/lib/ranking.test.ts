@@ -20,7 +20,9 @@ describe("createRankingState", () => {
     const state = createRankingState(ids(5), { seed });
     expect(state.sourceIds).toHaveLength(5);
     expect(state.rankedIds).toHaveLength(1);
-    expect(state.pendingIds.length + state.skippedIds.length + state.rankedIds.length).toBeLessThanOrEqual(5);
+    expect(
+      state.pendingIds.length + state.skippedIds.length + state.rankedIds.length,
+    ).toBeLessThanOrEqual(5);
     expect(state.completed).toBe(false);
     expect(state.phase).toBe("ranking");
     expect(state.comparisonCount).toBe(0);
@@ -173,12 +175,31 @@ describe("serialize/deserialize", () => {
   it("handles legacy v1 format migration", () => {
     // Simulate a v1 state (without verification fields)
     const v1 = {
-      version: 1, seed: "abc", topN: 3, sourceIds: ["a", "b", "c", "d"],
-      shuffledIds: ["a", "b", "c", "d"], rankedIds: ["a", "b"],
-      pendingIds: ["c", "d"], deferredIds: [], skippedIds: [], outsideTopIds: [],
-      activeInsertion: null, comparisonCount: 1, estimatedTotalComparisons: 4,
-      processedCount: 2, nextPresentationIndex: 2, completed: false,
-      decisionLog: [{ kind: "choose", candidateId: "b", opponentId: "a", presentationIndex: 0, preferredId: "b" }],
+      version: 1,
+      seed: "abc",
+      topN: 3,
+      sourceIds: ["a", "b", "c", "d"],
+      shuffledIds: ["a", "b", "c", "d"],
+      rankedIds: ["a", "b"],
+      pendingIds: ["c", "d"],
+      deferredIds: [],
+      skippedIds: [],
+      outsideTopIds: [],
+      activeInsertion: null,
+      comparisonCount: 1,
+      estimatedTotalComparisons: 4,
+      processedCount: 2,
+      nextPresentationIndex: 2,
+      completed: false,
+      decisionLog: [
+        {
+          kind: "choose",
+          candidateId: "b",
+          opponentId: "a",
+          presentationIndex: 0,
+          preferredId: "b",
+        },
+      ],
     };
     const restored = deserializeRankingState(JSON.stringify(v1));
     expect(restored.version).toBe(2);

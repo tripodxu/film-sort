@@ -10,7 +10,9 @@ export function ThemeSwitcher({ zh }: { zh: boolean }) {
 
   useEffect(() => {
     if (!open) return;
-    const onDown = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false); };
+    const onDown = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
     document.addEventListener("mousedown", onDown);
     return () => document.removeEventListener("mousedown", onDown);
   }, [open]);
@@ -21,17 +23,38 @@ export function ThemeSwitcher({ zh }: { zh: boolean }) {
     setOpen(false);
   }
 
-  return <div className="theme-switcher" ref={ref}>
-    <button className="icon-button" aria-label={zh ? "主题" : "Theme"} aria-haspopup="menu" aria-expanded={open} title={zh ? "主题" : "Theme"} onClick={() => setOpen(!open)}>
-      <Palette size={18} />
-      <span className="tooltip" role="tooltip">{zh ? "主题" : "Theme"}</span>
-    </button>
-    {open && <div className="rank-menu theme-menu" role="menu">
-      {THEMES.map((item) => <button key={item.id} role="menuitemradio" aria-checked={theme === item.id} className={theme === item.id ? "active" : ""} onClick={() => pick(item.id)}>
-        <span className={`theme-dot theme-${item.id}`} />
-        <span className="theme-name">{zh ? item.zh : item.en}</span>
-        {theme === item.id && <Check size={14} className="theme-check" />}
-      </button>)}
-    </div>}
-  </div>;
+  return (
+    <div className="theme-switcher" ref={ref}>
+      <button
+        className="icon-button"
+        aria-label={zh ? "主题" : "Theme"}
+        aria-haspopup="menu"
+        aria-expanded={open}
+        title={zh ? "主题" : "Theme"}
+        onClick={() => setOpen(!open)}
+      >
+        <Palette size={18} />
+        <span className="tooltip" role="tooltip">
+          {zh ? "主题" : "Theme"}
+        </span>
+      </button>
+      {open && (
+        <div className="rank-menu theme-menu" role="menu">
+          {THEMES.map((item) => (
+            <button
+              key={item.id}
+              role="menuitemradio"
+              aria-checked={theme === item.id}
+              className={theme === item.id ? "active" : ""}
+              onClick={() => pick(item.id)}
+            >
+              <span className={`theme-dot theme-${item.id}`} />
+              <span className="theme-name">{zh ? item.zh : item.en}</span>
+              {theme === item.id && <Check size={14} className="theme-check" />}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
 }

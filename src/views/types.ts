@@ -94,12 +94,22 @@ export interface SortingViewProps {
   collection: MediaCollection;
   ranking: RankingState;
   comparison: { leftId: string; rightId: string; phase: "ranking" | "verification" };
-  progress: { fraction: number; phase: "ranking" | "verification" | "complete"; processed: number; total: number; estimatedRemaining: number; comparisonCount: number; verificationRemaining: number };
+  progress: {
+    fraction: number;
+    phase: "ranking" | "verification" | "complete";
+    processed: number;
+    total: number;
+    estimatedRemaining: number;
+    comparisonCount: number;
+    verificationRemaining: number;
+  };
   label: (kind: MediaKind) => string;
   kind: MediaKind;
   t: (zh: string, en: string) => string;
   worksById: Map<string, import("../data/media").Artwork>;
-  act: (action: "left" | "right" | "undo" | "skip-left" | "skip-right" | "defer-left" | "defer-right") => void;
+  act: (
+    action: "left" | "right" | "undo" | "skip-left" | "skip-right" | "defer-left" | "defer-right",
+  ) => void;
 }
 
 export interface ProfileViewProps {
@@ -137,7 +147,12 @@ export interface ProfileViewProps {
   setRanking: (ranking: RankingState | null) => void;
   collection: MediaCollection | null;
   notes: Record<string, string>;
-  openNoteModal: (key: string, title: string, kind: MediaKind, posterUrls?: readonly string[]) => void;
+  openNoteModal: (
+    key: string,
+    title: string,
+    kind: MediaKind,
+    posterUrls?: readonly string[],
+  ) => void;
   openArtworkDetail: (work: RankedArtwork, kind: MediaKind) => void;
   accountToken: string;
   busy: boolean;
@@ -250,7 +265,14 @@ export interface CompareViewProps {
   t: (zh: string, en: string) => string;
   setCompareSortBy: (by: "own" | "peer") => void;
   compareSortBy: "own" | "peer";
-  setCompareRankDetail: (detail: { side: "own" | "peer"; collectionTitle: string; ranking: RankingExport | null; highlightId?: string } | null) => void;
+  setCompareRankDetail: (
+    detail: {
+      side: "own" | "peer";
+      collectionTitle: string;
+      ranking: RankingExport | null;
+      highlightId?: string;
+    } | null,
+  ) => void;
   shareSingleRanking: (ranking: RankingExport) => void;
   exportProfile: () => void;
   setFormat: (format: "json" | "txt" | "md" | "csv" | "png") => void;

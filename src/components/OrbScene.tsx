@@ -79,7 +79,11 @@ export function OrbScene() {
 
     let renderer: WebGLRenderer;
     try {
-      renderer = new WebGLRenderer({ antialias: true, alpha: true, powerPreference: "high-performance" });
+      renderer = new WebGLRenderer({
+        antialias: true,
+        alpha: true,
+        powerPreference: "high-performance",
+      });
     } catch {
       host.classList.add("orb-scene-fallback");
       return;
@@ -141,7 +145,12 @@ export function OrbScene() {
     const particleCount = 620;
     const positions = new Float32Array(particleCount * 3);
     const colors = new Float32Array(particleCount * 3);
-    const palette = [new Color(0xc8ff72), new Color(0x62d8e5), new Color(0xff7668), new Color(0xf0f2ea)];
+    const palette = [
+      new Color(0xc8ff72),
+      new Color(0x62d8e5),
+      new Color(0xff7668),
+      new Color(0xf0f2ea),
+    ];
     for (let index = 0; index < particleCount; index += 1) {
       const radius = 1.65 + Math.pow(random(), 1.7) * 2.2;
       const theta = random() * Math.PI * 2;

@@ -22,7 +22,8 @@ const ENCODER_MODULE = join("..", "shared", "storedItem.ts");
  * 刻意**不**匹配裸标识符（如挑战赛的 `JSON.stringify(items)`）或 notes 之类的旁路字段——
  * 收窄到「会写进 user_profiles_v2 / plaza_posts / user_collections / shared_links 的那个载荷」。
  */
-const PAYLOAD_STRINGIFY = /JSON\.stringify\(\s*(?:body|collection|parsed|post)\s*\.\s*(?:items|profile|rankings|collection)\b/;
+const PAYLOAD_STRINGIFY =
+  /JSON\.stringify\(\s*(?:body|collection|parsed|post)\s*\.\s*(?:items|profile|rankings|collection)\b/;
 
 /** 五条写入路径必须经由同一个编码出口。 */
 const WRITE_PATHS = [
@@ -56,17 +57,30 @@ describe("载荷编码出口唯一", () => {
   });
 
   it("worker 里不再出现针对载荷的 JSON.stringify（除编码器之外）", () => {
-    const offenders = workerSources().flatMap(({ file, source }) => scanPayloadStringify(file, source));
-    expect(offenders, `载荷必须经由 shared/storedItem.ts 的编码器落库，命中的位置：\n${offenders.join("\n")}`).toEqual([]);
+    const offenders = workerSources().flatMap(({ file, source }) =>
+      scanPayloadStringify(file, source),
+    );
+    expect(
+      offenders,
+      `载荷必须经由 shared/storedItem.ts 的编码器落库，命中的位置：\n${offenders.join("\n")}`,
+    ).toEqual([]);
   });
 
   it("守卫本身有效：把 JSON.stringify(body.items) 加回路由就必须变红", () => {
     // 这条测试保证护栏不会被误调宽到「永远通过」——它必须能真的抓到回归。
-    expect(scanPayloadStringify("fixture.ts", "    const itemsJson = JSON.stringify(body.items);")).toEqual(["fixture.ts:1"]);
-    expect(scanPayloadStringify("fixture.ts", "const profileStr = JSON.stringify(body.profile);")).toEqual(["fixture.ts:1"]);
-    expect(scanPayloadStringify("fixture.ts", "// JSON.stringify(body.items) 已在白名单里")).toEqual([]);
+    expect(
+      scanPayloadStringify("fixture.ts", "    const itemsJson = JSON.stringify(body.items);"),
+    ).toEqual(["fixture.ts:1"]);
+    expect(
+      scanPayloadStringify("fixture.ts", "const profileStr = JSON.stringify(body.profile);"),
+    ).toEqual(["fixture.ts:1"]);
+    expect(
+      scanPayloadStringify("fixture.ts", "// JSON.stringify(body.items) 已在白名单里"),
+    ).toEqual([]);
     // 旁路字段不该被误报，否则守卫会因为噪音被调宽。
-    expect(scanPayloadStringify("fixture.ts", "const notesJson = JSON.stringify(body.notes);")).toEqual([]);
+    expect(
+      scanPayloadStringify("fixture.ts", "const notesJson = JSON.stringify(body.notes);"),
+    ).toEqual([]);
     expect(scanPayloadStringify("fixture.ts", "const s = JSON.stringify(items);")).toEqual([]);
   });
 
@@ -78,6 +92,9 @@ describe("载荷编码出口唯一", () => {
       const usesEncoder = /encodeStored(Works|Rankings|Profile)\(/.test(source);
       if (!importsEncoder || !usesEncoder) missing.push(`${why}（${file}）`);
     }
-    expect(missing, `以下写入路径没有走 shared/storedItem.ts 的编码器：\n${missing.join("\n")}`).toEqual([]);
+    expect(
+      missing,
+      `以下写入路径没有走 shared/storedItem.ts 的编码器：\n${missing.join("\n")}`,
+    ).toEqual([]);
   });
 });

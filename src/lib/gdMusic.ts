@@ -18,49 +18,84 @@ export interface GdErrorInfo {
 
 export type MusicResult<T> = { ok: true; value: T } | { ok: false; error: GdErrorInfo };
 
-const fail = (reason: GdFailure, retryAfter = 0): { ok: false; error: GdErrorInfo } => ({ ok: false, error: { reason, retryAfter } });
+const fail = (reason: GdFailure, retryAfter = 0): { ok: false; error: GdErrorInfo } => ({
+  ok: false,
+  error: { reason, retryAfter },
+});
 
 function classify(code: string, status: number): GdFailure {
   if (code === "rate_limited") return "rate_limited";
-  if (code === "music_upstream_limited" || code === "lyric_upstream_limited") return "upstream_limited";
-  if (code === "music_not_found" || code === "lyric_not_found" || code === "lyric_not_found") return "not_found";
+  if (code === "music_upstream_limited" || code === "lyric_upstream_limited")
+    return "upstream_limited";
+  if (code === "music_not_found" || code === "lyric_not_found" || code === "lyric_not_found")
+    return "not_found";
   if (status === 404) return "not_found";
   return "unavailable";
 }
 
-async function jsonFetch(path: string, params: Record<string, string>): Promise<{ ok: true; data: Record<string, unknown> } | { ok: false; error: GdErrorInfo }> {
+async function jsonFetch(
+  path: string,
+  params: Record<string, string>,
+): Promise<{ ok: true; data: Record<string, unknown> } | { ok: false; error: GdErrorInfo }> {
   const qs = new URLSearchParams(params);
   try {
     const response = await fetch(`${path}?${qs}`, { signal: AbortSignal.timeout(20000) });
     const retryAfter = Number(response.headers.get("retry-after")) || 0;
     if (!response.ok) {
-      const body = await response.json().catch(() => null) as { error?: unknown } | null;
+      const body = (await response.json().catch(() => null)) as { error?: unknown } | null;
       const code = typeof body?.error === "string" ? body.error : "";
       return fail(classify(code, response.status), retryAfter);
     }
     const data: unknown = await response.json();
     if (!data || typeof data !== "object" || Array.isArray(data)) return fail("unavailable");
     return { ok: true, data: data as Record<string, unknown> };
-  } catch { return fail("unavailable"); }
+  } catch {
+    return fail("unavailable");
+  }
 }
 
-export type PlayResult = { trackId: string; trackName: string; artistName: string; playUrl: string; isCover: boolean };
+export type PlayResult = {
+  trackId: string;
+  trackName: string;
+  artistName: string;
+  playUrl: string;
+  isCover: boolean;
+};
 
 export async function gdPlay(title: string, artist?: string): Promise<MusicResult<PlayResult>> {
-  const response = await jsonFetch("/api/music/play", { q: title, ...(artist ? { artist: artist.split("/")[0].trim() } : {}) });
+  const response = await jsonFetch("/api/music/play", {
+    q: title,
+    ...(artist ? { artist: artist.split("/")[0].trim() } : {}),
+  });
   if (!response.ok) return response;
   const data = response.data;
   if (typeof data.playUrl !== "string" || !data.playUrl) return fail("not_found");
-  const track = data.track && typeof data.track === "object" ? data.track as Record<string, unknown> : null;
-  if (!track || typeof track.id !== "string" || typeof track.name !== "string") return fail("not_found");
-  const trackArtist = Array.isArray(track.artist) ? track.artist.join(" / ") : String(track.artist ?? "");
-  return { ok: true, value: { trackId: track.id, trackName: track.name, artistName: trackArtist, playUrl: data.playUrl, isCover: !!data.isCover } };
+  const track =
+    data.track && typeof data.track === "object" ? (data.track as Record<string, unknown>) : null;
+  if (!track || typeof track.id !== "string" || typeof track.name !== "string")
+    return fail("not_found");
+  const trackArtist = Array.isArray(track.artist)
+    ? track.artist.join(" / ")
+    : String(track.artist ?? "");
+  return {
+    ok: true,
+    value: {
+      trackId: track.id,
+      trackName: track.name,
+      artistName: trackArtist,
+      playUrl: data.playUrl,
+      isCover: !!data.isCover,
+    },
+  };
 }
 
 export type LyricResult = { title: string; artist: string; lyric: string; tlyric: string };
 
 export async function gdLyric(title: string, artist?: string): Promise<MusicResult<LyricResult>> {
-  const response = await jsonFetch("/api/music/lyric", { q: title, ...(artist ? { artist: artist.split("/")[0].trim() } : {}) });
+  const response = await jsonFetch("/api/music/lyric", {
+    q: title,
+    ...(artist ? { artist: artist.split("/")[0].trim() } : {}),
+  });
   if (!response.ok) return response;
   const data = response.data;
   if (typeof data.lyric !== "string" || !data.lyric) return fail("not_found");
@@ -93,6 +128,10 @@ export function buildLyricLines(lyric: string, tlyric: string): LyricLine[] {
   const original = lyric.split("\n").filter((line) => line.trim().length > 0);
   const translated = tlyric ? tlyric.split("\n").filter((line) => line.trim().length > 0) : [];
   if (!translated.length) return original.map((text) => ({ text, translation: "" }));
-  if (translated.length === original.length) return original.map((text, index) => ({ text, translation: translated[index] }));
-  return [...original.map((text) => ({ text, translation: "" })), { text: "", translation: translated.join("\n") }];
+  if (translated.length === original.length)
+    return original.map((text, index) => ({ text, translation: translated[index] }));
+  return [
+    ...original.map((text) => ({ text, translation: "" })),
+    { text: "", translation: translated.join("\n") },
+  ];
 }

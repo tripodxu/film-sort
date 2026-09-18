@@ -45,9 +45,6 @@ Deno.serve(async (req) => {
       },
     });
   } catch (e) {
-    return Response.json(
-      { error: "upstream_unavailable", detail: String(e) },
-      { status: 502 },
-    );
+    return Response.json({ error: "upstream_unavailable", detail: String(e) }, { status: 502 });
   }
 });

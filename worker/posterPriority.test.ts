@@ -19,7 +19,10 @@ const GD_API = "music-api.gdstudio.xyz";
 const requestedHosts: string[] = [];
 
 function json(body: unknown, status = 200): Response {
-  return new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { "content-type": "application/json" },
+  });
 }
 
 /** searchCover 依赖 `window.__DATA__` 这段 HTML 结构（见 media.ts 的解析逻辑）。 */
@@ -45,19 +48,29 @@ function stubUpstream(options: { neteaseCover?: string | null; doubanCover?: str
     if (url.hostname === "search.douban.com") {
       const query = url.searchParams.get("search_text") ?? "";
       const cover = options.doubanCover;
-      return new Response(cover ? doubanSearchHtml(query, cover) : "<html></html>", { status: 200 });
+      return new Response(cover ? doubanSearchHtml(query, cover) : "<html></html>", {
+        status: 200,
+      });
     }
     // gd-proxy 兜底：成功但空结果，避免 gdApiWithRetry 的重试等待。
     if (url.hostname === GD_API) return json([], 200);
     // 豆瓣榜单页索引（ensureMusicIndex 触发）：200 + 空页即可。
     // 返回 502 会让 upstream() 走 1s/2s 退避重试，白白拖长测试。
-    if (url.hostname === "music.douban.com") return new Response("<html></html>", { status: 200, headers: { "content-type": "text/html" } });
+    if (url.hostname === "music.douban.com")
+      return new Response("<html></html>", {
+        status: 200,
+        headers: { "content-type": "text/html" },
+      });
     return json({}, 502);
   });
 }
 
-beforeEach(() => { requestedHosts.length = 0; });
-afterEach(() => { vi.unstubAllGlobals(); });
+beforeEach(() => {
+  requestedHosts.length = 0;
+});
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
 
 describe("音乐的取图优先级", () => {
   it("网易云命中时：它是第一张候选，豆瓣只作为后续兜底", async () => {
@@ -81,7 +94,10 @@ describe("音乐的取图优先级", () => {
   });
 
   it("http 的网易云封面会被升级为 https（否则页面是混合内容）", async () => {
-    stubUpstream({ neteaseCover: "http://p1.music.126.net/xyz==/1.jpg", doubanCover: DOUBAN_COVER });
+    stubUpstream({
+      neteaseCover: "http://p1.music.126.net/xyz==/1.jpg",
+      doubanCover: DOUBAN_COVER,
+    });
     const urls = await resolvePosters("后来", "后来", undefined, "music");
     expect(urls[0]).toBe("https://p1.music.126.net/xyz==/1.jpg");
   });
