@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { gdLyric, gdPlay } from "./gdMusic";
+import { buildLyricLines, gdLyric, gdPlay } from "./gdMusic";
 
 /**
  * 失败原因必须能从 Worker 传到界面。
@@ -90,5 +90,51 @@ describe("gdLyric 的失败分类", () => {
     if (!result.ok) return;
     expect(result.value.lyric).toBe("忘了有多久");
     expect(result.value.tlyric).toBe("");
+  });
+
+  it("带回译文时界面能拿到（不再被丢掉）", async () => {
+    stub(200, { title: "Yellow", artist: "Coldplay", lyric: "Look at the stars", tlyric: "抬头看星星" });
+    const result = await gdLyric("Yellow", "Coldplay");
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.tlyric).toBe("抬头看星星");
+  });
+});
+
+describe("buildLyricLines：原文与译文的行对齐", () => {
+  it("没有译文时只出原文行", () => {
+    expect(buildLyricLines("第一句\n第二句", "")).toEqual([
+      { text: "第一句", translation: "" },
+      { text: "第二句", translation: "" },
+    ]);
+  });
+
+  it("行数一致时逐行配对", () => {
+    expect(buildLyricLines("Look at the stars\nAnd everything you do", "抬头看星星\n你做的每一件事")).toEqual([
+      { text: "Look at the stars", translation: "抬头看星星" },
+      { text: "And everything you do", translation: "你做的每一件事" },
+    ]);
+  });
+
+  it("行数不一致时译文单独成段，绝不逐行错位配对", () => {
+    // stripLrc 会对原文/译文各自去空行与去重，行数真的可能不同
+    const lines = buildLyricLines("第一句\n第二句\n第三句", "First\nSecond");
+    expect(lines).toEqual([
+      { text: "第一句", translation: "" },
+      { text: "第二句", translation: "" },
+      { text: "第三句", translation: "" },
+      { text: "", translation: "First\nSecond" },
+    ]);
+    // 每一条要么是纯原文、要么是纯译文，不存在"甲句配乙句译文"
+    expect(lines.filter((line) => line.text && line.translation)).toHaveLength(0);
+  });
+
+  it("忽略空行；整段译文独占一条（text 为空）", () => {
+    const lines = buildLyricLines("A\n\nB", "甲");
+    expect(lines).toEqual([
+      { text: "A", translation: "" },
+      { text: "B", translation: "" },
+      { text: "", translation: "甲" },
+    ]);
   });
 });

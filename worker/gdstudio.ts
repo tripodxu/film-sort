@@ -96,18 +96,52 @@ async function gdApi(params: Record<string, string>, env?: GdProxyEnv): Promise<
   return null;
 }
 
+/** 搜索缓存键。窥视与写入必须共用，否则限流判断会与实际缓存对不上。 */
+const searchKey = (name: string, count: number) => `${name}|${count}`;
+
+export interface GdSearchOutcome { tracks: GdTrack[]; blocked: boolean }
+
+/** 同步窥视搜索缓存（不触发上游）。 */
+function cachedSearch(name: string, count: number): GdSearchOutcome | undefined {
+  return searchCache.get(searchKey(name, count)) as GdSearchOutcome | undefined;
+}
+
 /** 搜索曲目。count≤30；失败返回 []（预算耗尽时 blocked=true，网络失败 blocked=false）。 */
-export async function gdSearch(name: string, count = 10, env?: GdProxyEnv): Promise<{ tracks: GdTrack[]; blocked: boolean }> {
-  const key = `${name}|${count}`;
-  const hit = searchCache.get(key);
-  if (hit) return hit as { tracks: GdTrack[]; blocked: boolean };
+export async function gdSearch(name: string, count = 10, env?: GdProxyEnv): Promise<GdSearchOutcome> {
+  const key = searchKey(name, count);
+  const hit = cachedSearch(name, count);
+  if (hit) return hit;
   const { result: raw, blocked } = await gdApiWithRetry({ types: "search", source: SOURCE, name, count: String(count), pages: "1" }, env);
   const tracks = Array.isArray(raw) ? (raw as GdTrack[]).filter((t) => t && typeof t.id === "string" && typeof t.name === "string") : [];
-  const outcome = { tracks, blocked: blocked && tracks.length === 0 };
+  const outcome: GdSearchOutcome = { tracks, blocked: blocked && tracks.length === 0 };
   // 只缓存**结构性正确**的响应。上游偶尔会回 200 + 非数组（错误 JSON / 拦截页），
   // 把它当"没有结果"缓存 10 分钟，会让这首曲子在这 10 分钟里一直"搜不到"。
   if (Array.isArray(raw)) searchCache.set(key, outcome);
   return outcome;
+}
+
+/**
+ * 这次试听是否真的会打上游——用来决定要不要计入限流配额。
+ *
+ * 命中缓存时**零上游调用**，不该占配额（同一首歌反复试听很常见）。只有能证明
+ * "完全不需要上游"时才返回 false：拿不准一律返回 true，宁可多记一次账，
+ * 也不放松上游保护。
+ */
+export function playNeedsUpstream(title: string, artist?: string): boolean {
+  const hit = cachedSearch(title, 10);
+  if (!hit) return true;                                    // 搜索未命中 → 必然打上游
+  const first = pickTracks(hit.tracks, title, artist, 3)[0];
+  if (!first) return false;                                 // 命中缓存且无候选 → 直接 404，零上游
+  return !playCache.get(String(first.id));                   // 首候选的播放链没缓存 → 要打上游
+}
+
+/** 同上，歌词：曲目与歌词都命中缓存时零上游。 */
+export function lyricNeedsUpstream(title: string, artist?: string): boolean {
+  const hit = cachedSearch(title, 10);
+  if (!hit) return true;
+  const track = pickTrack(hit.tracks, title, artist);
+  if (!track) return false;
+  return !lyricCache.get(String(track.lyric_id || track.id));
 }
 
 /**

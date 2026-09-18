@@ -192,9 +192,15 @@ async function generateQR(url: string) {
 | `src/lib/gdMusic.ts` | 保留失败原因（`rate_limited` / `upstream_limited` / `not_found` / `unavailable`）+ `retry-after`，不再一律折叠成 `null` |
 | `ArtworkDetail` | 按原因给提示："操作太频繁了，请 10 分钟后再试" / "音乐服务暂时限流" / "未找到可试听的版本" |
 
-**遗留（产品取舍，本次未改）**：试听与歌词共享 `music` 桶 12 次/10 分钟，而一次试听要 1 次搜索 + 最多 3 次播放链查询。刷一份榜单、点 6 首（各看歌词）就会撞上额度。上游另有 isolate 级 40 次/5 分钟的硬预算，所以**不建议直接调大 per-IP 上限**；要改善的话优先考虑给试听/歌词分桶，或命中缓存时不记账。
+**第二轮（配额与译文）**：
 
-**回归护栏**：`worker/musicMatch.test.ts`（7 项）、`src/lib/gdMusic.test.ts`（8 项）。
+| 位置 | 改动 |
+|---|---|
+| `allowUpstreamRequest` | 新增 `music_play` / `music_lyric` 两个桶：**试听与歌词各 12 次/10 分钟**，互不吃额度（原先共享一个桶，点 6 首各看歌词就撞上） |
+| `gdstudio.playNeedsUpstream()` / `lyricNeedsUpstream()` | 命中缓存（搜索 + 首候选的播放链/歌词）时**零上游调用 → 不记账**；只有能**证明**完全不需要上游才放行，拿不准一律照记（保守，不放松保护） |
+| `ArtworkDetail` + `styles.css` | **渲染译文**：行数与原文一致时逐行配对（`.music-lyric-line` + `.music-lyric-translation`）；行数不同（`stripLrc` 对两段各自去空行/去重）时译文单独成段，绝不逐行错位 |
+
+**回归护栏**：`worker/musicMatch.test.ts`（12 项）、`src/lib/gdMusic.test.ts`（13 项）。
 
 ---
 

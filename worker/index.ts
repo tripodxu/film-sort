@@ -8,7 +8,7 @@ import { importRoute } from "./import";
 import { neteaseQrIssue, neteaseQrPoll, hasProviderCookie, deleteProviderCookie, saveProviderCookie, loadProviderCookie, neteaseUserId, neteaseAccountInfo, neteaseUserPlaylists } from "./netease";
 import { doubanQrIssue, doubanQrPoll, extractDoubanLoginCookie, doubanUserId, doubanAccountInfo } from "./douban";
 import { otherSearch, otherDetail } from "./other";
-import { gdSearch, gdPlayUrl, gdLyric, pickTracks, pickTrack, stripLrc, isCoverTrack } from "./gdstudio";
+import { gdSearch, gdPlayUrl, gdLyric, pickTracks, pickTrack, stripLrc, isCoverTrack, lyricNeedsUpstream, playNeedsUpstream } from "./gdstudio";
 import { recordAudit } from "./audit";
 
 export interface Env {
@@ -94,7 +94,7 @@ const MAX_POSTER_BATCH_ITEMS = 300;
 const MAX_POSTER_BATCH_BYTES = 128 * 1024;
 const upstreamWindows = new Map<string, { startedAt: number; count: number }>();
 
-async function allowUpstreamRequest(request: Request, bucket: "ai" | "music" | "auth" | "share" | "import" | "netease" | "douban" | "posters" | "other" | "events" | "challenge", limit: number): Promise<boolean> {
+async function allowUpstreamRequest(request: Request, bucket: "ai" | "music" | "music_play" | "music_lyric" | "auth" | "share" | "import" | "netease" | "douban" | "posters" | "other" | "events" | "challenge", limit: number): Promise<boolean> {
   const client = request.headers.get("cf-connecting-ip") ?? "anonymous";
   const key = `${bucket}:${client}`;
   const now = Date.now();
@@ -1823,9 +1823,12 @@ async function route(request: Request, env: Env): Promise<Response> {
     const query = url.searchParams.get("q")?.trim();
     const artist = url.searchParams.get("artist")?.trim() ?? "";
     if (!query || query.length > 80 || artist.length > 80) return json({ error: "invalid_query" }, 400);
-    // 限流窗口是 10 分钟（allowUpstreamRequest 的窗口），retry-after 必须一致，
-    // 否则客户端按 60 秒重试仍然会被拦，只会得到"未找到可试听的版本"这种误导提示。
-    if (!await allowUpstreamRequest(request, "music", 12)) return json({ error: "rate_limited" }, 429, { "retry-after": "600" });
+    // 试听与歌词**各自独立**的配额（各 12 次/10 分钟）：一个入口不再吃掉另一个的额度。
+    // 命中缓存（同一首歌重听）时零上游调用，就不记账；只有真会打上游的请求才占额度。
+    // 限流窗口是 10 分钟，retry-after 必须与之一致，否则客户端按 60 秒重试仍会被拦。
+    if (playNeedsUpstream(query, artist) && !await allowUpstreamRequest(request, "music_play", 12)) {
+      return json({ error: "rate_limited" }, 429, { "retry-after": "600" });
+    }
     try {
       const { tracks, blocked } = await gdSearch(query, 10, env);
       if (blocked) return json({ error: "music_upstream_limited" }, 429, { "retry-after": "300", msg: "音乐服务暂时限流，稍后再试" });
@@ -1845,7 +1848,9 @@ async function route(request: Request, env: Env): Promise<Response> {
     const query = url.searchParams.get("q")?.trim();
     const artist = url.searchParams.get("artist")?.trim() ?? "";
     if (!query || query.length > 80 || artist.length > 80) return json({ error: "invalid_query" }, 400);
-    if (!await allowUpstreamRequest(request, "music", 12)) return json({ error: "rate_limited" }, 429, { "retry-after": "600" });
+    if (lyricNeedsUpstream(query, artist) && !await allowUpstreamRequest(request, "music_lyric", 12)) {
+      return json({ error: "rate_limited" }, 429, { "retry-after": "600" });
+    }
     try {
       const { tracks, blocked } = await gdSearch(query, 10, env);
       if (blocked) return json({ error: "music_upstream_limited" }, 429, { "retry-after": "300", msg: "歌词服务暂时限流，稍后再试" });

@@ -74,3 +74,25 @@ export async function gdLyric(title: string, artist?: string): Promise<MusicResu
     },
   };
 }
+
+export interface LyricLine {
+  /** 原文行；为空表示这一条只有译文（见下面的"分块"退路）。 */
+  text: string;
+  /** 该行的译文；没有译文时为空串。 */
+  translation: string;
+}
+
+/**
+ * 把原文与译文整理成可逐行渲染的结构。
+ *
+ * Worker 端对原文与译文各自做了 `stripLrc`（去时间轴、去空行、去连续重复行），
+ * 两段的行数因此**可能不同**：行数一致才逐行配对；不一致时宁可让译文单独成段
+ * （`text` 为空的那一条），也不要把译文错位到别的句子下面。
+ */
+export function buildLyricLines(lyric: string, tlyric: string): LyricLine[] {
+  const original = lyric.split("\n").filter((line) => line.trim().length > 0);
+  const translated = tlyric ? tlyric.split("\n").filter((line) => line.trim().length > 0) : [];
+  if (!translated.length) return original.map((text) => ({ text, translation: "" }));
+  if (translated.length === original.length) return original.map((text, index) => ({ text, translation: translated[index] }));
+  return [...original.map((text) => ({ text, translation: "" })), { text: "", translation: translated.join("\n") }];
+}
