@@ -1,6 +1,7 @@
 import type { Env } from "./index";
 import { getUserFromToken } from "./account";
-import { upstream } from "./media";
+import { allowedImage, upstream } from "./media";
+import { posterKeyFor, saveResolvedPosters } from "./posterStore";
 import { loadProviderCookie, neteaseUserId, neteaseUserPlaylists, weapiPost } from "./netease";
 import { classifyDoubanList, fetchDoubanList, type PagedImport } from "./doubanlist";
 
@@ -9,11 +10,48 @@ const json = (data: unknown, status = 200) => new Response(JSON.stringify(data),
 export interface ImportedWork {
   id: string;
   title: string;
+  subtitle?: string;
   creator?: string;
   year?: number;
   rating?: string;
   poster_url?: string;
   type?: "movie" | "book" | "music";
+}
+
+/** 豆瓣「没有封面」时列表里用的是站内静态占位图；把它写进侧表会让所有用户都看到假封面。 */
+const PLACEHOLDER_PATH = /\/f\/shire\//;
+
+/**
+ * 导入时把封面顺带写进 `poster_urls` 侧表（电影 / 书籍 / 音乐三条导入路径共用）。
+ *
+ * 导入是唯一「封面地址免费到手」的时刻：地址已经随列表一起返回，不需要再回源。
+ * 顺手落库后，同一件作品之后出现在榜单、广场、分享或单条查询里都会先命中侧表
+ * （`loadPosterUrls` 短路），于是零回源、封面稳定，而且能跨用户共享。
+ *
+ * 键必须与客户端之后发来的批量请求**逐字一致**：`type|title|subtitle ?? title|year`。
+ * 导入载荷目前不带 subtitle，客户端 `applyImportedWorks` 也会保留它，两侧同为
+ * `subtitle ?? title`；将来导入若开始提供 subtitle，两边也不会漂移。
+ *
+ * 落库口径交给 `allowedImage()`（与 `/api/image` 完全同一套主机白名单）：
+ * 既顺手把 `http://` 统一升级为 `https://`，也保证写进去的地址前端能直连、
+ * 代理也取得到。写入由 `saveResolvedPosters` 去重并吞掉异常（迁移未落地的环境不会整体失效）。
+ */
+export async function seedImportedPosterUrls(
+  env: Env,
+  works: readonly ImportedWork[],
+  fallbackType?: "movie" | "book" | "music",
+): Promise<void> {
+  if (!env.DB) return;
+  const records: Array<{ key: string; urls: string[] }> = [];
+  for (const work of works) {
+    const url = allowedImage(work.poster_url ?? "");
+    if (!url || PLACEHOLDER_PATH.test(url.pathname)) continue;
+    const key = posterKeyFor({ title: work.title, english: work.subtitle ?? work.title, type: work.type ?? fallbackType, year: work.year });
+    if (key) records.push({ key, urls: [url.href] });
+  }
+  // 覆盖式写入：导入拿到的就是这件作品自己的封面，比搜索得来的候选更可信；
+  // 与「音乐优先网易云 CDN 直出」的取图优先级一致。
+  if (records.length) await saveResolvedPosters(env.DB, records);
 }
 
 // ===== 豆瓣豆列抓取 =====
@@ -265,6 +303,7 @@ export async function importRoute(request: Request, env: Env): Promise<Response>
     try {
       const page = await fetchDoulist(target, await loadProviderCookie(env, user.id, "douban"), offset, limit);
       if (!page.works.length) return json({ error: "doulist_empty", msg: "该豆列为空或抓取被拦截，请稍后重试" }, 502);
+      await seedImportedPosterUrls(env, page.works);
       return json({ works: page.works, total: page.works.length, listTotal: page.total, hasMore: page.hasMore, nextOffset: page.nextOffset });
     } catch (error) {
       console.error("doulist import failed:", error instanceof Error ? error.message : error);
@@ -287,6 +326,8 @@ export async function importRoute(request: Request, env: Env): Promise<Response>
       if (!page.works.length) {
         return json({ error: "list_empty", msg: "该清单为空或抓取被拦截，请稍后重试" }, 502);
       }
+      // 清单里的条目可能不带 type（如类型未识别的 subject_collection），用清单本身的媒介兜底。
+      await seedImportedPosterUrls(env, page.works, classified.media);
       return json({ works: page.works, total: page.works.length, listTotal: page.total, hasMore: page.hasMore, nextOffset: page.nextOffset, kind: classified.kind });
     } catch (error) {
       console.error("douban-list import failed:", error instanceof Error ? error.message : error);
@@ -304,6 +345,7 @@ export async function importRoute(request: Request, env: Env): Promise<Response>
       const cookie = await loadProviderCookie(env, user.id, "netease");
       const page = await fetchNeteasePlaylist(playlistId, cookie, offset, limit);
       if (!page.works.length) return json({ error: "playlist_empty", msg: "该歌单为空，请确认链接后重试" }, 502);
+      await seedImportedPosterUrls(env, page.works);
       return json({ works: page.works, total: page.works.length, listTotal: page.total, hasMore: page.hasMore, nextOffset: page.nextOffset });
     } catch (error) {
       console.error("netease import failed:", error instanceof Error ? error.message : error);

@@ -416,6 +416,9 @@ curl.exe -s -o NUL -H "User-Agent: Mozilla/5.0 … Chrome/131" -w "%{http_code} 
 | `worker/posterCache.test.ts`（新） | `throttled` / `absent` TTL 分支、`knownPosterHit` 空数组语义、批量键对齐 |
 | `worker/media.ts` | `ThrottledError` + `PosterOutcome` + `posterCacheTtlMs`；缓存条目带 outcome（旧裸数组格式仍可读）；`known` 短路；`retry` 绕过被限流的负缓存 |
 | `worker/posterStore.ts` | `attachStoredPosterUrls` → `resolveStoredPosterUrls`（旁路数组）；导出 `loadPosterUrls` |
+| `worker/import.ts` | **导入即种子化**：三条导入路径（豆瓣豆列 / 豆瓣清单 / 网易云歌单）把封面按同一键口径写进 `poster_urls`，之后的榜单/广场/分享零回源；音乐取图优先级改为「网易云 CDN → 豆瓣」 |
+| `worker/importSeed.test.ts`（新） | 种子化的键一致性（对照 `posterKeyFor`）、http→https、占位图与非白名单主机丢弃、三条路径接线、响应体形状不变 |
+| `worker/posterPriority.test.ts`（新） | 音乐取图优先级：网易云命中即第一张候选且不再请求维基、网易云取不到时豆瓣顶上、https 归一、候选去重 |
 | `worker/plaza.ts` | 详情接口改为旁路；`POST`/`PUT` 走编码器；两处 `raw.length` → 字节 |
 | `worker/account.ts` | `PUT profile` / `POST collections` 走编码器；`GET profile` 读取端自愈 |
 | `worker/index.ts` | `POST /api/share` 走编码器；`GET /api/share/:code` 读取端自愈；海报批量/单条先查库 + 失败入 `poster_errors(source='batch'/'single')` |

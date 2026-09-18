@@ -172,7 +172,9 @@ export function useSorting(deps: SortingDeps) {
 
   function applyImportedWorks(works: Array<Artwork & { type?: string; poster_url?: string }>, silent = false) {
     const d = depsRef.current;
-    const normalized = works.map((w) => ({ id: w.id || `imp-${Math.random().toString(36).slice(2, 10)}`, title: w.title, creator: w.creator, year: w.year, posterUrls: w.posterUrls ?? (w.poster_url ? [w.poster_url] : undefined) })) as Array<Artwork & { type?: string }>;
+    // 保留 subtitle：海报缓存键两侧都写作 `subtitle ?? title`，丢掉它会让
+    // 客户端请求的键与服务端（导入时种子化 poster_urls）写下的键对不上。
+    const normalized = works.map((w) => ({ id: w.id || `imp-${Math.random().toString(36).slice(2, 10)}`, title: w.title, creator: w.creator, year: w.year, ...(w.subtitle ? { subtitle: w.subtitle } : {}), posterUrls: w.posterUrls ?? (w.poster_url ? [w.poster_url] : undefined) })) as Array<Artwork & { type?: string }>;
     const matching = normalized.filter((w) => !w.type || w.type === kind);
     const others = normalized.length - matching.length;
     // **批内去重**：原先的 seen 只由「已有清单」构建，从不把本批已接受的作品加进去，

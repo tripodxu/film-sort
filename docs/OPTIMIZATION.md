@@ -114,6 +114,7 @@ async function generateQR(url: string) {
 | 并发闸门 | 批量 fetch 在途 ≤ 8 | ✅ |
 | 持久化 | `poster_urls` 侧表（`migrations/0022`），读取时走**旁路数组** | ✅ |
 | 先查库 | 批量/单条路由先算键 → `loadPosterUrls` → 命中即短路，不再回源 | ✅ |
+| 导入即种子化 | 豆瓣豆列/清单（电影·书籍）与网易云歌单（音乐）导入时，把封面**顺带写进 `poster_urls` 侧表**：键与客户端之后发来的批量请求逐字一致，之后榜单/广场/分享/单条查询一律命中侧表 → 零回源、封面稳定、跨用户共享 | ✅ |
 | 取图优先级 | **音乐：网易云 CDN 直出优先，豆瓣垫后**。两档并行取，返回数组顺序即前端尝试顺序；网易云封面 `p*.music.126.net` 浏览器直连、不占豆瓣抓取配额，豆瓣封面必须走 `/api/image` 补 Referer 且并发下会被 418 打回 | ✅ |
 | 自带封面优先 | `Poster` 把作品自带的 `posterUrls`（导入网易云时拿到的封面）排在解析候选之前，加载失败再依次降级 | ✅ |
 | 刷新即重试 | 每次页面加载首次批量带 `retry: true`，服务端据此绕过被限流的负缓存 | ✅ |
@@ -121,6 +122,11 @@ async function generateQR(url: string) {
 
 > 取图优先级只调整了**音乐**：电影/书籍仍保持"豆瓣准确度优先"，因为网易云没有影视/图书封面，
 > 而 IMDb/Amazon（可直连）的封面常与豆瓣不是同一版设计。回归护栏见 `worker/posterPriority.test.ts`。
+>
+> 导入种子化三条路径共用 `seedImportedPosterUrls()`（`worker/import.ts`）：落库前统一过
+> `allowedImage()`（与 `/api/image` 同一套主机白名单，顺带 http→https），并跳过豆瓣
+> `/f/shire/` 静态占位图——把"没有封面"的占位图写进侧表会让所有用户都看到假封面。
+> 回归护栏见 `worker/importSeed.test.ts`。
 
 **已修复（原线上活跃风险）**：`attachStoredPosterUrls()` 曾把海报地址**注回 `post.items`**，而 `plaza_posts` / `user_collections` / `share` 等写入路径没有剥离护栏 —— 作者编辑一次帖子即会把海报地址写回库，重演 512KB 故障（`51dfc8d` 修的就是这条链）。
 
