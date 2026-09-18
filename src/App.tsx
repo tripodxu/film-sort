@@ -2396,15 +2396,21 @@ export default function App() {
                     <li>
                       <strong>{t("音乐", "Music")}</strong>：
                       {t(
-                        "search.douban.com 搜索 → Top250 索引（无 suggest API）",
-                        "search.douban.com → Top250 index (no suggest API)",
+                        "网易云 CDN 封面直出优先 → search.douban.com 搜索 → Top250 索引（无 suggest API）",
+                        "NetEase CDN cover first → search.douban.com → Top250 index (no suggest API)",
                       )}
                     </li>
                   </ul>
                   <p>
                     {t(
-                      "每个来源返回的 URL 会生成多个 CDN 镜像变体（img1-img9.doubanio.com），前端按顺序尝试加载。",
-                      "Each source URL generates multiple CDN mirror variants (img1-img9.doubanio.com), tried in sequence by the frontend.",
+                      "以上都没命中时，所有类别统一按「维基百科 → 网易云 / gd-proxy」逐级兜底。",
+                      "When none of the above hit, every medium falls back through Wikipedia → NetEase / gd-proxy.",
+                    )}
+                  </p>
+                  <p>
+                    {t(
+                      "豆瓣返回的 URL 会展开成多个 CDN 镜像变体（img1/2/3/9.doubanio.com）并做 https 升级，前端按顺序尝试加载。",
+                      "A Douban URL expands into several CDN mirror variants (img1/2/3/9.doubanio.com) with https upgrade; the frontend tries them in order.",
                     )}
                   </p>
                   <p>
@@ -2417,8 +2423,8 @@ export default function App() {
                   <p>
                     <strong>{t("防限流机制", "Rate Limit Protection")}</strong>：
                     {t(
-                      "4 个 Edge UA 轮换；同域名请求间隔 800ms；403/418 自动重试 2 次（指数退避）；限流后递增冷却期 5s→10s→15s。",
-                      "4 Edge UAs rotated; 800ms min delay per domain; auto-retry 2x on 403/418 with exponential backoff; escalating cooldown 5s→10s→15s after rate limit.",
+                      "4 个 Edge UA 轮换；同域名请求按域名串行并保持最小间隔（默认 800ms，search.douban.com 放宽到 200ms）；图片请求不参与节流；403/418 重试 2 次并递增冷却 5s→10s→15s。",
+                      "4 Edge UAs rotated; per-domain serialized requests with a minimum gap (800ms default, 200ms for search.douban.com); image requests skip throttling; 2 retries on 403/418 with escalating cooldown 5s→10s→15s.",
                     )}
                   </p>
                 </div>
@@ -2443,8 +2449,8 @@ export default function App() {
                   <p>
                     <strong>{t("分享链接", "Share links")}</strong>：
                     {t(
-                      "使用 fflate 压缩 + Base64URL 编码到 URL；配置 D1 后支持 8–12 位短码。",
-                      "Compressed with fflate + Base64URL encoded in URL; 8-char short codes supported with D1.",
+                      "统一走服务端 12 位短码（需要 D1）。旧版把画像压缩后内联在 URL 里的链接仍可打开，由前端 fflate 解压读取。",
+                      "Served as a 12-character server-side code (requires D1). Older links that inline a compressed profile in the URL still open, decoded client-side with fflate.",
                     )}
                   </p>
                 </div>
