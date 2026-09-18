@@ -1,14 +1,63 @@
-import { doubanTop250, doubanSuggest, doubanBookTop250, doubanBookSuggest, doubanMusicTop250, doubanSearch, doubanBookDetail, doubanMovieDetail, doubanMusicDetail, fetchContentIntro, proxyImage, resolvePosters, resolvePostersBatch, posterMediaKey, type PosterBatchRequest } from "./media";
+import {
+  doubanTop250,
+  doubanSuggest,
+  doubanBookTop250,
+  doubanBookSuggest,
+  doubanMusicTop250,
+  doubanSearch,
+  doubanBookDetail,
+  doubanMovieDetail,
+  doubanMusicDetail,
+  fetchContentIntro,
+  proxyImage,
+  resolvePosters,
+  resolvePostersBatch,
+  posterMediaKey,
+  type PosterBatchRequest,
+} from "./media";
 import { loadPosterUrls, normalizePosterItem, saveResolvedPosters } from "./posterStore";
+import { RATE_WINDOW_MS, consumeIsolateWindow, type RateWindow } from "./rateWindow";
 import { MAX_PAYLOAD_BYTES, encodeStoredProfile, healStoredProfile } from "../shared/storedItem";
-import { accountRoute, hashPasswordStrong, needsPasswordUpgrade, timingSafeEqual, verifyPassword } from "./account";
+import {
+  accountRoute,
+  hashPasswordStrong,
+  needsPasswordUpgrade,
+  timingSafeEqual,
+  verifyPassword,
+} from "./account";
 import { getUserFromToken } from "./account";
 import { adminPlazaRoute, plazaRoute } from "./plaza";
 import { importRoute } from "./import";
-import { neteaseQrIssue, neteaseQrPoll, hasProviderCookie, deleteProviderCookie, saveProviderCookie, loadProviderCookie, neteaseUserId, neteaseAccountInfo, neteaseUserPlaylists } from "./netease";
-import { doubanQrIssue, doubanQrPoll, extractDoubanLoginCookie, doubanUserId, doubanAccountInfo } from "./douban";
+import {
+  neteaseQrIssue,
+  neteaseQrPoll,
+  hasProviderCookie,
+  deleteProviderCookie,
+  saveProviderCookie,
+  loadProviderCookie,
+  neteaseUserId,
+  neteaseAccountInfo,
+  neteaseUserPlaylists,
+} from "./netease";
+import {
+  doubanQrIssue,
+  doubanQrPoll,
+  extractDoubanLoginCookie,
+  doubanUserId,
+  doubanAccountInfo,
+} from "./douban";
 import { otherSearch, otherDetail } from "./other";
-import { gdSearch, gdPlayUrl, gdLyric, pickTracks, pickTrack, stripLrc, isCoverTrack, lyricNeedsUpstream, playNeedsUpstream } from "./gdstudio";
+import {
+  gdSearch,
+  gdPlayUrl,
+  gdLyric,
+  pickTracks,
+  pickTrack,
+  stripLrc,
+  isCoverTrack,
+  lyricNeedsUpstream,
+  playNeedsUpstream,
+} from "./gdstudio";
 import { recordAudit } from "./audit";
 
 export interface Env {
@@ -92,37 +141,61 @@ const MAX_CHALLENGE_ITEMS = 300;
 // 批量海报：一次可提交整份榜单（300 首），独立于 48KB 的通用请求上限。
 const MAX_POSTER_BATCH_ITEMS = 300;
 const MAX_POSTER_BATCH_BYTES = 128 * 1024;
-const upstreamWindows = new Map<string, { startedAt: number; count: number }>();
+const upstreamWindows = new Map<string, RateWindow>();
 
-async function allowUpstreamRequest(request: Request, bucket: "ai" | "music" | "music_play" | "music_lyric" | "auth" | "share" | "import" | "netease" | "douban" | "posters" | "other" | "events" | "challenge", limit: number): Promise<boolean> {
+async function allowUpstreamRequest(
+  request: Request,
+  bucket:
+    | "ai"
+    | "music"
+    | "music_play"
+    | "music_lyric"
+    | "auth"
+    | "share"
+    | "import"
+    | "netease"
+    | "douban"
+    | "posters"
+    | "other"
+    | "events"
+    | "challenge",
+  limit: number,
+): Promise<boolean> {
   const client = request.headers.get("cf-connecting-ip") ?? "anonymous";
   const key = `${bucket}:${client}`;
   const now = Date.now();
-  const previous = upstreamWindows.get(key);
-  if (!previous || now - previous.startedAt > 10 * 60 * 1000) {
-    upstreamWindows.set(key, { startedAt: now, count: 1 });
-  } else if (previous.count >= limit) {
-    return false;
-  } else {
-    previous.count += 1;
-  }
+  // isolate 级窗口（带上界与惰性清扫，见 rateWindow.ts）。
+  if (!consumeIsolateWindow(upstreamWindows, key, limit, now)) return false;
 
   // The isolate map is a fast fallback. Edge Cache makes the budget visible
   // across isolates in production without requiring a Durable Object binding.
   try {
     const cache = (caches as unknown as { default: Cache }).default;
-    const cacheKey = new Request(`https://rate-limit.art-rank.internal/${encodeURIComponent(bucket)}/${encodeURIComponent(client)}`);
+    const cacheKey = new Request(
+      `https://rate-limit.art-rank.internal/${encodeURIComponent(bucket)}/${encodeURIComponent(client)}`,
+    );
     const hit = await cache.match(cacheKey);
     let next = { startedAt: now, count: 1 };
     if (hit) {
-      const stored = await hit.json() as { startedAt?: number; count?: number };
-      if (typeof stored.startedAt === "number" && typeof stored.count === "number" && now - stored.startedAt <= 10 * 60 * 1000) {
+      const stored = (await hit.json()) as { startedAt?: number; count?: number };
+      if (
+        typeof stored.startedAt === "number" &&
+        typeof stored.count === "number" &&
+        now - stored.startedAt <= RATE_WINDOW_MS
+      ) {
         if (stored.count >= limit) return false;
         next = { startedAt: stored.startedAt, count: stored.count + 1 };
       }
     }
-    await cache.put(cacheKey, new Response(JSON.stringify(next), { headers: { "cache-control": "max-age=600", "content-type": "application/json" } }));
-  } catch { /* Cache is best-effort; the in-memory window still protects the isolate. */ }
+    await cache.put(
+      cacheKey,
+      new Response(JSON.stringify(next), {
+        headers: { "cache-control": "max-age=600", "content-type": "application/json" },
+      }),
+    );
+  } catch {
+    /* Cache is best-effort; the in-memory window still protects the isolate. */
+  }
   return true;
 }
 const JSON_HEADERS = {
@@ -131,8 +204,8 @@ const JSON_HEADERS = {
 };
 
 const SECURITY_HEADERS: Record<string, string> = {
-    "content-security-policy":
-      "default-src 'self'; img-src 'self' data: https://*.doubanio.com https://m.media-amazon.com https://ia.media-imdb.com https://image.tmdb.org https://*.music.126.net https://*.githubusercontent.com https://upload.wikimedia.org https://thumb.wikimedia.org https://bkimg.cdn.bcebos.com; style-src 'self' 'unsafe-inline'; script-src 'self' https://cdn.jsdelivr.net https://static.cloudflareinsights.com 'sha256-d+1XxRQUWY8LGwXhdeFvJFpB3nkb5L9UFxsCt9kf/SU='; connect-src 'self' https://cloudflareinsights.com; font-src 'self' data:; media-src 'self' https://*.music.126.net; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'; upgrade-insecure-requests",
+  "content-security-policy":
+    "default-src 'self'; img-src 'self' data: https://*.doubanio.com https://m.media-amazon.com https://ia.media-imdb.com https://image.tmdb.org https://*.music.126.net https://*.githubusercontent.com https://upload.wikimedia.org https://thumb.wikimedia.org https://bkimg.cdn.bcebos.com; style-src 'self' 'unsafe-inline'; script-src 'self' https://cdn.jsdelivr.net https://static.cloudflareinsights.com 'sha256-d+1XxRQUWY8LGwXhdeFvJFpB3nkb5L9UFxsCt9kf/SU='; connect-src 'self' https://cloudflareinsights.com; font-src 'self' data:; media-src 'self' https://*.music.126.net; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'; upgrade-insecure-requests",
   "cross-origin-opener-policy": "same-origin",
   "referrer-policy": "strict-origin-when-cross-origin",
   "x-content-type-options": "nosniff",
@@ -741,22 +814,49 @@ function withSecurityHeaders(response: Response): Response {
 const logQueue: Array<[string, string, number, number, string, string | null, string | null]> = [];
 let logFlushScheduled = false;
 let cachedDB: D1Database | undefined;
-function enqueueLog(db: D1Database | undefined, path: string, method: string, status: number, durationMs: number, source: string, error?: string, ip?: string) {
+function enqueueLog(
+  db: D1Database | undefined,
+  path: string,
+  method: string,
+  status: number,
+  durationMs: number,
+  source: string,
+  error?: string,
+  ip?: string,
+) {
   if (db) cachedDB = db;
   logQueue.push([path, method, status, durationMs, source, error ?? null, ip ?? null]);
   if (logQueue.length >= 50) void flushLogs();
-  else if (!logFlushScheduled) { logFlushScheduled = true; setTimeout(() => void flushLogs(), 5000); }
+  else if (!logFlushScheduled) {
+    logFlushScheduled = true;
+    setTimeout(() => void flushLogs(), 5000);
+  }
 }
 async function flushLogs() {
   logFlushScheduled = false;
   const batch = logQueue.splice(0);
   if (!batch.length || !cachedDB) return;
   try {
-    const stmt = cachedDB.prepare("INSERT INTO api_logs (path, method, status, duration_ms, source, error, ip) VALUES (?, ?, ?, ?, ?, ?, ?)");
-    await cachedDB.batch(batch.map(([p, m, s, d, src, e, ip]) => stmt.bind(p, m, s, d, src, e, ip)));
-  } catch { /* logging should never break requests */ }
+    const stmt = cachedDB.prepare(
+      "INSERT INTO api_logs (path, method, status, duration_ms, source, error, ip) VALUES (?, ?, ?, ?, ?, ?, ?)",
+    );
+    await cachedDB.batch(
+      batch.map(([p, m, s, d, src, e, ip]) => stmt.bind(p, m, s, d, src, e, ip)),
+    );
+  } catch {
+    /* logging should never break requests */
+  }
 }
-async function logApiCall(env: Env | undefined, path: string, method: string, status: number, durationMs: number, source: string, error?: string, ip?: string) {
+async function logApiCall(
+  env: Env | undefined,
+  path: string,
+  method: string,
+  status: number,
+  durationMs: number,
+  source: string,
+  error?: string,
+  ip?: string,
+) {
   if (!env?.DB) return;
   enqueueLog(env.DB, path, method, status, durationMs, source, error, ip);
 }
@@ -764,7 +864,7 @@ async function logApiCall(env: Env | undefined, path: string, method: string, st
 // ===== Admin Auth =====
 function generateToken(): string {
   const bytes = crypto.getRandomValues(new Uint8Array(32));
-  return Array.from(bytes, b => b.toString(16).padStart(2, "0")).join("");
+  return Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
 }
 
 async function adminAuth(request: Request, env: Env): Promise<boolean> {
@@ -773,10 +873,14 @@ async function adminAuth(request: Request, env: Env): Promise<boolean> {
   if (!token || token.length < 32) return false;
   try {
     const session = await env.DB.prepare(
-      "SELECT token FROM admin_sessions WHERE token = ? AND expires_at > datetime('now')"
-    ).bind(token).first();
+      "SELECT token FROM admin_sessions WHERE token = ? AND expires_at > datetime('now')",
+    )
+      .bind(token)
+      .first();
     return !!session;
-  } catch { return false; }
+  } catch {
+    return false;
+  }
 }
 
 function getAdminToken(request: Request): string | null {
@@ -831,8 +935,16 @@ function sanitizePosterBatch(raw: readonly unknown[]): PosterBatchRequest[] {
   for (const entry of raw.slice(0, MAX_POSTER_BATCH_ITEMS)) {
     if (!isObject(entry)) continue;
     // 兼容未带 type 的旧客户端：缺省按 movie 处理，而不是丢弃整条。
-    const type = entry.type === "book" || entry.type === "music" || entry.type === "movie" ? entry.type : "movie";
-    const item = normalizePosterItem({ title: entry.title, english: entry.english, year: entry.year, type });
+    const type =
+      entry.type === "book" || entry.type === "music" || entry.type === "movie"
+        ? entry.type
+        : "movie";
+    const item = normalizePosterItem({
+      title: entry.title,
+      english: entry.english,
+      year: entry.year,
+      type,
+    });
     if (item) items.push(item);
   }
   return items;
@@ -862,7 +974,11 @@ function cleanOptionalInteger(
 ): number | null {
   if (value === undefined || value === null) return null;
   if (!Number.isInteger(value) || Number(value) < minimum || Number(value) > maximum) {
-    throw new HttpError(400, "invalid_field", `${field} must be an integer from ${minimum} to ${maximum}.`);
+    throw new HttpError(
+      400,
+      "invalid_field",
+      `${field} must be an integer from ${minimum} to ${maximum}.`,
+    );
   }
   return Number(value);
 }
@@ -902,7 +1018,11 @@ async function createEvent(request: Request, env: Env): Promise<Response> {
     throw new HttpError(400, "event_not_allowed", "Unknown analytics event.");
   }
   if (!SESSION_ID.test(sessionId)) {
-    throw new HttpError(400, "invalid_session_id", "session_id must be an anonymous random identifier.");
+    throw new HttpError(
+      400,
+      "invalid_session_id",
+      "session_id must be an anonymous random identifier.",
+    );
   }
 
   const payload = validateEventPayload(body.payload);
@@ -967,12 +1087,38 @@ async function getStats(env: Env): Promise<Response> {
 }
 
 /** 逐表行数统计：D1 对复合 SELECT 项数有限制，禁止用大 UNION ALL（经 db.batch 单次往返执行） */
-const STORAGE_CORE_TABLES = ["analytics_events", "api_logs", "user_accounts", "user_sessions", "user_profiles_v2", "challenge_sets", "user_collections"];
-const STORAGE_EXTENDED_TABLES = ["plaza_posts", "plaza_comments", "plaza_likes", "shared_links", "poster_errors", "admin_sessions", "admin_audit", "oauth_exchanges", "user_oauth"];
-async function countTables(db: D1Database, tables: string[]): Promise<Array<{ tbl: string; cnt: number }>> {
+const STORAGE_CORE_TABLES = [
+  "analytics_events",
+  "api_logs",
+  "user_accounts",
+  "user_sessions",
+  "user_profiles_v2",
+  "challenge_sets",
+  "user_collections",
+];
+const STORAGE_EXTENDED_TABLES = [
+  "plaza_posts",
+  "plaza_comments",
+  "plaza_likes",
+  "shared_links",
+  "poster_errors",
+  "admin_sessions",
+  "admin_audit",
+  "oauth_exchanges",
+  "user_oauth",
+];
+async function countTables(
+  db: D1Database,
+  tables: string[],
+): Promise<Array<{ tbl: string; cnt: number }>> {
   try {
-    const results = await db.batch(tables.map((t) => db.prepare(`SELECT COUNT(*) AS cnt FROM ${t}`)));
-    return tables.map((t, i) => ({ tbl: t, cnt: Number((results[i]?.results?.[0] as { cnt?: number } | undefined)?.cnt ?? 0) }));
+    const results = await db.batch(
+      tables.map((t) => db.prepare(`SELECT COUNT(*) AS cnt FROM ${t}`)),
+    );
+    return tables.map((t, i) => ({
+      tbl: t,
+      cnt: Number((results[i]?.results?.[0] as { cnt?: number } | undefined)?.cnt ?? 0),
+    }));
   } catch (error) {
     console.error("dashboard query failed:", error instanceof Error ? error.message : error);
     return [];
@@ -982,11 +1128,33 @@ async function countTables(db: D1Database, tables: string[]): Promise<Array<{ tb
 async function getDashboard(env: Env): Promise<Response> {
   if (!env.DB) return json({ available: false }, 200, { "cache-control": "public, max-age=60" });
   try {
-    const safe = <T>(p: Promise<T>, fallback: T): Promise<T> => p.catch((err) => { console.error("dashboard query failed:", err instanceof Error ? err.message : err); return fallback; });
-    const safeAll = (p: Promise<{results?: unknown[]}>) => p.catch((err) => { console.error("dashboard query failed:", err instanceof Error ? err.message : err); return ({ results: [] }); });
+    const safe = <T>(p: Promise<T>, fallback: T): Promise<T> =>
+      p.catch((err) => {
+        console.error("dashboard query failed:", err instanceof Error ? err.message : err);
+        return fallback;
+      });
+    const safeAll = (p: Promise<{ results?: unknown[] }>) =>
+      p.catch((err) => {
+        console.error("dashboard query failed:", err instanceof Error ? err.message : err);
+        return { results: [] };
+      });
 
-    const [overview, daily, modes, recentEvents, apiLogs, apiErrors, accounts, storageInfo, storageExtended, posterErrors, posterErrorSummary] = await Promise.all([
-      safe(env.DB.prepare(`SELECT
+    const [
+      overview,
+      daily,
+      modes,
+      recentEvents,
+      apiLogs,
+      apiErrors,
+      accounts,
+      storageInfo,
+      storageExtended,
+      posterErrors,
+      posterErrorSummary,
+    ] = await Promise.all([
+      safe(
+        env.DB.prepare(
+          `SELECT
         COUNT(CASE WHEN event_name = 'visit' THEN 1 END) AS total_visits,
         COUNT(CASE WHEN event_name = 'visit' AND created_at >= datetime('now', '-7 days') THEN 1 END) AS visits_7d,
         COUNT(CASE WHEN event_name = 'visit' AND created_at >= datetime('now', 'start of day') THEN 1 END) AS visits_today,
@@ -996,58 +1164,104 @@ async function getDashboard(env: Env): Promise<Response> {
         ROUND(AVG(CASE WHEN event_name = 'ranking_completed' THEN CAST(json_extract(payload, '$.comparison_count') AS REAL) END), 1) AS avg_comparisons,
         ROUND(AVG(CASE WHEN event_name = 'ranking_completed' THEN CAST(json_extract(payload, '$.item_count') AS REAL) END), 1) AS avg_items,
         COUNT(DISTINCT CASE WHEN event_name = 'visit' THEN session_id END) AS unique_sessions
-      FROM analytics_events`).first(), null),
-      safeAll(env.DB.prepare(`SELECT
+      FROM analytics_events`,
+        ).first(),
+        null,
+      ),
+      safeAll(
+        env.DB.prepare(
+          `SELECT
         strftime('%Y-%m-%d', created_at) AS date,
         COUNT(CASE WHEN event_name = 'visit' THEN 1 END) AS visits,
         COUNT(CASE WHEN event_name = 'ranking_completed' THEN 1 END) AS completions
-      FROM analytics_events WHERE created_at >= datetime('now', '-14 days') GROUP BY date ORDER BY date DESC LIMIT 14`).all()),
-      safeAll(env.DB.prepare(`SELECT json_extract(payload, '$.mode') AS mode, COUNT(*) AS count
-      FROM analytics_events WHERE event_name = 'ranking_completed' AND json_extract(payload, '$.mode') IS NOT NULL GROUP BY mode ORDER BY count DESC`).all()),
-      safeAll(env.DB.prepare(`SELECT event_name, json_extract(payload, '$.mode') AS mode, json_extract(payload, '$.item_count') AS item_count, json_extract(payload, '$.comparison_count') AS comparison_count, created_at
-      FROM analytics_events ORDER BY created_at DESC LIMIT 20`).all()),
-      safeAll(env.DB.prepare(`SELECT id, path, method, status, duration_ms, source, error, created_at FROM api_logs ORDER BY created_at DESC LIMIT 30`).all()),
-      safeAll(env.DB.prepare(`SELECT id, path, method, status, duration_ms, source, error, created_at FROM api_logs WHERE status >= 400 ORDER BY created_at DESC LIMIT 20`).all()),
-      safeAll(env.DB.prepare(`SELECT id, email, nickname, disabled_at, created_at FROM user_accounts ORDER BY created_at DESC LIMIT 50`).all()),
+      FROM analytics_events WHERE created_at >= datetime('now', '-14 days') GROUP BY date ORDER BY date DESC LIMIT 14`,
+        ).all(),
+      ),
+      safeAll(
+        env.DB.prepare(
+          `SELECT json_extract(payload, '$.mode') AS mode, COUNT(*) AS count
+      FROM analytics_events WHERE event_name = 'ranking_completed' AND json_extract(payload, '$.mode') IS NOT NULL GROUP BY mode ORDER BY count DESC`,
+        ).all(),
+      ),
+      safeAll(
+        env.DB.prepare(
+          `SELECT event_name, json_extract(payload, '$.mode') AS mode, json_extract(payload, '$.item_count') AS item_count, json_extract(payload, '$.comparison_count') AS comparison_count, created_at
+      FROM analytics_events ORDER BY created_at DESC LIMIT 20`,
+        ).all(),
+      ),
+      safeAll(
+        env.DB.prepare(
+          `SELECT id, path, method, status, duration_ms, source, error, created_at FROM api_logs ORDER BY created_at DESC LIMIT 30`,
+        ).all(),
+      ),
+      safeAll(
+        env.DB.prepare(
+          `SELECT id, path, method, status, duration_ms, source, error, created_at FROM api_logs WHERE status >= 400 ORDER BY created_at DESC LIMIT 20`,
+        ).all(),
+      ),
+      safeAll(
+        env.DB.prepare(
+          `SELECT id, email, nickname, disabled_at, created_at FROM user_accounts ORDER BY created_at DESC LIMIT 50`,
+        ).all(),
+      ),
       safe(countTables(env.DB, STORAGE_CORE_TABLES), []),
       // 扩展表单独一组：迁移未全部应用时不影响核心统计
       safe(countTables(env.DB, STORAGE_EXTENDED_TABLES), []),
       // Poster errors - last 7 days
-      safeAll(env.DB.prepare("SELECT id, title, media_type, error, source, created_at FROM poster_errors WHERE created_at >= datetime('now', '-7 days') ORDER BY created_at DESC LIMIT 50").all()),
-      safeAll(env.DB.prepare("SELECT media_type, source, error, COUNT(*) AS count FROM poster_errors WHERE created_at >= datetime('now', '-30 days') GROUP BY media_type, source, error ORDER BY count DESC LIMIT 30").all()),
+      safeAll(
+        env.DB.prepare(
+          "SELECT id, title, media_type, error, source, created_at FROM poster_errors WHERE created_at >= datetime('now', '-7 days') ORDER BY created_at DESC LIMIT 50",
+        ).all(),
+      ),
+      safeAll(
+        env.DB.prepare(
+          "SELECT media_type, source, error, COUNT(*) AS count FROM poster_errors WHERE created_at >= datetime('now', '-30 days') GROUP BY media_type, source, error ORDER BY count DESC LIMIT 30",
+        ).all(),
+      ),
     ]);
 
-    return json({
-      available: true,
-      timestamp: new Date().toISOString(),
-      overview: {
-        total_visits: Number((overview as Record<string, unknown>)?.total_visits ?? 0),
-        visits_7d: Number((overview as Record<string, unknown>)?.visits_7d ?? 0),
-        visits_today: Number((overview as Record<string, unknown>)?.visits_today ?? 0),
-        total_completed: Number((overview as Record<string, unknown>)?.total_completed ?? 0),
-        completed_7d: Number((overview as Record<string, unknown>)?.completed_7d ?? 0),
-        completed_today: Number((overview as Record<string, unknown>)?.completed_today ?? 0),
-        avg_comparisons: Number((overview as Record<string, unknown>)?.avg_comparisons ?? 0),
-        avg_items: Number((overview as Record<string, unknown>)?.avg_items ?? 0),
-        unique_sessions: Number((overview as Record<string, unknown>)?.unique_sessions ?? 0),
-        completion_rate: Number((overview as Record<string, unknown>)?.total_visits ?? 0) > 0
-          ? Math.round(Number((overview as Record<string, unknown>)?.total_completed ?? 0) / Number((overview as Record<string, unknown>)?.total_visits ?? 0) * 100)
-          : 0,
+    return json(
+      {
+        available: true,
+        timestamp: new Date().toISOString(),
+        overview: {
+          total_visits: Number((overview as Record<string, unknown>)?.total_visits ?? 0),
+          visits_7d: Number((overview as Record<string, unknown>)?.visits_7d ?? 0),
+          visits_today: Number((overview as Record<string, unknown>)?.visits_today ?? 0),
+          total_completed: Number((overview as Record<string, unknown>)?.total_completed ?? 0),
+          completed_7d: Number((overview as Record<string, unknown>)?.completed_7d ?? 0),
+          completed_today: Number((overview as Record<string, unknown>)?.completed_today ?? 0),
+          avg_comparisons: Number((overview as Record<string, unknown>)?.avg_comparisons ?? 0),
+          avg_items: Number((overview as Record<string, unknown>)?.avg_items ?? 0),
+          unique_sessions: Number((overview as Record<string, unknown>)?.unique_sessions ?? 0),
+          completion_rate:
+            Number((overview as Record<string, unknown>)?.total_visits ?? 0) > 0
+              ? Math.round(
+                  (Number((overview as Record<string, unknown>)?.total_completed ?? 0) /
+                    Number((overview as Record<string, unknown>)?.total_visits ?? 0)) *
+                    100,
+                )
+              : 0,
+        },
+        daily: (daily as { results?: unknown[] }).results ?? [],
+        modes: (modes as { results?: unknown[] }).results ?? [],
+        recent_events: (recentEvents as { results?: unknown[] }).results ?? [],
+        api_logs: (apiLogs as { results?: unknown[] }).results ?? [],
+        api_errors: (apiErrors as { results?: unknown[] }).results ?? [],
+        accounts: (accounts as { results?: unknown[] }).results ?? [],
+        storage: Array.isArray(storageInfo) ? storageInfo : [],
+        storage_extended: (storageExtended as { results?: unknown[] })?.results ?? [],
+        poster_errors: (posterErrors as { results?: unknown[] }).results ?? [],
+        poster_error_summary: (posterErrorSummary as { results?: unknown[] }).results ?? [],
       },
-      daily: (daily as { results?: unknown[] }).results ?? [],
-      modes: (modes as { results?: unknown[] }).results ?? [],
-      recent_events: (recentEvents as { results?: unknown[] }).results ?? [],
-      api_logs: (apiLogs as { results?: unknown[] }).results ?? [],
-      api_errors: (apiErrors as { results?: unknown[] }).results ?? [],
-      accounts: (accounts as { results?: unknown[] }).results ?? [],
-      storage: Array.isArray(storageInfo) ? storageInfo : [],
-      storage_extended: ((storageExtended as { results?: unknown[] })?.results ?? []),
-      poster_errors: (posterErrors as { results?: unknown[] }).results ?? [],
-      poster_error_summary: (posterErrorSummary as { results?: unknown[] }).results ?? [],
-    }, 200, { "cache-control": "private, no-store" });
+      200,
+      { "cache-control": "private, no-store" },
+    );
   } catch (error) {
     console.error("dashboard query failed", error instanceof Error ? error.message : error);
-    return json({ available: false, error: "query failed" }, 200, { "cache-control": "private, no-store" });
+    return json({ available: false, error: "query failed" }, 200, {
+      "cache-control": "private, no-store",
+    });
   }
 }
 
@@ -1059,24 +1273,32 @@ async function handleAdminLogin(request: Request, env: Env): Promise<Response> {
 
   // Prefer environment variable password
   if (env.ADMIN_PASSWORD) {
-    if (!timingSafeEqual(password, env.ADMIN_PASSWORD)) return json({ error: "invalid_password" }, 401);
+    if (!timingSafeEqual(password, env.ADMIN_PASSWORD))
+      return json({ error: "invalid_password" }, 401);
   } else {
     // Fallback to DB-stored password
     if (!env.DB) return json({ error: "auth_unavailable" }, 503);
-    const stored = await env.DB.prepare("SELECT value FROM admin_config WHERE key = 'password_hash'").first<{ value: string }>();
+    const stored = await env.DB.prepare(
+      "SELECT value FROM admin_config WHERE key = 'password_hash'",
+    ).first<{ value: string }>();
     if (!stored?.value) return json({ error: "no_password_configured" }, 503);
-    if (!(await verifyPassword(password, stored.value))) return json({ error: "invalid_password" }, 401);
+    if (!(await verifyPassword(password, stored.value)))
+      return json({ error: "invalid_password" }, 401);
     // Transparently upgrade legacy SHA-256 admin hashes to PBKDF2.
     if (needsPasswordUpgrade(stored.value)) {
       await env.DB.prepare("UPDATE admin_config SET value = ? WHERE key = 'password_hash'")
-        .bind(await hashPasswordStrong(password)).run().catch(() => undefined);
+        .bind(await hashPasswordStrong(password))
+        .run()
+        .catch(() => undefined);
     }
   }
 
   if (!env.DB) return json({ error: "database_unavailable" }, 503);
   const token = generateToken();
   const expires = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
-  await env.DB.prepare("INSERT INTO admin_sessions (token, expires_at) VALUES (?, ?)").bind(token, expires).run();
+  await env.DB.prepare("INSERT INTO admin_sessions (token, expires_at) VALUES (?, ?)")
+    .bind(token, expires)
+    .run();
   await env.DB.prepare("DELETE FROM admin_sessions WHERE expires_at < datetime('now')").run();
   return json({ token, expires });
 }
@@ -1098,13 +1320,52 @@ async function handleAdminCheck(request: Request, env: Env): Promise<Response> {
 
 /** 各重置范围对应的清空语句（ accounts 为最高危：全部账户及用户生成内容） */
 const RESET_SCOPES: Record<string, { label: string; tables: string[]; statements: string[] }> = {
-  analytics: { label: "运行数据（分析事件/API日志/海报错误）", tables: ["analytics_events", "api_logs", "poster_errors"], statements: ["DELETE FROM analytics_events", "DELETE FROM api_logs", "DELETE FROM poster_errors"] },
-  plaza: { label: "广场内容（帖子/点赞/评论/编辑历史）", tables: ["plaza_post_edits", "plaza_posts", "plaza_likes", "plaza_comments"], statements: ["DELETE FROM plaza_post_edits", "DELETE FROM plaza_comments", "DELETE FROM plaza_likes", "DELETE FROM plaza_posts"] },
+  analytics: {
+    label: "运行数据（分析事件/API日志/海报错误）",
+    tables: ["analytics_events", "api_logs", "poster_errors"],
+    statements: [
+      "DELETE FROM analytics_events",
+      "DELETE FROM api_logs",
+      "DELETE FROM poster_errors",
+    ],
+  },
+  plaza: {
+    label: "广场内容（帖子/点赞/评论/编辑历史）",
+    tables: ["plaza_post_edits", "plaza_posts", "plaza_likes", "plaza_comments"],
+    statements: [
+      "DELETE FROM plaza_post_edits",
+      "DELETE FROM plaza_comments",
+      "DELETE FROM plaza_likes",
+      "DELETE FROM plaza_posts",
+    ],
+  },
   shares: { label: "分享短链", tables: ["shared_links"], statements: ["DELETE FROM shared_links"] },
   accounts: {
     label: "全部用户账户及用户内容（画像/清单/会话/OAuth/广场/分享）",
-    tables: ["user_accounts", "user_profiles_v2", "user_collections", "user_sessions", "user_oauth", "plaza_posts", "plaza_likes", "plaza_comments", "shared_links"],
-    statements: ["DELETE FROM user_sessions", "DELETE FROM user_oauth", "DELETE FROM user_cookie_vault", "DELETE FROM user_profiles_v2", "DELETE FROM user_collections", "DELETE FROM plaza_post_edits", "DELETE FROM plaza_comments", "DELETE FROM plaza_likes", "DELETE FROM plaza_posts", "DELETE FROM shared_links", "DELETE FROM user_accounts"],
+    tables: [
+      "user_accounts",
+      "user_profiles_v2",
+      "user_collections",
+      "user_sessions",
+      "user_oauth",
+      "plaza_posts",
+      "plaza_likes",
+      "plaza_comments",
+      "shared_links",
+    ],
+    statements: [
+      "DELETE FROM user_sessions",
+      "DELETE FROM user_oauth",
+      "DELETE FROM user_cookie_vault",
+      "DELETE FROM user_profiles_v2",
+      "DELETE FROM user_collections",
+      "DELETE FROM plaza_post_edits",
+      "DELETE FROM plaza_comments",
+      "DELETE FROM plaza_likes",
+      "DELETE FROM plaza_posts",
+      "DELETE FROM shared_links",
+      "DELETE FROM user_accounts",
+    ],
   },
 };
 
@@ -1112,7 +1373,9 @@ const RESET_SCOPES: Record<string, { label: string; tables: string[]; statements
 async function reverifyAdminPassword(env: Env, password: string): Promise<boolean> {
   if (env.ADMIN_PASSWORD) return timingSafeEqual(password, env.ADMIN_PASSWORD);
   if (!env.DB) return false;
-  const stored = await env.DB.prepare("SELECT value FROM admin_config WHERE key = 'password_hash'").first<{ value: string }>();
+  const stored = await env.DB.prepare(
+    "SELECT value FROM admin_config WHERE key = 'password_hash'",
+  ).first<{ value: string }>();
   return stored?.value ? verifyPassword(password, stored.value) : false;
 }
 
@@ -1124,8 +1387,10 @@ async function handleAdminReset(request: Request, env: Env): Promise<Response> {
   const password = cleanOptionalString(body.password, "password", 128) ?? "";
   const config = RESET_SCOPES[scope];
   if (!config) return json({ error: "invalid_scope" }, 400);
-  if (confirm !== "RESET") return json({ error: "confirm_required", msg: "请输入确认短语 RESET" }, 400);
-  if (!password || !await reverifyAdminPassword(env, password)) return json({ error: "password_required", msg: "管理员密码验证失败" }, 401);
+  if (confirm !== "RESET")
+    return json({ error: "confirm_required", msg: "请输入确认短语 RESET" }, 400);
+  if (!password || !(await reverifyAdminPassword(env, password)))
+    return json({ error: "password_required", msg: "管理员密码验证失败" }, 401);
 
   const db = env.DB;
   await db.batch(config.statements.map((sql) => db.prepare(sql)));
@@ -1134,16 +1399,26 @@ async function handleAdminReset(request: Request, env: Env): Promise<Response> {
 }
 
 async function handleAdminChangePassword(request: Request, env: Env): Promise<Response> {
-  if (env.ADMIN_PASSWORD) return json({ error: "env_password_immutable", msg: "当前使用环境变量密码，请在 Cloudflare 设置中修改" }, 400);
+  if (env.ADMIN_PASSWORD)
+    return json(
+      { error: "env_password_immutable", msg: "当前使用环境变量密码，请在 Cloudflare 设置中修改" },
+      400,
+    );
   if (!env.DB) return json({ error: "database_unavailable" }, 503);
   const body = await readJson(request);
   const oldPassword = cleanOptionalString(body.old_password, "old_password", 128) ?? "";
   const newPassword = cleanOptionalString(body.new_password, "new_password", 128) ?? "";
-  if (!newPassword || newPassword.length < 6) return json({ error: "invalid_password", msg: "新密码至少6位" }, 400);
-  const stored = await env.DB.prepare("SELECT value FROM admin_config WHERE key = 'password_hash'").first<{ value: string }>();
+  if (!newPassword || newPassword.length < 6)
+    return json({ error: "invalid_password", msg: "新密码至少6位" }, 400);
+  const stored = await env.DB.prepare(
+    "SELECT value FROM admin_config WHERE key = 'password_hash'",
+  ).first<{ value: string }>();
   if (!stored?.value) return json({ error: "no_password_configured" }, 503);
-  if (!oldPassword || !await verifyPassword(oldPassword, stored.value)) return json({ error: "invalid_credentials", msg: "旧密码错误" }, 401);
-  await env.DB.prepare("UPDATE admin_config SET value = ? WHERE key = 'password_hash'").bind(await hashPasswordStrong(newPassword)).run();
+  if (!oldPassword || !(await verifyPassword(oldPassword, stored.value)))
+    return json({ error: "invalid_credentials", msg: "旧密码错误" }, 401);
+  await env.DB.prepare("UPDATE admin_config SET value = ? WHERE key = 'password_hash'")
+    .bind(await hashPasswordStrong(newPassword))
+    .run();
   await recordAudit(env, "admin:change_password", "修改管理后台密码", request);
   return json({ ok: true });
 }
@@ -1152,21 +1427,37 @@ async function handleAdminAuditList(request: Request, env: Env): Promise<Respons
   if (!env.DB) return json({ error: "database_unavailable" }, 503);
   const url = new URL(request.url);
   const limit = Math.min(500, Math.max(1, Number(url.searchParams.get("limit") ?? "100") || 100));
-  const rows = await env.DB.prepare("SELECT id, action, detail, ip, created_at FROM admin_audit ORDER BY created_at DESC, id DESC LIMIT ?").bind(limit).all();
+  const rows = await env.DB.prepare(
+    "SELECT id, action, detail, ip, created_at FROM admin_audit ORDER BY created_at DESC, id DESC LIMIT ?",
+  )
+    .bind(limit)
+    .all();
   return json({ entries: rows.results ?? [] });
 }
 
 async function handleAdminRevokeSessions(request: Request, env: Env): Promise<Response> {
   if (!env.DB) return json({ error: "database_unavailable" }, 503);
   const result = await env.DB.prepare("DELETE FROM user_sessions").run();
-  await recordAudit(env, "sessions:revoke_all", `强制下线全部用户（清除 ${result.meta?.changes ?? 0} 个会话）`, request);
+  await recordAudit(
+    env,
+    "sessions:revoke_all",
+    `强制下线全部用户（清除 ${result.meta?.changes ?? 0} 个会话）`,
+    request,
+  );
   return json({ ok: true, revoked: result.meta?.changes ?? 0 });
 }
 
 async function handleAdminCleanExpiredLinks(request: Request, env: Env): Promise<Response> {
   if (!env.DB) return json({ error: "database_unavailable" }, 503);
-  const result = await env.DB.prepare("DELETE FROM shared_links WHERE expires_at < datetime('now')").run();
-  await recordAudit(env, "links:clean_expired", `清理过期分享链接 ${result.meta?.changes ?? 0} 条`, request);
+  const result = await env.DB.prepare(
+    "DELETE FROM shared_links WHERE expires_at < datetime('now')",
+  ).run();
+  await recordAudit(
+    env,
+    "links:clean_expired",
+    `清理过期分享链接 ${result.meta?.changes ?? 0} 条`,
+    request,
+  );
   return json({ ok: true, deleted: result.meta?.changes ?? 0 });
 }
 
@@ -1204,11 +1495,9 @@ function randomChallengeId(): string {
 async function createChallenge(request: Request, env: Env): Promise<Response> {
   assertSameOrigin(request);
   if (!env.DB) {
-    return json(
-      { error: "challenge_storage_unavailable", fallback: "payload" },
-      503,
-      { "retry-after": "60" },
-    );
+    return json({ error: "challenge_storage_unavailable", fallback: "payload" }, 503, {
+      "retry-after": "60",
+    });
   }
 
   const body = await readJson(request);
@@ -1302,12 +1591,17 @@ async function route(request: Request, env: Env): Promise<Response> {
       try {
         await env.DB.prepare("SELECT 1").first();
         checks.database = "ok";
-      } catch { checks.database = "error"; }
+      } catch {
+        checks.database = "error";
+      }
     }
-    return json({ ok: true, version: "2.0.0", timestamp: new Date().toISOString(), checks }, 200, { "cache-control": "no-store" });
+    return json({ ok: true, version: "2.0.0", timestamp: new Date().toISOString(), checks }, 200, {
+      "cache-control": "no-store",
+    });
   }
   if (url.pathname === "/api/events" && request.method === "POST") {
-    if (!await allowUpstreamRequest(request, "events", 120)) return json({ error: "rate_limited" }, 429, { "retry-after": "60" });
+    if (!(await allowUpstreamRequest(request, "events", 120)))
+      return json({ error: "rate_limited" }, 429, { "retry-after": "60" });
     return createEvent(request, env);
   }
   if (url.pathname === "/api/stats" && request.method === "GET") {
@@ -1315,19 +1609,24 @@ async function route(request: Request, env: Env): Promise<Response> {
   }
   if (url.pathname === "/api/poster-errors/client" && request.method === "POST") {
     assertSameOrigin(request);
-    if (!await allowUpstreamRequest(request, "other", 120)) return json({ error: "rate_limited" }, 429, { "retry-after": "60" });
+    if (!(await allowUpstreamRequest(request, "other", 120)))
+      return json({ error: "rate_limited" }, 429, { "retry-after": "60" });
     if (!env.DB) return json({ stored: false }, 202);
     const body = await readJson(request);
     const title = cleanString(body.title, "title", 160);
     const type = cleanString(body.type, "type", 16);
     const error = cleanString(body.error, "error", 80);
-    if (!["film", "book", "music", "other"].includes(type)) return json({ error: "invalid_type" }, 400);
-    await env.DB.prepare("INSERT INTO poster_errors (title, media_type, error, source) VALUES (?, ?, ?, ?)")
-      .bind(title, type === "film" ? "movie" : type, error, "client").run();
+    if (!["film", "book", "music", "other"].includes(type))
+      return json({ error: "invalid_type" }, 400);
+    await env.DB.prepare(
+      "INSERT INTO poster_errors (title, media_type, error, source) VALUES (?, ?, ?, ?)",
+    )
+      .bind(title, type === "film" ? "movie" : type, error, "client")
+      .run();
     return json({ stored: true }, 202);
   }
   if (url.pathname === "/api/admin/dashboard" && request.method === "GET") {
-    if (!await adminAuth(request, env)) return json({ error: "auth_required" }, 401);
+    if (!(await adminAuth(request, env))) return json({ error: "auth_required" }, 401);
     return getDashboard(env);
   }
   if (url.pathname === "/api/admin/login" && request.method === "POST") {
@@ -1343,45 +1642,51 @@ async function route(request: Request, env: Env): Promise<Response> {
     return withSecurityHeaders(await adminPlazaRoute(request, env));
   }
   if (url.pathname === "/api/admin/reset" && request.method === "POST") {
-    if (!await allowUpstreamRequest(request, "auth", 30)) return json({ error: "rate_limited" }, 429, { "retry-after": "300" });
+    if (!(await allowUpstreamRequest(request, "auth", 30)))
+      return json({ error: "rate_limited" }, 429, { "retry-after": "300" });
     return handleAdminReset(request, env);
   }
   if (url.pathname === "/api/admin/audit" && request.method === "GET") {
-    if (!env.DB || !await adminAuth(request, env)) return json({ error: "auth_required" }, 401);
+    if (!env.DB || !(await adminAuth(request, env))) return json({ error: "auth_required" }, 401);
     return handleAdminAuditList(request, env);
   }
   if (url.pathname === "/api/admin/change-password" && request.method === "POST") {
-    if (!await allowUpstreamRequest(request, "auth", 30)) return json({ error: "rate_limited" }, 429, { "retry-after": "300" });
+    if (!(await allowUpstreamRequest(request, "auth", 30)))
+      return json({ error: "rate_limited" }, 429, { "retry-after": "300" });
     return handleAdminChangePassword(request, env);
   }
   if (url.pathname === "/api/admin/sessions/revoke-all" && request.method === "POST") {
-    if (!env.DB || !await adminAuth(request, env)) return json({ error: "auth_required" }, 401);
-    if (!await allowUpstreamRequest(request, "auth", 30)) return json({ error: "rate_limited" }, 429, { "retry-after": "300" });
+    if (!env.DB || !(await adminAuth(request, env))) return json({ error: "auth_required" }, 401);
+    if (!(await allowUpstreamRequest(request, "auth", 30)))
+      return json({ error: "rate_limited" }, 429, { "retry-after": "300" });
     return handleAdminRevokeSessions(request, env);
   }
   if (url.pathname === "/api/admin/links/clean-expired" && request.method === "POST") {
-    if (!env.DB || !await adminAuth(request, env)) return json({ error: "auth_required" }, 401);
+    if (!env.DB || !(await adminAuth(request, env))) return json({ error: "auth_required" }, 401);
     return handleAdminCleanExpiredLinks(request, env);
   }
   if (url.pathname === "/api/admin/accounts" || url.pathname.startsWith("/api/admin/accounts/")) {
     return withSecurityHeaders(await accountRoute(request, env));
   }
   if (url.pathname === "/api/admin/poster-errors" && request.method === "GET") {
-    if (!env.DB || !await adminAuth(request, env)) return json({ error: "auth_required" }, 401);
+    if (!env.DB || !(await adminAuth(request, env))) return json({ error: "auth_required" }, 401);
     const days = Number(url.searchParams.get("days") ?? "7");
     const limit = Math.min(Number(url.searchParams.get("limit") ?? "200"), 1000);
     const errors = await env.DB.prepare(
-      "SELECT id, title, media_type, error, source, created_at FROM poster_errors WHERE created_at >= datetime('now', ?) ORDER BY created_at DESC LIMIT ?"
-    ).bind(`-${days} days`, limit).all();
+      "SELECT id, title, media_type, error, source, created_at FROM poster_errors WHERE created_at >= datetime('now', ?) ORDER BY created_at DESC LIMIT ?",
+    )
+      .bind(`-${days} days`, limit)
+      .all();
     return json({ errors: errors.results ?? [] }, 200, { "cache-control": "no-store" });
   }
   if (url.pathname === "/api/admin/logs/clean" && request.method === "POST") {
-    if (!env.DB || !await adminAuth(request, env)) return json({ error: "auth_required" }, 401);
+    if (!env.DB || !(await adminAuth(request, env))) return json({ error: "auth_required" }, 401);
     const body = await readJson(request);
     const table = cleanString(body.table, "table", 20);
     const action = cleanString(body.action, "action", 20);
     const tables = table === "all" ? ["api_logs", "analytics_events", "poster_errors"] : [table];
-    if (!tables.every((t) => ["api_logs", "analytics_events", "poster_errors"].includes(t))) return json({ error: "invalid_table" }, 400);
+    if (!tables.every((t) => ["api_logs", "analytics_events", "poster_errors"].includes(t)))
+      return json({ error: "invalid_table" }, 400);
     const actions: Record<string, { time: string; op: string }> = {
       delete_all: { time: "", op: "" },
       delete_7d: { time: "datetime('now', '-7 days')", op: "<" },
@@ -1394,139 +1699,245 @@ async function route(request: Request, env: Env): Promise<Response> {
     let total = 0;
     for (const tbl of tables) {
       const cfg = actions[action];
-      const sql = action === "delete_all" ? `DELETE FROM ${tbl}` : `DELETE FROM ${tbl} WHERE created_at ${cfg.op} ${cfg.time}`;
+      const sql =
+        action === "delete_all"
+          ? `DELETE FROM ${tbl}`
+          : `DELETE FROM ${tbl} WHERE created_at ${cfg.op} ${cfg.time}`;
       const result = await env.DB.prepare(sql).run();
       total += result.meta?.changes ?? 0;
     }
     return json({ ok: true, deleted: total });
   }
   if (url.pathname === "/api/admin/poster-errors/export" && request.method === "GET") {
-    if (!env.DB || !await adminAuth(request, env)) return json({ error: "auth_required" }, 401);
+    if (!env.DB || !(await adminAuth(request, env))) return json({ error: "auth_required" }, 401);
     const days = Number(url.searchParams.get("days") ?? "30");
     const errors = await env.DB.prepare(
-      "SELECT title, media_type, error, source, created_at FROM poster_errors WHERE created_at >= datetime('now', ?) ORDER BY created_at DESC LIMIT 5000"
-    ).bind(`-${days} days`).all();
-    const rows = errors.results as Array<{ title: string; media_type: string; error: string; created_at: string }>;
-    const csv = "\uFEFF" + "title,media_type,error,created_at\n" + rows.map(r => `"${r.title.replace(/"/g, '""')}","${r.media_type}","${r.error}","${r.created_at}"`).join("\n");
-    return new Response(csv, { status: 200, headers: { "content-type": "text/csv; charset=utf-8", "content-disposition": `attachment; filename="poster-errors-${days}d.csv"`, "cache-control": "no-store" } });
+      "SELECT title, media_type, error, source, created_at FROM poster_errors WHERE created_at >= datetime('now', ?) ORDER BY created_at DESC LIMIT 5000",
+    )
+      .bind(`-${days} days`)
+      .all();
+    const rows = errors.results as Array<{
+      title: string;
+      media_type: string;
+      error: string;
+      created_at: string;
+    }>;
+    const csv =
+      "\uFEFF" +
+      "title,media_type,error,created_at\n" +
+      rows
+        .map(
+          (r) =>
+            `"${r.title.replace(/"/g, '""')}","${r.media_type}","${r.error}","${r.created_at}"`,
+        )
+        .join("\n");
+    return new Response(csv, {
+      status: 200,
+      headers: {
+        "content-type": "text/csv; charset=utf-8",
+        "content-disposition": `attachment; filename="poster-errors-${days}d.csv"`,
+        "cache-control": "no-store",
+      },
+    });
   }
   if (url.pathname === "/api/douban/top250" && request.method === "GET") {
     const limit = Number(url.searchParams.get("limit") ?? 50);
-    if (!Number.isInteger(limit) || limit < 2 || limit > 250) return json({ error: "invalid_limit" }, 400);
-    try { const works = await doubanTop250(limit); return json({ source: "douban", total: works.length, works }, 200, { "cache-control": "public, max-age=900" }); }
-    catch { return json({ error: "douban_unavailable" }, 502); }
+    if (!Number.isInteger(limit) || limit < 2 || limit > 250)
+      return json({ error: "invalid_limit" }, 400);
+    try {
+      const works = await doubanTop250(limit);
+      return json({ source: "douban", total: works.length, works }, 200, {
+        "cache-control": "public, max-age=900",
+      });
+    } catch {
+      return json({ error: "douban_unavailable" }, 502);
+    }
   }
   if (url.pathname === "/api/douban/books/top250" && request.method === "GET") {
     const limit = Number(url.searchParams.get("limit") ?? 50);
-    if (!Number.isInteger(limit) || limit < 2 || limit > 250) return json({ error: "invalid_limit" }, 400);
-    try { const works = await doubanBookTop250(limit); return json({ source: "douban", total: works.length, works }, 200, { "cache-control": "public, max-age=900" }); }
-    catch { return json({ error: "douban_unavailable" }, 502); }
+    if (!Number.isInteger(limit) || limit < 2 || limit > 250)
+      return json({ error: "invalid_limit" }, 400);
+    try {
+      const works = await doubanBookTop250(limit);
+      return json({ source: "douban", total: works.length, works }, 200, {
+        "cache-control": "public, max-age=900",
+      });
+    } catch {
+      return json({ error: "douban_unavailable" }, 502);
+    }
   }
   if (url.pathname === "/api/douban/music/top250" && request.method === "GET") {
     const limit = Number(url.searchParams.get("limit") ?? 50);
-    if (!Number.isInteger(limit) || limit < 2 || limit > 250) return json({ error: "invalid_limit" }, 400);
-    try { const works = await doubanMusicTop250(limit); return json({ source: "douban", total: works.length, works }, 200, { "cache-control": "public, max-age=900" }); }
-    catch { return json({ error: "douban_unavailable" }, 502); }
+    if (!Number.isInteger(limit) || limit < 2 || limit > 250)
+      return json({ error: "invalid_limit" }, 400);
+    try {
+      const works = await doubanMusicTop250(limit);
+      return json({ source: "douban", total: works.length, works }, 200, {
+        "cache-control": "public, max-age=900",
+      });
+    } catch {
+      return json({ error: "douban_unavailable" }, 502);
+    }
   }
   if (url.pathname === "/api/douban/suggest" && request.method === "GET") {
     const query = url.searchParams.get("q")?.trim();
     if (!query || query.length > 80) return json({ error: "invalid_query" }, 400);
-    try { return json({ works: await doubanSuggest(query) }, 200, { "cache-control": "public, max-age=3600" }); }
-    catch { return json({ error: "douban_unavailable", works: [] }, 502); }
+    try {
+      return json({ works: await doubanSuggest(query) }, 200, {
+        "cache-control": "public, max-age=3600",
+      });
+    } catch {
+      return json({ error: "douban_unavailable", works: [] }, 502);
+    }
   }
   if (url.pathname === "/api/douban/books/suggest" && request.method === "GET") {
     const query = url.searchParams.get("q")?.trim();
     if (!query || query.length > 80) return json({ error: "invalid_query" }, 400);
-    try { return json({ works: await doubanBookSuggest(query) }, 200, { "cache-control": "public, max-age=3600" }); }
-    catch { return json({ error: "douban_unavailable", works: [] }, 502); }
+    try {
+      return json({ works: await doubanBookSuggest(query) }, 200, {
+        "cache-control": "public, max-age=3600",
+      });
+    } catch {
+      return json({ error: "douban_unavailable", works: [] }, 502);
+    }
   }
   if (url.pathname === "/api/posters" && request.method === "GET") {
     const title = url.searchParams.get("q")?.trim();
     const english = url.searchParams.get("en")?.trim() ?? "";
     const year = Number(url.searchParams.get("year")) || undefined;
     const type = url.searchParams.get("type") as "movie" | "book" | "music" | undefined;
-    if (!title || title.length > 160 || english.length > 160 || (year !== undefined && (!Number.isInteger(year) || year < 1800 || year > 2200))) return json({ error: "invalid_query" }, 400);
+    if (
+      !title ||
+      title.length > 160 ||
+      english.length > 160 ||
+      (year !== undefined && (!Number.isInteger(year) || year < 1800 || year > 2200))
+    )
+      return json({ error: "invalid_query" }, 400);
     // Phase 1：先查库。已落库的条目直接返回，不再回源。
     const cacheKey = posterMediaKey(title, english, type, year);
     const stored = env.DB ? (await loadPosterUrls(env.DB, [cacheKey])).get(cacheKey) : undefined;
-    const poster_urls = stored?.length ? stored : await resolvePosters(title, english, year, type, env);
-    if (!stored?.length && poster_urls.length) await saveResolvedPosters(env.DB, [{ key: cacheKey, urls: poster_urls }]);
+    const poster_urls = stored?.length
+      ? stored
+      : await resolvePosters(title, english, year, type, env);
+    if (!stored?.length && poster_urls.length)
+      await saveResolvedPosters(env.DB, [{ key: cacheKey, urls: poster_urls }]);
     if (!stored?.length && poster_urls.length === 0 && env.DB) {
-      void env.DB.prepare("INSERT INTO poster_errors (title, media_type, error, source) VALUES (?, ?, ?, ?)").bind(title, type ?? "movie", "no_poster_found", "single").run().catch(() => {});
+      void env.DB.prepare(
+        "INSERT INTO poster_errors (title, media_type, error, source) VALUES (?, ?, ?, ?)",
+      )
+        .bind(title, type ?? "movie", "no_poster_found", "single")
+        .run()
+        .catch(() => {});
     }
-    return json({ poster_urls }, 200, { "cache-control": `public, max-age=${poster_urls.length ? 86400 : 300}` });
+    return json({ poster_urls }, 200, {
+      "cache-control": `public, max-age=${poster_urls.length ? 86400 : 300}`,
+    });
   }
   if (url.pathname === "/api/posters/batch" && request.method === "POST") {
     // 独立限流桶：批量解析的上游开销远大于单条查询，不该和试听共享 music 配额。
-    if (!await allowUpstreamRequest(request, "posters", 60)) return json({ error: "rate_limited" }, 429, { "retry-after": "600" });
+    if (!(await allowUpstreamRequest(request, "posters", 60)))
+      return json({ error: "rate_limited" }, 429, { "retry-after": "600" });
     const raw = await request.text();
-    if (new TextEncoder().encode(raw).byteLength > MAX_POSTER_BATCH_BYTES) return json({ error: "payload_too_large" }, 413);
+    if (new TextEncoder().encode(raw).byteLength > MAX_POSTER_BATCH_BYTES)
+      return json({ error: "payload_too_large" }, 413);
     let parsed: unknown;
-    try { parsed = JSON.parse(raw); } catch { return json({ error: "invalid_json" }, 400); }
-    if (!isObject(parsed) || !Array.isArray((parsed as { items?: unknown }).items)) return json({ error: "invalid_json" }, 400);
+    try {
+      parsed = JSON.parse(raw);
+    } catch {
+      return json({ error: "invalid_json" }, 400);
+    }
+    if (!isObject(parsed) || !Array.isArray((parsed as { items?: unknown }).items))
+      return json({ error: "invalid_json" }, 400);
     const items = sanitizePosterBatch((parsed as { items: unknown[] }).items);
-    if (items.length === 0) return json({ results: {}, keys: [] }, 200, { "cache-control": "public, max-age=300" });
+    if (items.length === 0)
+      return json({ results: {}, keys: [] }, 200, { "cache-control": "public, max-age=300" });
     // Phase 1：先算出这一批的键，再一次性查库，命中项短路掉上游。
-    const batchKeys = items.map((item) => posterMediaKey(item.title, item.english ?? "", item.type, item.year));
+    const batchKeys = items.map((item) =>
+      posterMediaKey(item.title, item.english ?? "", item.type, item.year),
+    );
     const known = env.DB ? await loadPosterUrls(env.DB, batchKeys) : undefined;
     // 客户端在每次页面加载的首次批量带 retry：绕过「被限流」的负缓存，
     // 让「刷新 = 真重试」是确定的（正缓存与「确实没有」的负缓存仍然生效）。
     const retry = (parsed as { retry?: unknown }).retry === true;
     const { results, keys, outcomes } = await resolvePostersBatch(items, env, 8, known, { retry });
     // 写穿：只把**新解析到**的地址落库（已知命中项不必重写）。
-    await saveResolvedPosters(env.DB, keys
-      .filter((key) => !known?.get(key)?.length)
-      .map((key) => ({ key, urls: results[key] ?? [] })));
+    await saveResolvedPosters(
+      env.DB,
+      keys
+        .filter((key) => !known?.get(key)?.length)
+        .map((key) => ({ key, urls: results[key] ?? [] })),
+    );
     // 批量失败原先在后台完全不可见——这里落一条 poster_errors(source=batch)，
     // 且严格限量（每请求最多 10 条），避免把 D1 写成热点。
     if (env.DB) {
-      const failures = keys.map((key, index) => ({ key, item: items[index] }))
-        .filter(({ key }) => !(results[key]?.length))
+      const failures = keys
+        .map((key, index) => ({ key, item: items[index] }))
+        .filter(({ key }) => !results[key]?.length)
         .slice(0, 10);
       if (failures.length) {
-        const statement = env.DB.prepare("INSERT INTO poster_errors (title, media_type, error, source) VALUES (?, ?, ?, ?)");
-        void env.DB.batch(failures.map(({ key, item }) => statement.bind(
-          (item?.title ?? key).slice(0, 160),
-          item?.type ?? "movie",
-          outcomes[key] === "throttled" ? "throttled" : "no_poster_found",
-          "batch",
-        ))).catch(() => undefined);
+        const statement = env.DB.prepare(
+          "INSERT INTO poster_errors (title, media_type, error, source) VALUES (?, ?, ?, ?)",
+        );
+        void env.DB.batch(
+          failures.map(({ key, item }) =>
+            statement.bind(
+              (item?.title ?? key).slice(0, 160),
+              item?.type ?? "movie",
+              outcomes[key] === "throttled" ? "throttled" : "no_poster_found",
+              "batch",
+            ),
+          ),
+        ).catch(() => undefined);
       }
     }
     // 真正的 1 天缓存发生在服务端（L1 isolate + L2 Edge Cache）；
     // 这里只是顺带声明新鲜度，浏览器通常不缓存 POST 响应。
     return json({ results, keys }, 200, { "cache-control": "private, max-age=86400" });
   }
-  if (url.pathname === "/api/image" && request.method === "GET") return withSecurityHeaders(await proxyImage(url.searchParams.get("url") ?? ""));
+  if (url.pathname === "/api/image" && request.method === "GET")
+    return withSecurityHeaders(await proxyImage(url.searchParams.get("url") ?? ""));
 
   // Search list APIs
   if (url.pathname === "/api/book/list" && request.method === "GET") {
     const key = url.searchParams.get("key")?.trim();
     const page = Number(url.searchParams.get("page") ?? "1");
-    if (!key || key.length > 80) return json({ status: false, msg: "缺少参数 key", data: null }, 400);
-    if (!Number.isInteger(page) || page < 1 || page > 100) return json({ status: false, msg: "page 参数无效", data: null }, 400);
-    return json(await doubanSearch("book", key, page), 200, { "cache-control": "public, max-age=3600" });
+    if (!key || key.length > 80)
+      return json({ status: false, msg: "缺少参数 key", data: null }, 400);
+    if (!Number.isInteger(page) || page < 1 || page > 100)
+      return json({ status: false, msg: "page 参数无效", data: null }, 400);
+    return json(await doubanSearch("book", key, page), 200, {
+      "cache-control": "public, max-age=3600",
+    });
   }
   if (url.pathname === "/api/movie/list" && request.method === "GET") {
     const key = url.searchParams.get("key")?.trim();
     const page = Number(url.searchParams.get("page") ?? "1");
-    if (!key || key.length > 80) return json({ status: false, msg: "缺少参数 key", data: null }, 400);
-    if (!Number.isInteger(page) || page < 1 || page > 100) return json({ status: false, msg: "page 参数无效", data: null }, 400);
-    return json(await doubanSearch("movie", key, page), 200, { "cache-control": "public, max-age=3600" });
+    if (!key || key.length > 80)
+      return json({ status: false, msg: "缺少参数 key", data: null }, 400);
+    if (!Number.isInteger(page) || page < 1 || page > 100)
+      return json({ status: false, msg: "page 参数无效", data: null }, 400);
+    return json(await doubanSearch("movie", key, page), 200, {
+      "cache-control": "public, max-age=3600",
+    });
   }
   if (url.pathname === "/api/music/list" && request.method === "GET") {
     const key = url.searchParams.get("key")?.trim();
     const page = Number(url.searchParams.get("page") ?? "1");
-    if (!key || key.length > 80) return json({ status: false, msg: "缺少参数 key", data: null }, 400);
-    if (!Number.isInteger(page) || page < 1 || page > 100) return json({ status: false, msg: "page 参数无效", data: null }, 400);
-    return json(await doubanSearch("music", key, page), 200, { "cache-control": "public, max-age=3600" });
+    if (!key || key.length > 80)
+      return json({ status: false, msg: "缺少参数 key", data: null }, 400);
+    if (!Number.isInteger(page) || page < 1 || page > 100)
+      return json({ status: false, msg: "page 参数无效", data: null }, 400);
+    return json(await doubanSearch("music", key, page), 200, {
+      "cache-control": "public, max-age=3600",
+    });
   }
 
   // Detail APIs
   if (url.pathname === "/api/book/detail" && request.method === "GET") {
     const detailUrl = url.searchParams.get("url")?.trim();
     const title = url.searchParams.get("name")?.trim() || url.searchParams.get("title")?.trim();
-    if (!detailUrl && !title) return json({ status: false, msg: "缺少参数 url 或 name", data: null }, 400);
+    if (!detailUrl && !title)
+      return json({ status: false, msg: "缺少参数 url 或 name", data: null }, 400);
 
     let bookTitle = title ?? "";
     const data: Record<string, unknown> = {};
@@ -1538,7 +1949,7 @@ async function route(request: Request, env: Env): Promise<Response> {
       try {
         const search = await doubanSearch("book", bookTitle || bookId!, 1);
         const wantCreator = url.searchParams.get("creator")?.trim() ?? "";
-        const scoreHit = (i: typeof search.data[number]) => {
+        const scoreHit = (i: (typeof search.data)[number]) => {
           let sc = 0;
           const hay = `${i.title ?? ""} ${i.author ?? ""}`;
           if (wantCreator && hay.includes(wantCreator)) sc += 4;
@@ -1546,9 +1957,11 @@ async function route(request: Request, env: Env): Promise<Response> {
           return sc;
         };
         const found = bookId
-          ? search.data.find(i => i.cover_link?.includes(`/subject/${bookId}/`)) ?? search.data[0]
-          : wantCreator ? [...search.data].sort((a, b) => scoreHit(b) - scoreHit(a))[0]
-          : search.data[0];
+          ? (search.data.find((i) => i.cover_link?.includes(`/subject/${bookId}/`)) ??
+            search.data[0])
+          : wantCreator
+            ? [...search.data].sort((a, b) => scoreHit(b) - scoreHit(a))[0]
+            : search.data[0];
         if (found) {
           bookTitle = found.title || bookTitle;
           data.title = found.title;
@@ -1567,10 +1980,15 @@ async function route(request: Request, env: Env): Promise<Response> {
       try {
         const detail = await doubanBookDetail(subjectUrl);
         if (detail.status && detail.data) {
-          if (detail.data.content_intro) { data.content_intro = detail.data.content_intro; data.content_source = "douban"; }
+          if (detail.data.content_intro) {
+            data.content_intro = detail.data.content_intro;
+            data.content_source = "douban";
+          }
           if (detail.data.author_intro) data.author_intro = detail.data.author_intro;
           if (detail.data.tags) data.tags = detail.data.tags;
-          for (const [k, v] of Object.entries(detail.data)) { if (v && !data[k]) data[k] = v; }
+          for (const [k, v] of Object.entries(detail.data)) {
+            if (v && !data[k]) data[k] = v;
+          }
         }
       } catch {}
     }
@@ -1578,7 +1996,12 @@ async function route(request: Request, env: Env): Promise<Response> {
     // Step 3: 维基兜底
     if (!data.content_intro && bookTitle) {
       const wikiTitle = title && bookTitle.includes(title) ? title : bookTitle;
-      const intro = await fetchContentIntro(wikiTitle, "book", typeof data.author === "string" ? data.author.split("/")[0] : undefined, data.date);
+      const intro = await fetchContentIntro(
+        wikiTitle,
+        "book",
+        typeof data.author === "string" ? data.author.split("/")[0] : undefined,
+        data.date,
+      );
       if (intro) {
         data.content_intro = intro.intro;
         data.content_source = intro.source;
@@ -1596,14 +2019,19 @@ async function route(request: Request, env: Env): Promise<Response> {
     }
 
     if (data.title) {
-      return json({ status: true, msg: "ok", time: "0s", data }, 200, { "cache-control": "public, max-age=86400" });
+      return json({ status: true, msg: "ok", time: "0s", data }, 200, {
+        "cache-control": "public, max-age=86400",
+      });
     }
-    return json({ status: false, msg: "未找到书籍信息", data: null }, 404, { "cache-control": "public, max-age=60" });
+    return json({ status: false, msg: "未找到书籍信息", data: null }, 404, {
+      "cache-control": "public, max-age=60",
+    });
   }
-    if (url.pathname === "/api/movie/detail" && request.method === "GET") {
+  if (url.pathname === "/api/movie/detail" && request.method === "GET") {
     const detailUrl = url.searchParams.get("url")?.trim();
     const title = url.searchParams.get("name")?.trim() || url.searchParams.get("title")?.trim();
-    if (!detailUrl && !title) return json({ status: false, msg: "Missing url or name", data: null }, 400);
+    if (!detailUrl && !title)
+      return json({ status: false, msg: "Missing url or name", data: null }, 400);
 
     const movieId = detailUrl?.match(/subject\/(\d+)/)?.[1];
     let movieTitle = title ?? "";
@@ -1615,7 +2043,7 @@ async function route(request: Request, env: Env): Promise<Response> {
       try {
         const search = await doubanSearch("movie", movieTitle || movieId!, 1);
         const wantCreator = url.searchParams.get("creator")?.trim() ?? "";
-        const scoreHit = (i: typeof search.data[number]) => {
+        const scoreHit = (i: (typeof search.data)[number]) => {
           let sc = 0;
           const hay = `${i.title ?? ""} ${String(Array.isArray(i.actors) ? i.actors.join(" ") : "")}`;
           if (wantCreator && hay.includes(wantCreator)) sc += 4;
@@ -1623,9 +2051,11 @@ async function route(request: Request, env: Env): Promise<Response> {
           return sc;
         };
         const found = movieId
-          ? search.data.find(i => i.cover_link?.includes(`/subject/${movieId}/`)) ?? search.data[0]
-          : wantCreator ? [...search.data].sort((a, b) => scoreHit(b) - scoreHit(a))[0]
-          : search.data[0];
+          ? (search.data.find((i) => i.cover_link?.includes(`/subject/${movieId}/`)) ??
+            search.data[0])
+          : wantCreator
+            ? [...search.data].sort((a, b) => scoreHit(b) - scoreHit(a))[0]
+            : search.data[0];
         if (found) {
           movieTitle = found.title || movieTitle;
           data.title = found.title;
@@ -1646,8 +2076,13 @@ async function route(request: Request, env: Env): Promise<Response> {
       try {
         const detail = await doubanMovieDetail(subjectUrl);
         if (detail.status && detail.data) {
-          if (detail.data.content_intro) { data.content_intro = detail.data.content_intro; data.content_source = "douban"; }
-          for (const [k, v] of Object.entries(detail.data)) { if (v && !data[k]) data[k] = v; }
+          if (detail.data.content_intro) {
+            data.content_intro = detail.data.content_intro;
+            data.content_source = "douban";
+          }
+          for (const [k, v] of Object.entries(detail.data)) {
+            if (v && !data[k]) data[k] = v;
+          }
         }
       } catch {}
     }
@@ -1655,7 +2090,12 @@ async function route(request: Request, env: Env): Promise<Response> {
     // Step 3: 维基兜底（豆瓣详情未取到简介时）
     if (!data.content_intro && movieTitle) {
       const wikiTitle = title && movieTitle.includes(title) ? title : movieTitle;
-      const intro = await fetchContentIntro(wikiTitle, "movie", typeof data.actors === "string" ? data.actors.split("/")[0] : undefined, data.year);
+      const intro = await fetchContentIntro(
+        wikiTitle,
+        "movie",
+        typeof data.actors === "string" ? data.actors.split("/")[0] : undefined,
+        data.year,
+      );
       if (intro) {
         data.content_intro = intro.intro;
         data.content_source = intro.source;
@@ -1673,14 +2113,19 @@ async function route(request: Request, env: Env): Promise<Response> {
     }
 
     if (data.title) {
-      return json({ status: true, msg: "ok", time: "0s", data }, 200, { "cache-control": "public, max-age=86400" });
+      return json({ status: true, msg: "ok", time: "0s", data }, 200, {
+        "cache-control": "public, max-age=86400",
+      });
     }
-    return json({ status: false, msg: "not found", data: null }, 404, { "cache-control": "public, max-age=60" });
+    return json({ status: false, msg: "not found", data: null }, 404, {
+      "cache-control": "public, max-age=60",
+    });
   }
   if (url.pathname === "/api/music/detail" && request.method === "GET") {
     const detailUrl = url.searchParams.get("url")?.trim();
     const title = url.searchParams.get("name")?.trim() || url.searchParams.get("title")?.trim();
-    if (!detailUrl && !title) return json({ status: false, msg: "缺少参数 url 或 name", data: null }, 400);
+    if (!detailUrl && !title)
+      return json({ status: false, msg: "缺少参数 url 或 name", data: null }, 400);
 
     let musicTitle = title ?? "";
     const data: Record<string, unknown> = {};
@@ -1692,7 +2137,7 @@ async function route(request: Request, env: Env): Promise<Response> {
       try {
         const search = await doubanSearch("music", musicTitle || musicId!, 1);
         const wantCreator = url.searchParams.get("creator")?.trim() ?? "";
-        const scoreHit = (i: typeof search.data[number]) => {
+        const scoreHit = (i: (typeof search.data)[number]) => {
           let sc = 0;
           const hay = `${i.title ?? ""} ${i.artist ?? ""}`;
           if (wantCreator && hay.includes(wantCreator)) sc += 4;
@@ -1700,9 +2145,11 @@ async function route(request: Request, env: Env): Promise<Response> {
           return sc;
         };
         const found = musicId
-          ? search.data.find(i => i.cover_link?.includes(`/subject/${musicId}/`)) ?? search.data[0]
-          : wantCreator ? [...search.data].sort((a, b) => scoreHit(b) - scoreHit(a))[0]
-          : search.data[0];
+          ? (search.data.find((i) => i.cover_link?.includes(`/subject/${musicId}/`)) ??
+            search.data[0])
+          : wantCreator
+            ? [...search.data].sort((a, b) => scoreHit(b) - scoreHit(a))[0]
+            : search.data[0];
         if (found) {
           musicTitle = found.title || musicTitle;
           data.title = found.title;
@@ -1723,9 +2170,14 @@ async function route(request: Request, env: Env): Promise<Response> {
       try {
         const detail = await doubanMusicDetail(subjectUrl);
         if (detail.status && detail.data) {
-          if (detail.data.content_intro) { data.content_intro = detail.data.content_intro; data.content_source = "douban"; }
+          if (detail.data.content_intro) {
+            data.content_intro = detail.data.content_intro;
+            data.content_source = "douban";
+          }
           if (detail.data.songs) data.songs = detail.data.songs;
-          for (const [k, v] of Object.entries(detail.data)) { if (v && !data[k]) data[k] = v; }
+          for (const [k, v] of Object.entries(detail.data)) {
+            if (v && !data[k]) data[k] = v;
+          }
         }
       } catch {}
     }
@@ -1733,7 +2185,12 @@ async function route(request: Request, env: Env): Promise<Response> {
     // Step 3: 维基兜底（简介 + douban 搜索失败时的标题/海报兜底）
     if (!data.content_intro && musicTitle) {
       const wikiTitle = title && musicTitle.includes(title) ? title : musicTitle;
-      const intro = await fetchContentIntro(wikiTitle, "music", typeof data.artist === "string" ? data.artist.split("/")[0] : undefined, data.date);
+      const intro = await fetchContentIntro(
+        wikiTitle,
+        "music",
+        typeof data.artist === "string" ? data.artist.split("/")[0] : undefined,
+        data.date,
+      );
       if (intro) {
         data.content_intro = intro.intro;
         data.content_source = intro.source;
@@ -1751,118 +2208,231 @@ async function route(request: Request, env: Env): Promise<Response> {
     }
 
     if (data.title) {
-      return json({ status: true, msg: "ok", time: "0s", data }, 200, { "cache-control": "public, max-age=86400" });
+      return json({ status: true, msg: "ok", time: "0s", data }, 200, {
+        "cache-control": "public, max-age=86400",
+      });
     }
-    return json({ status: false, msg: "未找到音乐信息", data: null }, 404, { "cache-control": "public, max-age=60" });
+    return json({ status: false, msg: "未找到音乐信息", data: null }, 404, {
+      "cache-control": "public, max-age=60",
+    });
   }
   if (url.pathname === "/api/artwork/detail" && request.method === "GET") {
     const kind = url.searchParams.get("kind");
     const title = url.searchParams.get("q")?.trim();
-    if (!title || title.length > 120 || (kind !== "film" && kind !== "book" && kind !== "music" && kind !== "other")) {
+    if (
+      !title ||
+      title.length > 120 ||
+      (kind !== "film" && kind !== "book" && kind !== "music" && kind !== "other")
+    ) {
       return json({ status: false, msg: "invalid_query", data: null }, 400);
     }
     if (kind === "other") {
       try {
         const work = await otherDetail(title);
-        if (!work) return json({ status: false, msg: "not_found", data: null }, 404, { "cache-control": "public, max-age=300" });
-        return json({ status: true, msg: "ok", data: work }, 200, { "cache-control": "public, max-age=86400" });
+        if (!work)
+          return json({ status: false, msg: "not_found", data: null }, 404, {
+            "cache-control": "public, max-age=300",
+          });
+        return json({ status: true, msg: "ok", data: work }, 200, {
+          "cache-control": "public, max-age=86400",
+        });
       } catch {
-        return json({ status: false, msg: "wiki_unavailable", data: null }, 502, { "cache-control": "public, max-age=300" });
+        return json({ status: false, msg: "wiki_unavailable", data: null }, 502, {
+          "cache-control": "public, max-age=300",
+        });
       }
     }
     const type = kind === "film" ? "movie" : kind;
     try {
       const search = await doubanSearch(type, title, 1);
-      const subject = search.data.find((item) => typeof item.cover_link === "string" && item.cover_link.includes("douban.com/subject/"));
-      if (!subject?.cover_link) return json({ status: false, msg: "not_found", data: null }, 404, { "cache-control": "public, max-age=300" });
-      const detail = kind === "film" ? await doubanMovieDetail(subject.cover_link) : kind === "book" ? await doubanBookDetail(subject.cover_link) : await doubanMusicDetail(subject.cover_link);
-      return json({ ...detail, source_url: subject.cover_link }, detail.status ? 200 : 502, { "cache-control": detail.status ? "public, max-age=86400" : "public, max-age=300" });
+      const subject = search.data.find(
+        (item) =>
+          typeof item.cover_link === "string" && item.cover_link.includes("douban.com/subject/"),
+      );
+      if (!subject?.cover_link)
+        return json({ status: false, msg: "not_found", data: null }, 404, {
+          "cache-control": "public, max-age=300",
+        });
+      const detail =
+        kind === "film"
+          ? await doubanMovieDetail(subject.cover_link)
+          : kind === "book"
+            ? await doubanBookDetail(subject.cover_link)
+            : await doubanMusicDetail(subject.cover_link);
+      return json({ ...detail, source_url: subject.cover_link }, detail.status ? 200 : 502, {
+        "cache-control": detail.status ? "public, max-age=86400" : "public, max-age=300",
+      });
     } catch {
-      return json({ status: false, msg: "douban_unavailable", data: null }, 502, { "cache-control": "public, max-age=300" });
+      return json({ status: false, msg: "douban_unavailable", data: null }, 502, {
+        "cache-control": "public, max-age=300",
+      });
     }
   }
   if (url.pathname === "/api/other/list" && request.method === "GET") {
     const key = url.searchParams.get("key")?.trim() ?? "";
     if (!key || key.length > 80) return json({ status: false, msg: "invalid_key", data: [] }, 400);
-    if (!await allowUpstreamRequest(request, "other", 20)) return json({ error: "rate_limited" }, 429, { "retry-after": "60" });
+    if (!(await allowUpstreamRequest(request, "other", 20)))
+      return json({ error: "rate_limited" }, 429, { "retry-after": "60" });
     try {
       const works = await otherSearch(key);
-      return json({ status: true, msg: "ok", data: works }, 200, { "cache-control": "public, max-age=3600" });
+      return json({ status: true, msg: "ok", data: works }, 200, {
+        "cache-control": "public, max-age=3600",
+      });
     } catch {
       return json({ status: false, msg: "wiki_unavailable", data: [] }, 502);
     }
   }
   if (url.pathname === "/api/other/detail" && request.method === "GET") {
     const name = (url.searchParams.get("name") ?? url.searchParams.get("title"))?.trim() ?? "";
-    if (!name || name.length > 120) return json({ status: false, msg: "invalid_name", data: null }, 400);
-    if (!await allowUpstreamRequest(request, "other", 20)) return json({ error: "rate_limited" }, 429, { "retry-after": "60" });
+    if (!name || name.length > 120)
+      return json({ status: false, msg: "invalid_name", data: null }, 400);
+    if (!(await allowUpstreamRequest(request, "other", 20)))
+      return json({ error: "rate_limited" }, 429, { "retry-after": "60" });
     try {
       const work = await otherDetail(name);
-      if (!work) return json({ status: false, msg: "not_found", data: null }, 404, { "cache-control": "public, max-age=300" });
-      return json({ status: true, msg: "ok", data: work }, 200, { "cache-control": "public, max-age=86400" });
+      if (!work)
+        return json({ status: false, msg: "not_found", data: null }, 404, {
+          "cache-control": "public, max-age=300",
+        });
+      return json({ status: true, msg: "ok", data: work }, 200, {
+        "cache-control": "public, max-age=86400",
+      });
     } catch {
-      return json({ status: false, msg: "wiki_unavailable", data: null }, 502, { "cache-control": "public, max-age=300" });
+      return json({ status: false, msg: "wiki_unavailable", data: null }, 502, {
+        "cache-control": "public, max-age=300",
+      });
     }
   }
   if (url.pathname === "/api/insights" && request.method === "POST") {
     if (!env.AI_API_KEY) return json({ enabled: false, error: "ai_not_configured" }, 503);
-    if (!await allowUpstreamRequest(request, "ai", 8)) return json({ error: "rate_limited" }, 429, { "retry-after": "600" });
+    if (!(await allowUpstreamRequest(request, "ai", 8)))
+      return json({ error: "rate_limited" }, 429, { "retry-after": "600" });
     const body = await readJson(request);
     const summary = cleanOptionalString(body.summary, "summary", 2400);
     if (!summary) return json({ error: "invalid_summary" }, 400);
     const endpoint = env.AI_API_URL || "https://token-plan-cn.xiaomimimo.com/anthropic";
     try {
-      const response = await fetch(endpoint, { method: "POST", headers: { "content-type": "application/json", "x-api-key": env.AI_API_KEY, "anthropic-version": "2023-06-01" }, body: JSON.stringify({ model: "claude-3-5-haiku-latest", max_tokens: 280, system: "你是艺术偏好分析助手。只输出三段简短、温和、可解释的中文洞察，不要声称心理诊断，不要复述完整榜单。", messages: [{ role: "user", content: summary }] }), signal: AbortSignal.timeout(15000) });
+      const response = await fetch(endpoint, {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "x-api-key": env.AI_API_KEY,
+          "anthropic-version": "2023-06-01",
+        },
+        body: JSON.stringify({
+          model: "claude-3-5-haiku-latest",
+          max_tokens: 280,
+          system:
+            "你是艺术偏好分析助手。只输出三段简短、温和、可解释的中文洞察，不要声称心理诊断，不要复述完整榜单。",
+          messages: [{ role: "user", content: summary }],
+        }),
+        signal: AbortSignal.timeout(15000),
+      });
       if (!response.ok) return json({ error: "ai_upstream_failed" }, 502);
-      const raw = await response.json() as { content?: Array<{ text?: string }> };
-      const text = raw.content?.map((item) => item.text ?? "").join(" ").trim().slice(0, 1200);
-      return json({ enabled: true, insight: text || "暂时无法生成解读。" }, 200, { "cache-control": "no-store" });
-    } catch { return json({ error: "ai_unavailable" }, 502); }
+      const raw = (await response.json()) as { content?: Array<{ text?: string }> };
+      const text = raw.content
+        ?.map((item) => item.text ?? "")
+        .join(" ")
+        .trim()
+        .slice(0, 1200);
+      return json({ enabled: true, insight: text || "暂时无法生成解读。" }, 200, {
+        "cache-control": "no-store",
+      });
+    } catch {
+      return json({ error: "ai_unavailable" }, 502);
+    }
   }
   if (url.pathname === "/api/music/play" && request.method === "GET") {
     const query = url.searchParams.get("q")?.trim();
     const artist = url.searchParams.get("artist")?.trim() ?? "";
-    if (!query || query.length > 80 || artist.length > 80) return json({ error: "invalid_query" }, 400);
+    if (!query || query.length > 80 || artist.length > 80)
+      return json({ error: "invalid_query" }, 400);
     // 试听与歌词**各自独立**的配额（各 12 次/10 分钟）：一个入口不再吃掉另一个的额度。
     // 命中缓存（同一首歌重听）时零上游调用，就不记账；只有真会打上游的请求才占额度。
     // 限流窗口是 10 分钟，retry-after 必须与之一致，否则客户端按 60 秒重试仍会被拦。
-    if (playNeedsUpstream(query, artist) && !await allowUpstreamRequest(request, "music_play", 12)) {
+    if (
+      playNeedsUpstream(query, artist) &&
+      !(await allowUpstreamRequest(request, "music_play", 12))
+    ) {
       return json({ error: "rate_limited" }, 429, { "retry-after": "600" });
     }
     try {
       const { tracks, blocked } = await gdSearch(query, 10, env);
-      if (blocked) return json({ error: "music_upstream_limited" }, 429, { "retry-after": "300", msg: "音乐服务暂时限流，稍后再试" });
-      if (!tracks.length) return json({ error: "music_search_failed", msg: "音乐搜索暂不可用，请稍后重试" }, 502, { "cache-control": "public, max-age=60" });
-      let track = null; let playUrl = "";
+      if (blocked)
+        return json({ error: "music_upstream_limited" }, 429, {
+          "retry-after": "300",
+          msg: "音乐服务暂时限流，稍后再试",
+        });
+      if (!tracks.length)
+        return json({ error: "music_search_failed", msg: "音乐搜索暂不可用，请稍后重试" }, 502, {
+          "cache-control": "public, max-age=60",
+        });
+      let track = null;
+      let playUrl = "";
       for (const candidate of pickTracks(tracks, query, artist, 3)) {
         const candidateUrl = await gdPlayUrl(String(candidate.id), env);
-        if (candidateUrl) { track = candidate; playUrl = candidateUrl; break; }
+        if (candidateUrl) {
+          track = candidate;
+          playUrl = candidateUrl;
+          break;
+        }
       }
-      if (!track) return json({ error: "music_not_found" }, 404, { "cache-control": "public, max-age=300" });
+      if (!track)
+        return json({ error: "music_not_found" }, 404, { "cache-control": "public, max-age=300" });
       const isCover = isCoverTrack(track, query, artist);
-      return json({ track, playUrl, lyricId: String(track.lyric_id || track.id), isCover }, 200, { "cache-control": "no-store" });
-    } catch { return json({ error: "music_unavailable" }, 502); }
+      return json({ track, playUrl, lyricId: String(track.lyric_id || track.id), isCover }, 200, {
+        "cache-control": "no-store",
+      });
+    } catch {
+      return json({ error: "music_unavailable" }, 502);
+    }
   }
   // 歌词：按歌曲名（+可选歌手）解析曲目后返回 LRC 剥离时间轴的纯文本
   if (url.pathname === "/api/music/lyric" && request.method === "GET") {
     const query = url.searchParams.get("q")?.trim();
     const artist = url.searchParams.get("artist")?.trim() ?? "";
-    if (!query || query.length > 80 || artist.length > 80) return json({ error: "invalid_query" }, 400);
-    if (lyricNeedsUpstream(query, artist) && !await allowUpstreamRequest(request, "music_lyric", 12)) {
+    if (!query || query.length > 80 || artist.length > 80)
+      return json({ error: "invalid_query" }, 400);
+    if (
+      lyricNeedsUpstream(query, artist) &&
+      !(await allowUpstreamRequest(request, "music_lyric", 12))
+    ) {
       return json({ error: "rate_limited" }, 429, { "retry-after": "600" });
     }
     try {
       const { tracks, blocked } = await gdSearch(query, 10, env);
-      if (blocked) return json({ error: "music_upstream_limited" }, 429, { "retry-after": "300", msg: "歌词服务暂时限流，稍后再试" });
-      if (!tracks.length) return json({ error: "music_search_failed", msg: "歌词搜索暂不可用，请稍后重试" }, 502, { "cache-control": "public, max-age=60" });
+      if (blocked)
+        return json({ error: "music_upstream_limited" }, 429, {
+          "retry-after": "300",
+          msg: "歌词服务暂时限流，稍后再试",
+        });
+      if (!tracks.length)
+        return json({ error: "music_search_failed", msg: "歌词搜索暂不可用，请稍后重试" }, 502, {
+          "cache-control": "public, max-age=60",
+        });
       const track = pickTrack(tracks, query, artist);
-      if (!track) return json({ error: "music_not_found" }, 404, { "cache-control": "public, max-age=300" });
+      if (!track)
+        return json({ error: "music_not_found" }, 404, { "cache-control": "public, max-age=300" });
       const result = await gdLyric(String(track.lyric_id || track.id), env);
-      if (!result) return json({ error: "lyric_not_found" }, 404, { "cache-control": "public, max-age=3600" });
+      if (!result)
+        return json({ error: "lyric_not_found" }, 404, { "cache-control": "public, max-age=3600" });
       const lyric = stripLrc(result.lyric);
       const tlyric = stripLrc(result.tlyric);
-      return json({ title: track.name, artist: Array.isArray(track.artist) ? track.artist.join(" / ") : String(track.artist ?? ""), lyric, ...(tlyric ? { tlyric } : {}) }, 200, { "cache-control": "public, max-age=86400" });
-    } catch { return json({ error: "lyric_unavailable" }, 502); }
+      return json(
+        {
+          title: track.name,
+          artist: Array.isArray(track.artist)
+            ? track.artist.join(" / ")
+            : String(track.artist ?? ""),
+          lyric,
+          ...(tlyric ? { tlyric } : {}),
+        },
+        200,
+        { "cache-control": "public, max-age=86400" },
+      );
+    } catch {
+      return json({ error: "lyric_unavailable" }, 502);
+    }
   }
 
   if (url.pathname === "/api/auth/config") return json({ enabled: Boolean(env.DB) });
@@ -1871,7 +2441,8 @@ async function route(request: Request, env: Env): Promise<Response> {
     if (!env.DB) return json({ error: "database_unavailable" }, 503);
     const user = await getUserFromToken(request, env.DB);
     if (!user) return json({ error: "authentication_required" }, 401);
-    if (!await allowUpstreamRequest(request, "netease", 120)) return json({ error: "rate_limited" }, 429, { "retry-after": "60" });
+    if (!(await allowUpstreamRequest(request, "netease", 120)))
+      return json({ error: "rate_limited" }, 429, { "retry-after": "60" });
     try {
       if (url.pathname === "/api/netease/qr/issue" && request.method === "GET") {
         const { unikey, qrValue, ttl } = await neteaseQrIssue();
@@ -1891,27 +2462,59 @@ async function route(request: Request, env: Env): Promise<Response> {
       // 两层都拿不到时 blocked=true（网易云对本出口 IP 匿名风控），前端引导连接账号。
       if (url.pathname === "/api/netease/user-playlists" && request.method === "GET") {
         const uid = Number(url.searchParams.get("uid")?.trim());
-        if (!Number.isInteger(uid) || uid <= 0 || uid > 1e12) return json({ error: "invalid_uid", msg: "请输入正确的网易云用户 ID（个人主页 URL 里的纯数字）" }, 400);
+        if (!Number.isInteger(uid) || uid <= 0 || uid > 1e12)
+          return json(
+            { error: "invalid_uid", msg: "请输入正确的网易云用户 ID（个人主页 URL 里的纯数字）" },
+            400,
+          );
         const cookie = await loadProviderCookie(env, user.id, "netease");
         const { playlists, blocked } = await neteaseUserPlaylists(cookie, uid);
         return json({
-          playlists, total: playlists.length, blocked,
-          msg: blocked && !cookie ? "网易云暂时限制了服务器匿名访问。展开下方「连接我的网易云账号」后重试即可。" : undefined,
+          playlists,
+          total: playlists.length,
+          blocked,
+          msg:
+            blocked && !cookie
+              ? "网易云暂时限制了服务器匿名访问。展开下方「连接我的网易云账号」后重试即可。"
+              : undefined,
         });
       }
       // 手动粘贴 Cookie 连接（扫码被风控时的替代入口）：校验 MUSIC_U 真实可用后才入保险库
       if (url.pathname === "/api/netease/cookie" && request.method === "POST") {
-        const body = await request.json().catch(() => null) as { cookie?: unknown } | null;
+        const body = (await request.json().catch(() => null)) as { cookie?: unknown } | null;
         const raw = typeof body?.cookie === "string" ? body.cookie.trim() : "";
-        if (!raw || raw.length > 4096) return json({ error: "invalid_cookie", msg: "请粘贴包含 MUSIC_U 的完整 Cookie（或纯 MUSIC_U 值）" }, 400);
+        if (!raw || raw.length > 4096)
+          return json(
+            { error: "invalid_cookie", msg: "请粘贴包含 MUSIC_U 的完整 Cookie（或纯 MUSIC_U 值）" },
+            400,
+          );
         const musicU = raw.match(/MUSIC_U=([^;,\s]+)/)?.[1];
-        if (!musicU) return json({ error: "missing_music_u", msg: "粘贴的内容里没有 MUSIC_U，请确认已登录 music.163.com" }, 400);
+        if (!musicU)
+          return json(
+            {
+              error: "missing_music_u",
+              msg: "粘贴的内容里没有 MUSIC_U，请确认已登录 music.163.com",
+            },
+            400,
+          );
         const csrf = raw.match(/__csrf=([^;,\s]+)/)?.[1];
         const normalized = csrf ? `MUSIC_U=${musicU}; __csrf=${csrf}` : `MUSIC_U=${musicU}`;
         const uid = await neteaseUserId(normalized);
-        if (!uid) return json({ error: "cookie_invalid", msg: "该 Cookie 无法通过网易云校验（可能已失效），请重新复制" }, 400);
+        if (!uid)
+          return json(
+            {
+              error: "cookie_invalid",
+              msg: "该 Cookie 无法通过网易云校验（可能已失效），请重新复制",
+            },
+            400,
+          );
         await saveProviderCookie(env, user.id, "netease", normalized);
-        await recordAudit(env, "netease:cookie", `用户 #${user.id} 手动连接网易云 (uid=${uid})`, request);
+        await recordAudit(
+          env,
+          "netease:cookie",
+          `用户 #${user.id} 手动连接网易云 (uid=${uid})`,
+          request,
+        );
         return json({ ok: true, nickname: null });
       }
       if (url.pathname === "/api/netease/disconnect" && request.method === "POST") {
@@ -1929,7 +2532,8 @@ async function route(request: Request, env: Env): Promise<Response> {
     if (!env.DB) return json({ error: "database_unavailable" }, 503);
     const user = await getUserFromToken(request, env.DB);
     if (!user) return json({ error: "authentication_required" }, 401);
-    if (!await allowUpstreamRequest(request, "douban", 120)) return json({ error: "rate_limited" }, 429, { "retry-after": "60" });
+    if (!(await allowUpstreamRequest(request, "douban", 120)))
+      return json({ error: "rate_limited" }, 429, { "retry-after": "60" });
     try {
       if (url.pathname === "/api/douban/qr/issue" && request.method === "GET") {
         const { code, qrImage, ttl } = await doubanQrIssue();
@@ -1947,15 +2551,35 @@ async function route(request: Request, env: Env): Promise<Response> {
       }
       // 手动粘贴 Cookie 连接：校验 dbcl2 真实可用后才入保险库
       if (url.pathname === "/api/douban/cookie" && request.method === "POST") {
-        const body = await request.json().catch(() => null) as { cookie?: unknown } | null;
+        const body = (await request.json().catch(() => null)) as { cookie?: unknown } | null;
         const raw = typeof body?.cookie === "string" ? body.cookie.trim() : "";
-        if (!raw || raw.length > 4096) return json({ error: "invalid_cookie", msg: "请粘贴包含 dbcl2 的完整 Cookie（或纯 dbcl2 值）" }, 400);
+        if (!raw || raw.length > 4096)
+          return json(
+            { error: "invalid_cookie", msg: "请粘贴包含 dbcl2 的完整 Cookie（或纯 dbcl2 值）" },
+            400,
+          );
         const normalized = extractDoubanLoginCookie(raw);
-        if (!normalized) return json({ error: "missing_dbcl2", msg: "粘贴的内容里没有 dbcl2，请确认已登录 douban.com" }, 400);
+        if (!normalized)
+          return json(
+            { error: "missing_dbcl2", msg: "粘贴的内容里没有 dbcl2，请确认已登录 douban.com" },
+            400,
+          );
         const uid = await doubanUserId(normalized);
-        if (!uid) return json({ error: "cookie_invalid", msg: "该 Cookie 无法通过豆瓣校验（可能已失效），请重新复制" }, 400);
+        if (!uid)
+          return json(
+            {
+              error: "cookie_invalid",
+              msg: "该 Cookie 无法通过豆瓣校验（可能已失效），请重新复制",
+            },
+            400,
+          );
         await saveProviderCookie(env, user.id, "douban", normalized);
-        await recordAudit(env, "douban:cookie", `用户 #${user.id} 手动连接豆瓣 (uid=${uid})`, request);
+        await recordAudit(
+          env,
+          "douban:cookie",
+          `用户 #${user.id} 手动连接豆瓣 (uid=${uid})`,
+          request,
+        );
         return json({ ok: true });
       }
       if (url.pathname === "/api/douban/disconnect" && request.method === "POST") {
@@ -1970,7 +2594,10 @@ async function route(request: Request, env: Env): Promise<Response> {
     return json({ error: "not_found" }, 404);
   }
   if (url.pathname.startsWith("/api/import/")) {
-    if (!await allowUpstreamRequest(request, "import", 8)) return json({ error: "rate_limited", msg: "导入过于频繁，请稍后再试" }, 429, { "retry-after": "600" });
+    if (!(await allowUpstreamRequest(request, "import", 8)))
+      return json({ error: "rate_limited", msg: "导入过于频繁，请稍后再试" }, 429, {
+        "retry-after": "600",
+      });
     return withSecurityHeaders(await importRoute(request, env));
   }
   if (url.pathname.startsWith("/api/plaza/") || url.pathname.startsWith("/api/comments/")) {
@@ -1984,19 +2611,27 @@ async function route(request: Request, env: Env): Promise<Response> {
   if (url.pathname === "/api/share" && request.method === "POST") {
     if (!env.DB) return json({ error: "database_unavailable" }, 503);
     assertSameOrigin(request);
-    if (!await allowUpstreamRequest(request, "share", 30)) return json({ error: "rate_limited" }, 429, { "retry-after": "60" });
+    if (!(await allowUpstreamRequest(request, "share", 30)))
+      return json({ error: "rate_limited" }, 429, { "retry-after": "60" });
     const raw = await request.text();
-    if (new TextEncoder().encode(raw).byteLength > MAX_PAYLOAD_BYTES) return json({ error: "profile_too_large" }, 413);
+    if (new TextEncoder().encode(raw).byteLength > MAX_PAYLOAD_BYTES)
+      return json({ error: "profile_too_large" }, 413);
     let body: JsonObject;
     try {
       const parsed: unknown = JSON.parse(raw);
       if (!isObject(parsed)) throw new Error("not an object");
       body = parsed;
-    } catch { return json({ error: "invalid_json" }, 400); }
+    } catch {
+      return json({ error: "invalid_json" }, 400);
+    }
     if (!isObject(body.profile)) return json({ error: "invalid_profile" }, 400);
     // 有效期白名单（天），默认 30；不提供永久档（链接含完整排名，过期即失效）
     const SHARE_EXPIRY_DAYS = [7, 30, 90, 365];
-    const expiresDays = typeof body.expires_days === "number" && (SHARE_EXPIRY_DAYS as number[]).includes(body.expires_days) ? body.expires_days : 30;
+    const expiresDays =
+      typeof body.expires_days === "number" &&
+      (SHARE_EXPIRY_DAYS as number[]).includes(body.expires_days)
+        ? body.expires_days
+        : 30;
     // 唯一编码出口：白名单投影剔除 posterUrls 与任何未知字段（共享链接同样会进库）。
     const encoded = encodeStoredProfile(body.profile);
     if (!encoded.ok) {
@@ -2012,27 +2647,53 @@ async function route(request: Request, env: Env): Promise<Response> {
     for (let attempt = 0; attempt < 3 && !inserted; attempt += 1) {
       code = crypto.randomUUID().replace(/-/g, "").slice(0, 12);
       try {
-        await env.DB.prepare("INSERT INTO shared_links (code, profile, notes, expires_at) VALUES (?, ?, ?, ?)").bind(code, profileStr, notesJson, expires).run();
+        await env.DB.prepare(
+          "INSERT INTO shared_links (code, profile, notes, expires_at) VALUES (?, ?, ?, ?)",
+        )
+          .bind(code, profileStr, notesJson, expires)
+          .run();
         inserted = true;
-      } catch { /* Retry a short-code collision. */ }
+      } catch {
+        /* Retry a short-code collision. */
+      }
     }
     if (!inserted) return json({ error: "link_create_failed" }, 503);
     const origin = new URL(request.url).origin;
-    return json({ code, url: `${origin}/share/${code}`, compareUrl: `${origin}/encounter?payload=${code}`, expires_days: expiresDays, expires_at: expires });
+    return json({
+      code,
+      url: `${origin}/share/${code}`,
+      compareUrl: `${origin}/encounter?payload=${code}`,
+      expires_days: expiresDays,
+      expires_at: expires,
+    });
   }
   if (url.pathname.startsWith("/api/share/") && request.method === "GET") {
     if (!env.DB) return json({ error: "database_unavailable" }, 503);
     const code = url.pathname.slice("/api/share/".length);
     if (!code || code.length > 20) return json({ error: "invalid_code" }, 400);
-    const row = await env.DB.prepare("SELECT profile, notes, expires_at FROM shared_links WHERE code = ? AND expires_at > datetime('now')").bind(code).first<{ profile: string; notes: string | null; expires_at: string }>();
+    const row = await env.DB.prepare(
+      "SELECT profile, notes, expires_at FROM shared_links WHERE code = ? AND expires_at > datetime('now')",
+    )
+      .bind(code)
+      .first<{ profile: string; notes: string | null; expires_at: string }>();
     if (!row) return json({ error: "link_expired_or_not_found" }, 404);
     // 读取端自愈：旧链接里的画像可能残留 posterUrls（见 shared/storedItem.ts）。
-    const result: Record<string, unknown> = { profile: healStoredProfile(JSON.parse(row.profile)), expires_at: row.expires_at };
-    if (row.notes) { try { result.notes = JSON.parse(row.notes); } catch { /* ignore */ } }
+    const result: Record<string, unknown> = {
+      profile: healStoredProfile(JSON.parse(row.profile)),
+      expires_at: row.expires_at,
+    };
+    if (row.notes) {
+      try {
+        result.notes = JSON.parse(row.notes);
+      } catch {
+        /* ignore */
+      }
+    }
     return json(result, 200, { "cache-control": "public, max-age=3600" });
   }
   if (url.pathname === "/api/challenges" && request.method === "POST") {
-    if (!await allowUpstreamRequest(request, "challenge", 30)) return json({ error: "rate_limited" }, 429, { "retry-after": "60" });
+    if (!(await allowUpstreamRequest(request, "challenge", 30)))
+      return json({ error: "rate_limited" }, 429, { "retry-after": "60" });
     return createChallenge(request, env);
   }
   if (url.pathname.startsWith("/api/challenges/") && request.method === "GET") {
@@ -2040,7 +2701,10 @@ async function route(request: Request, env: Env): Promise<Response> {
   }
   if (url.pathname === "/admin" && request.method === "GET") {
     return new Response(DASHBOARD_HTML, {
-      headers: { "content-type": "text/html; charset=utf-8", "cache-control": "public, max-age=300" },
+      headers: {
+        "content-type": "text/html; charset=utf-8",
+        "cache-control": "public, max-age=300",
+      },
     });
   }
   if (url.pathname.startsWith("/api/")) {
@@ -2062,17 +2726,25 @@ export default {
     let error: string | undefined;
 
     try {
-      const cacheable = request.method === "GET" && ["/api/douban/top250", "/api/douban/suggest", "/api/posters", "/api/image"].includes(path);
+      const cacheable =
+        request.method === "GET" &&
+        ["/api/douban/top250", "/api/douban/suggest", "/api/posters", "/api/image"].includes(path);
       if (cacheable) {
         const edgeCache = (caches as unknown as { default: Cache }).default;
         const hit = await edgeCache.match(request);
         if (hit) {
-          if (isApi) ctx.waitUntil(logApiCall(env, path, request.method, hit.status, Date.now() - t0, "cache"));
+          if (isApi)
+            ctx.waitUntil(
+              logApiCall(env, path, request.method, hit.status, Date.now() - t0, "cache"),
+            );
           return hit;
         }
       }
       response = await route(request, env);
-      if (cacheable && response.ok) ctx.waitUntil((caches as unknown as { default: Cache }).default.put(request, response.clone()));
+      if (cacheable && response.ok)
+        ctx.waitUntil(
+          (caches as unknown as { default: Cache }).default.put(request, response.clone()),
+        );
     } catch (err) {
       if (err instanceof HttpError) {
         response = json({ error: err.code, message: err.message }, err.status);
@@ -2086,8 +2758,22 @@ export default {
 
     if (isApi) {
       const duration = Date.now() - t0;
-      const ip = request.headers.get("cf-connecting-ip") ?? request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ?? "";
-      ctx.waitUntil(logApiCall(env, path, request.method, response.status, duration, response.status >= 400 ? "error" : "ok", error, ip));
+      const ip =
+        request.headers.get("cf-connecting-ip") ??
+        request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ??
+        "";
+      ctx.waitUntil(
+        logApiCall(
+          env,
+          path,
+          request.method,
+          response.status,
+          duration,
+          response.status >= 400 ? "error" : "ok",
+          error,
+          ip,
+        ),
+      );
     }
 
     return response;
@@ -2097,7 +2783,9 @@ export default {
     if (!env.DB) return;
     try {
       await env.DB.batch([
-        env.DB.prepare("DELETE FROM analytics_events WHERE created_at < datetime('now', '-90 days')"),
+        env.DB.prepare(
+          "DELETE FROM analytics_events WHERE created_at < datetime('now', '-90 days')",
+        ),
         env.DB.prepare("DELETE FROM api_logs WHERE created_at < datetime('now', '-90 days')"),
         env.DB.prepare("DELETE FROM poster_errors WHERE created_at < datetime('now', '-180 days')"),
         env.DB.prepare("DELETE FROM admin_sessions WHERE expires_at < datetime('now')"),
