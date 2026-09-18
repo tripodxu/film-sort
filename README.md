@@ -198,12 +198,20 @@ npm run worker:dev
 # TypeScript 类型检查
 npm run check
 
+# 代码检查与格式化（ESLint 9 + Prettier 3）
+npm run lint
+npm run format          # 就地格式化
+npm run format:check    # 只检查，不改动
+
 # 运行测试
 npm test
 
 # 构建生产版本
 npm run build
 ```
+
+> `src/styles.css` 与 `docs/`、`*.md` 在 `.prettierignore` 中刻意排除，原因见
+> `docs/OPTIMIZATION.md` §5.3。
 
 ### 部署到 Cloudflare
 
@@ -219,7 +227,7 @@ npx wrangler login
 npx wrangler d1 create film-sort
 # 记下 database_id，填入 wrangler.jsonc
 
-# 应用数据库迁移（0015 OAuth / 0016 审计 / 0017 海报 source / 0018 广场索引 / 0019 编辑历史 / 0020 Cookie 保险库 / 0021 云端清单 1000 件上限）
+# 应用数据库迁移（共 23 个，最新 0022_poster_urls 海报地址侧表）
 npx wrangler d1 migrations apply film-sort --remote
 
 # 部署
@@ -252,62 +260,35 @@ npm run deploy
 ```text
 film-sort3/
 ├── src/                           # 前端源码（React + TypeScript）
-│   ├── App.tsx                    # 主应用：状态管理、路由、所有视图组件
-│   ├── main.tsx                   # React 入口
-│   ├── types.ts                   # 旧版类型定义（Movie, FilmList 等）
-│   ├── styles.css                 # 全局样式（含果冻卡片、响应式断点）
-│   ├── content-intro.test.ts      # 测试文件
-│   ├── components/
-│   │   ├── Poster.tsx             # 海报组件：API 解析 + 图片代理 + 错误上报
-│   │   └── OrbScene.tsx           # Three.js 首页 3D 光球
-│   ├── data/
-│   │   ├── media.ts               # 媒介类型定义、内置榜单（电影/书籍/音乐/其他）
-│   │   └── catalog.ts             # 电影目录数据（详细电影列表）
-│   └── lib/
-│       ├── ranking.ts             # 排序状态机（二分插入、环检测、冷却、验证阶段）
-│       ├── profile.ts             # 画像解析、合并、重命名、删除、比较、导出
-│       └── collections.ts         # 自定义清单导入解析
+│   ├── App.tsx                    # 主应用：全局状态、路由分发、弹窗
+│   ├── main.tsx / types.ts / styles.css
+│   ├── views/                     # 视图层：HomeView / SourceView / SetupView / SortingView
+│   │                              # ProfileView / CompareView / PlazaView / PlazaPostView / ShareView
+│   ├── components/                # Poster / OrbScene / DeferredOrb / ArtworkDetail / RankingDetail
+│   │                              # SettingsMenu / ThemeSwitcher / ExpandableNote / FocusTrap / ErrorBoundary
+│   ├── data/                      # media.ts（媒介定义与内置榜单）/ catalog.ts（电影目录数据）
+│   └── lib/                       # ranking.ts（排序状态机）/ profile.ts（画像读写）
+│                                  # collections.ts（清单导入）/ notes.ts / theme.ts / exportPng.ts
+│                                  # gdMusic.ts（音乐上游客户端）/ useAuth / useRouter / useSorting
 │
 ├── worker/                        # Cloudflare Worker 后端
-│   ├── index.ts                   # Worker 路由、D1 绑定、管理后台、海报错误日志
-│   ├── media.ts                   # 豆瓣/书籍/音乐 API、海报解析、防限流、Wikipedia/百度百科
-│   ├── account.ts                 # 用户注册/登录/OAuth、管理员账户管理、云端清单
-│   └── plaza.ts                   # 广场接口（帖子 CRUD、点赞、留言）
+│   ├── index.ts                   # 路由分发、限流、CSP、管理后台
+│   ├── media.ts                   # 豆瓣/维基/网易云取图与详情、防限流、图片代理
+│   ├── douban.ts / doubanlist.ts  # 豆瓣抓取与豆列解析
+│   ├── gdstudio.ts                # 音乐上游（搜索/播放链/歌词）+ 预算守卫
+│   ├── netease.ts / import.ts     # 网易云歌单与导入入口（导入即写入海报侧表）
+│   ├── account.ts                 # 账号/登录/OAuth/云端画像与清单
+│   ├── plaza.ts / audit.ts / other.ts
+│   ├── posterStore.ts             # poster_urls 侧表读写
+│   ├── rateWindow.ts              # isolate 级限流窗口（带上界与惰性清扫）
 │   └── imdb-posters.json          # IMDb 海报手动映射表
 │
-├── migrations/                    # D1 数据库迁移
-│   ├── 0001_initial.sql           # analytics_events, challenge_sets
-│   ├── 0002_user_profiles.sql     # user_profiles
-│   ├── 0003_api_logs.sql          # api_logs, admin_sessions, admin_config
-│   ├── 0004_user_accounts.sql     # user_accounts, user_sessions, user_profiles_v2, user_oauth
-│   ├── 0005_oauth_table.sql       # user_oauth
-│   ├── 0006_nickname.sql          # user_accounts.nickname
-│   ├── 0007_poster_errors.sql     # poster_errors
-│   ├── 0008_user_collections.sql  # 云端清单
-│   ├── 0008_disabled_at.sql       # 账户禁用字段
-│   ├── 0009_shared_links.sql      # 共享链接短码
-│   ├── 0011_plaza.sql             # 广场帖子、点赞、留言
-│   ├── 0015_oauth_exchange.sql    # OAuth 一次性 code 交换
-│   ├── 0016_admin_audit.sql       # 管理操作审计日志
-│   ├── 0017_poster_errors_source.sql # poster_errors 补充 source 列
-│   ├── 0018_plaza_perf.sql        # 广场排序/筛选索引
-│   ├── 0019_plaza_post_edits.sql  # 广场帖子编辑历史
-│   └── 0020_cookie_vault.sql      # 外部平台 Cookie 加密保险库
-│
-├── docs/                          # 文档
-│   ├── ARCHITECTURE.md            # 技术架构文档
-│   ├── API.md                     # API 接口参考
-│   ├── USAGE.md                   # 用户操作说明
-│   ├── OPTIMIZATION.md            # 优化路线图
-│   ├── CLOUDFLARE.md              # Cloudflare 部署文档
-│   └── DOUBAN_API.md              # 豆瓣 API 接口文档
-│
-├── package.json                   # 项目配置
-├── tsconfig.json                  # TypeScript 根配置
-├── tsconfig.app.json              # 前端 TS 配置
-├── tsconfig.worker.json           # Worker TS 配置
-├── vite.config.ts                 # Vite 构建配置
-├── vitest.config.ts               # Vitest 测试配置
+├── shared/storedItem.ts           # 前端与 Worker 共用的「可落库白名单」与编码出口
+├── migrations/                    # D1 迁移，共 23 个（0001 … 0022_poster_urls）
+├── docs/                          # 见下方「文档索引」
+├── gd-proxy/1.ts                  # 部署在 Deno Deploy 的音乐上游透明代理
+├── package.json / tsconfig*.json / vite.config.ts / vitest.config.ts
+├── eslint.config.js / .prettierrc.json
 ├── wrangler.jsonc                 # Cloudflare Workers 配置
 └── index.html                     # HTML 入口
 ```
@@ -327,7 +308,24 @@ film-sort3/
 | 静态资源 | Workers Static Assets | — |
 | 类型检查 | TypeScript | 5.7 |
 | 测试框架 | Vitest | 2.1 |
+| 代码质量 | ESLint / Prettier | 9 / 3 |
 | 部署工具 | Wrangler | 4.35 |
+
+### 文档索引
+
+| 文档 | 用途 |
+|------|------|
+| [`docs/FEATURES.md`](docs/FEATURES.md) | **已实现功能全量清单与回归走查基线**——改完 UI 逐条走查 |
+| [`docs/USAGE.md`](docs/USAGE.md) | 面向用户的操作指南 |
+| [`docs/API.md`](docs/API.md) | 后端 API 参考 |
+| [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | 技术架构与数据流 |
+| [`docs/CLOUDFLARE.md`](docs/CLOUDFLARE.md) | 部署方式与绑定配置 |
+| [`docs/DOUBAN_API.md`](docs/DOUBAN_API.md) | 豆瓣数据抓取细节 |
+| [`docs/OPTIMIZATION.md`](docs/OPTIMIZATION.md) | 优化路线图、实施状态与待办池 |
+| [`docs/PLAN-poster-pipeline.md`](docs/PLAN-poster-pipeline.md) | 海报管线计划（含实施记录与偏离说明） |
+| [`docs/PLAN-plaza.md`](docs/PLAN-plaza.md) | 广场功能计划 |
+| [`docs/UI_REVIEW.md`](docs/UI_REVIEW.md) | UI 审查记录 |
+| [`docs/REVIEW-2026-09-external-reports.md`](docs/REVIEW-2026-09-external-reports.md) | 对外部 AI 分析报告的核验结论（历史记录） |
 
 ---
 
@@ -443,14 +441,16 @@ film-sort3/
 
 | 数据 | 存储位置 | 过期时间 |
 |------|----------|----------|
-| 海报/图片 | Edge Cache | 24 小时 |
-| 搜索结果 | Edge Cache | 1 小时 |
-| 详情页 | Edge Cache | 24 小时 |
+| 海报解析结果 | L1 isolate LRU（上限 2000 条）+ L2 Edge Cache | 命中/确实缺失 24 小时；上游限流 15 秒 |
+| 单条海报响应 | 响应头 | `private, max-age=86400` |
+| 图片代理 | Edge Cache | 24 小时 |
+| 详情页 | Edge Cache | 命中 24 小时；未命中 5 分钟 |
+| 搜索与候选 | Edge Cache | 5 分钟 ~ 1 小时（按端点） |
 | Top250 索引 | Worker 内存 Map | 15 分钟 |
-| 海报错误 | D1 持久化 | 永久 |
-| API 日志 | D1 持久化 | 永久 |
-| 用户画像 | D1 持久化 | 永久 |
-| 排序草稿 | 浏览器 localStorage | 手动清除 |
+| 音乐上游（isolate 内） | 内存 LRU | 搜索 10 分钟 / 播放链 30 分钟 / 封面 50 分钟 / 歌词 24 小时 |
+| 限流窗口 | Edge Cache + isolate Map | 10 分钟（isolate Map 上界 5000 条） |
+| 画像 / 云端清单 / 广场帖 / 海报错误 / API 日志 | D1 持久化 | 永久（日志类由 cron 清理） |
+| 排序草稿 / 云端清单缓存 / 主题 / 布局 | 浏览器 localStorage | 手动清除 |
 
 **PWA 缓存更新策略**：Service Worker 对页面导航请求采用 network-first（部署新版本后立即生效，离线时回退缓存的 index.html），对带 hash 的静态资源采用 cache-first；缓存版本号升级（`art-rank-v2`）时自动清理旧缓存。开发环境（localhost）不注册 Service Worker，避免缓存住未带 hash 的源码模块导致热更新失效。
 
@@ -461,7 +461,7 @@ film-sort3/
 - Content-Security-Policy、X-Frame-Options、Referrer-Policy、Permissions-Policy 全开。
 - 用户与管理后台密码采用 PBKDF2-SHA256 加盐哈希（10 万次迭代，存储格式 `pbkdf2$<iterations>$<salt>$<hash>`），恒定时间比较；旧的无盐 SHA-256 哈希在登录成功时自动透明升级。
 - 管理后台（/admin）所有动态内容（用户邮箱/昵称、海报标题、API 路径、事件 payload 等）渲染前统一 HTML 转义，防止存储型 XSS。
-- 图片代理仅允许 `doubanio.com`、`media-amazon.com`、`media-imdb.com`、`tmdb.org` 四类 host。
+- 图片代理/入库白名单仅允许 `img*.doubanio.com`、`m.media-amazon.com`、`ia.media-imdb.com`、`image.tmdb.org`、`*.music.126.net`、`upload|thumb.wikimedia.org`、`bkimg.cdn.bcebos.com`；只接受 http(s)、无用户信息、端口仅 443/80，`http://` 统一升级为 `https://`（`worker/media.ts` 的 `allowedImage()` 是唯一判定处）。
 - 分析事件仅收集产品元数据，不含作品标题或用户信息。
 - 分享链接包含排名作品，请确认后传播。
 - OAuth 回调强制校验发起时写入的 HttpOnly Cookie state（CSRF 防护）；登录成功后通过一次性 code（5 分钟有效、用后即焚，存于 `oauth_exchanges` 表）交换会话 token，30 天 token 不再出现在重定向 URL 和浏览器历史。

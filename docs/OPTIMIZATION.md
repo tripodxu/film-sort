@@ -8,40 +8,43 @@
 
 ### 1.1 App.tsx 单体组件拆分
 
-**现状**：✅ 已完成。6 个视图组件已提取到 `src/views/`。
+**现状**：✅ 已完成。视图组件已提取到 `src/views/`，但"文件是否过大"这个判断标准此前一直看错了对象。
 
 **已实现结构**：
 
 ```
 src/
 ├── App.tsx                    # 路由 + 全局状态 + 弹窗
-├── views/
-│   ├── HomeView.tsx           # 首页（光球 + 媒介选择 + 品味年轮）
-│   ├── SourceView.tsx         # 清单来源选择（内置/自定义/豆瓣）
-│   ├── SetupView.tsx          # 排序配置（Top N、候选筛选）
-│   ├── SortingView.tsx        # 1v1 取舍界面
-│   ├── ProfileView.tsx        # 文化索引（榜单列表 + 导出）
-│   ├── CompareView.tsx        # 相遇比较（指标 + 共同作品 + AI）
-│   ├── types.ts               # 各视图 Props 接口
-│   ├── helpers.tsx            # 共享辅助函数
-│   └── IconButton.tsx         # 提取的 IconButton 组件
-├── components/
-│   ├── Poster.tsx             # 海报组件
-│   └── OrbScene.tsx           # 3D 光球
-└── lib/
-    ├── ranking.ts             # 排序状态机
-    ├── profile.ts             # 画像管理
-    └── collections.ts         # 清单导入
+├── views/                     # HomeView / SourceView / SetupView / SortingView
+│   │                          # ProfileView / CompareView / PlazaView / PlazaPostView
+│   │                          # ShareView / IconButton / helpers / types
+├── components/                # Poster / OrbScene / DeferredOrb / ArtworkDetail
+│   │                          # RankingDetail / SettingsMenu / ThemeSwitcher
+│   │                          # ExpandableNote / FocusTrap / ErrorBoundary
+└── lib/                       # ranking / profile / collections / notes / theme
+                               # exportPng / gdMusic / useAuth / useRouter / useSorting
 ```
 
-**收益**：
-- 每次只重新渲染当前视图组件，减少不必要的 re-render
-- 代码可读性和可维护性显著提升
-- 新开发者可以在单个文件中理解某个视图的完整逻辑
+**2026-09-18 补充：真正的可维护性杀手是"巨行"而不是"大文件"。**
+
+`App.tsx` 587 行本身是可读的，问题在于 JSX 被压成了超长单行：
+
+| 文件 | 格式化前最长单行 |
+|------|------------------|
+| `src/views/SourceView.tsx` | 10,539 字符 |
+| `src/views/CompareView.tsx` | 8,554 字符 |
+| `src/App.tsx` | 6,817 字符 |
+| `src/views/HomeView.tsx` | 4,422 字符 |
+
+已引入 Prettier（`npm run format`）并全仓统一格式，最长单行降到 252 字符。格式化前后用
+esbuild 把两侧压成 minified 产物逐字节比较（JSX 文本会变成字符串字面量，任何文案
+空白变化都会暴露），67 个代码文件确认只有排版变化。
+
+**仍待处理**：`worker/index.ts` 1999 行、`src/views/PlazaPostView.tsx` 1139 行仍偏大，
+按路由/子组件继续拆分（见文末待办池）。
 
 **风险**：
-- 需要仔细处理跨视图共享状态（profile、peer、locale 等）
-- 弹窗组件仍需访问全局状态，考虑 Context 或 prop drilling
+- 弹窗组件仍需访问全局状态，目前靠 prop drilling
 
 ### 1.2 状态管理精简
 
@@ -62,16 +65,36 @@ src/
 
 ### 2.1 Bundle 按需加载
 
-**现状**：主包 353 KB（gzip 115 KB），Three.js 522 KB 已做 lazy load。QRCode 和 fflate 已完成动态 import。
+**现状**（2026-09-18 实测 gzip，`npx vite build`）：
 
-| 优化项 | 当前大小 | 方案 | 预估收益 | 状态 |
-|--------|----------|------|----------|------|
-| QRCode 库 | ~15 KB gzipped | 仅在点击「分享」时 `import("qrcode")` | 首屏 -15 KB | ✅ 已完成 |
-| fflate | ~8 KB gzipped | 仅在分享链接解析/生成时动态 import | 首屏 -8 KB | ✅ 已完成 |
-| lucide-react | ~20 KB gzipped | `sideEffects: false` 已添加，Vite 默认 tree-shaking 已生效 | -5~10 KB | ✅ sideEffects 已添加 |
-| catalog.ts | ~36 KB | 电影目录数据改为动态 import | 首屏 -36 KB | ⏸ 暂缓 |
+| 产物 | 原始 | gzip |
+|------|------|------|
+| `index-*.js`（主包） | 505.74 KB | 159.43 KB |
+| `OrbScene-*.js`（Three.js 光球，独立 chunk） | 521.72 KB | 132.13 KB |
+| `index-*.css` | 89.16 KB | 16.46 KB |
 
-**实施**：
+| 优化项 | 方案 | 状态 |
+|--------|------|------|
+| QRCode 库 | 仅在点击「分享」时 `import("qrcode")` | ✅ 已完成 |
+| fflate | 仅在分享链接解析/生成时动态 import | ✅ 已完成 |
+| lucide-react | `sideEffects: false` + Vite tree-shaking | ✅ 已完成 |
+| **首屏 3D 光球** | **从关键路径移出**（见下） | ✅ 2026-09-18 完成 |
+| catalog.ts（36 KB） | 改为动态 import | ⏸ 暂缓（原因见文末） |
+
+**首屏光球移出关键路径**：`OrbScene` 是装饰性背景（`aria-hidden`），却占了落地页 JS 的
+约 45%。此前只有 `lazy()`——那只是把它拆成第二个请求，并没有避免加载。现改为
+`src/components/DeferredOrb.tsx`：
+
+- 省流模式（`navigator.connection.saveData`）或 2G/slow-2G：**完全不加载**，保留既有的 CSS 兜底背景
+- 其余情况：等首屏空闲（`requestIdleCallback`，2s 上限；Safari 缺该 API 时退回定时器）后再 `import()`
+- `prefers-reduced-motion` **刻意不拦截**：`OrbScene` 内部已把该偏好处理成"只渲染一帧静止画面"，
+  这些用户本来就该看到静态光球，跳过加载反而是视觉回归
+- 等待期间渲染与 `OrbScene` 根节点同 class 的占位元素，因此没有布局跳动（无 CLS）
+
+注意口径：这一步把 132 KB gzip 从**首屏关键路径**上摘下来（并让省流/2G 用户完全省掉），
+而不是把页面总传输量减少 132 KB——留在页面上的用户仍会在空闲时加载它。
+
+**实施（QRCode 按需加载示例）**：
 
 ```typescript
 // QRCode 按需加载示例
@@ -288,13 +311,32 @@ export default {
 ```
 
 ```jsonc
-// wrangler.jsonc
+// wrangler.jsonc（实际配置为每周一凌晨 3 点）
 {
   "triggers": {
-    "crons": ["0 3 * * 0"]  // 每周日凌晨 3 点
+    "crons": ["0 3 * * 1"]
   }
 }
 ```
+
+### 3.5 限流窗口的内存上界 （✅ 2026-09-18 完成）
+
+**问题**：`allowUpstreamRequest` 的 isolate 级 Map 键为 `bucket:ip`，写入后**没有任何淘汰
+路径**——只有同一个键再次出现时才可能重置，于是不同 IP 只增不减，长寿命 isolate 里会随
+访问者数量单调增长。（外部分析报告把它称作"P0 内存泄漏"，定级过高：每条约 50 字节且随
+isolate 回收释放；但无界本身是真的。）
+
+**实施**：窗口语义抽到 `worker/rateWindow.ts`：
+
+- 保留逐字等价的行为：窗口过期即重开并计 1；达到上限时不再自增、返回 `false`
+- 写入后惰性清扫（只在超过上界时触发，常规路径仍是一次 Map 查找）：先删已到期条目，
+  仍超上界才按插入顺序淘汰。淘汰最坏情况是把某个 IP 的窗口提前重置——只会放宽、不会
+  收紧，因此不会误伤正常用户
+- 顺带把硬编码在两处（isolate 判定与 Edge Cache 判定）的 10 分钟窗口提成 `RATE_WINDOW_MS`
+
+上界取 5000（约 250 KB）：5000 个不同 IP / 10 分钟已远超本站在单个 isolate 上的真实流量，
+正常限流语义不会因淘汰而失效。`worker/rateWindow.test.ts` 覆盖窗口重置、上限拒绝且不自增、
+桶与 IP 相互独立、超上界后 Map 不再增长、优先清扫过期条目、淘汰只会放宽共 7 项。
 
 ---
 
@@ -316,21 +358,29 @@ export default {
 - 添加 token 刷新机制
 - 限制 `localStorage` 访问权限（CSP `script-src` 更严格）
 
-### 4.2 CSP 加固
+### 4.2 CSP 加固 （✅ 已完成）
 
-**现状**：
+**原状**：`img-src 'self' data:` 之外的图片来源靠 `https:` 泛放行，等于允许任意外部图片。
 
-```
-img-src 'self' data: https:
-```
-
-允许加载任意外部图片，可能被利用加载恶意图片触发 SSRF。
-
-**建议**：
+**已落地**（唯一出处是 `worker/index.ts` 的 `SECURITY_HEADERS`，此处只摘录图片与媒体相关指令）：
 
 ```
-img-src 'self' data: https://img*.doubanio.com https://m.media-amazon.com https://ia.media-imdb.com https://image.tmdb.org https://cdn.jsdelivr.net
+img-src 'self' data: https://*.doubanio.com https://m.media-amazon.com
+        https://ia.media-imdb.com https://image.tmdb.org https://*.music.126.net
+        https://*.githubusercontent.com https://upload.wikimedia.org
+        https://thumb.wikimedia.org https://bkimg.cdn.bcebos.com
+media-src 'self' https://*.music.126.net
 ```
+
+注意两点容易记错的细节：
+
+- `img-src` 用的是 `https://*.doubanio.com`（子域通配），而**应用层**入库/代理白名单是更严的
+  `img\d+\.doubanio\.com`（见 §6.3 与 `worker/media.ts` 的 `allowedImage()`）。两者刻意不同：
+  CSP 管浏览器能加载什么，白名单管服务端允许写入/代理什么。
+- `https://cdn.jsdelivr.net` 属于 `script-src`，不属于 `img-src`；内联脚本用固定 SHA-256 hash 放行。
+
+配套还启用了 COOP、`nosniff`、`X-Frame-Options: DENY`、`Referrer-Policy`、`Permissions-Policy`
+与 `upgrade-insecure-requests`；写接口另有 `assertSameOrigin()` 同源校验。
 
 ### 4.3 输入验证
 
@@ -366,26 +416,32 @@ async function shareSingleRanking(ranking: RankingExport) {
 
 ### 5.1 测试覆盖
 
-**现状**：仅有 `content-intro.test.ts` 一个测试文件。
+**现状**（2026-09-18）：15 个测试文件、**179 项通过 / 9 项跳过**。`npm test` 全绿；CI 每次都跑。
 
-**优先覆盖**：
+已覆盖的核心模块：
 
-| 模块 | 测试内容 | 优先级 |
-|------|----------|--------|
-| `lib/ranking.ts` | 创建状态、选择、撤销、跳过、暂放、验证阶段、回环检测、序列化/反序列化 | P0 |
-| `lib/profile.ts` | 画像解析、合并、重命名、删除、比较指标计算、维度合并 | P0 |
-| `lib/collections.ts` | TXT/JSON 导入、去重、边界条件（空输入、超长标题、300+ 作品） | P1 |
-| `components/Poster.tsx` | 海报 URL 解析、降级策略 | P2 |
+| 测试文件 | 覆盖内容 |
+|----------|----------|
+| `src/lib/profile.test.ts` | 画像解析、去重口径、坏数据容错、备份恢复（42 项） |
+| `shared/storedItem.test.ts` | 可落库白名单、唯一编码出口、UTF-8 字节上限 |
+| `worker/posterCache.test.ts` / `posterPriority.test.ts` | 缓存 TTL 分类、取图优先级与短路 |
+| `worker/posterStore.test.ts` | 海报键等价性（数字/字符串年份、全角、繁简）、侧表读写 |
+| `worker/importSeed.test.ts` | 导入即种子化（白名单校验、占位图跳过、覆盖写） |
+| `worker/musicMatch.test.ts` | 歌名匹配、失败原因分类、缓存命中不记账的判定 |
+| `src/lib/gdMusic.test.ts` | 上游失败分类、歌词行与译文配对 |
+| `worker/rateWindow.test.ts` | 限流窗口语义与内存上界 |
 
-**建议添加覆盖率检查到 CI**：
+**仍未做**：没有任何覆盖率工具（未安装 `@vitest/coverage-*`），所以**任何"覆盖率 X%"的说法
+目前都不可测量**。若要让覆盖率成为可追踪指标，先建立基线：
 
-```json
+```jsonc
 // vitest.config.ts
 export default defineConfig({
   test: {
     coverage: {
-      provider: 'v8',
-      thresholds: { lines: 60, functions: 60 }
+      provider: "v8",
+      // 先只报告、不设阈值；等基线稳定后再逐目录提阈值
+      reporter: ["text", "lcov"]
     }
   }
 })
@@ -412,12 +468,35 @@ export default defineConfig({
 
 当前压缩单文件已够用。迁移到 CSS Modules 或 Tailwind 需重写所有 class 引用。
 
-**现状**：`styles.css` 单文件 38 行（每行 2000+ 字符的压缩格式），不可读、不可 diff。
+**现状**：`src/styles.css` 562 行，大量压缩长行，不可读、不可 diff。
+
+**2026-09-18 新增发现：文件里存在 4 处早已损坏的 `content` 声明。**
+
+```css
+.metrics-more summary::after{content:"<U+FFFD>?;font-size:10px;…}
+.tech-sections details summary::before{content:"<U+FFFD>?;font-size:12px;…}
+.advanced-import summary::before{content:" <U+FFFD>? "}
+.advanced-import[open] summary::before{content:" <U+FFFD>? "}
+```
+
+`U+FFFD` 是替换字符——原本的装饰箭头（形如 `\25B8` ▸ / `\25BE` ▾）在早前的某次编辑里
+被编码破坏了。字符串因此没有正常闭合，CSS 解析器只能靠错误恢复跳过，`npx vite build`
+每次都会为它打印警告。（这 4 处在 `git show HEAD:src/styles.css` 里同样存在，属历史遗留，
+不是本轮引入。）修复需要判断每一处原本用的是哪个箭头，建议与 CSS 可维护性一起处理。
+
+**另一个决定**：`src/styles.css` 已加入 `.prettierignore` 并**刻意不做格式化**。Prettier 的
+CSS 打印器除了 5 类无害归一化（逗号后补空格、小数补前导零、组合器两侧补空格、属性选择器值
+补引号、括号内媒体特征名后补空格），还会把 `content:"\25B8"` 改写成 `content:" \25B8 "`——
+按 CSS 转义规则，转义后的那个空格会被当作终止符吃掉，字符串凭空多出一个前导空格，折叠标记
+真的会位移。为了把 `--bg:#x` 改成 `--bg: #x` 而引入 1276 节点重排并附赠一个真实视觉改动，
+不划算。
 
 **建议**：
 - 开发时维护未压缩版本，构建时通过 Vite 插件压缩
 - 或迁移到 CSS Modules（`styles.module.css`），与现有 class 名兼容
 - 或引入 Tailwind CSS（与现有的 `glass-capsule` 等自定义 class 共存）
+- 顺手清理历史重复定义（`.rank-detail-dialog` / `.guide-help-btn` / `.profile-layout section` /
+  `.ranking-card-*` 各出现两份）
 
 ---
 
@@ -476,10 +555,9 @@ const estimatedRemaining = Math.round(remaining * avgComparisonsPerItem);
 
 ### 7.1 CI/CD
 
-**现状**：✅ 已完成。`.github/workflows/ci.yml` 已配置。
+**现状**：✅ 已完成。`.github/workflows/ci.yml`（2026-09-18 补入 lint 与 format:check）。
 
 ```yaml
-# .github/workflows/ci.yml — 已部署
 name: CI
 on:
   push:
@@ -494,10 +572,15 @@ jobs:
       - uses: actions/setup-node@v4
         with: { node-version: 20, cache: npm }
       - run: npm ci
-      - run: npm run check
+      - run: npm run check          # tsc -b
+      - run: npm run lint           # eslint（react-hooks + no-unused-vars）
+      - run: npm run format:check   # prettier --check
       - run: npm test -- --run
       - run: npm run build
 ```
+
+`npm run lint` 当前是 0 error / 39 warning（`exhaustive-deps` 与未使用变量）。warning 不
+阻塞 CI——这是刻意的：这些 warning 是待办线索，不是门禁。
 
 ### 7.2 监控 （✅ 部分完成）
 
@@ -516,69 +599,48 @@ jobs:
 
 ## 实施优先级
 
-| 优先级 | 项目 | 工作量 | 收益 | 状态 |
-|--------|------|--------|------|------|
-| **P0** | App.tsx 视图拆分 | 2-3 天 | 可维护性、性能、协作 | ✅ 6 个视图组件 |
-| **P0** | 排序/画像核心测试 | 1-2 天 | 防回归、信心 | ✅ 58 tests |
-| **P1** | Bundle 按需加载 | 0.5 天 | 首屏加载速度 | ✅ QRCode+fflate 动态 import |
-| **P1** | D1 查询合并 + 日志批量写 | 0.5 天 | 后端性能 | ✅ |
-| **P1** | CSP 加固 | 0.5 天 | 安全性 | ✅ img-src 白名单 |
-| **P1** | Token 安全加固 | 0.5 天 | 安全性 | ⏸ 暂缓 |
-| **P1** | CI/CD 流水线 | 0.5 天 | 开发效率 | ✅ GitHub Actions |
-| **P2** | 海报缓存优化 | 0.5 天 | 加载体验 | ✅ sessionStorage |
-| **P2** | TypeScript 严格化 | 1 天 | 代码质量 | ⏸ 暂缓 |
-| **P2** | 数据库自动清理 | 0.5 天 | 运维 | ✅ Cron Trigger |
-| **P2** | 无障碍改进 | 1 天 | 可访问性 | ✅ 部分完成 |
-| **P3** | PWA 离线支持 | 1-2 天 | 用户体验 | ✅ |
-| **P3** | CSS 模块化 | 1-2 天 | 可维护性 | ⏸ 暂缓 |
-| **P3** | 国际化系统化 | 1 天 | 多语言支持 | ⏸ 暂缓 |
-| **P3** | 排序撤销性能优化 | 0.5 天 | 大榜单体验 | ✅ 快照法 O(1) |
-| **P3** | 缓存策略改进 | 0.5 天 | 后端性能 | ✅ 跳过 |
-| **P3** | catalog.ts 动态加载 | 0.5 天 | 首屏 -36KB | ⏸ 暂缓 |
+| 优先级 | 项目 | 状态 |
+|--------|------|------|
+| **P0** | 视图组件拆分 | ✅ |
+| **P0** | 排序/画像核心测试 | ✅（最新基线见 §5.1） |
+| **P0** | 画像读写单侧校验 | ✅ 见 §2.5 |
+| **P0** | 首屏 3D 光球移出关键路径 | ✅ 2026-09-18，见 §2.1 |
+| **P0** | 限流窗口内存上界 | ✅ 2026-09-18，见 §3.5 |
+| **P0** | lint / format 工具链 + 全仓格式化 | ✅ 2026-09-18，见 §1.1、§7.1 |
+| **P1** | Bundle 按需加载（QRCode / fflate / lucide） | ✅ |
+| **P1** | D1 查询合并 + 日志批量写 | ✅ |
+| **P1** | CSP 加固 | ✅ img-src 白名单 |
+| **P1** | 海报管线 Phase 0/1/2 | ✅ 见 [PLAN-poster-pipeline.md](./PLAN-poster-pipeline.md) |
+| **P1** | 导入时把封面写进 `poster_urls` 侧表 | ✅ |
+| **P1** | 音乐试听 / 歌词（含独立配额与译文） | ✅ 见 §2.6 |
+| **P1** | 音乐封面取图网易云优先、豆瓣兜底 | ✅ |
+| **P1** | Token 安全加固 | ⏸ 暂缓（原因见下） |
+| **P1** | CI/CD 流水线 | ✅ |
+| **P2** | 海报缓存优化 | ✅ |
+| **P2** | TypeScript 严格化 | ⏸ 暂缓 |
+| **P2** | 数据库自动清理 | ✅ Cron Trigger |
+| **P2** | 无障碍改进 | ✅ 部分完成 |
+| **P3** | PWA 离线支持 | ✅ 见 §6.2 |
+| **P3** | CSS 模块化 / 修 4 处损坏的 `content` | ⏸ 暂缓，见 §5.3 |
+| **P3** | 国际化系统化 | ⏸ 暂缓 |
+| **P3** | 排序撤销性能优化 | ✅ 快照法 O(1)，见 §2.2 |
+| **P3** | catalog.ts 动态加载 | ⏸ 暂缓 |
 
-**统计：12 项已完成 / 4 项暂缓**
+> **本表是实施状态的唯一出处。** 历史上"未完成项说明"与"可优化点清单"里出现过
+> ❌ PWA 离线支持、❌ 排序撤销性能优化，与本节 ✅ 直接矛盾——这两项实际都已落地。
+> 本次校订已按上表口径统一，并删掉了重复的条目清单。
 
-### 广场功能（新增）
+### 广场功能
 
-广场功能已完成实施，包括：
-
-| 阶段 | 内容 | 状态 |
-|------|------|------|
-| Phase 1 | 数据库迁移 + 广场 API（CRUD + 点赞 + 留言 + 编辑） | ✅ 已完成 |
-| Phase 2 | 查看分享页（/share/:code）改造 | ✅ 已完成 |
-| Phase 3 | 广场列表页 + 帖子详情页（含编辑/删除） | ✅ 已完成 |
-| Phase 4 | 发布到广场功能（ProfileView 集成） | ✅ 已完成 |
-| Phase 5 | 人工优化排序（拖拽/上下移动） | ✅ 已完成 |
-| Phase 6 | 广场 → 排序/比较 交互流程 | ✅ 已完成 |
-| Phase 7 | 文档更新 + 测试 | ✅ 已完成 |
-
-**额外优化（已完成）**：
-- 广场卡片自定义 HTML/CSS 设计（便利贴风格）
-- 列数选择器（2/3/4 列，持久化到 localStorage）
-- 加载骨架屏动画（解决首次加载闪烁）
-- 广场头部高端化（渐变背景 + 毛玻璃标签页）
-- 媒介能力选择器（圆角按钮组）
-- 导航栏毛玻璃效果
-- 广场发布描述字段（输入框展开 + Enter 发布）
-- 区分比较链接和分享链接（`/encounter?payload=` vs `/share/:code`）
-- 批注大写作框（280px 高 textarea）
-- 长批注展开/收起（ExpandableNote 组件）
-- 4 列模式单海报（紧凑模式）
-- 发布粒子爆炸动画（12 粒子彩色飞散）
-- 下拉模组 UI 美化（details/summary 圆角卡片 + 动画箭头）
-- 批注截断 30 字 + 弹窗查看（不再 inline 展开）
-- 发布到广场弹窗设计（类 note-modal 风格 + 大 textarea）
-- 排序进度混合预估（60% 实际速率 + 40% 理论速率）
-- 无障碍 ARIA 属性增强（duel-grid、plaza filters、poster alt 改进）
-- 云端批注自动恢复（登录 / OAuth / session 刷新三入口）
-- 留言回复功能（嵌套评论 + 缩进显示 + 回复按钮）
-- 区分比较链接和分享链接（`/encounter?payload=` vs `/share/:code`）
+广场（帖子 CRUD + 点赞 + 留言/回复 + 编辑历史 + 发布 + 广场→排序互动）已全部上线。
+功能清单与入口以 `FEATURES.md` 为准，本文不再重复维护一份（此前这里列了 20 条"额外优化"，
+其中"区分比较链接和分享链接"还重复出现了两次）。
 
 ---
 
-## 未完成项说明
+## 暂缓项及其原因
 
-### ❌ Token 安全加固（P1）
+### ⏸ Token 安全加固（P1）
 
 **原因**：需要改造整个认证流程。当前 `accountToken` 存储在 `localStorage`，改为 HttpOnly Cookie 需要：
 - Worker 端登录响应改用 `Set-Cookie` 替代 JSON body 返回 token
@@ -589,45 +651,29 @@ jobs:
 
 改动量大且涉及安全关键路径，需要充分测试，不宜在批量优化中一并处理。
 
-### ❌ TypeScript 严格化（P2）
+### ⏸ TypeScript 严格化（P2）
 
 **原因**：开启 `noUncheckedIndexedAccess` 后，所有 `Map.get()`、数组索引访问都返回 `T | undefined`，需要在数百处添加非空断言或类型守卫。`exactOptionalPropertyTypes` 会改变 `interface` 中 `prop?: T` 的语义，现有代码中大量使用 `undefined` 赋值的地方需要逐一修复。
 
 建议在大版本迭代时逐步开启，而非一次性修改。
 
-### ❌ 无障碍改进（P2）
+### ⏸ 无障碍改进（P2，已部分完成）
 
-**原因**：涉及多个子项，工作量和风险各异：
-- ARIA 角色补充（排序卡片 `role="group"`）——简单，但需要确认不干扰现有键盘导航
-- 焦点陷阱（弹窗焦点捕获）——需要引入 Radix Dialog 或手动实现，与现有 `modal-backdrop` 模式冲突
+**已完成**：ARIA 属性增强（duel-grid、广场筛选、海报 alt）、新手引导使用 `FocusTrap`。
+
+**剩余子项**：
+- 焦点陷阱推广到全部 modal——需要引入 Radix Dialog 或手动实现，与现有 `modal-backdrop` 模式冲突
 - 海报 alt 文本改为作品名——当前 `Poster` 组件的 `alt` 是通用文案，改为动态值需要调整组件接口
 - `--muted` 对比度调整——需要验证所有使用场景的视觉效果
+- toast 队列化 + `aria-live` 播报（现在多条通知会互相顶掉）
 
 各项独立性高，建议按子项逐步推进，不阻塞其他优化。
 
-### ❌ PWA 离线支持（P3）
+### ⏸ CSS 模块化（P3）
 
-**原因**：需要引入 `vite-plugin-pwa` 并配置 Service Worker 策略。当前项目使用 Cloudflare Workers 静态资源服务，需要确认 Service Worker 与 Workers Assets 的缓存策略不冲突。排序草稿已有 localStorage 保存机制，离线恢复的实际收益有限。
+见 §5.3。除了拆分压缩长行，还需一并修掉那 4 处 U+FFFD 损坏的 `content` 声明。
 
-优先级低，可在用户体验优化阶段单独处理。
-
-### ❌ CSS 模块化（P3）
-
-**原因**：`styles.css` 是单文件压缩格式（38 行，每行 2000+ 字符），迁移到 CSS Modules 或 Tailwind 需要：
-- 拆分所有压缩行到独立文件
-- 重写所有 class 引用（App.tsx + 6 个视图组件 + 组件库）
-- 确保与现有的 `glass-capsule`、`poster-*`、`medium-*` 等自定义 class 兼容
-- 响应式断点和动画需要重新组织
-
-工作量大（1-2 天），收益主要是可维护性而非功能/性能，建议在下一次大规模 UI 改版时一并处理。
-
-### ❌ 排序撤销性能优化（P3）
-
-**原因**：当前 `undoLastAction` 通过重放决策日志实现，300 作品约需重放 30 次比较，单次撤销耗时 < 1ms。实际用户场景中，排序榜单很少超过 100 件作品，撤销操作也不频繁，当前性能完全可接受。
-
-只有在支持超大榜单（500+ 作品）且用户频繁撤销的场景下才值得优化。
-
-### ❌ catalog.ts 动态加载（P3）
+### ⏸ catalog.ts 动态加载（P3）
 
 **原因**：`catalog.ts`（36 KB）是电影目录数据，通过 `media.ts` 的 `fromFilms()` 在模块初始化时构建 `mediaCollections` 常量。改为动态加载需要：
 - 将 `mediaCollections` 从同步常量改为异步加载（`Promise<MediaCollection[]>`）
@@ -638,34 +684,37 @@ jobs:
 
 ---
 
-## 可优化点清单 v1（2026-09-13，P1-P5 执行中累积，P6 滚动输入）
+## 待办池（滚动更新）
 
-### UI/组件精修（P6 候选）
-- [ ] PlazaPostView.tsx（629 行 / 68 内联样式）拆出评论区、作者编辑区子组件
-- [ ] CompareView.tsx 超长单行 JSX 格式化（42 行含 38 内联 style）
-- [ ] styles.css 历史重复定义清理（.rank-detail-dialog/.guide-help-btn/.profile-layout section/.ranking-card-* 各 2 份）
-- [ ] 弹窗焦点陷阱推广到全部 modal（现仅新手引导用 FocusTrap）
-- [ ] toast 通知队列化（现在多条会互相顶掉）；aria-live 播报
-- [ ] OrbScene 移动端降级（低 dpr/小屏减粒子或静态图）
-- [ ] 广场/比较长列表虚拟化（>200 项时）
-- [ ] 主题切换器下拉在 cyber/retro 下的对比度微调（菜单 hover 态）
-- [ ] retro 主题字体本地化（Manrope/DM Mono woff2 入 public/fonts，当前回退系统字体）
+来源：外部分析报告核验结论（见 [REVIEW-2026-09-external-reports.md](./REVIEW-2026-09-external-reports.md)）、
+`npm run lint` 的 39 条 warning、以及日常开发中的观察。**这不是承诺清单，只是候选池。**
 
-### 数据/逻辑
-- [ ] clearAllData 与登出的 localStorage 清理集合不一致（notes 一处清一处不清）
-- [ ] Poster 缓存键已含 kind，但 douban 标题带原文后缀问题可同样喂给维基（当前已用用户输入标题，可再优化为豆瓣干净标题剥离）
-- [ ] /api/share 无独立限流桶（share 桶已声明未使用）
-- [ ] other 类别的 /api/posters 解析路径未接维基（仅详情带图；搜索候选带图已可用）
+### UI / 组件精修
+- [ ] `src/styles.css`：修掉 4 处 U+FFFD 损坏的 `content` 声明（见 §5.3），并清理历史重复定义（`.rank-detail-dialog` / `.guide-help-btn` / `.profile-layout section` / `.ranking-card-*` 各 2 份）
+- [ ] `worker/index.ts`（1999 行）按资源拆成 `worker/routes/*`；`src/views/PlazaPostView.tsx`（1139 行）拆出评论区、作者编辑区子组件
+- [ ] **无障碍剩余项（详见 `UI_REVIEW.md` 的「剩余未完成项」）**：`ExpandableNote` 是 `<p onClick>`，没有 `tabIndex`/`role`/`onKeyDown`，键盘无法触发"查看全文"；14 处 modal backdrop 缺 `aria-hidden`；焦点陷阱只接了新手引导一处（`FocusTrap`）；`RankingDetail` 行首奖牌 emoji 缺 `aria-hidden`
+- [ ] toast 通知队列化（现在多条会互相顶掉）+ `aria-live` 播报
+- [ ] `OrbScene` 移动端降级（低 dpr / 小屏减粒子或静态图）
+- [ ] 广场 / 比较长列表虚拟化（> 200 项时）
+- [ ] 主题切换器下拉在 cyber / retro 下的对比度微调（菜单 hover 态）
+- [ ] retro 主题字体本地化（Manrope / DM Mono woff2 入 `public/fonts`，当前回退系统字体）
+
+### 数据 / 逻辑
+- [ ] **`pickTracks` 补繁简归一**：`worker/gdstudio.ts` 的 `norm()` 只做 `NFKC + toLowerCase + 去标点`，而 **NFKC 不统一繁简**，所以「告白氣球」与「告白气球」当前不匹配、会被判成"未收录"。这是收紧歌名匹配后唯一被确认的召回缺口（只扩召回，不放松精确性）
+- [ ] `clearAllData` 与登出的 localStorage 清理集合不一致（notes 一处清一处不清）
+- [ ] `other` 类别的 `/api/posters` 解析路径未接维基（仅详情带图；搜索候选带图已可用）
 - [ ] 网易云扫码 risk 判定后 unikey 已销毁，「再试一次扫码」会重新签发——可保留原 unikey 轮询恢复窗口
-- [ ] doubanSearch 无 music suggest（/api/douban/music/suggest 缺失）
+- [ ] `doubanSearch` 无 music suggest（`/api/douban/music/suggest` 确实缺失，已核实）
+- [ ] Poster 缓存键已含 kind，但豆瓣标题常带原文后缀，可把豆瓣干净标题同样喂给维基（当前用的是用户输入标题）
+
+### 后端 / 可观测性
+- [ ] `ensureIndex()` / `ensureMusicIndex()` / `ensureBookIndex()` 改为不 `await`（`ctx.waitUntil` 预热）：`doubanTop250(250)` = 10 页，经 `throttle()` 按域名 800ms 串行，冷 isolate 首请求有 **≥8s 墙钟下界**且压在响应路径上。改成后台预热是"命中率换尾延迟"的取舍，**先测量再改**
+- [ ] 给取图来源加计数（`direct` 网易云 vs `proxied` 豆瓣 各胜出多少次，写进 `poster_errors` 或新建极简计数表）。动机：音乐封面并行取图时两侧预算不对等（gdstudio 40 次 / 5 分钟 / isolate vs 豆瓣 120 次 / 10 分钟），稀缺的那份还要供试听与歌词用。**先测出 direct 胜出比，再决定是否让豆瓣在 direct 命中时短路**——不要直接改成串行，那会在"网易云失败"这条用户已经在等的路径上再叠一次豆瓣往返
+- [ ] 建立覆盖率基线（装 `@vitest/coverage-v8`，见 §5.1）
 
 ### 海报管线（详见 [PLAN-poster-pipeline.md](./PLAN-poster-pipeline.md)）
-- [x] **Phase 0（最高优先级）**：海报地址走旁路不进 `items` + 统一"可落库白名单"与唯一编码出口 + 静态守卫测试 —— 修当前线上活跃风险
-- [x] Phase 1：批量/单条接口先查 `poster_urls` 再解析（命中即零回源）
-- [x] Phase 2：失败分类（`throttled` 15s / `absent` 24h）+ 刷新即重试 + 批量失败入 `poster_errors`
-- [ ] Phase 3：`poster_misses` 失败队列 + cron 定时补温（让覆盖率无需人工访问即可收敛）—— 需要新增迁移与 cron，且会持续占用 Worker 出口 IP，**建议在线上观察 Phase 1/2 效果后再落地**
-- [x] 统一 512KB 体积判定口径（`plaza.ts` 两处 `raw.length` 已改为 UTF-8 字节）
+- [x] Phase 0 / 1 / 2 已落地，512KB 体积口径统一为 UTF-8 字节
+- [ ] Phase 3：`poster_misses` 失败队列 + cron 定时补温——需新增迁移与 cron，且会持续占用 Worker 出口 IP，**建议在线上观察 Phase 1/2 效果后再落地**
 
 ### 文档
-- [ ] FEATURES.md 的回归走查清单尚未做成可自动化脚本（Playwright）
-- [ ] PLAN-plaza.md 标注「已被 FEATURES.md 取代」或归档至 docs/old/
+- [ ] `FEATURES.md` 的回归走查清单尚未做成可自动化脚本（Playwright）

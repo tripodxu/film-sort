@@ -3,6 +3,7 @@
 > 状态：**Phase 0 / 1 / 2 已实施**（含自动化护栏）· Phase 3 未实施（见 §11）
 > 相关文档：`OPTIMIZATION.md` §2.3、§3.3 · `DOUBAN_API.md` · `API.md`
 > 相关提交：`d158fce` `d4492eb` `23fc8c3`（已完成）· `51dfc8d` `58da68a` `4ce1f15`（历史成因）
+> 实施提交：`960139d`（Phase 0 + Phase 1）· `64d1c08`（导入即种子化）· `bc83fab`（音乐取图优先级）
 > 实施记录与偏离说明：**§11**
 
 ---
@@ -109,41 +110,48 @@ items: kept.map((w, i) => ({ ...w, rank: i + 1 }))   // ...w 把 posterUrls 原�
 
 ### 4.2 第二层：剥离零散 + 写入路径缺护栏（**本文档重点**）
 
-仓库里存在**三套各写各的"可落库形状"**：
+仓库里**曾经**存在三套各写各的"可落库形状"（Phase 0 之前）：
 
 | 位置 | 实现方式 |
 |---|---|
-| `src/lib/profile.ts:46-52` `parseRanking` | 白名单 `id/title/rank/creator?/year?/subtitle?` **+ posterUrls（保留、校验、截断 8 个）** |
-| `src/lib/useSorting.ts:134,155` | 手写同样 6 个字段，无 posterUrls |
-| `worker/account.ts:364-370` | 黑名单 `delete item.posterUrls` |
+| `src/lib/profile.ts` 的 `parseRanking` | 白名单 `id/title/rank/creator?/year?/subtitle?` **+ posterUrls（保留、校验、截断 8 个）** |
+| `src/lib/useSorting.ts` 的两处保存函数 | 手写同样 6 个字段，无 posterUrls |
+| `worker/account.ts` 的 `PUT profile` 分支 | 黑名单 `delete item.posterUrls` |
 
-而实际能写入 `items` 的路径有 5 条，**只有 1 条有护栏**：
+而当时实际能写入 `items` 的路径有 5 条，**只有 1 条有护栏**：
 
 | # | 写入路径 | 位置 | 护栏 |
 |---|---|---|---|
-| 1 | `PUT /api/account/profile` | `account.ts:364` | ✅ 有（本地实现） |
-| 2 | `POST /api/plaza/posts` | `plaza.ts:148` | ❌ **无** |
-| 3 | `PUT /api/plaza/posts/:id` | `plaza.ts:184` | ❌ **无** |
-| 4 | `POST /api/account/collections` | `account.ts:409` | ❌ **无**（1000 条上限，最高危） |
-| 5 | `POST /api/share` | `index.ts:1966` | ❌ **无** |
+| 1 | `PUT /api/account/profile` | `worker/account.ts` 的 PUT profile 分支 | ✅ 有（本地实现） |
+| 2 | `POST /api/plaza/posts` | `worker/plaza.ts` 的 POST posts 分支 | ❌ **无** |
+| 3 | `PUT /api/plaza/posts/:id` | `worker/plaza.ts` 的 PUT posts/:id 分支 | ❌ **无** |
+| 4 | `POST /api/account/collections` | `worker/account.ts` 的 POST collections 分支 | ❌ **无**（1000 条上限，最高危） |
+| 5 | `POST /api/share` | `worker/index.ts` 的 POST /api/share 分支 | ❌ **无** |
 
-另外体积判定单位不一致：`account.ts` / `index.ts` 用**字节**，`plaza.ts:121,169` 用 `raw.length`（UTF-16 码元）—— 对中文实际放行到约 3 倍。
+另外当时体积判定单位不一致：`account.ts` / `index.ts` 用**字节**，`plaza.ts` 两处用 `raw.length`（UTF-16 码元）—— 对中文实际放行到约 3 倍。
 
-### 4.3 合并成因：当前线上活跃风险
+> **现状（Phase 0 落地后）**：这 5 条路径全部改为调用 `shared/storedItem.ts` 的编码器，
+> `plaza.ts` 的两处也统一为 `new TextEncoder().encode(raw).byteLength`，`JSON.stringify` 载荷已被
+> `worker/payloadGuard.test.ts` 静态拦住。逐条落点见 §11.1。
 
-`23fc8c3` 上线的 `attachStoredPosterUrls()` 会把 `poster_urls` 侧表的结果**注回 `post.items`**，于是：
+### 4.3 合并成因：这条链为何一度高危（**Phase 0 已封堵**）
+
+`23fc8c3` 上线的 `attachStoredPosterUrls()` 会把 `poster_urls` 侧表的结果**注回 `post.items`**，当时因此形成这样一条复发链：
 
 ```
-attachStoredPosterUrls 注回 post.items                    ← 已上线（worker/plaza.ts:104）
-  → PlazaPostView.tsx:234  setEditItems(post.items.map(w => ({ ...w })))   ← ...w 展开带入
+attachStoredPosterUrls 注回 post.items                    ← 当时已上线
+  → PlazaPostView 的 startEdit  setEditItems(post.items.map(w => ({ ...w })))   ← ...w 展开带入
   → saveEdit()  body.items = editItems
-  → plaza.ts:184  itemsJson = JSON.stringify(body.items)   ← 无护栏
+  → plaza.ts 的 PUT 分支  itemsJson = JSON.stringify(body.items)   ← 无护栏
   → 写回 plaza_posts.items                                  ← 重演 512KB 故障
 ```
 
 对照历史：`51dfc8d` 修的正是这条链。**只要作者编辑一次帖子，海报地址就会重新进库并随覆盖率增长。**
 
-> 三个结构性缺陷缺一不可：① 没有权威的"可落库形状"；② 编码出口不唯一（5 处各自 `JSON.stringify`）；③ 体积口径不一致。**这也是为什么补丁会反复出现 —— 漏掉一处没有任何信号。**
+> 该链已由 Phase 0 断开：详情接口改为返回**旁路数组** `posterUrls`（`worker/plaza.ts` 的 GET 详情分支），
+> 不再注入 `post.items`；`PlazaPostView` 只在渲染时合并（`displayItems`），编辑流继续使用干净的
+> `post.items`；PUT 又加了白名单编码器。三处结构性缺陷（无权威形状、编码出口不唯一、体积口径不一致）
+> 也一并收敛，所以"补丁反复出现"的根因已不再成立。
 
 ---
 
@@ -152,7 +160,7 @@ attachStoredPosterUrls 注回 post.items                    ← 已上线（work
 | 项 | 内容 | 验证状态 |
 |---|---|---|
 | 批量接口 | `POST /api/posters/batch`，300 首一次提交，独立 `posters` 限流桶，逐条宽松清洗，回显 `keys` 保证位置对齐 | ✅ 线上 |
-| 服务端缓存 | L1 isolate LRU（2000 条 / 24h）+ L2 Edge Cache，键为 `type\|title\|english\|year` 的截断 SHA-256 | ✅ 线上 |
+| 服务端缓存 | L1 isolate LRU（`POSTER_CACHE_MAX_ENTRIES` = 2000 条，TTL 按 outcome）+ L2 Edge Cache（TTL 同 outcome），键为 `type\|title\|english\|year` 的截断 SHA-256 | ✅ 线上 |
 | 分页懒加载 | `RankingDetail` 30 首/页，滚动续载；`PlazaPostView` 原死代码已删 | ✅ 线上 |
 | 并发闸门 | 批量 fetch 在途 ≤ 8 | ✅ 线上 |
 | 豆瓣 Referer | `imageUrl()` 只把 `img\d+.doubanio.com` 交给代理，其余直连 + `onError` 代理兜底 | ✅ 线上 |
@@ -160,9 +168,9 @@ attachStoredPosterUrls 注回 post.items                    ← 已上线（work
 | `throttle` 串行化 | 改为每域 promise 链，修 TOCTOU；`search.douban.com` 间隔 800ms → 200ms | ✅ 线上 |
 | 冷却去连坐 | `searchCover` 10s 全域冷却 → 1.2s 短冷却 + 重试一次 | ✅ 线上 |
 | 客户端分块 | 批量上限 300 → 30 | ✅ 线上 |
-| `poster_urls` 侧表 | `migrations/0022`，解析结果落库；plaza 详情读取时挂载 | ⚠️ **已上线但见 §4.3 风险** |
+| `poster_urls` 侧表 | `migrations/0022_poster_urls.sql`，解析结果落库；plaza 详情读取时以旁路数组返回 | ✅ 已上线（Phase 0 后已无 §4.3 的复发风险） |
 
-**实测确认**（部署后复测）：迁移已生效；`posterUrls` 覆盖率随解析累积 **0 → 3 → 37**，与批量实际解析数完全对应；写穿与读取挂载链路成立。
+**实测确认**（部署后复测）：迁移已生效；`posterUrls` 覆盖率随解析累积 **0 → 3 → 37**，与批量实际解析数完全对应；写穿与读取（现为旁路数组）链路成立。
 
 ---
 
@@ -192,7 +200,7 @@ attachStoredPosterUrls 注回 post.items                    ← 已上线（work
 ```ts
 /** 可落库作品的唯一字段集。posterUrls 永远不在其中——海报走 poster_urls 侧表。 */
 export interface StoredWork {
-  id: string; title: string; rank: number;
+  id?: string; title: string; rank?: number;   // id / rank 实际为可选，原因见 §11.2
   creator?: string; year?: number; subtitle?: string;
 }
 
@@ -202,8 +210,12 @@ export interface StoredWork {
  */
 export function toStoredWork(value: unknown): StoredWork | null;
 export function toStoredWorks(value: unknown): StoredWork[];
-/** profile 形状：rankings[].items[] 逐层走 toStoredWorks；榜单元数据保留 */
-export function toStoredRankingsContainer(value: unknown): unknown;
+/** 榜单：元数据按白名单保留，items 逐层走 toStoredWorks */
+export function toStoredRanking(value: unknown): StoredRanking | null;
+/** 榜单集合：广场 profile 帖的 items 就是这个形状 */
+export function toStoredRankings(value: unknown): StoredRanking[];
+/** profile 形状：rankings[].items[] 逐层收敛；另兼容 v1 画像，见 §11.2 */
+export function toStoredProfile(value: unknown): StoredProfile | null;
 ```
 
 字段集**照抄 `parseRanking` 现有形状**（不做增删），因此不是新语义，只是把既有语义收敛为唯一实现。
@@ -211,16 +223,18 @@ export function toStoredRankingsContainer(value: unknown): unknown;
 
 #### 0c. 唯一的编码出口 + 统一字节限额
 
-同模块内，只有这两个函数能产出可落库字符串：
+同模块内，只有这三个函数能产出可落库字符串：
 
 ```ts
 export const MAX_PAYLOAD_BYTES = 512 * 1024;
 
-export function encodeStoredWorks(value: unknown):
+export type StoredEncodeResult =
   | { ok: true; json: string; count: number }
-  | { ok: false; error: "payload_too_large" };
+  | { ok: false; error: "payload_too_large" | "empty_payload" };  // empty_payload 见 §11.2
 
-export function encodeStoredRankings(value: unknown): /* 同上 */;
+export function encodeStoredWorks(value: unknown, limit?: number): StoredEncodeResult;
+export function encodeStoredRankings(value: unknown, limit?: number): StoredEncodeResult;
+export function encodeStoredProfile(value: unknown, limit?: number): StoredEncodeResult;
 ```
 
 内部统一用 `new TextEncoder().encode(json).byteLength` 判定，**顺带把 `plaza.ts` 两处 `raw.length` 口径统一到字节**。
@@ -228,31 +242,32 @@ export function encodeStoredRankings(value: unknown): /* 同上 */;
 
 #### 0d. 让第 6 条路径无法悄悄出现
 
-- **静态守卫测试** `worker/payloadGuard.test.ts`：扫描 `worker/**/*.ts`，若在编码器模块之外出现针对载荷的 `JSON.stringify`（窄模式匹配 `JSON.stringify\(\s*(body|collection|parsed)\.(items|profile|rankings)`），测试失败并输出文件行号。
+- **静态守卫测试** `worker/payloadGuard.test.ts`：扫描 `worker/**/*.ts`，若在编码器模块之外出现针对载荷的 `JSON.stringify`，测试失败并输出文件行号。实际使用的窄模式是 `JSON.stringify\(\s*(?:body|collection|parsed|post)\s*\.\s*(?:items|profile|rankings|collection)\b`（比计划多收了 `post` 与 `.collection`，并显式排除注释行与 `notes` 之类的旁路字段）；测试还额外校验 5 条写入路径都 import 并调用了 `encodeStored*`。
 - **类型品牌（可选加固）**：`StoredJson = string & { __stored: true }`。不能拦 D1 `.bind()`（那里是 `unknown`），但能拦住"编码结果被当普通字符串二次加工"的误用。
 
 #### 0e. 客户端收敛
 
 | 位置 | 改法 |
 |---|---|
-| `profile.ts:39-53` `parseRanking` | 改为调用 `toStoredWork`，删除本地重复白名单 |
-| `useSorting.ts:134,155` | 改为 `toStoredWorks(kept.map((w,i) => ({ ...w, rank: i+1 })))` |
-| `App.tsx` `persist()` | 复用同一 builder，删除自定义 destructure |
-| `useSorting.ts:165` | 保持不动（内存里带 posterUrls 用于渲染是合法的，落库必经编码器） |
+| `src/lib/profile.ts` 的 `parseRanking` | 改为调用 `toStoredWork`，删除本地重复白名单（另新增导出 `toRankedItems`） |
+| `src/lib/useSorting.ts` 的两处保存函数 | 改为 `toRankedItems(kept.map((w, i) => ({ ...w, rank: i + 1 })))` |
+| `src/App.tsx` 的 `persist()` | 复用同一 builder（`toRankedItems`），删除自定义 destructure |
+| `src/lib/useSorting.ts` 的排序结果归集 | 保持不动（内存里带 posterUrls 用于渲染是合法的，落库必经编码器） |
 
 #### 0f. 存量数据自愈
 
-读取时也过一遍 `toStoredWork`：库中残留 posterUrls 的旧行读出来即干净，客户端编辑保存后自动瘦身 —— **无需数据迁移脚本**。
+读取时也过一遍白名单（`plaza.ts` 详情用 `toStoredWorks` / `toStoredRankings`，画像与分享链接用
+`healStoredProfile`）：库中残留 posterUrls 的旧行读出来即干净，客户端编辑保存后自动瘦身 —— **无需数据迁移脚本**。
 
 ### Phase 1 — 批量/单条接口先查库 ✅ 已实施
 
 | 文件 | 改动 |
 |---|---|
-| `worker/posterStore.ts` | 导出目前私有的 `loadPosterUrls` |
-| `worker/media.ts` | `resolvePostersBatch(requests, env, known?)`：命中即短路；`keys` 仍与入参等长对齐 |
+| `worker/posterStore.ts` | 导出目前私有的 `loadPosterUrls`（另新增 `resolveStoredPosterUrls` 返回旁路数组） |
+| `worker/media.ts` | `resolvePostersBatch(requests, env?, concurrency = 8, known?, opts?)`：`known` 命中即短路（`knownPosterHit`）；`keys` 仍与入参等长对齐 |
 | `worker/index.ts` | 批量/单条路由：先算 keys → `loadPosterUrls` → 作为 `known` 传入 → 只解析未命中项 → 只对新解析到的写库 |
 
-空数组命中按未命中处理。DB 不可用/表缺失 → 返回空 map → 退化为当前行为，不报错。
+空数组命中按未命中处理（`knownPosterHit` 对空数组返回 null）。DB 不可用/表缺失 → 返回空 map → 退化为当前行为，不报错。
 **受益面**：分享页（posterUrls 被剥掉）、任何走批量的入口都不再重复回源。
 
 ### Phase 2 — 失败可重试 ✅ 已实施（2c 未做）
@@ -273,6 +288,7 @@ export function encodeStoredRankings(value: unknown): /* 同上 */;
 
 - `resolvedPosters.set` 改为只在有结果时写 → 失败不再被页面会话记住
 - 每次页面加载的**首次**批量带 `retry: true`；服务端据此**绕过负缓存**（正缓存仍生效）→ "刷新 = 真重试"是确定的，不依赖 15 秒窗口
+  （实际只绕过 `throttled` 负缓存、保留 `absent`，原因见 §11.2 第 3 条）
 
 **2c. 页内自动补一轮**（可选，限 1 次，首批 settle 后 3~5 秒）
 
@@ -282,15 +298,18 @@ export function encodeStoredRankings(value: unknown): /* 同上 */;
 
 **3a.** 迁移 `0023_poster_misses.sql`：`media_key PK, title, english, type, year, attempts, first_seen, last_attempt`
 失败 upsert（`attempts+1`）、成功 delete。同时成为"还差什么"的唯一事实来源。
+（该迁移文件当前**不存在**，`migrations/` 最新是 `0022_poster_urls.sql`。）
 
 **3b.** `wrangler.jsonc` 增加 cron（如 `*/20 * * * *`），`scheduled()` 按 `event.cron` 分支：
 每轮取 `last_attempt` 最旧的一批（30~60 个），走现有节流链解析落库，严格限量。
+（当前 `wrangler.jsonc` 已有一个每周清理用的 cron `0 3 * * 1`，`scheduled()` 只做数据清理、
+**没有** `event.cron` 分支，也没有任何海报补温逻辑。）
 
 > 只靠人刷，冷门帖子永远补不齐；这一步让覆盖率在无人访问时也能收敛到接近 100%。
 
 ### Phase 4 — 验证
 
-**单元测试（✅ 已落地，122 passed）**
+**单元测试（✅ 已落地：全套 179 passed | 9 skipped）**
 - 白名单丢弃未知字段（含 posterUrls、tags、缓存字段）；超限返回 `payload_too_large`；字节口径对中文正确 → `shared/storedItem.test.ts`
 - `known` 短路、空数组按未命中、`retry` 只影响 `throttled` 分支 → `worker/posterCache.test.ts`
 - **静态守卫测试**：故意在某路由加 `JSON.stringify(body.items)`，确认测试变红 → `worker/payloadGuard.test.ts`（含守卫自身的有效性用例）
@@ -446,13 +465,13 @@ curl.exe -s -o NUL -H "User-Agent: Mozilla/5.0 … Chrome/131" -w "%{http_code} 
 npx tsc --noEmit -p tsconfig.app.json     # 客户端
 npx tsc --noEmit -p tsconfig.worker.json  # Worker（含 shared）
 npx tsc --noEmit -p tsconfig.node.json
-npm test                                  # 122 passed | 9 skipped
+npm test                                  # 179 passed | 9 skipped
 npx vite build                            # 客户端产物
 npx wrangler deploy --dry-run             # Worker 打包（含 ../shared 引用）
 ```
 
-> 本机 `npm run check` / `tsc -b` 会因工作区里三个 `*.tsbuildinfo` 被占用而报 `TS5033 EPERM`；
-> 用上面的 `tsc --noEmit -p <project>` 等价替代（已验证三个 project 全绿）。
+> `npm run check`（即 `tsc -b`）当前可直接跑通（已实测）。若本机三个 `*.tsbuildinfo` 被其它进程
+> 占用而报 `TS5033 EPERM`，用上面的 `tsc --noEmit -p <project>` 等价替代即可。
 
 ### 11.4 Phase 3 为何暂不实施
 
