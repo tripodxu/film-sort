@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Music2, Play, X } from "lucide-react";
 import { Poster } from "./Poster";
 import { IconButton } from "../views/IconButton";
-import { gdPlay, gdLyric } from "../lib/gdMusic";
+import { gdPlay, gdLyric, type GdErrorInfo } from "../lib/gdMusic";
 import type { RankedArtwork } from "../lib/profile";
 import type { MediaKind } from "../data/media";
 
@@ -27,6 +27,20 @@ export function ArtworkDetail({ detail, label, t, onClose }: { detail: ArtworkDe
   const [lyricBusy, setLyricBusy] = useState(false);
   const [lyricError, setLyricError] = useState("");
   const isMusic = detail.kind === "music";
+  /**
+   * 把失败原因说清楚。旧实现把它一律当作"没找到"：用户连点几首撞上 12 次/10 分钟的
+   * 限流后，界面仍显示"未找到可试听的版本"，于是看起来就像功能坏了。
+   */
+  function musicErrorText(error: GdErrorInfo, notFound?: string): string {
+    if (error.reason === "rate_limited") {
+      const wait = error.retryAfter > 0 ? error.retryAfter : 60;
+      const hint = wait >= 120 ? t(`${Math.ceil(wait / 60)} 分钟`, `${Math.ceil(wait / 60)} min`) : t(`${wait} 秒`, `${wait}s`);
+      return t(`操作太频繁了，请 ${hint}后再试`, `Too many requests — retry in ${hint}`);
+    }
+    if (error.reason === "upstream_limited") return t("音乐服务暂时限流，请稍后再试", "Music service is rate-limited — please retry later");
+    if (error.reason === "not_found") return notFound ?? t("未找到可试听的版本", "No playable version found");
+    return t("试听服务暂不可用", "Preview unavailable");
+  }
   async function playMusic() {
     if (playUrl) return;
     setPlayBusy(true); setPlayError("");
@@ -34,8 +48,8 @@ export function ArtworkDetail({ detail, label, t, onClose }: { detail: ArtworkDe
     const artist = detail.work.creator;
     try {
       const result = await gdPlay(title, artist);
-      if (result) { setPlayUrl(result.playUrl); setIsCover(result.isCover); }
-      else setPlayError(t("未找到可试听的版本", "No playable version found"));
+      if (result.ok) { setPlayUrl(result.value.playUrl); setIsCover(result.value.isCover); }
+      else setPlayError(musicErrorText(result.error));
     } catch { setPlayError(t("试听服务暂不可用", "Preview unavailable")); }
     finally { setPlayBusy(false); }
   }
@@ -46,7 +60,8 @@ export function ArtworkDetail({ detail, label, t, onClose }: { detail: ArtworkDe
     const artist = detail.work.creator;
     try {
       const result = await gdLyric(title, artist);
-      if (result?.lyric) setLyric(result.lyric);
+      if (result.ok && result.value.lyric) setLyric(result.value.lyric);
+      else if (!result.ok) setLyricError(musicErrorText(result.error, t("暂无歌词", "No lyrics available")));
       else setLyricError(t("暂无歌词", "No lyrics available"));
     } catch { setLyricError(t("歌词服务暂不可用", "Lyrics unavailable")); }
     finally { setLyricBusy(false); }

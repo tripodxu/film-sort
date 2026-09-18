@@ -1823,7 +1823,9 @@ async function route(request: Request, env: Env): Promise<Response> {
     const query = url.searchParams.get("q")?.trim();
     const artist = url.searchParams.get("artist")?.trim() ?? "";
     if (!query || query.length > 80 || artist.length > 80) return json({ error: "invalid_query" }, 400);
-    if (!await allowUpstreamRequest(request, "music", 12)) return json({ error: "rate_limited" }, 429, { "retry-after": "60" });
+    // 限流窗口是 10 分钟（allowUpstreamRequest 的窗口），retry-after 必须一致，
+    // 否则客户端按 60 秒重试仍然会被拦，只会得到"未找到可试听的版本"这种误导提示。
+    if (!await allowUpstreamRequest(request, "music", 12)) return json({ error: "rate_limited" }, 429, { "retry-after": "600" });
     try {
       const { tracks, blocked } = await gdSearch(query, 10, env);
       if (blocked) return json({ error: "music_upstream_limited" }, 429, { "retry-after": "300", msg: "音乐服务暂时限流，稍后再试" });
@@ -1843,7 +1845,7 @@ async function route(request: Request, env: Env): Promise<Response> {
     const query = url.searchParams.get("q")?.trim();
     const artist = url.searchParams.get("artist")?.trim() ?? "";
     if (!query || query.length > 80 || artist.length > 80) return json({ error: "invalid_query" }, 400);
-    if (!await allowUpstreamRequest(request, "music", 12)) return json({ error: "rate_limited" }, 429, { "retry-after": "60" });
+    if (!await allowUpstreamRequest(request, "music", 12)) return json({ error: "rate_limited" }, 429, { "retry-after": "600" });
     try {
       const { tracks, blocked } = await gdSearch(query, 10, env);
       if (blocked) return json({ error: "music_upstream_limited" }, 429, { "retry-after": "300", msg: "歌词服务暂时限流，稍后再试" });

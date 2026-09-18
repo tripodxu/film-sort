@@ -172,6 +172,30 @@ async function generateQR(url: string) {
 
 **回归护栏**：`src/lib/profile.test.ts` 用线上帖子 32 里真实相撞的曲目做 fixture，钉住「重复→合并、脏数据→单条丢弃、写入端产物必可被读取端接受、读取端永不删数据」。
 
+### 2.6 音乐试听 / 歌词（✅ 已修复误播与可诊断性）
+
+**线上实测**（`sort.logicc.top`）：
+
+| 现象 | 证据 |
+|---|---|
+| 点「试听」播了一首**毫不相干**的歌 | `GET /api/music/play?q=zzzzqqqxxx` 返回 `Can't Give Up` / `ZXXXQ`，且 `isCover:false`（连"仅提供翻唱"的提示都没有） |
+| 连点十来次后被拦，界面却说"没找到" | 撞上 `429 rate_limited`（试听+歌词共享 `music` 桶 **12 次/10 分钟**），而服务端给的 `retry-after: 60` 与 10 分钟窗口不符；客户端把 429/404/502 一律折叠成 null → 统一显示"未找到可试听的版本" |
+| 同一首歌忽好忽坏 | 同一查询先 502 `music_search_failed`、紧接着 200；`gdSearch` 还会把 `200 + 非数组` 的响应当成"没有结果"**缓存 10 分钟** |
+
+**修复**：
+
+| 位置 | 改动 |
+|---|---|
+| `gdstudio.pickTracks()` | **歌名必须对上**才算候选（原先"一条都没对上"时会把搜索结果原样返回，于是播无关的歌、也给无关的封面）；只有歌手相同不再入选 |
+| `gdstudio.gdSearch()` | 只缓存数组响应，非数组不再被当成"没有结果"缓存 10 分钟 |
+| `/api/music/play`、`/api/music/lyric` | `retry-after` 60 → **600**（与实际 10 分钟窗口一致） |
+| `src/lib/gdMusic.ts` | 保留失败原因（`rate_limited` / `upstream_limited` / `not_found` / `unavailable`）+ `retry-after`，不再一律折叠成 `null` |
+| `ArtworkDetail` | 按原因给提示："操作太频繁了，请 10 分钟后再试" / "音乐服务暂时限流" / "未找到可试听的版本" |
+
+**遗留（产品取舍，本次未改）**：试听与歌词共享 `music` 桶 12 次/10 分钟，而一次试听要 1 次搜索 + 最多 3 次播放链查询。刷一份榜单、点 6 首（各看歌词）就会撞上额度。上游另有 isolate 级 40 次/5 分钟的硬预算，所以**不建议直接调大 per-IP 上限**；要改善的话优先考虑给试听/歌词分桶，或命中缓存时不记账。
+
+**回归护栏**：`worker/musicMatch.test.ts`（7 项）、`src/lib/gdMusic.test.ts`（8 项）。
+
 ---
 
 ## 3. 后端优化

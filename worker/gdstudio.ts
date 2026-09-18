@@ -104,27 +104,34 @@ export async function gdSearch(name: string, count = 10, env?: GdProxyEnv): Prom
   const { result: raw, blocked } = await gdApiWithRetry({ types: "search", source: SOURCE, name, count: String(count), pages: "1" }, env);
   const tracks = Array.isArray(raw) ? (raw as GdTrack[]).filter((t) => t && typeof t.id === "string" && typeof t.name === "string") : [];
   const outcome = { tracks, blocked: blocked && tracks.length === 0 };
-  if (tracks.length || raw !== null) searchCache.set(key, outcome);
+  // 只缓存**结构性正确**的响应。上游偶尔会回 200 + 非数组（错误 JSON / 拦截页），
+  // 把它当"没有结果"缓存 10 分钟，会让这首曲子在这 10 分钟里一直"搜不到"。
+  if (Array.isArray(raw)) searchCache.set(key, outcome);
   return outcome;
 }
 
-/** 从搜索命中里按歌手/歌名匹配度排序，保留若干候选供播放链逐个尝试。 */
+/**
+ * 从搜索命中里按歌名/歌手匹配度排序，保留若干候选供播放链逐个尝试。
+ *
+ * **歌名必须先对上**（精确 +4、互相包含 +2），只有歌手对上不算命中：搜「童话 / 光良」
+ * 时上游会连带返回同歌手的《第一次》，拿它当候选等于播放一首无关的歌。一条歌名都对不上
+ * 就返回空——宁可告诉用户"没找到"，也不播错歌、也不给错封面。
+ */
 export function pickTracks(tracks: GdTrack[], title: string, artist?: string, limit = 3): GdTrack[] {
   if (!tracks.length) return [];
   const norm = (s: string) => s.normalize("NFKC").toLowerCase().replace(/[\s·．.、,，/()（）'’\-—_]/g, "");
   const wantTitle = norm(title);
+  if (!wantTitle) return [];
   const wantArtist = artist ? norm(artist.split("/")[0].trim()) : "";
   const artistOf = (t: GdTrack) => norm(Array.isArray(t.artist) ? t.artist.join(" ") : String(t.artist ?? ""));
   const scored = tracks.map((track, index) => {
-    let score = 0;
     const tName = norm(track.name);
-    if (tName === wantTitle) score += 4;
-    else if (tName.includes(wantTitle) || wantTitle.includes(tName)) score += 2;
-    if (wantArtist && (artistOf(track).includes(wantArtist) || wantArtist.includes(artistOf(track)))) score += 3;
+    let score = tName === wantTitle ? 4 : (tName.includes(wantTitle) || wantTitle.includes(tName) ? 2 : 0);
+    if (score > 0 && wantArtist && (artistOf(track).includes(wantArtist) || wantArtist.includes(artistOf(track)))) score += 3;
     return { track, score, index };
-  }).sort((a, b) => b.score - a.score || a.index - b.index);
-  const matched = scored.filter((entry) => entry.score > 0).map((entry) => entry.track);
-  return (matched.length ? matched : tracks).slice(0, Math.max(1, limit));
+  }).filter((entry) => entry.score > 0)
+    .sort((a, b) => b.score - a.score || a.index - b.index);
+  return scored.slice(0, Math.max(1, limit)).map((entry) => entry.track);
 }
 
 export function pickTrack(tracks: GdTrack[], title: string, artist?: string): GdTrack | null {
