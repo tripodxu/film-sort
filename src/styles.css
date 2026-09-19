@@ -33,8 +33,8 @@
 @media(max-width:540px){.topbar,.main,footer{width:calc(100% - 24px)}.topbar{height:64px;gap:8px}.wordmark{font-size:15px}.topbar nav{gap:10px}.topbar nav button{font-size:11px;padding:0}.header-tools{gap:0}.header-tools .icon-button{width:30px}.header-tools a.icon-button{display:none}.main{padding-top:22px}.home-heading{display:block;padding-top:15px}.home-heading h1{font-size:48px}.home-heading h1>span{font-size:20px}.identity{margin-top:22px;max-width:none}.identity .text-button{width:auto;margin-left:auto}.home-actions{gap:8px}.button{padding-inline:14px}.medium-section{padding-top:32px}.medium-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.medium-item{grid-template-rows:20px 35px 30px 30px;padding:18px}.medium-item:nth-child(2){border-right:0}.medium-item:nth-child(-n+2){border-bottom:1px solid var(--line)}.medium-item>strong{font-size:19px}.medium-item>svg:last-child{right:14px}.profile-overview{padding-top:30px}.sample-covers .poster-small{width:45px;height:65px}.sample-covers{gap:4px}.empty-profile h3{font-size:14px}.empty-profile span{font-size:11px}.empty-profile{gap:16px}.empty-profile .file-button{width:100%}.coordinate-grid{grid-template-columns:minmax(0,1fr)}.page-heading h1{font-size:29px}.collection-row{gap:16px;padding-block:18px}.segmented button{padding-inline:13px}.back-link{margin-bottom:18px}.duel-heading h1{font-size:20px}.comparison-count{flex-direction:column;gap:0}.comparison-count strong{font-size:24px}.comparison-count span{font-size:10px}.duel-grid{gap:10px}.artwork-card{padding:0}.artwork-main{padding:8px}.artwork-top{margin-bottom:8px;font-size:10px}.artwork-info{height:100px;padding:12px 12px 0 0}.artwork-info h2{font-size:17px}.artwork-info p{font-size:10px}.choose-arrow{width:14px;right:6px;bottom:16px}.cover-fallback{gap:15px}.cover-fallback span{font-size:18px}.cover-fallback svg{width:26px}.profile-dimensions{grid-template-columns:repeat(2,minmax(0,1fr))}.profile-dimension{padding:17px 10px}.profile-dimension strong{font-size:16px}.comparison-inputs{gap:15px}.comparison-inputs h2{font-size:17px}.comparison-inputs .button{font-size:11px;padding-inline:8px;gap:5px}.metrics{gap:12px}.metrics strong{font-size:31px}.metrics span{font-size:11px}.ranking-list li{gap:12px}.rank-detail-dialog{width:min(440px,100%);padding:18px}}
 @media(prefers-reduced-motion:reduce){*,*:before,*:after{transition:none!important;animation:none!important;scroll-behavior:auto!important}}
 /* ===== Guide Modal & Help Button ===== */
-.guide-help-btn{position:fixed;bottom:28px;right:28px;z-index:50;width:48px;height:48px;border-radius:50%;border:1px solid color-mix(in srgb,var(--text) 30%,transparent);background:color-mix(in srgb,var(--surface-3) 70%,transparent);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);color:var(--accent);font-size:22px;font-weight:700;display:flex;align-items:center;justify-content:center;cursor:pointer;box-shadow:0 4px 20px rgba(0,0,0,.3);transition:transform .2s ease,box-shadow .2s ease,border-color .2s ease}.guide-help-btn:hover{transform:scale(1.1);border-color:var(--accent);box-shadow:0 6px 28px color-mix(in srgb,var(--accent-2) 15%,transparent)}.guide-modal{max-width:560px;max-height:80vh;overflow-y:auto;padding:32px 36px 28px}.guide-modal h2{font-size:22px;margin-bottom:6px;color:var(--text)}.guide-modal .eyebrow{color:var(--accent);font-size:11px;font-weight:600;letter-spacing:.5px;text-transform:uppercase;margin-bottom:4px}.guide-modal .guide-subtitle{color:var(--muted);font-size:13px;margin-bottom:24px;line-height:1.6}.guide-steps{display:flex;flex-direction:column;gap:14px;margin-bottom:28px}.guide-step{display:flex;gap:14px;align-items:flex-start}.guide-step-num{width:28px;height:28px;border-radius:50%;background:color-mix(in srgb,var(--accent) 12%,transparent);color:var(--accent);font-size:13px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0}.guide-step-body{flex:1}.guide-step-body strong{display:block;font-size:14px;color:var(--text);margin-bottom:2px}.guide-step-body p{font-size:12px;color:var(--muted);line-height:1.6;margin:0}.guide-modal-footer{display:flex;gap:8px;justify-content:flex-end;padding-top:16px;border-top:1px solid var(--line)}.guide-modal-footer .button{min-height:38px;font-size:13px;border-radius:999px;padding:0 18px}.guide-modal-footer .button.primary{box-shadow:0 0 20px color-mix(in srgb,var(--accent-2) 12%,transparent)}
-@media(max-width:600px){.guide-help-btn{bottom:18px;right:18px;width:42px;height:42px;font-size:20px}.guide-modal{padding:24px 20px 20px;max-width:calc(100vw - 32px)}.guide-modal h2{font-size:19px}}
+.guide-help-btn:hover{transform:scale(1.1);border-color:var(--accent);box-shadow:0 6px 28px color-mix(in srgb,var(--accent-2) 15%,transparent)}.guide-modal{max-width:560px;max-height:80vh;overflow-y:auto;padding:32px 36px 28px}.guide-modal h2{font-size:22px;margin-bottom:6px;color:var(--text)}.guide-modal .eyebrow{color:var(--accent);font-size:11px;font-weight:600;letter-spacing:.5px;text-transform:uppercase;margin-bottom:4px}.guide-modal .guide-subtitle{color:var(--muted);font-size:13px;margin-bottom:24px;line-height:1.6}.guide-steps{display:flex;flex-direction:column;gap:14px;margin-bottom:28px}.guide-step{display:flex;gap:14px;align-items:flex-start}.guide-step-num{width:28px;height:28px;border-radius:50%;background:color-mix(in srgb,var(--accent) 12%,transparent);color:var(--accent);font-size:13px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0}.guide-step-body{flex:1}.guide-step-body strong{display:block;font-size:14px;color:var(--text);margin-bottom:2px}.guide-step-body p{font-size:12px;color:var(--muted);line-height:1.6;margin:0}.guide-modal-footer{display:flex;gap:8px;justify-content:flex-end;padding-top:16px;border-top:1px solid var(--line)}.guide-modal-footer .button{min-height:38px;font-size:13px;border-radius:999px;padding:0 18px}.guide-modal-footer .button.primary{box-shadow:0 0 20px color-mix(in srgb,var(--accent-2) 12%,transparent)}
+@media(max-width:600px){.guide-modal{padding:24px 20px 20px;max-width:calc(100vw - 32px)}.guide-modal h2{font-size:19px}}
 /* ===== Tech Details Modal ===== */
 .tech-modal{max-width:620px;max-height:80vh;overflow-y:auto;padding:32px 36px 28px}.tech-sections{display:flex;flex-direction:column;gap:0;margin-bottom:24px}.tech-sections details{border-bottom:1px solid var(--line)}.tech-sections details:last-child{border-bottom:0}.tech-sections summary{padding:14px 0;font-size:14px;font-weight:600;color:var(--text);cursor:pointer;list-style:none;display:flex;align-items:center;gap:8px}.tech-sections summary::-webkit-details-marker{display:none}.tech-sections summary::before{content:"▸";font-size:12px;color:var(--accent);transition:transform .2s ease}.tech-sections details[open] summary::before{transform:rotate(90deg)}.tech-body{padding:0 0 16px 20px;font-size:13px;color:var(--muted);line-height:1.8}.tech-body p{margin-bottom:10px}.tech-body strong{color:var(--text);font-weight:600}.tech-body ul{margin:8px 0;padding-left:18px}.tech-body li{margin-bottom:6px}.tech-body li strong{color:var(--accent);font-weight:600}
 @media(max-width:600px){.tech-modal{padding:24px 20px 20px;max-width:calc(100vw - 32px)}.tech-modal h2{font-size:19px}.tech-body{font-size:12px}}
@@ -75,12 +75,12 @@ body{background:var(--bg);color:var(--text)}.app-shell{min-height:100svh;backgro
 /* ===== Ranking Card in Comparison ===== */
 .ranking-card{display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer;transition:background .15s ease}
 .ranking-card:hover{background:color-mix(in srgb,var(--accent) 4%,transparent)}
-.ranking-card-poster{flex-shrink:0;cursor:pointer}
-.ranking-card-top3{display:flex;flex-direction:column;gap:5px;min-width:0}
-.ranking-card-top3-item{display:flex;align-items:center;gap:6px;font-size:12px}
+
+
+
 .ranking-card-top3-item .poster-small{width:30px;height:42px;border-radius:3px}
-.ranking-card-top3-medal{font-size:13px;width:18px;text-align:center;flex-shrink:0}
-.ranking-card-top3-name{font-size:11px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:100px}
+
+
 
 /* ===== Note Modal ===== */
 
@@ -113,11 +113,11 @@ body{background:var(--bg);color:var(--text)}.app-shell{min-height:100svh;backgro
 
 
 /* ===== Ranking Detail Modal Polish ===== */
-.rank-detail-dialog{border-radius:16px;border:1px solid color-mix(in srgb,var(--accent) 12%,transparent);background:color-mix(in srgb,var(--surface-3) 95%,transparent);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);box-shadow:0 20px 60px rgba(0,0,0,.4)}
+
 .rank-detail-dialog .ranking-list li{transition:background .15s ease}
 .rank-detail-dialog .ranking-list li:hover{background:color-mix(in srgb,var(--accent) 3%,transparent)}
 /* ===== Profile Detail Polish ===== */
-.profile-layout section{border:1px solid color-mix(in srgb,var(--accent) 8%,transparent);border-radius:14px;padding:20px;background:color-mix(in srgb,var(--surface) 40%,transparent)}
+
 .profile-layout aside{border:1px solid color-mix(in srgb,var(--accent) 8%,transparent);border-radius:14px;padding:20px;background:color-mix(in srgb,var(--surface) 40%,transparent)}
 /* ===== Publish Modal ===== */
 .publish-modal{max-width:520px;max-height:80vh;overflow-y:auto}
@@ -631,3 +631,9 @@ kbd{display:inline-flex;align-items:center;justify-content:center;min-width:22px
 [data-theme] .home-actions .button.primary,
 [data-theme] .home-actions .button.secondary,
 .home-actions .button{border-radius:999px}
+
+/* ===== 补齐此前缺失的类定义（mini-note/badge 系）+ 手机端比较页指标溢出兜底 ===== */
+.mini-note{font-size:11px;color:var(--muted);line-height:1.6}
+.badge{display:inline-block;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:500}
+.badge-visit{background:color-mix(in srgb,var(--ok) 14%,transparent);color:var(--ok)}
+@media(max-width:850px){.metrics{overflow-x:clip}}
