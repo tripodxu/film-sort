@@ -76,7 +76,7 @@ body{background:var(--bg);color:var(--text)}.app-shell{min-height:100svh;backgro
 .ranking-card{display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer;transition:background .15s ease}
 .ranking-card:hover{background:color-mix(in srgb,var(--accent) 4%,transparent)}
 .ranking-card-poster{flex-shrink:0;cursor:pointer}
-.ranking-card-top3{display:flex;flex-direction:column;gap:5px;flex-shrink:0}
+.ranking-card-top3{display:flex;flex-direction:column;gap:5px;min-width:0}
 .ranking-card-top3-item{display:flex;align-items:center;gap:6px;font-size:12px}
 .ranking-card-top3-item .poster-small{width:30px;height:42px;border-radius:3px}
 .ranking-card-top3-medal{font-size:13px;width:18px;text-align:center;flex-shrink:0}
@@ -259,7 +259,7 @@ details > div, details > .tech-body{padding:18px 20px}
 
 /* ===== Ranking Card in Comparison ===== */
 .ranking-card-poster{flex-shrink:0;cursor:pointer}
-.ranking-card-top3{display:flex;flex-direction:column;gap:5px;flex-shrink:0}
+.ranking-card-top3{display:flex;flex-direction:column;gap:5px;min-width:0}
 .ranking-card-top3-item{display:flex;align-items:center;gap:6px;font-size:12px}
 .ranking-card-top3-item .poster-small{width:30px;height:42px;border-radius:3px}
 .ranking-card-top3-medal{font-size:13px;width:18px;text-align:center;flex-shrink:0}
