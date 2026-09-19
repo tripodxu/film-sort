@@ -738,7 +738,7 @@ jobs:
 `npm run lint` 的 39 条 warning、以及日常开发中的观察。**这不是承诺清单，只是候选池。**
 
 ### UI / 组件精修
-- [ ] `src/styles.css`：~~修掉 4 处 U+FFFD 损坏的 `content` 声明~~ ✅ 2026-09-19 已修复（含根因分析见 §5.3）；剩余子项：清理历史重复定义（`.rank-detail-dialog` / `.guide-help-btn` / `.profile-layout section` / `.ranking-card-*` 各 2 份）、清理注释内残留的 8 个无害 U+FFFD
+- [x] `src/styles.css`：~~修掉 4 处 U+FFFD 损坏的 `content` 声明~~ ✅ 2026-09-19 已修复（含根因分析见 §5.3）；~~清理历史重复定义~~ ✅ 同日清理 9 条 byte-identical 重复（`.rank-detail-dialog` border 组 / `.guide-help-btn` 主+媒体 / `.profile-layout section` / `.ranking-card-poster`+top3 四连各 2 份，删前留后 cascade 等价）；~~补 `mini-note`/`badge` 系缺失类~~ ✅（`.mini-note`/`.badge`/`.badge-visit` 以主题令牌补定义）；新增手机端 `.metrics{overflow-x:clip}` 兜底比较页瞬态溢出。剩余：注释内 8 个无害 U+FFFD 文字
 - [ ] `worker/index.ts`（1999 行）按资源拆成 `worker/routes/*`；`src/views/PlazaPostView.tsx`（1139 行）拆出评论区、作者编辑区子组件
 - [ ] **无障碍剩余项（详见 `UI_REVIEW.md` 的「剩余未完成项」）**：`ExpandableNote` 是 `<p onClick>`，没有 `tabIndex`/`role`/`onKeyDown`，键盘无法触发"查看全文"；14 处 modal backdrop 缺 `aria-hidden`；焦点陷阱只接了新手引导一处（`FocusTrap`）；`RankingDetail` 行首奖牌 emoji 缺 `aria-hidden`
 - [ ] toast 通知队列化（现在多条会互相顶掉）+ `aria-live` 播报
