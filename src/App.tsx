@@ -54,6 +54,7 @@ import { importCollection } from "./lib/collections";
 import { renderProfilePng, pngFileName, type ExportLayout } from "./lib/exportPng";
 import { FocusTrap } from "./components/FocusTrap";
 import { ErrorBoundary } from "./components/ErrorBoundary";
+import { AiConfigDialog } from "./components/AiConfigDialog";
 import { readNotes, writeNotes, setNote } from "./lib/notes";
 import { Poster } from "./components/Poster";
 import { RankingDetail } from "./components/RankingDetail";
@@ -72,7 +73,7 @@ import { ShareView } from "./views/ShareView";
 import { PlazaView } from "./views/PlazaView";
 import { PlazaPostView } from "./views/PlazaPostView";
 
-import { stored, track, decode, saveFile, crossProfileSummary, type Locale } from "./lib/utils";
+import { stored, track, decode, saveFile, type Locale } from "./lib/utils";
 import { useRouter, pathToView, type View } from "./lib/useRouter";
 import { useAuth } from "./lib/useAuth";
 import { useSorting } from "./lib/useSorting";
@@ -147,8 +148,7 @@ export default function App() {
   } | null>(null);
   const [compareSortBy, setCompareSortBy] = useState<"own" | "peer">("own");
   const [peerRankPickOpen, setPeerRankPickOpen] = useState(false);
-  const [aiInsight, setAiInsight] = useState("");
-  const [aiBusy, setAiBusy] = useState(false);
+  const [aiConfigOpen, setAiConfigOpen] = useState(false);
   const [notice, setNotice] = useState("");
   const [format, setFormat] = useState<"json" | "txt" | "md" | "csv" | "png">("json");
   const [exportLayout, setExportLayout] = useState<ExportLayout>("editorial");
@@ -695,24 +695,6 @@ export default function App() {
       setDetailWork({ work, kind: detailKind, data: null, loading: false });
     }
   }
-  async function requestInsight() {
-    if (!profile || !peer || !crossProfileSummary(profile, peer)) return;
-    setAiBusy(true);
-    try {
-      const response = await fetch("/api/insights", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ summary: crossProfileSummary(profile, peer) }),
-      });
-      const data = (await response.json()) as { insight?: string };
-      if (response.ok && data.insight) setAiInsight(data.insight);
-      else setNotice(t("AI 解读暂不可用。", "AI insights are not available."));
-    } catch {
-      setNotice(t("AI 解读暂不可用。", "AI insights are not available."));
-    } finally {
-      setAiBusy(false);
-    }
-  }
   async function importProfile(file: File, target: "own" | "peer") {
     try {
       if (file.size > MAX_PROFILE_BYTES) throw new Error();
@@ -1231,6 +1213,7 @@ export default function App() {
         setEditingRankTitle={setEditingRankTitle}
         renameRank={renameRank}
         deleteRank={deleteRank}
+        openAiConfig={() => setAiConfigOpen(true)}
         setNotice={setNotice}
         openCollection={openCollection}
         shareSingleRanking={shareSingleRanking}
@@ -1262,6 +1245,7 @@ export default function App() {
         kinds={kinds}
         profile={profile}
         peer={peer}
+        locale={locale}
         compareActiveKind={compareActiveKind}
         setCompareActiveKind={setCompareActiveKind}
         compareMode={compareMode}
@@ -1276,7 +1260,7 @@ export default function App() {
         compareProfiles={compareProfiles}
         navigateTo={navigateTo}
         setPeer={setPeer}
-        setAiInsight={setAiInsight}
+        openAiConfig={() => setAiConfigOpen(true)}
         label={label}
         t={t}
         setCompareSortBy={setCompareSortBy}
@@ -1288,9 +1272,6 @@ export default function App() {
         busy={busy}
         namedProfile={namedProfile}
         setNotice={setNotice}
-        requestInsight={requestInsight}
-        aiBusy={aiBusy}
-        aiInsight={aiInsight}
         createFromPeer={createFromPeer}
         setPeerRankPickOpen={setPeerRankPickOpen}
         openArtworkDetail={openArtworkDetail}
@@ -1499,6 +1480,7 @@ export default function App() {
           <ArrowLeft size={18} style={{ transform: "rotate(90deg)" }} />
         </button>
       )}
+      {aiConfigOpen && <AiConfigDialog t={t} onClose={() => setAiConfigOpen(false)} />}
       {cloudConflict && (
         <div className="modal-backdrop" onClick={() => setCloudConflict(null)}>
           <section

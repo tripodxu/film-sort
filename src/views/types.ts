@@ -166,6 +166,7 @@ export interface ProfileViewProps {
   saveReorder: () => void;
   cancelReorder: () => void;
   moveItem: (from: number, to: number) => void;
+  openAiConfig: () => void;
 }
 
 export interface ShareViewProps {
@@ -246,6 +247,7 @@ export interface CompareViewProps {
   kinds: MediaKind[];
   profile: ArtisticProfile | null;
   peer: ArtisticProfile | null;
+  locale: Locale;
   compareActiveKind: MediaKind;
   setCompareActiveKind: (kind: MediaKind) => void;
   compareMode: "auto" | "manual";
@@ -260,7 +262,7 @@ export interface CompareViewProps {
   compareProfiles: typeof import("../lib/profile").compareProfiles;
   navigateTo: (view: "home" | "source" | "setup" | "sorting" | "profile" | "compare") => void;
   setPeer: (peer: ArtisticProfile | null) => void;
-  setAiInsight: (insight: string) => void;
+  openAiConfig: () => void;
   label: (kind: MediaKind) => string;
   t: (zh: string, en: string) => string;
   setCompareSortBy: (by: "own" | "peer") => void;
@@ -279,9 +281,6 @@ export interface CompareViewProps {
   busy: boolean;
   namedProfile: () => ArtisticProfile | null;
   setNotice: (notice: string) => void;
-  requestInsight: () => void;
-  aiBusy: boolean;
-  aiInsight: string;
   createFromPeer: (kind: MediaKind) => void;
   setPeerRankPickOpen: (open: boolean) => void;
   openArtworkDetail: (work: RankedArtwork, kind: MediaKind) => void;

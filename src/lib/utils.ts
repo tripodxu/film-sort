@@ -1,4 +1,4 @@
-import { parseProfile, MAX_PROFILE_BYTES, type ArtisticProfile } from "./profile";
+import { parseProfile, MAX_PROFILE_BYTES } from "./profile";
 
 export type Locale = "zh" | "en";
 
@@ -45,21 +45,4 @@ export function saveFile(content: BlobPart, name: string, type: string) {
   link.download = name;
   link.click();
   setTimeout(() => URL.revokeObjectURL(url), 1000);
-}
-
-export function crossProfileSummary(own: ArtisticProfile, peer: ArtisticProfile): string {
-  return own.rankings
-    .map((ranking) => {
-      const other = peer.rankings.find((entry) => entry.kind === ranking.kind);
-      if (!other) return `${ranking.kind}: only one side has a list`;
-      return `${ranking.kind}: mine=${ranking.items
-        .slice(0, 5)
-        .map((item) => item.title)
-        .join(", ")}; theirs=${other.items
-        .slice(0, 5)
-        .map((item) => item.title)
-        .join(", ")}`;
-    })
-    .join("\n")
-    .slice(0, 2200);
 }

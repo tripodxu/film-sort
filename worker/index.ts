@@ -59,6 +59,23 @@ import {
   playNeedsUpstream,
 } from "./gdstudio";
 import { recordAudit } from "./audit";
+import {
+  AiError,
+  aiErrorPayload,
+  aiErrorStatus,
+  callAi,
+  callModelAuto,
+  composePrompt,
+  listAiModels,
+  promptOverrideKey,
+  readPromptOverride,
+  resolveEndpoint,
+  testAiConnection,
+  validateUserConfig,
+  type AiProtocol,
+  type AiScene,
+  type ResolvedAi,
+} from "./ai";
 
 export interface Env {
   DB?: D1Database;
@@ -72,6 +89,8 @@ export interface Env {
   GITHUB_CLIENT_SECRET?: string;
   AI_API_KEY?: string;
   AI_API_URL?: string;
+  AI_MODEL?: string;
+  AI_PROTOCOL?: string;
   COOKIE_ENC_KEY?: string;
   MUSIC_PROXY_URL?: string;
   MUSIC_PROXY_KEY?: string;
@@ -141,12 +160,17 @@ const MAX_CHALLENGE_ITEMS = 300;
 // 批量海报：一次可提交整份榜单（300 首），独立于 48KB 的通用请求上限。
 const MAX_POSTER_BATCH_ITEMS = 300;
 const MAX_POSTER_BATCH_BYTES = 128 * 1024;
+// AI 点评场景数据：结构化 JSON（榜单/画像/比较指标），独立于 48KB 通用上限。
+const MAX_AI_DATA_BYTES = 16 * 1024;
 const upstreamWindows = new Map<string, RateWindow>();
 
 async function allowUpstreamRequest(
   request: Request,
   bucket:
     | "ai"
+    | "ai_custom"
+    | "ai_test"
+    | "ai_models"
     | "music"
     | "music_play"
     | "music_lyric"
@@ -415,7 +439,7 @@ function switchTab(name) {
   var tabButtons = document.querySelectorAll('.dash-tab');
   for (var i = 0; i < tabButtons.length; i++) tabButtons[i].classList.toggle('active', tabButtons[i].getAttribute('data-tab') === name);
   if (name === 'plaza' && !plazaState.loaded) loadPlaza();
-  if (name === 'data') loadAudit();
+  if (name === 'data') { loadAudit(); loadAiPrompts(); }
 }
 function refreshCurrent(){ if (CURRENT_TAB === 'plaza') loadPlaza(); else load(); }
 
@@ -630,6 +654,7 @@ function renderData(d) {
       }).join('')+
       '<p class="mini-note">执行需输入确认短语 RESET 并重新验证管理员密码；所有重置操作都会写入审计日志。建议重置前先用 wrangler d1 export 导出备份。</p>'+
     '</div>'+
+    '<div class="card" style="margin-top:16px"><h3 style="margin-bottom:12px">AI 提示词覆盖（三场景，留空 = 使用内置默认模块）</h3><div id="ai-prompts" class="loading">加载中...</div></div>'+
     '<div class="card" style="margin-top:16px"><h3 style="margin-bottom:12px">管理操作审计日志</h3><div id="audit-app" class="loading">加载中...</div></div>';
 }
 function storageCount(d, tbl){
@@ -710,6 +735,40 @@ async function loadAudit(){
       return '<tr class="audit-row"><td style="color:var(--muted);white-space:nowrap">'+esc(time)+'</td><td><span class="badge badge-visit">'+esc(e.action)+'</span></td><td>'+esc(e.detail||'')+'</td><td style="color:var(--muted)">'+esc(e.ip||'-')+'</td></tr>';
     }).join('')+'</tbody></table>' : '<p style="color:var(--muted);font-size:13px">暂无审计记录</p>';
   } catch(e){ el.innerHTML = '<p style="color:var(--red);font-size:13px">审计日志加载失败</p>'; }
+}
+
+// ===== AI 提示词覆盖（三场景在线调优）=====
+async function loadAiPrompts() {
+  var el = document.getElementById('ai-prompts');
+  if (!el) return;
+  try {
+    var r = await fetch('/api/admin/ai/prompts', { headers: { 'Authorization': 'Bearer ' + getToken() } });
+    var d = await r.json();
+    if (!r.ok) throw new Error(d.error || '加载失败');
+    var scenes = [['ranking', '榜单点评'], ['profile', '画像点评'], ['compare', '比较解读']];
+    el.classList.remove('loading');
+    el.innerHTML = scenes.map(function(s) {
+      var p = (d.prompts && d.prompts[s[0]]) || {};
+      return '<div style="margin-bottom:12px">' +
+        '<div class="mini-note" style="margin-bottom:4px">' + s[1] + (p.override ? ' · <span style="color:var(--yellow)">覆盖中</span>（响应 promptVersion=override）' : ' · 默认模块') + '</div>' +
+        '<textarea id="ai-prompt-' + s[0] + '" style="width:100%;min-height:72px;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:12px;padding:8px" placeholder="留空使用默认提示词；仅覆盖指令部分，作品数据始终由服务端渲染">' + esc(p.value || '') + '</textarea>' +
+        '<div style="display:flex;gap:6px;margin-top:4px">' +
+          '<button class="table-action" onclick="saveAiPrompt(\'' + s[0] + '\')">保存覆盖</button>' +
+          (p.override ? '<button class="table-action warn" onclick="clearAiPrompt(\'' + s[0] + '\')">恢复默认</button>' : '') +
+        '</div></div>';
+    }).join('');
+  } catch(e) { el.classList.remove('loading'); el.textContent = '加载失败'; }
+}
+async function saveAiPrompt(scene) {
+  var value = (document.getElementById('ai-prompt-' + scene).value || '').trim();
+  if (!value) { alert('提示词不能为空；要回到默认请点「恢复默认」'); return; }
+  var r = await fetch('/api/admin/ai/prompt/' + scene, { method: 'PUT', headers: { 'Authorization': 'Bearer ' + getToken(), 'Content-Type': 'application/json' }, body: JSON.stringify({ system: value }) });
+  if (r.ok) { alert('已保存覆盖'); loadAiPrompts(); } else alert('保存失败');
+}
+async function clearAiPrompt(scene) {
+  if (!confirm('清除「' + scene + '」的覆盖，恢复默认提示词？')) return;
+  var r = await fetch('/api/admin/ai/prompt/' + scene, { method: 'DELETE', headers: { 'Authorization': 'Bearer ' + getToken() } });
+  if (r.ok) { loadAiPrompts(); } else alert('操作失败');
 }
 
 // ===== 广场管理 =====
@@ -1679,6 +1738,42 @@ async function route(request: Request, env: Env): Promise<Response> {
       .all();
     return json({ errors: errors.results ?? [] }, 200, { "cache-control": "no-store" });
   }
+  // AI 提示词在线覆盖（docs/PLAN-ai-insights.md §6.3）：管理端读/写/清，全部写审计。
+  if (url.pathname === "/api/admin/ai/prompts" && request.method === "GET") {
+    if (!env.DB || !(await adminAuth(request, env))) return json({ error: "auth_required" }, 401);
+    const scenes: AiScene[] = ["ranking", "profile", "compare"];
+    const prompts: Record<string, { override: boolean; value: string | null }> = {};
+    for (const scene of scenes) {
+      const value = await readPromptOverride(env.DB, scene);
+      prompts[scene] = { override: !!value, value };
+    }
+    return json({ prompts });
+  }
+  const aiPromptMatch = url.pathname.match(/^\/api\/admin\/ai\/prompt\/(ranking|profile|compare)$/);
+  if (aiPromptMatch) {
+    if (!env.DB || !(await adminAuth(request, env))) return json({ error: "auth_required" }, 401);
+    const scene = aiPromptMatch[1] as AiScene;
+    if (request.method === "PUT") {
+      const body = await readJson(request);
+      const system = cleanOptionalString(body.system, "system", 4000);
+      if (!system)
+        return json({ error: "invalid_system", msg: "提示词不能为空且不超过 4000 字" }, 400);
+      await env.DB.prepare(
+        "INSERT INTO admin_config (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+      )
+        .bind(promptOverrideKey(scene), system)
+        .run();
+      await recordAudit(env, "ai:prompt_override", `设置 AI 提示词覆盖：${scene}`, request);
+      return json({ ok: true });
+    }
+    if (request.method === "DELETE") {
+      await env.DB.prepare("DELETE FROM admin_config WHERE key = ?")
+        .bind(promptOverrideKey(scene))
+        .run();
+      await recordAudit(env, "ai:prompt_override", `清除 AI 提示词覆盖：${scene}`, request);
+      return json({ ok: true });
+    }
+  }
   if (url.pathname === "/api/admin/logs/clean" && request.method === "POST") {
     if (!env.DB || !(await adminAuth(request, env))) return json({ error: "auth_required" }, 401);
     const body = await readJson(request);
@@ -2303,43 +2398,133 @@ async function route(request: Request, env: Env): Promise<Response> {
       });
     }
   }
-  if (url.pathname === "/api/insights" && request.method === "POST") {
-    if (!env.AI_API_KEY) return json({ enabled: false, error: "ai_not_configured" }, 503);
-    if (!(await allowUpstreamRequest(request, "ai", 8)))
-      return json({ error: "rate_limited" }, 429, { "retry-after": "600" });
+  if (url.pathname === "/api/ai/test" && request.method === "POST") {
+    assertSameOrigin(request);
+    if (!(await allowUpstreamRequest(request, "ai_test", 5)))
+      return json({ ok: false, error: "rate_limited", msg: "操作太频繁，请稍后再试" }, 429, {
+        "retry-after": "600",
+      });
     const body = await readJson(request);
-    const summary = cleanOptionalString(body.summary, "summary", 2400);
-    if (!summary) return json({ error: "invalid_summary" }, 400);
-    const endpoint = env.AI_API_URL || "https://token-plan-cn.xiaomimimo.com/anthropic";
+    const config = validateUserConfig(body.config);
+    if (!config)
+      return json(
+        { ok: false, error: "invalid_config", msg: "API 配置不合法（检查地址/密钥/模型名）" },
+        400,
+      );
     try {
-      const response = await fetch(endpoint, {
-        method: "POST",
-        headers: {
-          "content-type": "application/json",
-          "x-api-key": env.AI_API_KEY,
-          "anthropic-version": "2023-06-01",
+      return json(await testAiConnection(config));
+    } catch (error) {
+      return json({ ok: false, ...aiErrorPayload(error) }, aiErrorStatus(error));
+    }
+  }
+  if (url.pathname === "/api/ai/models" && request.method === "POST") {
+    assertSameOrigin(request);
+    if (!(await allowUpstreamRequest(request, "ai_models", 10)))
+      return json({ ok: false, error: "rate_limited", msg: "操作太频繁，请稍后再试" }, 429, {
+        "retry-after": "600",
+      });
+    const body = await readJson(request);
+    const config = validateUserConfig(body.config);
+    if (!config)
+      return json(
+        { ok: false, error: "invalid_config", msg: "API 配置不合法（检查地址/密钥/模型名）" },
+        400,
+      );
+    try {
+      const result = await listAiModels(config);
+      return json({ ok: true, ...result });
+    } catch (error) {
+      return json({ ok: false, ...aiErrorPayload(error) }, aiErrorStatus(error));
+    }
+  }
+  if (url.pathname === "/api/insights" && request.method === "POST") {
+    assertSameOrigin(request);
+    const body = await readJson(request);
+    const scene = cleanOptionalString(body.scene, "scene", 10);
+    if (scene !== "ranking" && scene !== "profile" && scene !== "compare")
+      return json({ error: "invalid_scene" }, 400);
+    const data = body.data;
+    if (!isObject(data)) return json({ error: "invalid_data", msg: "数据格式不正确" }, 400);
+    if (new TextEncoder().encode(JSON.stringify(data)).byteLength > MAX_AI_DATA_BYTES)
+      return json({ error: "data_too_large", msg: "数据过大" }, 413);
+    const locale = body.locale === "en" ? "en" : "zh";
+    const length = body.length === "brief" || body.length === "deep" ? body.length : "standard";
+    // 通道选择：带合法 config 走自定义（独立限流），否则内置 env（未配置即 503）。
+    const custom = body.config !== undefined ? validateUserConfig(body.config) : null;
+    if (body.config !== undefined && !custom)
+      return json({ error: "invalid_config", msg: "API 配置不合法（检查地址/密钥/模型名）" }, 400);
+    let source: "builtin" | "custom";
+    let resolved: ResolvedAi | null = null;
+    if (custom) {
+      if (!(await allowUpstreamRequest(request, "ai_custom", 15)))
+        return json({ error: "rate_limited", msg: "操作太频繁，请 10 分钟后再试" }, 429, {
+          "retry-after": "600",
+        });
+      source = "custom";
+    } else {
+      if (!env.AI_API_KEY)
+        return json(
+          { error: "ai_not_configured", msg: "服务端未配置 AI，可在设置里填入自己的 API" },
+          503,
+        );
+      if (!(await allowUpstreamRequest(request, "ai", 8)))
+        return json({ error: "rate_limited", msg: "操作太频繁，请 10 分钟后再试" }, 429, {
+          "retry-after": "600",
+        });
+      const model = env.AI_MODEL?.trim() || "claude-3-5-haiku-latest";
+      // 内置通道协议：缺省 anthropic（保持历史行为，AI_API_URL 原样直发）；
+      // 配成 chat/responses/gemini 时按端点归一规则补路径。
+      const protocol: AiProtocol =
+        env.AI_PROTOCOL === "chat" ||
+        env.AI_PROTOCOL === "responses" ||
+        env.AI_PROTOCOL === "gemini"
+          ? env.AI_PROTOCOL
+          : "anthropic";
+      const base = (
+        env.AI_API_URL?.trim() || "https://token-plan-cn.xiaomimimo.com/anthropic"
+      ).replace(/\/+$/, "");
+      resolved = {
+        endpoint: protocol === "anthropic" ? base : resolveEndpoint(base, protocol, model),
+        apiKey: env.AI_API_KEY,
+        model,
+        protocol,
+      };
+      source = "builtin";
+    }
+    // 管理端在线覆盖优先（§6.3）；数据块始终由服务端渲染。
+    const overrideSystem = await readPromptOverride(env.DB, scene);
+    const spec = composePrompt(scene as AiScene, data, locale, { length, overrideSystem });
+    if (!spec) return json({ error: "invalid_data", msg: "数据格式不正确" }, 400);
+    try {
+      if (custom) {
+        const outcome = await callModelAuto(custom, spec);
+        return json(
+          {
+            insight: outcome.text,
+            source,
+            model: outcome.model,
+            protocol: outcome.protocol,
+            promptVersion: spec.version,
+          },
+          200,
+          { "cache-control": "no-store" },
+        );
+      }
+      const outcome = resolved as ResolvedAi; // custom 为 null 时上面分支必然已赋值
+      return json(
+        {
+          insight: await callAi(outcome, spec),
+          source,
+          model: outcome.model,
+          protocol: outcome.protocol,
+          promptVersion: spec.version,
         },
-        body: JSON.stringify({
-          model: "claude-3-5-haiku-latest",
-          max_tokens: 280,
-          system:
-            "你是艺术偏好分析助手。只输出三段简短、温和、可解释的中文洞察，不要声称心理诊断，不要复述完整榜单。",
-          messages: [{ role: "user", content: summary }],
-        }),
-        signal: AbortSignal.timeout(15000),
-      });
-      if (!response.ok) return json({ error: "ai_upstream_failed" }, 502);
-      const raw = (await response.json()) as { content?: Array<{ text?: string }> };
-      const text = raw.content
-        ?.map((item) => item.text ?? "")
-        .join(" ")
-        .trim()
-        .slice(0, 1200);
-      return json({ enabled: true, insight: text || "暂时无法生成解读。" }, 200, {
-        "cache-control": "no-store",
-      });
-    } catch {
-      return json({ error: "ai_unavailable" }, 502);
+        200,
+        { "cache-control": "no-store" },
+      );
+    } catch (error) {
+      if (error instanceof AiError) console.warn(`ai insights failed: ${error.code}`);
+      return json(aiErrorPayload(error), aiErrorStatus(error));
     }
   }
   if (url.pathname === "/api/music/play" && request.method === "GET") {

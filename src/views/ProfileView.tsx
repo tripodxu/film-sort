@@ -11,6 +11,7 @@ import {
   Plus,
   RefreshCw,
   Share2,
+  Sparkles,
   SquarePen,
   StickyNote,
   Trash2,
@@ -24,9 +25,11 @@ import { IconButton } from "./IconButton";
 import { heading } from "./helpers";
 import { undoLastAction } from "../lib/ranking";
 import { noteKey, hasNote } from "../lib/notes";
+import { AiInsightCard } from "../components/AiInsightCard";
+import { buildProfileData, buildRankingData } from "../lib/aiInsight";
 import type { ProfileViewProps } from "./types";
 import type { RankedArtwork } from "../lib/profile";
-import { useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 
 export function ProfileView({
   profile,
@@ -77,6 +80,7 @@ export function ProfileView({
   cancelReorder,
   moveItem,
   busy,
+  openAiConfig,
 }: ProfileViewProps) {
   const profileRankIdx = profile.rankings.indexOf(activeRanking);
   const isRenamingProfile = editingRankIdx === profileRankIdx;
@@ -90,6 +94,15 @@ export function ProfileView({
   const [plazaSyncPostId, setPlazaSyncPostId] = useState<number | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
+  // AI 点评：画像级 / 榜单级两个入口，同一时刻只展开一个（同一位置渲染）。
+  const [profileInsightOpen, setProfileInsightOpen] = useState(false);
+  const [rankingInsightOpen, setRankingInsightOpen] = useState(false);
+  const aiLocale = locale === "en" ? ("en" as const) : ("zh" as const);
+  const profileInsightData = useMemo(() => buildProfileData(profile), [profile]);
+  const rankingInsightData = useMemo(
+    () => buildRankingData(activeRanking, profile.profileName),
+    [activeRanking, profile.profileName],
+  );
 
   function handlePublish() {
     if (publishTarget === "profile") publishProfileToPlaza(publishDesc);
@@ -149,6 +162,24 @@ export function ProfileView({
           {hasNote(notes, noteKey("profile", profile.profileId))
             ? t("画像批注", "Profile note")
             : t("画像批注", "Add profile note")}
+        </button>
+        <button
+          className="rank-pill"
+          title={t("用 AI 点评整个画像", "AI review of the whole profile")}
+          onClick={() => {
+            setProfileInsightOpen((v) => !v);
+            setRankingInsightOpen(false);
+          }}
+          style={
+            profileInsightOpen
+              ? { borderColor: "var(--accent)", color: "var(--accent)" }
+              : undefined
+          }
+        >
+          <Sparkles size={13} />
+          {profileInsightOpen
+            ? t("收起点评", "Hide review")
+            : t("AI 点评画像", "AI profile review")}
         </button>
         <button
           className="rank-pill"
@@ -319,6 +350,25 @@ export function ProfileView({
                   {t("手动调整", "Reorder")}
                 </button>
               )}
+              {!isReordering && !editWorksOpen && (
+                <button
+                  className="rank-pill"
+                  title={t("用 AI 点评这份榜单", "AI review of this ranking")}
+                  disabled={activeRanking.items.length < 1}
+                  onClick={() => {
+                    setRankingInsightOpen((v) => !v);
+                    setProfileInsightOpen(false);
+                  }}
+                  style={
+                    rankingInsightOpen
+                      ? { borderColor: "var(--accent)", color: "var(--accent)" }
+                      : undefined
+                  }
+                >
+                  <Sparkles size={13} />
+                  {rankingInsightOpen ? t("收起点评", "Hide review") : t("AI 点评", "AI review")}
+                </button>
+              )}
               {!isReordering && (
                 <button className="rank-pill" onClick={() => setEditWorksOpen(true)}>
                   <Pencil size={13} />
@@ -484,6 +534,35 @@ export function ProfileView({
             </div>
           )}
 
+          {profileInsightOpen && (
+            <AiInsightCard
+              scene="profile"
+              data={profileInsightData}
+              locale={aiLocale}
+              eyebrow={t("AI 画像点评", "AI PROFILE REVIEW")}
+              intro={t(
+                "让模型基于你的全部榜单给出一份整体的艺术人格点评。",
+                "Ask the model to review your artistic personality across all lists.",
+              )}
+              onOpenConfig={openAiConfig}
+              t={t}
+            />
+          )}
+          {rankingInsightOpen && !editWorksOpen && !isReordering && (
+            <AiInsightCard
+              scene="ranking"
+              data={rankingInsightData}
+              locale={aiLocale}
+              eyebrow={`${t("AI 榜单点评", "AI RANKING REVIEW")} / ${label(activeRanking.kind)}`}
+              intro={t(
+                "让模型基于这份榜单的排名给出品味侧写。",
+                "Ask the model to profile the taste behind this ranking.",
+              )}
+              compact
+              onOpenConfig={openAiConfig}
+              t={t}
+            />
+          )}
           {plazaSyncPostId !== null && !editWorksOpen && (
             <div
               style={{

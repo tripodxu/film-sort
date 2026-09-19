@@ -110,7 +110,13 @@ ART/RANK 把"从看过、读过、听过的作品里排出自己的 Top N"拆成
 ### 比较与导出
 
 - 导入对方 JSON 或生成压缩链接和二维码。
-- 计算作品重合度、加权偏好、Top 3 共识、顺序一致率和最大名次分歧；可请求 AI 生成跨媒介解读。
+- 计算作品重合度、加权偏好、Top 3 共识、顺序一致率和最大名次分歧；支持 AI 比较解读。
+
+### AI 点评（榜单 / 画像 / 比较）
+
+- **三个场景**：文化索引页可对单份榜单（「AI 点评」）或完整画像（「AI 点评画像」）生成点评；比较页「AI 观察」基于比较指标生成跨媒介解读。
+- **双通道**：默认走服务端内置模型（CF 环境变量配置）；用户也可在「设置 → AI 解读服务」填入自己的 `Base URL + API Key + Model`，支持 Chat Completions / Responses API / Anthropic Messages / Gemini Native 四种协议（默认自动探测），可一键获取模型列表、测试连接。Key 仅存本浏览器，经同源 Worker 转发。
+- **提示词模块化**：指令与作品数据在服务端分离拼装（用户无自由文本注入面）；输出支持简短/标准/深入三档与中英文；管理后台可对三场景的指令部分在线覆盖调优（写入审计），响应携带 `promptVersion` 区分来源。
 - **两种比较模式**：自动合并（同媒介多榜单合并比较）和指定榜单（手动勾选参与比较的榜单）。
 - **共同作品表格**：可按我的顺序或对方顺序排列（交换按钮切换）；排名可点击打开榜单详情弹窗。
 - **来源榜单标签**：自动合并模式下显示最高排名的来源榜单名称，多榜单作品显示 "+N" 提示。
@@ -245,8 +251,10 @@ npm run deploy
 | `GOOGLE_CLIENT_SECRET` | 否 | Google OAuth 客户端密钥 |
 | `GITHUB_CLIENT_ID` | 否 | GitHub OAuth 客户端 ID |
 | `GITHUB_CLIENT_SECRET` | 否 | GitHub OAuth 客户端密钥 |
-| `AI_API_KEY` | 否 | AI 解读服务密钥 |
-| `AI_API_URL` | 否 | 自定义 Anthropic 兼容接口地址 |
+| `AI_API_KEY` | 否 | 内置 AI 解读服务密钥（未配置时用户仍可在网页端配置自己的 API） |
+| `AI_API_URL` | 否 | 内置 AI 的接口地址；`AI_PROTOCOL=anthropic`（默认）时原样直发，其他协议按 base url 补路径（填到 `/v1` 这一级） |
+| `AI_MODEL` | 否 | 内置 AI 的模型名（默认 `claude-3-5-haiku-latest`） |
+| `AI_PROTOCOL` | 否 | 内置 AI 的协议：`anthropic`（默认）/ `chat`（Chat Completions）/ `responses`（Responses API）/ `gemini`（Gemini Native） |
 | `COOKIE_ENC_KEY` | 否 | 网易云/豆瓣 Cookie 保险库的 64 位十六进制密钥；生产环境建议配置 |
 | `MUSIC_PROXY_URL` | 否 | Worker 使用的音乐上游代理地址，例如 Deno Deploy 地址 |
 | `MUSIC_PROXY_KEY` | 否 | 音乐代理共享密钥；与 Deno Deploy 的 `MUSIC_PROXY_KEY` 保持一致 |
@@ -353,7 +361,9 @@ film-sort3/
 | GET | `/api/other/list?key=` | 其他类别搜索（维基百科 opensearch + pageimages 图片） |
 | GET | `/api/other/detail?name=` | 其他类别详情（维基中英双语 + 百度百科兜底） |
 | GET | `/api/artwork/detail?kind=film|book|music|other&q=` | 统一作品详情入口 |
-| POST | `/api/insights` | 生成画像比较解读（需 AI_API_KEY） |
+| POST | `/api/insights` | AI 点评（榜单/画像/比较三场景；内置或用户自带 API 双通道，详见 docs/API.md） |
+| POST | `/api/ai/test` | 测试用户 AI 配置（探活 + 协议探测回显） |
+| POST | `/api/ai/models` | 获取用户 AI 服务的模型列表（供设置面板点选） |
 | GET | `/api/music/play?q=` | 音乐试听地址代理 |
 | POST | `/api/poster-errors/client` | 浏览器端海报加载失败上报 |
 | POST | `/api/share` | 创建分享短链（可选 expires_days：7/30/90/365 天，返回 url/compareUrl/expires_at） |

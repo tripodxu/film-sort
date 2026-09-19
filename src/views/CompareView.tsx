@@ -1,6 +1,8 @@
-import { useEffect, type CSSProperties } from "react";
-import { ArrowLeftRight, ArrowRight, Link, Play, Plus, Share2, Sparkles, X } from "lucide-react";
+import { useEffect, useMemo, type CSSProperties } from "react";
+import { ArrowLeftRight, ArrowRight, Link, Play, Plus, Share2, X } from "lucide-react";
 import { Poster } from "../components/Poster";
+import { AiInsightCard } from "../components/AiInsightCard";
+import { buildCompareData } from "../lib/aiInsight";
 import { heading, fileInput } from "./helpers";
 import type { CompareViewProps } from "./types";
 
@@ -8,6 +10,7 @@ export function CompareView({
   kinds,
   profile,
   peer,
+  locale,
   compareActiveKind,
   setCompareActiveKind,
   compareMode,
@@ -22,7 +25,7 @@ export function CompareView({
   compareProfiles,
   navigateTo,
   setPeer,
-  setAiInsight,
+  openAiConfig,
   label,
   t,
   setCompareSortBy,
@@ -34,9 +37,6 @@ export function CompareView({
   busy,
   namedProfile,
   setNotice,
-  requestInsight,
-  aiBusy,
-  aiInsight,
   createFromPeer,
   setPeerRankPickOpen,
   openArtworkDetail,
@@ -89,6 +89,21 @@ export function CompareView({
     return ownMerged && peerMerged ? compareDimensions(ownMerged, peerMerged) : null;
   })();
   const crossProfile = profile && peer ? compareProfiles(profile, peer) : null;
+  // AI 比较解读的数据：当前维度指标 + 跨媒介共识（§6.5 compare 规格）。
+  const aiLocale = locale === "en" ? ("en" as const) : ("zh" as const);
+  const aiCompareData = useMemo(
+    () =>
+      profile && peer && result
+        ? buildCompareData({
+            ownName: profile.profileName,
+            peerName: peer.profileName,
+            kind: compareKind,
+            result,
+            crossAgreement: crossProfile?.crossMediumAgreement ?? null,
+          })
+        : null,
+    [profile, peer, result, compareKind, crossProfile],
+  );
   return (
     <>
       {heading(
@@ -108,7 +123,6 @@ export function CompareView({
             onClick={() => {
               setPeer(null);
               navigateTo("compare");
-              setAiInsight("");
               setCompareActiveKind("film");
               setCompareMode("auto");
               setManualOwnSelections(new Set());
@@ -559,49 +573,18 @@ export function CompareView({
               </small>
             </div>
           )}
-          <div className="comparison-ai">
-            <div>
-              <span className="eyebrow">
-                <Sparkles size={13} /> {t("AI 观察", "AI OBSERVATION")}
-              </span>
-              <p>
-                {aiBusy
-                  ? t(
-                      "正在分析两份索引的偏好模式…",
-                      "Analyzing preference patterns across both indexes…",
-                    )
-                  : aiInsight ||
-                    t(
-                      "让模型把共同偏好与分歧整理成一段可读的文化侧写。",
-                      "Ask the model to turn overlap and divergence into a readable cultural note.",
-                    )}
-              </p>
-              {aiBusy && (
-                <div style={{ display: "flex", gap: 6, marginTop: 8 }}>
-                  {[1, 2, 3].map((i) => (
-                    <div
-                      key={i}
-                      style={{
-                        width: 60,
-                        height: 8,
-                        borderRadius: 4,
-                        background: "var(--line)",
-                        animation: `plaza-pulse 1.5s ease-in-out ${i * 0.2}s infinite`,
-                      }}
-                    />
-                  ))}
-                </div>
-              )}
-            </div>
-            <button
-              className="button secondary"
-              disabled={aiBusy}
-              onClick={() => void requestInsight()}
-            >
-              <Sparkles size={15} />
-              {aiBusy ? t("正在生成…", "Generating…") : t("生成解读", "Generate insight")}
-            </button>
-          </div>
+          <AiInsightCard
+            scene="compare"
+            data={aiCompareData}
+            locale={aiLocale}
+            eyebrow={t("AI 观察", "AI OBSERVATION")}
+            intro={t(
+              "让模型基于比较指标把共同偏好与分歧整理成一段可读的文化侧写。",
+              "Ask the model to turn the comparison metrics into a readable cultural note.",
+            )}
+            onOpenConfig={openAiConfig}
+            t={t}
+          />
           <div className="consensus-hero">
             <div
               className="consensus-dial"

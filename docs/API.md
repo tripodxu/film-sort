@@ -33,7 +33,10 @@ ART/RANK 后端 API 完整参考。所有接口由 Cloudflare Worker 处理，�
 | `other` | `GET /api/other/list`、`GET /api/other/detail` | 20 | 60 |
 | `auth` | `POST /api/admin/reset`、`/api/admin/change-password`、`/api/admin/sessions/revoke-all` | 30 | 300 |
 | `posters` | `POST /api/posters/batch` | 60 | 600 |
-| `ai` | `POST /api/insights` | 8 | 600 |
+| `ai` | `POST /api/insights`（内置通道） | 8 | 600 |
+| `ai_custom` | `POST /api/insights`（自定义通道） | 15 | 600 |
+| `ai_test` | `POST /api/ai/test` | 5 | 600 |
+| `ai_models` | `POST /api/ai/models` | 10 | 600 |
 | `music_play` | `GET /api/music/play` | 12 | 600 |
 | `music_lyric` | `GET /api/music/lyric` | 12 | 600 |
 | `netease` | `/api/netease/*` | 120 | 60 |
@@ -506,28 +509,70 @@ ART/RANK 后端 API 完整参考。所有接口由 Cloudflare Worker 处理，�
 
 ## AI 解读
 
+三个场景（榜单点评 / 画像点评 / 比较解读）共用 `POST /api/insights`；提示词由服务端模块拼装（指令与数据分离，见 `docs/PLAN-ai-insights.md` §6），前端只发送结构化数据。双通道：**内置**（CF 环境变量 `AI_API_URL`/`AI_API_KEY`/`AI_MODEL`/`AI_PROTOCOL`）或**用户自带**（请求体带 `config` 三参数，经 Worker 转发，key 不落日志）。
+
 ### POST /api/insights
 
-生成画像比较解读。需要配置 `AI_API_KEY`，未配置时返回 `503 { "enabled": false, "error": "ai_not_configured" }`。
-
 **请求体：**
-```json
+
+```jsonc
 {
-  "summary": "film: mine=龙猫, 千与千寻; theirs=霸王别姬, 花样年华\nbook: ..."
+  "scene": "ranking" | "profile" | "compare",
+  "data": { /* 结构化场景数据，序列化后 ≤ 16 KB */ },
+  "locale": "zh" | "en",                // 可选，默认 zh（仅影响输出语言）
+  "length": "brief" | "standard" | "deep", // 可选，默认 standard（输出字数档位）
+  "config": {                            // 可选。缺省 = 内置 env 通道
+    "baseUrl": "https://api.openai.com/v1",
+    "apiKey": "sk-…",
+    "model": "gpt-4o-mini",
+    "protocol": "auto" | "chat" | "responses" | "anthropic" | "gemini" // 可选，默认 auto
+  }
 }
 ```
 
-`summary` 必填且 ≤2400 字符，否则 `400 invalid_summary`。
+场景数据形状（前端 `src/lib/aiInsight.ts` 组装，服务端校验形状不符返回 `400 invalid_data`）：
 
-**响应：**
+| scene | data 关键字段 | 截断 |
+|-------|---------------|------|
+| `ranking` | `profileName`, `kind`, `collectionTitle`, `itemCount`, `works[{rank,title,creator?,year?}]` | works ≤ 150 |
+| `profile` | `profileName`, `rankings[{kind,collectionTitle,itemCount,top[...]}]`, `stats{totalWorks,kindsCount,topCreators}` | top ≤ 15/榜，creators ≤ 8 |
+| `compare` | `ownName`, `peerName`, `media[{kind,overlap,orderAgreement,consensusScore,kendallTau,sharedTop,onlyOwnCount,onlyPeerCount,biggestGap}]`, `crossAgreement` | sharedTop ≤ 5，media ≤ 10 |
+
+自定义 `config` 的 `baseUrl` 强制 https、拒绝字面 IP / localhost / `*.internal` / `metadata.cloudflare.com`（400 `invalid_config`）。四协议适配与 `auto` 自动探测（chat → responses → anthropic → gemini，仅 404/405 降档）见 `worker/ai.ts`。
+
+**响应（200）：**
+
 ```json
 {
-  "enabled": true,
-  "insight": "你们在电影品味上有显著重合..."
+  "insight": "1. 总体印象：…",
+  "source": "builtin" | "custom",
+  "model": "claude-3-5-haiku-latest",
+  "protocol": "anthropic",
+  "promptVersion": 1
 }
 ```
 
-`Cache-Control: no-store`；上游失败或超时 `502 ai_upstream_failed` / `ai_unavailable`。**限流：** 桶 `ai`，8 次/10 分钟（`retry-after: 600`）。
+`promptVersion` 为数字 = 默认模块组合版本；`"override"` = 管理端在线覆盖生效（见管理接口补充）。
+
+**错误：** `503 ai_not_configured`（未配置内置且请求未带 config）、`400 invalid_config / invalid_data`、`413 data_too_large`、`429 rate_limited`（retry-after 600）、`502 upstream_auth_failed / upstream_not_found / upstream_rate_limited / upstream_error`。`Cache-Control: no-store`。
+
+**限流：** 内置桶 `ai` 8 次/10 分钟；自定义桶 `ai_custom` 15 次/10 分钟（各自独立）。
+
+### POST /api/ai/test
+
+「测试连接」：用 `max_tokens=16` 的探活请求验证 config 可用，`auto` 时回显探测到的协议。
+
+**请求体：** `{ "config": { 同上 } }`
+**响应：** `{ "ok": true, "model": "…", "protocol": "chat" }` 或 `{ "ok": false, "error": "…", "msg": "…" }`。
+**限流：** 桶 `ai_test` 5 次/10 分钟。
+
+### POST /api/ai/models
+
+「获取模型列表」：按协议代理各家的模型列表端点（chat/responses → `{base}/models` + Bearer；anthropic → `{base}/v1/models` + `x-api-key`；gemini → `{base}/v1beta/models` + `x-goog-api-key`，自动剥离 `models/` 前缀）。`auto` 时按序探测并缓存结论（按 baseUrl，isolate 级，上界 200）。
+
+**请求体：** `{ "config": { 同上 } }`
+**响应：** `{ "ok": true, "protocol": "chat", "models": ["gpt-4o-mini", …], "truncated": false }`（上限 100 条，超出 `truncated: true`）。
+**限流：** 桶 `ai_models` 10 次/10 分钟。
 
 ---
 
@@ -1184,5 +1229,8 @@ OAuth 回调。校验 `state` 与 `oauth_state` Cookie 一致（CSRF），自动
 | POST | `/api/admin/change-password` | 修改管理密码（体 `{ old_password, new_password }`，新密码 ≥6 位；使用 `ADMIN_PASSWORD` 环境变量时返回 `400 env_password_immutable`） |
 | POST | `/api/admin/sessions/revoke-all` | 强制**所有用户**会话下线（清空 `user_sessions`） |
 | POST | `/api/admin/links/clean-expired` | 立即清理过期短链 |
+| GET | `/api/admin/ai/prompts` | 三场景 AI 提示词覆盖现状（`{ prompts: { ranking/profile/compare: { override, value } } }`） |
+| PUT | `/api/admin/ai/prompt/:scene` | 设置某场景（`ranking`/`profile`/`compare`）的 system 提示词覆盖（体 `{ system }` ≤4000 字；存 `admin_config`，写审计 `ai:prompt_override`）。**仅覆盖指令部分**，作品数据块始终由服务端渲染 |
+| DELETE | `/api/admin/ai/prompt/:scene` | 清除覆盖、恢复默认模块拼装（写审计） |
 
 > 另有未在上表列出的管理端点：`POST /api/admin/logout`（注销当前管理员会话）、`GET /api/admin/check`（返回 `{ authenticated }`）、`GET /api/admin/poster-errors/export`（见上）。

@@ -227,6 +227,31 @@ async function generateQR(url: string) {
 
 ---
 
+## 2.7 AI 点评三场景 + 双通道四协议（✅ 2026-09-19 完成，见 [PLAN-ai-insights.md](./PLAN-ai-insights.md)）
+
+原「AI 解读」只有比较场景一个入口、模型硬编码、摘要只是标题列表。本次落地：
+
+| 能力 | 实现 |
+|------|------|
+| 三场景 | 榜单点评（ProfileView 榜单级）/ 画像点评（ProfileView 画像级）/ 比较解读（CompareView「AI 观察」卡改造），共用 `AiInsightCard` |
+| 双通道 | 内置（`AI_API_URL/KEY` + 新增 `AI_MODEL/AI_PROTOCOL`，默认行为与旧版逐字一致=零迁移）+ 用户自带（网页端三参数，存 localStorage，经 Worker 转发，key 不落日志） |
+| 四协议 | Chat Completions / Responses API / Anthropic Messages / Gemini Native 全按原生形态适配；auto 探测 404 降档并按 baseUrl 缓存 |
+| 模型列表 | `POST /api/ai/models` 代理各家列表端点（gemini 自动剥离 `models/` 前缀），设置面板 datalist 点选 |
+| 提示词模块化 | ROLE/TASK/CONSTRAINT/OUTPUT 指令模块 + dataBlock 数据块（数据只进数据块，无自由文本注入面）；输出三档长度 + 中英 locale；管理端可在线覆盖 system（`admin_config`，写审计），响应回显 `promptVersion` |
+| 安全 | 自定义 baseUrl 强制 https、拒字面 IP/localhost/metadata；限流桶 `ai 8 / ai_custom 15 / ai_test 5 / ai_models 10`（次/10 分钟）；错误码分类透传 |
+
+**实施偏离说明**（相对 PLAN）：`dataBlock` 的 compare 场景按每维度一节的紧凑格式渲染（计划只写了字段），实现时补了空 `media`（无共同维度）的显式文案；前端会话缓存的失效粒度包含 `length`（计划未明确）。
+
+**回归护栏**：`worker/ai.test.ts`（41 项：端点归一 8 / 配置校验 8 / 协议适配与错误映射 7 / 自动探测 5 / 提示词模块 10 / 模型列表 4 / 探活 1，四协议请求形状与响应解析全 stub 实测）+ `src/lib/aiInsight.test.ts`（19 项：配置存取与隐私模式、三场景组装截断、请求失败透传、会话缓存）。**测试基线 179 → 239 passed**。本地 e2e：mock 服务器（`npm run ai:mock`）四协议端点与错误注入实测通过；SSRF 拒绝 localhost 实测生效；内置通道转发与错误映射实测（404→`upstream_not_found` 中文文案）。
+
+**真实上游矩阵（2026-09-19，`token-plan-cn.xiaomimimo.com` / `mimo-v2.5`，Chat Completions 协议）**：`/api/ai/test` 探活 ✅（回显 protocol=chat）；`/api/ai/models` ✅（6 个模型含 `models/` 无前缀）；`/api/insights` 内置通道 ranking ✅（~30s）/ profile ✅ / compare(brief) ✅（20s）/ compare(en+deep) ✅（英文输出）；自定义通道（请求体带 config）✅；错误注入：错 key → `upstream_auth_failed` ✅。其余三协议（Responses/Anthropic/Gemini）该网关不支持（探测路径 404/模型解析失败），与 auto 降档设计一致，待接入对应服务商补测。
+
+**真实测试发现的两个缺陷（当轮修复）**：① 推理型模型生成 250 字点评实测 14–30s，20s 默认超时必然掐断（表现为 `upstream_error`）——Worker 默认超时 20s→60s，前端 30s→70s，另加 `Promise.race` 兜底（防 miniflare/dev 环境 signal 不生效的挂死连接，生产无害）；② 探活 `max_tokens=16` 被推理模型的推理段耗尽、content 为空被误判失败——探活配额提到 256。**验证插曲**：本地 wrangler dev 一度对所有请求（含不涉外的 /api/health）挂起，属本地 workerd 实例坏死假象，重启后全部场景通过；其余三协议的真实矩阵与线上探针仍待部署后执行。
+
+**验证记录**（§7.2 执行摘要）：`/api/ai/test` 对 `http://localhost` 返回 400 `invalid_config`（SSRF 生效）；`/api/insights` 内置通道在 mock 404 时返回分类文案——路由、env 通道选择、`callAi`、错误映射链路全部走通。
+
+---
+
 ## 3. 后端优化
 
 ### 3.1 D1 查询合并
@@ -464,13 +489,13 @@ export default defineConfig({
 
 **注意**：开启 `noUncheckedIndexedAccess` 需要大量类型断言修复，建议逐步开启。
 
-### 5.3 CSS 可维护性 （⏸ 暂缓 — 工作量大，建议下次 UI 改版时处理）
+### 5.3 CSS 可维护性 （⏸ 模块化仍暂缓；**损坏 content 已于 2026-09-19 修复** ✅）
 
 当前压缩单文件已够用。迁移到 CSS Modules 或 Tailwind 需重写所有 class 引用。
 
 **现状**：`src/styles.css` 562 行，大量压缩长行，不可读、不可 diff。
 
-**2026-09-18 新增发现：文件里存在 4 处早已损坏的 `content` 声明。**
+**2026-09-18 发现：文件里存在 4 处损坏的 `content` 声明。**
 
 ```css
 .metrics-more summary::after{content:"<U+FFFD>?;font-size:10px;…}
@@ -483,6 +508,28 @@ export default defineConfig({
 被编码破坏了。字符串因此没有正常闭合，CSS 解析器只能靠错误恢复跳过，`npx vite build`
 每次都会为它打印警告。（这 4 处在 `git show HEAD:src/styles.css` 里同样存在，属历史遗留，
 不是本轮引入。）修复需要判断每一处原本用的是哪个箭头，建议与 CSS 可维护性一起处理。
+
+**2026-09-19 修复 ✅ —— 且确认其破坏面远大于"4 条装饰箭头"（线上 UI 回归的真正根因）：**
+
+字节级对比定位到引入点：**`73374fe`（9/18 歌词译文提交）的 styles.css diff 把
+`.tech-sections summary::before` 与 `.metrics-more summary::after` 两处的 content
+字符串改成了未闭合形式**（闭合引号丢失），父版本 `d5f1ba1` 为 0 处未闭合 / 0 个
+U+FFFD。破坏机制：
+
+1. styles.css 是压缩单行文件，一条未闭合字符串在其所在物理行内吞掉**该行剩余的
+   全部规则**；esbuild minify 合并行后，吞没范围进一步扩大到产物中下一个引号为止——
+   文本仍在（grep 计数正常），但浏览器把它们当字符串丢弃，**不再作为规则解析**；
+2. 另有若干注释与 `.advanced-import` 两处 content 的字符损坏（闭合完好，属装饰性）。
+
+实测症状与修复：首页 `.orb-canvas` 的 `width:100%` 失效 → canvas 以 1680 物理像素
+裸奔撑爆横向（bodyScrollWidth 1752 > 1280），加上其它被吞规则构成"大量前端 UI 错误"。
+修复方式：以 `73374fe^`（好版本）逐行恢复 13 条被破坏行（含 3 条注释），保留该提交的
+正常功能改动（`.music-lyric-line/.music-lyric-translation`）。修复后：build 警告消失、
+`bodyScrollWidth` 1274（无溢出）、光球正常、各页布局恢复。
+
+**遗留 8 个 U+FFFD 位于闭合完好的注释内（纯文字损坏，无功能影响）**；历史重复定义
+清理仍挂待办池。同日另发现本地 dev D1 存有 9/12 写入 bug 产生的 4 条乱码广场帖
+（标题字节即 U+FFFD，与代码无关的历史坏数据），已按外键依赖顺序清理。
 
 **另一个决定**：`src/styles.css` 已加入 `.prettierignore` 并**刻意不做格式化**。Prettier 的
 CSS 打印器除了 5 类无害归一化（逗号后补空格、小数补前导零、组合器两侧补空格、属性选择器值
@@ -614,6 +661,7 @@ jobs:
 | **P1** | 导入时把封面写进 `poster_urls` 侧表 | ✅ |
 | **P1** | 音乐试听 / 歌词（含独立配额与译文） | ✅ 见 §2.6 |
 | **P1** | 音乐封面取图网易云优先、豆瓣兜底 | ✅ |
+| **P1** | AI 点评三场景 + 双通道四协议 + 提示词模块化 | ✅ 2026-09-19，见 §2.7 |
 | **P1** | Token 安全加固 | ⏸ 暂缓（原因见下） |
 | **P1** | CI/CD 流水线 | ✅ |
 | **P2** | 海报缓存优化 | ✅ |
@@ -690,7 +738,7 @@ jobs:
 `npm run lint` 的 39 条 warning、以及日常开发中的观察。**这不是承诺清单，只是候选池。**
 
 ### UI / 组件精修
-- [ ] `src/styles.css`：修掉 4 处 U+FFFD 损坏的 `content` 声明（见 §5.3），并清理历史重复定义（`.rank-detail-dialog` / `.guide-help-btn` / `.profile-layout section` / `.ranking-card-*` 各 2 份）
+- [ ] `src/styles.css`：~~修掉 4 处 U+FFFD 损坏的 `content` 声明~~ ✅ 2026-09-19 已修复（含根因分析见 §5.3）；剩余子项：清理历史重复定义（`.rank-detail-dialog` / `.guide-help-btn` / `.profile-layout section` / `.ranking-card-*` 各 2 份）、清理注释内残留的 8 个无害 U+FFFD
 - [ ] `worker/index.ts`（1999 行）按资源拆成 `worker/routes/*`；`src/views/PlazaPostView.tsx`（1139 行）拆出评论区、作者编辑区子组件
 - [ ] **无障碍剩余项（详见 `UI_REVIEW.md` 的「剩余未完成项」）**：`ExpandableNote` 是 `<p onClick>`，没有 `tabIndex`/`role`/`onKeyDown`，键盘无法触发"查看全文"；14 处 modal backdrop 缺 `aria-hidden`；焦点陷阱只接了新手引导一处（`FocusTrap`）；`RankingDetail` 行首奖牌 emoji 缺 `aria-hidden`
 - [ ] toast 通知队列化（现在多条会互相顶掉）+ `aria-live` 播报

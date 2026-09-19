@@ -15,7 +15,8 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "deploy": "npm run build && wrangler d1 migrations apply film-sort --remote && wrangler deploy",
-    "worker:dev": "npm run build && wrangler dev"
+    "worker:dev": "npm run build && wrangler dev",
+    "ai:mock": "node scripts/ai-mock-server.mjs"
   },
   "dependencies": {
     "fflate": "^0.8.2",

@@ -2,7 +2,7 @@
 
 > 本文档是**已实现功能的全量清单与回归基线**：每条功能标注入口路径与后端端点。任何重构/UI 改版后，逐条走查本文档即完成回归验证。
 > 端点的请求/响应细节见 `API.md`；算法与架构细节见 `ARCHITECTURE.md`；优化历史见 `OPTIMIZATION.md`。
-> 最后更新：2026-09-18
+> 最后更新：2026-09-19
 
 ## 0. 路由总表（SPA，History API）
 
@@ -55,6 +55,8 @@
 | PNG 主题感知（采样当前 data-theme 配色，2x 高清） | 同上 | `exportPng.samplePalette` |
 | 品味年轮（首页，row/col 两布局，就地改名/删除） | 首页 | `HomeView` |
 | 导入画像 JSON（校验+合并） | 首页/比较页 | `importProfile` |
+| AI 点评单份榜单（三档长度、来源徽标、会话缓存+重新生成） | 榜单动作栏「AI 点评」 | `AiInsightCard` + `buildRankingData` → `/api/insights(scene=ranking)` |
+| AI 点评完整画像（含跨媒介统计与高频创作者） | 顶部「AI 点评画像」 | 同上（scene=profile，`buildProfileData`） |
 
 ## 3. 比较（相遇 /encounter）
 
@@ -67,7 +69,7 @@
 | 每指标 ? 悬浮解释 | metric-help 图标 | CompareView |
 | 共同作品表（来源榜单徽章、名次可点进榜单详情、排序切换） | 比较页 | `RankingDetail` 弹窗 |
 | 最大分歧表 / 共同偏好 / 分歧轴 | 比较页 | `disagreements/commonPreference/divergence` |
-| AI 文化解读 | 「生成解读」 | `/api/insights` |
+| AI 比较解读（基于比较指标的跨媒介侧写） | 「AI 观察」卡 | `/api/insights(scene=compare)`，`buildCompareData` |
 | 用对方作品重新排序（选对方榜单） | 底部动作 | `createFromPeer` + PeerRankPick |
 
 ## 4. 分享
@@ -161,6 +163,20 @@
 - 性能：首页 3D 光球由 `src/components/DeferredOrb.tsx` 托管——空闲时（`requestIdleCallback`，2s 上限）才加载；`saveData` 或 2G 网络不加载，保留 CSS 兜底背景。
 - 质量门：CI（`.github/workflows/ci.yml`）依次跑 check / lint / format:check / test / build；本地对应 `npm run lint|format|format:check`。
 
+## 11. AI 点评（2026-09-19 新增）
+
+| 功能 | 入口 | 实现 |
+|---|---|---|
+| 三场景点评：榜单 / 画像 / 比较 | ProfileView×2 + CompareView「AI 观察」 | `AiInsightCard` → `POST /api/insights(scene,length,locale,data)` |
+| 双通道：内置（CF env）/ 用户自带 API | 「设置 → AI 解读服务」 | `AiConfigDialog`；config 存 `art-rank:ai-config`（仅本浏览器），经 Worker 转发 |
+| 四协议：Chat Completions / Responses / Anthropic Messages / Gemini Native（默认自动探测） | 配置弹窗协议下拉 | `worker/ai.ts callAi/callModelAuto`（探测结论按 baseUrl 缓存） |
+| 一键获取模型列表（datalist 点选）+ 测试连接 | 配置弹窗 | `POST /api/ai/models`、`POST /api/ai/test` |
+| 输出长度三档（简短/标准/深入）持久化 | 结果卡分段选择器 | `art-rank:ai-length` → OUTPUT_BLOCK 字数映射 |
+| 失败原因分类（限流带等待时长 / key 无效 / 地址协议不符 / 服务不可用） | 结果卡文案 | `lib/aiInsight.ts` 透传服务端错误码 |
+| 提示词模块化（指令/数据分离）+ 管理端在线覆盖（写审计） | /admin 数据页签「AI 提示词」 | `worker/ai.ts composePrompt`、`admin_config: ai_prompt_system_*`、`promptVersion` 回显 |
+| SSRF 防护（https-only、拒 IP/localhost/metadata） | — | `worker/ai.ts validateUserConfig`（自定义通道唯一入口） |
+| 限流：内置 8 / 自定义 15 / test 5 / models 10（次/10 分钟） | — | `allowUpstreamRequest` 桶 `ai / ai_custom / ai_test / ai_models` |
+
 ## 回归走查清单（改版后必查）
 
 1. 首页→选维度→精选/搜索/批量导入→TopN→排序（键盘+撤销+回环提示）→完成落画像
@@ -173,3 +189,4 @@
 8. 账号：注册/登录/OAuth/同步/冲突弹窗/退出清数据
 9. 主题：六主题切换、刷新持久化、PNG 跟随
 10. /admin 四页签各一操作
+11. AI 点评：三场景各生成一次（含长度三档切换）；设置→配置自己的 API→获取模型列表→测试连接→再生成（来源徽标变「我的」）；清除配置回落内置；错误注入（错 key / 错 base / 连打限流）文案正确

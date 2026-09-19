@@ -1152,8 +1152,10 @@ export function SourceView({
                       setCustomDeselected(event.target.checked ? [] : customWorks.map((w) => w.id))
                     }
                   />
-                  {t("全选", "All")} · {customWorks.length - customDeselected.length} /{" "}
-                  {customWorks.length}
+                  {/* 计数写成单个模板串：JSX 的 `{n} / {m}` 会被 Prettier 改写成
+                      ` /{" "}`，斜杠前的空格在渲染时丢失（464775b 引入的视觉回归） */}
+                  {t("全选", "All")} ·{" "}
+                  {`${customWorks.length - customDeselected.length} / ${customWorks.length}`}
                 </label>
                 <button
                   className="text-button"
