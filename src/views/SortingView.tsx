@@ -20,6 +20,8 @@ export function SortingView({
         <div>
           <span className="eyebrow">
             {label(kind)} / {t("相遇", "ENCOUNTER")} TOP {ranking.topN}
+            {ranking.mode === "quick" && t(" · 简易", " · Quick")}
+            {ranking.mode === "precise" && t(" · 精确", " · Precise")}
           </span>
           <h1>{collection.title}</h1>
         </div>
@@ -42,10 +44,15 @@ export function SortingView({
                 `正在复测 ${progress.verificationRemaining} 组相近取舍，让结果更贴近你的直觉。`,
                 `Rechecking ${progress.verificationRemaining} close calls for a truer result.`,
               )
-            : t(
-                "相同组合会留出间隔；完成前会进行少量复测。",
-                "Pairs are spaced apart, then a few close calls are rechecked.",
-              )}
+            : ranking.mode === "quick" && ranking.rankedIds.length >= ranking.topN
+              ? t(
+                  "守门员模式：新作品赢过榜单末位即可上榜，否则直接出局。",
+                  "Gatekeeper mode: a work enters only by beating the last spot, otherwise it's out.",
+                )
+              : t(
+                  "相同组合会留出间隔；完成前会进行少量复测。",
+                  "Pairs are spaced apart, then a few close calls are rechecked.",
+                )}
         </small>
         {ranking.cycleStatus === "observed" && (
           <em>

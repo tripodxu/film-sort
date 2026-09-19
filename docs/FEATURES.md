@@ -30,6 +30,7 @@
 | 四媒介维度选择（电影/书籍/音乐/其他） | 首页 medium 胶囊 | `App.chooseKind` |
 | 主动式二分插入排序（中位数对手 + 区间收敛） | `/catalog/sorting` | `lib/ranking.ts createRankingState/getCurrentComparison/choosePreferred` |
 | 键盘 A/D、←/→、1/2 快捷选择 | 排序页 | `App.tsx` keydown |
+| 三种排序模式：简易(守门员截断,~1次/件)/经典(二分+回环+复测,默认)/精确(加强校准+校准一致率) | Setup「排序模式」segmented，localStorage 记忆 | `ranking.ts mode`：quick gate 阶段 + precise 验证队列/校准统计 |
 | 撤销（O(1) 快照栈，上限 500）/ 略过 / 暂放 | 排序页底部工具 | `undoLastAction/skipWork/deferWork` |
 | 偏好回环检测（A>B>C>A）+ 二次确认 | 排序页 evidence 条 | `recordPreference/recordCycleConfirmation` |
 | 验证阶段（终局少量反证对局） | 排序尾段 | `startVerification` |
@@ -70,6 +71,7 @@
 | 共同作品表（来源榜单徽章、名次可点进榜单详情、排序切换） | 比较页 | `RankingDetail` 弹窗 |
 | 最大分歧表 / 共同偏好 / 分歧轴 | 比较页 | `disagreements/commonPreference/divergence` |
 | AI 比较解读（基于比较指标的跨媒介侧写） | 「AI 观察」卡 | `/api/insights(scene=compare)`，`buildCompareData` |
+| 三档比较深度：简易(共识圆环+三主指标)/经典(全指标,默认)/精确(+median 聚合+共识构成条+全量分歧表) | 「比较深度」segmented，localStorage 记忆 | `mergeDimensionRankings(strategy)` + CompareView 分档渲染 |
 | 用对方作品重新排序（选对方榜单） | 底部动作 | `createFromPeer` + PeerRankPick |
 
 ## 4. 分享

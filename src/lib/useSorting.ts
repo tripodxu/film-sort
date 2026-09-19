@@ -619,16 +619,33 @@ export function useSorting(deps: SortingDeps) {
     const d = depsRef.current;
     if (!collection || selected.length < 2) return;
     const works = collection.works.filter((work) => selected.includes(work.id));
+    // 排序模式：SetupView 写入 localStorage，缺省 classic。
+    let rankMode: "quick" | "classic" | "precise" = "classic";
+    try {
+      const stored = localStorage.getItem("art-rank:rank-mode");
+      if (stored === "quick" || stored === "precise") rankMode = stored;
+    } catch {
+      /* 隐私模式 */
+    }
     const next = createRankingState(
       works.map((work) => work.id),
-      { topN, seed: seed.trim() || crypto.randomUUID() },
+      {
+        topN,
+        seed: seed.trim() || crypto.randomUUID(),
+        mode: rankMode,
+      },
     );
     rankingSnapshots.current = [];
     setCollection({ ...collection, works });
     setRanking(next);
     d.navigateTo("sorting");
     d.setNotice("");
-    track("sorting_started", { mode: kind, item_count: works.length, top_k: next.topN });
+    track("sorting_started", {
+      mode: kind,
+      item_count: works.length,
+      top_k: next.topN,
+      rank_mode: rankMode,
+    });
   }
 
   function act(
@@ -689,6 +706,16 @@ export function useSorting(deps: SortingDeps) {
             `Ranking saved — ${merged} duplicate(s) were merged.`,
           ),
         );
+      // precise 模式：汇报校准一致率（复测与首次结论一致的比例）。
+      if (next.mode === "precise" && next.calibration.checked > 0) {
+        const pct = Math.round((100 * next.calibration.consistent) / next.calibration.checked);
+        d.setNotice(
+          d.t(
+            `排序完成：校准一致率 ${pct}%（${next.calibration.checked} 次复测）。`,
+            `Ranking complete — calibration accuracy ${pct}% over ${next.calibration.checked} rechecks.`,
+          ),
+        );
+      }
       d.navigateTo(d.getPeer() && collection.id.startsWith("peer-") ? "compare" : "profile");
       track("ranking_completed", {
         mode: kind,

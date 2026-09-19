@@ -227,6 +227,10 @@ async function generateQR(url: string) {
 
 ---
 
+## 2.6b 算法三模式（排序：简易/经典/精确；比较：三档深度）（✅ 2026-09-20，见 [PLAN-algo-modes.md](./PLAN-algo-modes.md)）
+
+quick=守门员截断（满员后 1 次比较出局，gate→bisect 两阶段）；precise=验证 max(4,ceil(topN/2)) + 未比较相邻对主动入队 + 回环阈值 2× + 校准一致率统计（完成 notice 汇报）；比较侧 mergeDimensionRankings 支持 best/median 聚合，CompareView 三档深度（simple 隐藏折叠区、precise 展开全部+共识构成+全量分歧表）。排序/深度选择均 localStorage 持久化，classic 缺省零迁移（旧草稿/旧快照 deserialize 自动补 mode/calibration/stage）。测试 239→255（ranking +10、profile +6）。
+
 ## 2.7 AI 点评三场景 + 双通道四协议（✅ 2026-09-19 完成，见 [PLAN-ai-insights.md](./PLAN-ai-insights.md)）
 
 原「AI 解读」只有比较场景一个入口、模型硬编码、摘要只是标题列表。本次落地：

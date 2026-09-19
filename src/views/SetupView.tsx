@@ -3,6 +3,41 @@ import { Poster } from "../components/Poster";
 import { heading } from "./helpers";
 import type { SetupViewProps } from "./types";
 
+const RANK_MODES: Array<{
+  value: "quick" | "classic" | "precise";
+  zh: string;
+  en: string;
+  hint: [string, string];
+}> = [
+  {
+    value: "quick",
+    zh: "简易",
+    en: "Quick",
+    hint: [
+      "每件作品约 1 次取舍，快速挖出 Top N（适合大清单）",
+      "~1 choice per work; fastest way to surface a Top N",
+    ],
+  },
+  {
+    value: "classic",
+    zh: "经典",
+    en: "Classic",
+    hint: [
+      "二分定位 + 回环检测 + 复测校准（推荐）",
+      "Binary insertion with loop detection and verification (recommended)",
+    ],
+  },
+  {
+    value: "precise",
+    zh: "精确",
+    en: "Precise",
+    hint: [
+      "更多复测与主动校准，给出校准一致率",
+      "Extra verification rounds; reports a calibration accuracy",
+    ],
+  },
+];
+
 export function SetupView({
   collection,
   kind,
@@ -18,6 +53,18 @@ export function SetupView({
   startRanking,
   saveWithoutSorting,
 }: SetupViewProps) {
+  const rankMode =
+    (typeof window !== "undefined" && window.localStorage.getItem("art-rank:rank-mode")) ||
+    "classic";
+  const setRankMode = (mode: string) => {
+    try {
+      window.localStorage.setItem("art-rank:rank-mode", mode);
+    } catch {
+      /* 隐私模式 */
+    }
+  };
+  const active = RANK_MODES.find((m) => m.value === rankMode) ?? RANK_MODES[1];
+  const activeHint = t(active.hint[0], active.hint[1]);
   return (
     <>
       {heading(
@@ -30,6 +77,26 @@ export function SetupView({
       )}
       <div className="setup-layout">
         <section className="settings">
+          <label htmlFor="rank-mode">{t("排序模式", "Ranking mode")}</label>
+          <div
+            className="segmented"
+            id="rank-mode"
+            role="group"
+            aria-label={t("排序模式", "Ranking mode")}
+          >
+            {RANK_MODES.map((m) => (
+              <button
+                key={m.value}
+                className={rankMode === m.value ? "active" : ""}
+                onClick={() => setRankMode(m.value)}
+              >
+                {t(m.zh, m.en)}
+              </button>
+            ))}
+          </div>
+          <p style={{ fontSize: 11, color: "var(--muted)", margin: "4px 0 12px", lineHeight: 1.5 }}>
+            {activeHint}
+          </p>
           <label htmlFor="top-n">
             Top N <strong>{topN}</strong>
           </label>

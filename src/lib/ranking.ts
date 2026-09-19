@@ -2,17 +2,27 @@ export const RANKING_STATE_VERSION = 2 as const;
 
 const PAIR_COOLDOWN = 3;
 const WORK_COOLDOWN = 4;
+/** classic 模式验证阶段基线复测上限。 */
 const MAX_BASELINE_VERIFICATIONS = 4;
+/** precise 模式的回环确认阈值倍数：需 2× 成员数的方向一致才判 persistent。 */
+const PRECISE_CYCLE_CONFIRM_FACTOR = 2;
+
+export type RankingMode = "quick" | "classic" | "precise";
+const RANKING_MODES: RankingMode[] = ["quick", "classic", "precise"];
 
 export interface RankingOptions {
   seed?: string;
   topN?: number;
+  /** 排序模式：quick=守门员截断（比较最少）、classic=现行二分（默认）、precise=加强校准。 */
+  mode?: RankingMode;
 }
 export interface ActiveInsertion {
   candidateId: string;
   low: number;
   high: number;
   presentationIndex: number;
+  /** quick 模式：先与守门员（当前末位）比（gate），赢了才进入二分（bisect）。其余模式恒为 bisect。 */
+  stage: "gate" | "bisect";
 }
 export interface VerificationTask {
   leftId: string;
@@ -62,9 +72,17 @@ export interface RankingDecision {
   phase: "ranking" | "verification";
 }
 
+export interface Calibration {
+  /** 验证复测总次数。 */
+  checked: number;
+  /** 复测与首次结论一致的次数。consistent/checked 即「校准一致率」（2.txt 测评方案 1）。 */
+  consistent: number;
+}
+
 /** JSON-only state that is safe to persist in a draft or sync to the account. */
 export interface RankingState {
   version: typeof RANKING_STATE_VERSION;
+  mode: RankingMode;
   seed: string;
   topN: number;
   sourceIds: readonly string[];
@@ -89,6 +107,8 @@ export interface RankingState {
   processedCount: number;
   nextPresentationIndex: number;
   completed: boolean;
+  /** precise 模式：验证复测与首次结论的一致性统计；其他模式恒为 {0,0}。 */
+  calibration: Calibration;
   decisionLog: readonly RankingDecision[];
 }
 
@@ -167,16 +187,24 @@ function seededShuffle(ids: readonly string[], seed: string): string[] {
   }
   return shuffled;
 }
-function estimateTotalComparisons(itemCount: number, topN: number): number {
+function estimateTotalComparisons(itemCount: number, topN: number, mode: RankingMode): number {
+  if (mode === "quick") {
+    // 守门员截断：满员后每个落选者约 1 次；进榜者二分成本。经验系数 1.3（见 2.txt 模拟）。
+    let build = 0;
+    for (let candidateIndex = 1; candidateIndex < Math.min(topN, itemCount); candidateIndex += 1)
+      build += Math.ceil(Math.log2(candidateIndex + 1));
+    return build + Math.max(0, itemCount - topN) * 1.3;
+  }
   let total = 0;
   for (let candidateIndex = 1; candidateIndex < itemCount; candidateIndex += 1)
     total += Math.ceil(Math.log2(Math.min(candidateIndex, topN) + 1));
-  return total;
+  return mode === "precise" ? total * 1.4 : total;
 }
-function estimateVerificationCount(itemCount: number, topN: number): number {
-  return itemCount < 2 || topN < 2
-    ? 0
-    : Math.min(MAX_BASELINE_VERIFICATIONS, Math.max(1, Math.ceil(topN / 3)));
+function estimateVerificationCount(itemCount: number, topN: number, mode: RankingMode): number {
+  if (itemCount < 2 || topN < 2) return 0;
+  if (mode === "quick") return 1; // 极简：仅复测守门员边界一次。
+  if (mode === "precise") return Math.max(4, Math.ceil(topN / 2));
+  return Math.min(MAX_BASELINE_VERIFICATIONS, Math.max(1, Math.ceil(topN / 3)));
 }
 function pairKey(leftId: string, rightId: string): string {
   return leftId < rightId ? `${leftId}\u0000${rightId}` : `${rightId}\u0000${leftId}`;
@@ -379,6 +407,11 @@ function recordCycleConfirmation(
   if (!task.cycleKey) return state;
   const cycleEvents = state.cycleEvents.map((event) => {
     if (event.key !== task.cycleKey) return event;
+    // precise 模式：需要 2× 成员数的方向一致才承认 persistent（回环更严）。
+    const confirmTarget =
+      state.mode === "precise"
+        ? event.memberIds.length * PRECISE_CYCLE_CONFIRM_FACTOR
+        : event.memberIds.length;
     const consistent = preferredId === task.expectedWinnerId;
     const consistentConfirmations = event.consistentConfirmations + (consistent ? 1 : 0);
     const conflictingConfirmations = event.conflictingConfirmations + (consistent ? 0 : 1);
@@ -389,7 +422,7 @@ function recordCycleConfirmation(
       conflictingConfirmations,
       tensionRounds,
       status:
-        consistentConfirmations >= event.memberIds.length && conflictingConfirmations === 0
+        consistentConfirmations >= confirmTarget && conflictingConfirmations === 0
           ? ("persistent" as const)
           : ("observed" as const),
     };
@@ -437,7 +470,7 @@ function scheduleNextVerification(state: RankingState): RankingState {
 }
 function startVerification(state: RankingState): RankingState {
   let verificationQueue = state.verificationQueue;
-  const baselineCount = estimateVerificationCount(state.sourceIds.length, state.topN);
+  const baselineCount = estimateVerificationCount(state.sourceIds.length, state.topN, state.mode);
   for (let index = 0; index < baselineCount; index += 1) {
     const leftId = state.rankedIds[index];
     const rightId = state.rankedIds[index + 1];
@@ -448,6 +481,22 @@ function startVerification(state: RankingState): RankingState {
         reason: "stability",
         expectedWinnerId: leftId,
       });
+  }
+  // precise（主动学习）：TopK 内**从未直接比较过**的相邻对也入队——首次结论全部
+  // 来自二分传递推断，直接验证一遍信息增益最高（2.txt "主动挑高不确定度对"）。
+  if (state.mode === "precise") {
+    for (let index = 0; index + 1 < state.rankedIds.length; index += 1) {
+      const leftId = state.rankedIds[index];
+      const rightId = state.rankedIds[index + 1];
+      const key = pairKey(leftId, rightId);
+      if (!state.pairEvidence.some((entry) => entry.key === key))
+        verificationQueue = enqueueTask(verificationQueue, {
+          leftId,
+          rightId,
+          reason: "stability",
+          expectedWinnerId: leftId,
+        });
+    }
   }
   return scheduleNextVerification({
     ...state,
@@ -467,6 +516,8 @@ function scheduleNextCandidate(state: RankingState): RankingState {
   else if (deferredIds.length)
     [candidateId, deferredIds] = takeCandidateWithCooldown(state, deferredIds);
   if (candidateId === undefined) return startVerification({ ...state, pendingIds, deferredIds });
+  // quick 模式：满员后候选先面对守门员（当前末位）；未满员直接二分建榜。
+  const gate = state.mode === "quick" && state.rankedIds.length >= state.topN ? "gate" : "bisect";
   return {
     ...state,
     pendingIds,
@@ -476,6 +527,7 @@ function scheduleNextCandidate(state: RankingState): RankingState {
       low: 0,
       high: state.rankedIds.length,
       presentationIndex: state.nextPresentationIndex,
+      stage: gate,
     },
     nextPresentationIndex: state.nextPresentationIndex + 1,
     completed: false,
@@ -494,11 +546,14 @@ export function createRankingState(
   }
   const topN = Math.min(requestedTopN, sourceIds.length);
   const seed = options.seed ?? "film-sort";
+  const mode: RankingMode =
+    options.mode && RANKING_MODES.includes(options.mode) ? options.mode : "classic";
   const shuffledIds = seededShuffle(sourceIds, seed);
   const hasFirstItem = shuffledIds.length > 0;
   const completed = shuffledIds.length <= 1;
   const initial: RankingState = {
     version: RANKING_STATE_VERSION,
+    mode,
     seed,
     topN,
     sourceIds,
@@ -520,11 +575,12 @@ export function createRankingState(
     preferenceTension: { level: 0, status: "none", cycleCount: 0 },
     comparisonCount: 0,
     estimatedTotalComparisons:
-      estimateTotalComparisons(sourceIds.length, topN) +
-      estimateVerificationCount(sourceIds.length, topN),
+      estimateTotalComparisons(sourceIds.length, topN, mode) +
+      estimateVerificationCount(sourceIds.length, topN, mode),
     processedCount: hasFirstItem ? 1 : 0,
     nextPresentationIndex: 0,
     completed,
+    calibration: { checked: 0, consistent: 0 },
     decisionLog: [],
   };
   return initial.completed ? initial : scheduleNextCandidate(initial);
@@ -548,7 +604,11 @@ export function getCurrentComparison(state: RankingState): RankingComparison | n
   }
   const active = state.activeInsertion;
   if (!active || state.phase !== "ranking" || active.low >= active.high) return null;
-  const opponentIndex = Math.floor((active.low + active.high) / 2);
+  // quick+gate：对手固定为守门员（当前末位），而非二分中位。
+  const opponentIndex =
+    active.stage === "gate"
+      ? state.rankedIds.length - 1
+      : Math.floor((active.low + active.high) / 2);
   const opponentId = state.rankedIds[opponentIndex];
   if (opponentId === undefined) throw new Error("Ranking state has an invalid insertion range");
   const candidateOnLeft = candidateIsOnLeft(
@@ -588,8 +648,22 @@ function completeVerification(
   const active = state.activeVerification;
   if (!active) throw new Error("There is no active verification");
   const otherId = preferredId === active.task.leftId ? active.task.rightId : active.task.leftId;
+  // 校准一致率：复测结论与验证任务的期望（首次结论/榜单顺序）一致则记 1。
+  const consistentWithExpectation = preferredId === active.task.expectedWinnerId;
+  const calibration =
+    state.mode === "precise"
+      ? {
+          checked: state.calibration.checked + 1,
+          consistent: state.calibration.consistent + (consistentWithExpectation ? 1 : 0),
+        }
+      : state.calibration;
   let next = recordPreference(
-    { ...state, comparisonCount: state.comparisonCount + 1, activeVerification: null },
+    {
+      ...state,
+      comparisonCount: state.comparisonCount + 1,
+      activeVerification: null,
+      calibration,
+    },
     preferredId,
     otherId,
     "verification",
@@ -614,8 +688,51 @@ export function choosePreferred(state: RankingState, preferredId: string): Ranki
     return completeVerification(state, preferredId, decision);
   const active = state.activeInsertion;
   if (!active) throw new Error("There is no active insertion");
-  const opponentIndex = Math.floor((active.low + active.high) / 2);
   const candidateWon = preferredId === active.candidateId;
+  // quick+gate：候选赢守门员 → 升级 bisect（在 topN 内二分定位）；输 → 直接出局。
+  if (active.stage === "gate") {
+    if (!candidateWon) {
+      // 守门员拦截：候选 1 次比较出局，榜单不动（守门员是期望赢家，preference 记录其胜）。
+      const next = recordPreference(
+        { ...state, comparisonCount: state.comparisonCount + 1, activeInsertion: null },
+        comparison.opponentId,
+        comparison.candidateId,
+        "ranking",
+      );
+      return appendDecision(
+        scheduleNextCandidate({
+          ...next,
+          outsideTopIds: [...next.outsideTopIds, active.candidateId],
+          processedCount: next.processedCount + 1,
+        }),
+        decision,
+      );
+    }
+    // 赢了守门员：记偏好（候选胜守门员），升级 bisect 在**守门员之前**定位
+    // （high = len-1：候选已证明强于末位，若再输只会插到守门员前面，守门员保持末位；
+    //   2.txt "击败第10名，继续二分法往上挑战"）。
+    const next = recordPreference(
+      { ...state, comparisonCount: state.comparisonCount + 1 },
+      preferredId,
+      comparison.opponentId,
+      "ranking",
+    );
+    const bisect = { ...active, stage: "bisect" as const, low: 0, high: next.rankedIds.length - 1 };
+    if (bisect.low >= bisect.high)
+      return appendDecision(
+        finishInsertion({ ...next, activeInsertion: bisect }, bisect.low),
+        decision,
+      );
+    return appendDecision(
+      {
+        ...next,
+        activeInsertion: { ...bisect, presentationIndex: next.nextPresentationIndex },
+        nextPresentationIndex: next.nextPresentationIndex + 1,
+      },
+      decision,
+    );
+  }
+  const opponentIndex = Math.floor((active.low + active.high) / 2);
   const low = candidateWon ? active.low : opponentIndex + 1;
   const high = candidateWon ? opponentIndex : active.high;
   const otherId = candidateWon ? comparison.opponentId : comparison.candidateId;
@@ -791,6 +908,7 @@ export function undoLastAction(state: RankingState): RankingState {
   let restored = createRankingState(state.sourceIds, {
     seed: state.seed,
     topN: state.topN || undefined,
+    mode: state.mode,
   });
   for (const decision of state.decisionLog.slice(0, -1))
     restored = replayDecision(restored, decision);
@@ -969,6 +1087,9 @@ function isRankingState(value: unknown): value is RankingState {
   const decisions = state.decisionLog ?? [];
   return (
     state.version === RANKING_STATE_VERSION &&
+    // mode 缺省视为 classic：旧版本 localStorage 草稿/云端快照零迁移兼容。
+    ((state.mode as RankingMode | undefined) === undefined ||
+      RANKING_MODES.includes(state.mode as RankingMode)) &&
     (state.phase === "ranking" || state.phase === "verification" || state.phase === "complete") &&
     Array.isArray(state.verificationQueue) &&
     state.verificationQueue.every(isTask) &&
@@ -984,6 +1105,9 @@ function isRankingState(value: unknown): value is RankingState {
       state.cycleStatus === "observed" ||
       state.cycleStatus === "persistent") &&
     (state.preferenceTension === undefined || isTension(state.preferenceTension)) &&
+    (state.calibration === undefined ||
+      (typeof state.calibration.checked === "number" &&
+        typeof state.calibration.consistent === "number")) &&
     decisions.every(isDecision)
   );
 }
@@ -1019,6 +1143,7 @@ function migrateLegacyState(legacy: LegacyRankingState): RankingState {
   return {
     ...legacy,
     version: RANKING_STATE_VERSION,
+    mode: "classic",
     phase: legacy.completed ? "complete" : "ranking",
     verificationQueue: [],
     activeVerification: null,
@@ -1028,14 +1153,25 @@ function migrateLegacyState(legacy: LegacyRankingState): RankingState {
     cycleEvents: [],
     cycleStatus: "none",
     preferenceTension: { level: 0, status: "none", cycleCount: 0 },
+    calibration: { checked: 0, consistent: 0 },
     estimatedTotalComparisons: Math.max(legacy.estimatedTotalComparisons, legacy.comparisonCount),
     decisionLog: legacy.decisionLog.map((decision) => ({ ...decision, phase: "ranking" as const })),
   };
 }
 export function deserializeRankingState(serialized: string): RankingState {
   const parsed: unknown = JSON.parse(serialized);
+  const patch = (state: RankingState): RankingState => ({
+    // 旧快照无 mode/calibration/stage：补默认值（classic / 零计数 / bisect）。
+    ...state,
+    mode: RANKING_MODES.includes(state.mode) ? state.mode : "classic",
+    calibration: state.calibration ?? { checked: 0, consistent: 0 },
+    activeInsertion:
+      state.activeInsertion && state.activeInsertion.stage === undefined
+        ? { ...state.activeInsertion, stage: "bisect" as const }
+        : state.activeInsertion,
+  });
   if (isRankingState(parsed)) {
-    const state = parsed as RankingState;
+    const state = patch(parsed as RankingState);
     if (!state.preferenceTension)
       return { ...state, preferenceTension: updateCycleTension(state.cycleEvents) };
     const patchedEvents = state.cycleEvents.map((e) => {
@@ -1052,6 +1188,6 @@ export function deserializeRankingState(serialized: string): RankingState {
           preferenceTension: updateCycleTension(patchedEvents),
         };
   }
-  if (isLegacyState(parsed)) return migrateLegacyState(parsed);
+  if (isLegacyState(parsed)) return patch(migrateLegacyState(parsed));
   throw new TypeError("Stored ranking state is invalid or unsupported");
 }

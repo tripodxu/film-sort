@@ -639,3 +639,70 @@ describe("profileText", () => {
     expect(text).toContain("rank");
   });
 });
+
+// ===== merge strategy（docs/PLAN-algo-modes.md 比较·精确模式）=====
+describe("mergeDimensionRankings strategy", () => {
+  const mk = (title: string, items: Array<[string, number]>): RankingExport => ({
+    version: 1,
+    profileId: "p",
+    profileName: "n",
+    kind: "film",
+    collectionTitle: title,
+    createdAt: "2026-01-01T00:00:00.000Z",
+    items: items.map(([t, rank], i) => ({ id: `${title}-${i}`, title: t, rank })),
+  });
+
+  it("best（缺省）：同作品取最高名次——现行行为不变", () => {
+    const merged = mergeDimensionRankings([
+      mk("榜A", [
+        ["流浪地球", 1],
+        ["活着", 2],
+      ]),
+      mk("榜B", [
+        ["活着", 1],
+        ["流浪地球", 10],
+      ]),
+    ])!;
+    const huo = merged.items.find((i) => i.title === "活着")!;
+    expect(huo.bestRank).toBe(1); // best：取两榜中最优
+    expect(huo.sources).toHaveLength(2);
+  });
+
+  it("median：同作品按名次中位数重排（奇数个榜单）", () => {
+    const merged = mergeDimensionRankings(
+      [mk("榜A", [["活着", 2]]), mk("榜B", [["活着", 10]]), mk("榜C", [["活着", 10]])],
+      "median",
+    )!;
+    const huo = merged.items.find((i) => i.title === "活着")!;
+    expect(huo.bestRank).toBe(10); // 中位数 = 10（best 会是 2）
+  });
+
+  it("median：偶数个榜单取两中位均值四舍五入", () => {
+    const merged = mergeDimensionRankings(
+      [mk("榜A", [["活着", 1]]), mk("榜B", [["活着", 4]])],
+      "median",
+    )!;
+    expect(merged.items.find((i) => i.title === "活着")!.bestRank).toBe(3); // (1+4)/2 → 3
+  });
+
+  it("median：单次出现的作品名次不变", () => {
+    const merged = mergeDimensionRankings(
+      [
+        mk("榜A", [
+          ["活着", 2],
+          ["流浪地球", 5],
+        ]),
+        mk("榜B", [["活着", 10]]),
+      ],
+      "median",
+    )!;
+    expect(merged.items.find((i) => i.title === "流浪地球")!.bestRank).toBe(5);
+  });
+
+  it("缺省 strategy 等价 best（兼容旧调用方）", () => {
+    const rs = [mk("榜A", [["活着", 2]]), mk("榜B", [["活着", 10]])];
+    expect(mergeDimensionRankings(rs)!.items[0].bestRank).toBe(
+      mergeDimensionRankings(rs, "best")!.items[0].bestRank,
+    );
+  });
+});

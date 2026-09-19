@@ -1,10 +1,18 @@
-import { useEffect, useMemo, type CSSProperties } from "react";
+import { useEffect, useMemo, useState, type CSSProperties } from "react";
 import { ArrowLeftRight, ArrowRight, Link, Play, Plus, Share2, X } from "lucide-react";
 import { Poster } from "../components/Poster";
 import { AiInsightCard } from "../components/AiInsightCard";
 import { buildCompareData } from "../lib/aiInsight";
 import { heading, fileInput } from "./helpers";
 import type { CompareViewProps } from "./types";
+
+/** 比较深度三档：simple=核心三指标；classic=现行全指标（默认）；precise=全指标展开+median 聚合+共识构成+全量分歧。 */
+type CompareLevel = "simple" | "classic" | "precise";
+const LEVELS: Array<{ value: CompareLevel; zh: string; en: string }> = [
+  { value: "simple", zh: "简易", en: "Simple" },
+  { value: "classic", zh: "经典", en: "Classic" },
+  { value: "precise", zh: "精确", en: "Precise" },
+];
 
 export function CompareView({
   kinds,
@@ -56,6 +64,23 @@ export function CompareView({
       peer?.rankings.some((entry) => entry.kind === item),
   );
   const compareKind = sharedKinds.includes(compareActiveKind) ? compareActiveKind : sharedKinds[0];
+  // 比较深度：localStorage 持久化，缺省 classic（与 d5f1ba1 起的行为一致）。
+  const [compareLevel, setCompareLevel] = useState<CompareLevel>(() => {
+    try {
+      const v = localStorage.getItem("art-rank:compare-level");
+      return v === "simple" || v === "precise" ? v : "classic";
+    } catch {
+      return "classic";
+    }
+  });
+  const changeLevel = (level: CompareLevel) => {
+    setCompareLevel(level);
+    try {
+      localStorage.setItem("art-rank:compare-level", level);
+    } catch {
+      /* 隐私模式 */
+    }
+  };
   const ownRankings = profile?.rankings.filter((entry) => entry.kind === compareKind) ?? [];
   const peerRankings = peer?.rankings.filter((entry) => entry.kind === compareKind) ?? [];
   // 手动模式下默认全选（首次进入或维度切换时）
@@ -76,16 +101,18 @@ export function CompareView({
       ? peerRankings.filter((_, i) => manualPeerSelections.has(i))
       : peerRankings;
   const result = (() => {
+    // precise：多榜单合并用 median（更稳健）；simple/classic 用 best（现行）。
+    const strategy = compareLevel === "precise" ? ("median" as const) : ("best" as const);
     if (compareMode === "manual") {
       if (selectedOwn.length === 0 || selectedPeer.length === 0) return null;
       if (selectedOwn.length === 1 && selectedPeer.length === 1)
         return compareRankings(selectedOwn[0], selectedPeer[0]);
-      const ownMerged = mergeDimensionRankings(selectedOwn);
-      const peerMerged = mergeDimensionRankings(selectedPeer);
+      const ownMerged = mergeDimensionRankings(selectedOwn, strategy);
+      const peerMerged = mergeDimensionRankings(selectedPeer, strategy);
       return ownMerged && peerMerged ? compareDimensions(ownMerged, peerMerged) : null;
     }
-    const ownMerged = mergeDimensionRankings(ownRankings);
-    const peerMerged = mergeDimensionRankings(peerRankings);
+    const ownMerged = mergeDimensionRankings(ownRankings, strategy);
+    const peerMerged = mergeDimensionRankings(peerRankings, strategy);
     return ownMerged && peerMerged ? compareDimensions(ownMerged, peerMerged) : null;
   })();
   const crossProfile = profile && peer ? compareProfiles(profile, peer) : null;
@@ -157,15 +184,35 @@ export function CompareView({
                 {t("指定榜单", "Pick lists")}
               </button>
             </div>
-            {compareMode === "manual" &&
-              (selectedOwn.length === 0 || selectedPeer.length === 0) && (
-                <div className="empty-state" style={{ marginBottom: 12 }}>
-                  <p style={{ fontSize: 12, color: "var(--muted)" }}>
-                    {t("请至少各选一个榜单", "Select at least one list from each side")}
-                  </p>
-                </div>
-              )}
           </div>
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <span style={{ fontSize: 11, color: "var(--muted)" }}>{t("比较深度", "Depth")}:</span>
+            <div className="segmented" style={{ marginBottom: 0 }}>
+              {LEVELS.map((level) => (
+                <button
+                  key={level.value}
+                  role="tab"
+                  aria-selected={compareLevel === level.value}
+                  className={compareLevel === level.value ? "active" : ""}
+                  onClick={() => changeLevel(level.value)}
+                >
+                  {t(level.zh, level.en)}
+                </button>
+              ))}
+            </div>
+            {compareLevel === "precise" && (
+              <span style={{ fontSize: 11, color: "var(--muted)" }}>
+                {t("多榜单按名次中位数聚合", "multi-list merges use median rank")}
+              </span>
+            )}
+          </div>
+          {compareMode === "manual" && (selectedOwn.length === 0 || selectedPeer.length === 0) && (
+            <div className="empty-state" style={{ marginBottom: 12 }}>
+              <p style={{ fontSize: 12, color: "var(--muted)" }}>
+                {t("请至少各选一个榜单", "Select at least one list from each side")}
+              </p>
+            </div>
+          )}
         </div>
       )}
       <div className="comparison-inputs">
@@ -668,138 +715,222 @@ export function CompareView({
                 <small>%</small>
               </strong>
             </div>
-            <details className="metrics-more">
-              <summary>{t("更多指标", "More metrics")}</summary>
-              <div className="metrics-more-grid">
-                <div>
-                  <span>
-                    {t("Kendall τ", "Kendall tau")}
-                    <i
-                      className="metric-help"
-                      tabIndex={0}
-                      data-tip={t(
-                        "秩相关（含并列），50=无关，100=完全一致",
-                        "Rank correlation with ties; 50=noise, 100=identical",
-                      )}
-                    >
-                      ?
-                    </i>
-                  </span>
-                  <strong>{result.kendallTau === null ? "--" : result.kendallTau}</strong>
+            {compareLevel !== "simple" && (
+              <details className="metrics-more" open={compareLevel === "precise"}>
+                <summary>{t("更多指标", "More metrics")}</summary>
+                <div className="metrics-more-grid">
+                  <div>
+                    <span>
+                      {t("Kendall τ", "Kendall tau")}
+                      <i
+                        className="metric-help"
+                        tabIndex={0}
+                        data-tip={t(
+                          "秩相关（含并列），50=无关，100=完全一致",
+                          "Rank correlation with ties; 50=noise, 100=identical",
+                        )}
+                      >
+                        ?
+                      </i>
+                    </span>
+                    <strong>{result.kendallTau === null ? "--" : result.kendallTau}</strong>
+                  </div>
+                  <div>
+                    <span>
+                      {t("Spearman 一致", "Spearman")}
+                      <i
+                        className="metric-help"
+                        tabIndex={0}
+                        data-tip={t("名次差的平方和换算", "Derived from squared rank differences")}
+                      >
+                        ?
+                      </i>
+                    </span>
+                    <strong>
+                      {result.spearmanLikeAgreement === null ? "--" : result.spearmanLikeAgreement}
+                    </strong>
+                  </div>
+                  <div>
+                    <span>
+                      {t("前五重合", "Top-5 overlap")}
+                      <i
+                        className="metric-help"
+                        tabIndex={0}
+                        data-tip={t(
+                          "双方前五名作品的 Jaccard 相似度",
+                          "Jaccard similarity of both Top-5 sets",
+                        )}
+                      >
+                        ?
+                      </i>
+                    </span>
+                    <strong>
+                      {result.topJaccard}
+                      <small>%</small>
+                    </strong>
+                  </div>
+                  <div>
+                    <span>
+                      {t("年代偏好", "Era affinity")}
+                      <i
+                        className="metric-help"
+                        tabIndex={0}
+                        data-tip={t(
+                          "双方榜单年代中位数越接近分越高",
+                          "Closer median release years score higher",
+                        )}
+                      >
+                        ?
+                      </i>
+                    </span>
+                    <strong>{result.eraAffinity === null ? "--" : result.eraAffinity}</strong>
+                  </div>
+                  <div>
+                    <span>
+                      {t("名次距离", "Rank distance")}
+                      <i
+                        className="metric-help"
+                        tabIndex={0}
+                        data-tip={t(
+                          "共同作品的平均名次差，越低越一致",
+                          "Average rank gap of shared works; lower is closer",
+                        )}
+                      >
+                        ?
+                      </i>
+                    </span>
+                    <strong>
+                      {result.rankDistance}
+                      <small>%</small>
+                    </strong>
+                  </div>
+                  <div>
+                    <span>
+                      {t("冠军一致", "Same champion")}
+                      <i
+                        className="metric-help"
+                        tabIndex={0}
+                        data-tip={t(
+                          "双方的第 1 名是否为同一作品",
+                          "Whether both #1 picks are the same work",
+                        )}
+                      >
+                        ?
+                      </i>
+                    </span>
+                    <strong>
+                      {result.championAgreement === null
+                        ? "--"
+                        : result.championAgreement
+                          ? "YES"
+                          : "NO"}
+                    </strong>
+                  </div>
+                  <div>
+                    <span>
+                      {t("Top 3 共识", "Top 3 consensus")}
+                      <i
+                        className="metric-help"
+                        tabIndex={0}
+                        data-tip={t("同时进入双方前三的作品数", "Works in both Top-3 lists")}
+                      >
+                        ?
+                      </i>
+                    </span>
+                    <strong>{result.top3Agreement}</strong>
+                  </div>
                 </div>
-                <div>
-                  <span>
-                    {t("Spearman 一致", "Spearman")}
-                    <i
-                      className="metric-help"
-                      tabIndex={0}
-                      data-tip={t("名次差的平方和换算", "Derived from squared rank differences")}
-                    >
-                      ?
-                    </i>
-                  </span>
-                  <strong>
-                    {result.spearmanLikeAgreement === null ? "--" : result.spearmanLikeAgreement}
-                  </strong>
-                </div>
-                <div>
-                  <span>
-                    {t("前五重合", "Top-5 overlap")}
-                    <i
-                      className="metric-help"
-                      tabIndex={0}
-                      data-tip={t(
-                        "双方前五名作品的 Jaccard 相似度",
-                        "Jaccard similarity of both Top-5 sets",
-                      )}
-                    >
-                      ?
-                    </i>
-                  </span>
-                  <strong>
-                    {result.topJaccard}
-                    <small>%</small>
-                  </strong>
-                </div>
-                <div>
-                  <span>
-                    {t("年代偏好", "Era affinity")}
-                    <i
-                      className="metric-help"
-                      tabIndex={0}
-                      data-tip={t(
-                        "双方榜单年代中位数越接近分越高",
-                        "Closer median release years score higher",
-                      )}
-                    >
-                      ?
-                    </i>
-                  </span>
-                  <strong>{result.eraAffinity === null ? "--" : result.eraAffinity}</strong>
-                </div>
-                <div>
-                  <span>
-                    {t("名次距离", "Rank distance")}
-                    <i
-                      className="metric-help"
-                      tabIndex={0}
-                      data-tip={t(
-                        "共同作品的平均名次差，越低越一致",
-                        "Average rank gap of shared works; lower is closer",
-                      )}
-                    >
-                      ?
-                    </i>
-                  </span>
-                  <strong>
-                    {result.rankDistance}
-                    <small>%</small>
-                  </strong>
-                </div>
-                <div>
-                  <span>
-                    {t("冠军一致", "Same champion")}
-                    <i
-                      className="metric-help"
-                      tabIndex={0}
-                      data-tip={t(
-                        "双方的第 1 名是否为同一作品",
-                        "Whether both #1 picks are the same work",
-                      )}
-                    >
-                      ?
-                    </i>
-                  </span>
-                  <strong>
-                    {result.championAgreement === null
-                      ? "--"
-                      : result.championAgreement
-                        ? "YES"
-                        : "NO"}
-                  </strong>
-                </div>
-                <div>
-                  <span>
-                    {t("Top 3 共识", "Top 3 consensus")}
-                    <i
-                      className="metric-help"
-                      tabIndex={0}
-                      data-tip={t("同时进入双方前三的作品数", "Works in both Top-3 lists")}
-                    >
-                      ?
-                    </i>
-                  </span>
-                  <strong>{result.top3Agreement}</strong>
-                </div>
-              </div>
-            </details>
+              </details>
+            )}
           </div>
-          <div className="comparison-signal">
-            <span>{t("共同偏好", "Common ground")}</span>
-            <strong>{result.commonPreference}</strong>
-            <span>{t("分歧轴", "Main divergence")}</span>
-            <strong>{result.divergence}</strong>
-          </div>
+          {compareLevel === "precise" && (
+            <div className="consensus-breakdown">
+              <span className="eyebrow">{t("共识构成", "CONSENSUS BREAKDOWN")}</span>
+              {(
+                [
+                  {
+                    key: "order",
+                    zh: "顺序一致",
+                    en: "Order agreement",
+                    weight: 0.3,
+                    value: result.orderAgreement ?? 0,
+                  },
+                  {
+                    key: "overlap",
+                    zh: "作品重合",
+                    en: "Overlap",
+                    weight: 0.2,
+                    value: result.overlap,
+                  },
+                  {
+                    key: "weighted",
+                    zh: "加权偏好",
+                    en: "Weighted",
+                    weight: 0.2,
+                    value: result.weightedTopAgreement,
+                  },
+                  {
+                    key: "distance",
+                    zh: "名次距离",
+                    en: "Rank distance",
+                    weight: 0.15,
+                    value: 100 - result.rankDistance,
+                  },
+                  {
+                    key: "era",
+                    zh: "年代偏好",
+                    en: "Era affinity",
+                    weight: 0.15,
+                    value: result.eraAffinity ?? 70,
+                  },
+                ] as Array<{ key: string; zh: string; en: string; weight: number; value: number }>
+              ).map((factor) => (
+                <div
+                  key={factor.key}
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: "110px 1fr 64px",
+                    gap: 10,
+                    alignItems: "center",
+                    fontSize: 12,
+                  }}
+                >
+                  <span style={{ color: "var(--muted)" }}>
+                    {t(factor.zh, factor.en)}
+                    <small style={{ opacity: 0.7 }}> ×{Math.round(factor.weight * 100)}%</small>
+                  </span>
+                  <div
+                    style={{
+                      height: 6,
+                      borderRadius: 3,
+                      background: "var(--line)",
+                      overflow: "hidden",
+                    }}
+                  >
+                    <div
+                      style={{
+                        height: "100%",
+                        width: `${Math.max(0, Math.min(100, factor.value))}%`,
+                        background: "var(--accent)",
+                        borderRadius: 3,
+                      }}
+                    />
+                  </div>
+                  <strong style={{ textAlign: "right" }}>
+                    {Math.round(factor.value * factor.weight)}
+                  </strong>
+                </div>
+              ))}
+            </div>
+          )}
+          {compareLevel !== "simple" && (
+            <div className="comparison-signal">
+              <span>{t("共同偏好", "Common ground")}</span>
+              <strong>{result.commonPreference}</strong>
+              <span>{t("分歧轴", "Main divergence")}</span>
+              <strong>{result.divergence}</strong>
+            </div>
+          )}
           <div className="comparison-lists">
             <section>
               <h2>{t("共同作品", "Shared works")}</h2>
@@ -924,8 +1055,19 @@ export function CompareView({
               )}
             </section>
             <section>
-              <h2>{t("最大分歧", "Largest rank differences")}</h2>
-              {result.disagreements.map((item) => (
+              <h2>
+                {compareLevel === "precise"
+                  ? t("全部名次分歧", "All rank differences")
+                  : t("最大分歧", "Largest rank differences")}
+              </h2>
+              {/* classic：分歧 top5；precise：全量共同作品按名次差排序（限 50 行防长榜） */}
+              {(compareLevel === "precise"
+                ? [...result.shared]
+                    .filter((m) => m.difference > 0)
+                    .sort((a, b) => b.difference - a.difference)
+                    .slice(0, 50)
+                : result.disagreements
+              ).map((item) => (
                 <button
                   className="difference-row"
                   key={`${item.title}-${item.ownRank}`}

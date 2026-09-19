@@ -380,7 +380,13 @@ export interface MergedDimension {
   sourceRankings: string[]; // 合并了哪些榜单
 }
 
-export function mergeDimensionRankings(rankings: RankingExport[]): MergedDimension | null {
+/** 多榜单同作品聚合策略：best=取最高名次（乐观，现行默认）；median=取名次中位数（稳健）。 */
+export type MergeStrategy = "best" | "median";
+
+export function mergeDimensionRankings(
+  rankings: RankingExport[],
+  strategy: MergeStrategy = "best",
+): MergedDimension | null {
   if (rankings.length === 0) return null;
   const kind = rankings[0].kind;
   const byKey = new Map<string, MergedItem>();
@@ -413,6 +419,21 @@ export function mergeDimensionRankings(rankings: RankingExport[]): MergedDimensi
         });
       }
     }
+  }
+
+  // median：多榜单出现的同作品按名次中位数重排（对单一异常榜单更稳健）。
+  // 单次出现的作品名次不变；排序键相同（代表作品/creator/year 保留 best 名次的那件）。
+  if (strategy === "median") {
+    const values = [...byKey.values()];
+    for (const item of values) {
+      if (item.sources.length < 2) continue;
+      const ranks = item.sources.map((s) => s.rank).sort((a, b) => a - b);
+      const mid = Math.floor(ranks.length / 2);
+      item.bestRank = ranks.length % 2 ? ranks[mid] : Math.round((ranks[mid - 1] + ranks[mid]) / 2);
+    }
+    // 重排序键只用于 items 顺序；representative 保持不变（作品本体与名次展示分离）。
+    values.sort((a, b) => a.bestRank - b.bestRank);
+    return { kind, items: values, sourceRankings: rankings.map((r) => r.collectionTitle) };
   }
 
   const items = [...byKey.values()].sort((a, b) => a.bestRank - b.bestRank);
