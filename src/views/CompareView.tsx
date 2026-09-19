@@ -271,6 +271,7 @@ export function CompareView({
                         <span
                           style={{
                             flex: 1,
+                            minWidth: 0,
                             overflow: "hidden",
                             textOverflow: "ellipsis",
                             whiteSpace: "nowrap",
@@ -391,6 +392,7 @@ export function CompareView({
                         <span
                           style={{
                             flex: 1,
+                            minWidth: 0,
                             overflow: "hidden",
                             textOverflow: "ellipsis",
                             whiteSpace: "nowrap",

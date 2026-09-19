@@ -1349,6 +1349,12 @@ export default function App() {
   else
     content = (
       <div className="empty-state">
+        <p style={{ marginBottom: 12 }}>
+          {t(
+            "此页面的内容还未创建（例如直接打开了配置或排序地址）。请从首页开始。",
+            "This page has no content yet (e.g. opening a setup/sorting link directly). Start from the home page.",
+          )}
+        </p>
         <button className="button primary" onClick={() => navigateTo("home")}>
           {t("返回首页", "Back home")}
         </button>
