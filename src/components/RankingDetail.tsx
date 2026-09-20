@@ -125,13 +125,11 @@ export function RankingDetail({
               }
             >
               <span className="row-number" style={isHit ? { color: "var(--accent)" } : undefined}>
-                {rank <= 3
-                  ? rank === 1
-                    ? "🥇"
-                    : rank === 2
-                      ? "🥈"
-                      : "🥉"
-                  : String(rank).padStart(2, "0")}
+                {rank <= 3 ? (
+                  <span aria-hidden="true">{rank === 1 ? "🥇" : rank === 2 ? "🥈" : "🥉"}</span>
+                ) : (
+                  String(rank).padStart(2, "0")
+                )}
               </span>
               <div
                 className="ranking-card-poster"

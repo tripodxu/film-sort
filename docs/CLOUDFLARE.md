@@ -54,7 +54,7 @@ npx wrangler d1 migrations apply film-sort --remote
 | `ADMIN_PASSWORD` | `/admin` 登录（优先于 DB hash） | 用首次登录写入的 DB hash |
 | `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | Google OAuth | 隐藏该登录入口 |
 | `GITHUB_CLIENT_ID` / `GITHUB_CLIENT_SECRET` | GitHub OAuth | 隐藏该登录入口 |
-| `AI_API_KEY` / `AI_API_URL` | 比较页 AI 解读（Anthropic 兼容端点） | 前端隐藏 AI 按钮，本地指标照常 |
+| `AI_API_KEY` / `AI_API_URL` / `AI_MODEL` / `AI_PROTOCOL` | 内置 AI 通道（四协议，详见 PLAN-ai-insights.md）；未配置时用户仍可在网页端自带 API | AI 按钮提示「服务端未配置」，用户自带 API 通道不受影响 |
 | `COOKIE_ENC_KEY` | 覆盖 Cookie 保险库密钥（64 位十六进制 = AES-256） | 首次使用时自动生成并存入 `admin_config('cookie_enc_key')` |
 | `MUSIC_PROXY_URL` / `MUSIC_PROXY_KEY` | 音乐上游代理（`worker/gdstudio.ts`） | 直连上游 API |
 

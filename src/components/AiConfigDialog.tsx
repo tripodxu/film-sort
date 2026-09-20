@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Check, Plug, RefreshCw, X } from "lucide-react";
 import { IconButton } from "../views/IconButton";
+import { FocusTrap } from "./FocusTrap";
 import {
   clearAiConfig,
   fetchAiModels,
@@ -110,180 +111,179 @@ export function AiConfigDialog({
 
   return (
     <div className="modal-backdrop" onClick={onClose}>
-      <section
-        className="account-dialog"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="ai-config-heading"
-        onClick={(event) => event.stopPropagation()}
-        onKeyDown={(event) => {
-          if (event.key === "Escape") onClose();
-        }}
-        style={{ width: "min(560px, 100%)" }}
-      >
-        <div className="section-heading">
-          <div>
-            <span className="eyebrow">AI</span>
-            <h2 id="ai-config-heading">{t("AI 解读服务", "AI service")}</h2>
-          </div>
-          <IconButton title={t("关闭", "Close")} onClick={onClose}>
-            <X size={18} />
-          </IconButton>
-        </div>
-        <p style={{ fontSize: 13, color: "var(--muted)", lineHeight: 1.7 }}>
-          {t(
-            "填入自己的 API 后，榜单/画像/比较的 AI 点评都会走你的服务；留空则使用服务端内置模型。Base URL 填到 /v1 这一级，例如 https://api.openai.com/v1 或 https://api.anthropic.com。",
-            "With your own API, all AI commentary goes to your service; leave empty to use the built-in one. Base URL goes up to /v1, e.g. https://api.openai.com/v1 or https://api.anthropic.com.",
-          )}
-        </p>
-        <div style={{ display: "grid", gap: 10, marginBottom: 10 }}>
-          <div>
-            <div style={label}>Base URL</div>
-            <input
-              value={baseUrl}
-              onChange={(event) => setBaseUrl(event.target.value)}
-              placeholder="https://api.openai.com/v1"
-              spellCheck={false}
-            />
-          </div>
-          <div>
-            <div style={label}>API Key</div>
-            <div style={{ display: "flex", gap: 6 }}>
-              <input
-                type={showKey ? "text" : "password"}
-                value={apiKey}
-                onChange={(event) => setApiKey(event.target.value)}
-                placeholder="sk-…"
-                spellCheck={false}
-                style={{ flex: 1 }}
-              />
-              <button
-                className="button secondary"
-                onClick={() => setShowKey(!showKey)}
-                style={{ minHeight: 36, paddingInline: 10, fontSize: 12 }}
-              >
-                {showKey ? t("隐藏", "Hide") : t("显示", "Show")}
-              </button>
+      <FocusTrap onEscape={onClose}>
+        <section
+          className="account-dialog"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="ai-config-heading"
+          onClick={(event) => event.stopPropagation()}
+          style={{ width: "min(560px, 100%)" }}
+        >
+          <div className="section-heading">
+            <div>
+              <span className="eyebrow">AI</span>
+              <h2 id="ai-config-heading">{t("AI 解读服务", "AI service")}</h2>
             </div>
+            <IconButton title={t("关闭", "Close")} onClick={onClose}>
+              <X size={18} />
+            </IconButton>
           </div>
-          <div>
-            <div style={label}>
-              Model{" "}
-              {models.length > 0 && (
-                <span style={{ color: "var(--accent)" }}>
-                  · {t("可从列表选择或继续手输", "pick from the list or keep typing")}
-                </span>
-              )}
-            </div>
-            <input
-              value={model}
-              onChange={(event) => setModel(event.target.value)}
-              placeholder="gpt-4o-mini"
-              list="ai-model-options"
-              spellCheck={false}
-            />
-            <datalist id="ai-model-options">
-              {models.map((name) => (
-                <option key={name} value={name} />
-              ))}
-            </datalist>
-          </div>
-          <div>
-            <div style={label}>{t("协议（默认自动探测）", "Protocol (auto by default)")}</div>
-            <select
-              value={protocol}
-              onChange={(event) => setProtocol(event.target.value as AiProtocol)}
-            >
-              {PROTOCOL_OPTIONS.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {t(option.zh, option.en)}
-                </option>
-              ))}
-            </select>
-          </div>
-        </div>
-        {message && (
-          <p
-            style={{
-              fontSize: 12,
-              margin: "0 0 10px",
-              color: message.ok ? "var(--green)" : "var(--red)",
-              lineHeight: 1.6,
-              overflowWrap: "anywhere",
-            }}
-          >
-            {message.text}
+          <p style={{ fontSize: 13, color: "var(--muted)", lineHeight: 1.7 }}>
+            {t(
+              "填入自己的 API 后，榜单/画像/比较的 AI 点评都会走你的服务；留空则使用服务端内置模型。Base URL 填到 /v1 这一级，例如 https://api.openai.com/v1 或 https://api.anthropic.com。",
+              "With your own API, all AI commentary goes to your service; leave empty to use the built-in one. Base URL goes up to /v1, e.g. https://api.openai.com/v1 or https://api.anthropic.com.",
+            )}
           </p>
-        )}
-        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 12 }}>
-          <button
-            className="button secondary"
-            disabled={!valid || listBusy}
-            onClick={() => void runList()}
-          >
-            <RefreshCw size={14} />
-            {listBusy ? t("获取中…", "Loading…") : t("获取模型列表", "List models")}
-          </button>
-          <button
-            className="button secondary"
-            disabled={!valid || testBusy}
-            onClick={() => void runTest()}
-          >
-            <Plug size={14} />
-            {testBusy ? t("测试中…", "Testing…") : t("测试连接", "Test connection")}
-          </button>
-        </div>
-        <p className="mini-note" style={{ margin: 0, lineHeight: 1.7 }}>
-          {t(
-            "Key 仅保存在本浏览器（不清除就一直有效）；AI 点评会把榜单标题发送给你配置的服务。如遇 404，请检查 Base URL 与协议是否匹配。",
-            "The key stays in this browser only; AI commentary sends ranking titles to your configured service. On 404, check that the Base URL and protocol match.",
+          <div style={{ display: "grid", gap: 10, marginBottom: 10 }}>
+            <div>
+              <div style={label}>Base URL</div>
+              <input
+                value={baseUrl}
+                onChange={(event) => setBaseUrl(event.target.value)}
+                placeholder="https://api.openai.com/v1"
+                spellCheck={false}
+              />
+            </div>
+            <div>
+              <div style={label}>API Key</div>
+              <div style={{ display: "flex", gap: 6 }}>
+                <input
+                  type={showKey ? "text" : "password"}
+                  value={apiKey}
+                  onChange={(event) => setApiKey(event.target.value)}
+                  placeholder="sk-…"
+                  spellCheck={false}
+                  style={{ flex: 1 }}
+                />
+                <button
+                  className="button secondary"
+                  onClick={() => setShowKey(!showKey)}
+                  style={{ minHeight: 36, paddingInline: 10, fontSize: 12 }}
+                >
+                  {showKey ? t("隐藏", "Hide") : t("显示", "Show")}
+                </button>
+              </div>
+            </div>
+            <div>
+              <div style={label}>
+                Model{" "}
+                {models.length > 0 && (
+                  <span style={{ color: "var(--accent)" }}>
+                    · {t("可从列表选择或继续手输", "pick from the list or keep typing")}
+                  </span>
+                )}
+              </div>
+              <input
+                value={model}
+                onChange={(event) => setModel(event.target.value)}
+                placeholder="gpt-4o-mini"
+                list="ai-model-options"
+                spellCheck={false}
+              />
+              <datalist id="ai-model-options">
+                {models.map((name) => (
+                  <option key={name} value={name} />
+                ))}
+              </datalist>
+            </div>
+            <div>
+              <div style={label}>{t("协议（默认自动探测）", "Protocol (auto by default)")}</div>
+              <select
+                value={protocol}
+                onChange={(event) => setProtocol(event.target.value as AiProtocol)}
+              >
+                {PROTOCOL_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {t(option.zh, option.en)}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+          {message && (
+            <p
+              style={{
+                fontSize: 12,
+                margin: "0 0 10px",
+                color: message.ok ? "var(--green)" : "var(--red)",
+                lineHeight: 1.6,
+                overflowWrap: "anywhere",
+              }}
+            >
+              {message.text}
+            </p>
           )}
-        </p>
-        <div className="guide-modal-footer">
-          {existing && (
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 12 }}>
             <button
-              className="button quiet"
+              className="button secondary"
+              disabled={!valid || listBusy}
+              onClick={() => void runList()}
+            >
+              <RefreshCw size={14} />
+              {listBusy ? t("获取中…", "Loading…") : t("获取模型列表", "List models")}
+            </button>
+            <button
+              className="button secondary"
+              disabled={!valid || testBusy}
+              onClick={() => void runTest()}
+            >
+              <Plug size={14} />
+              {testBusy ? t("测试中…", "Testing…") : t("测试连接", "Test connection")}
+            </button>
+          </div>
+          <p className="mini-note" style={{ margin: 0, lineHeight: 1.7 }}>
+            {t(
+              "Key 仅保存在本浏览器（不清除就一直有效）；AI 点评会把榜单标题发送给你配置的服务。如遇 404，请检查 Base URL 与协议是否匹配。",
+              "The key stays in this browser only; AI commentary sends ranking titles to your configured service. On 404, check that the Base URL and protocol match.",
+            )}
+          </p>
+          <div className="guide-modal-footer">
+            {existing && (
+              <button
+                className="button quiet"
+                onClick={() => {
+                  clearAiConfig();
+                  window.dispatchEvent(new CustomEvent("art-rank:ai-config-changed"));
+                  onSaved?.();
+                  onClose();
+                }}
+                title={t(
+                  "删除本浏览器保存的配置，AI 点评回到服务端内置通道",
+                  "Remove the saved config in this browser; commentary falls back to the built-in channel",
+                )}
+              >
+                {t("停用我的 API（回到内置）", "Use built-in instead")}
+              </button>
+            )}
+            <div style={{ flex: 1 }} />
+            <button
+              className="button secondary"
               onClick={() => {
-                clearAiConfig();
-                window.dispatchEvent(new CustomEvent("art-rank:ai-config-changed"));
-                onSaved?.();
-                onClose();
+                setBaseUrl("");
+                setApiKey("");
+                setModel("");
+                setProtocol("auto");
+                setModels([]);
+                setMessage(null);
               }}
               title={t(
-                "删除本浏览器保存的配置，AI 点评回到服务端内置通道",
-                "Remove the saved config in this browser; commentary falls back to the built-in channel",
+                "仅清空下方输入框，不影响已保存的配置",
+                "Clears the form only — keeps the saved config",
               )}
             >
-              {t("停用我的 API（回到内置）", "Use built-in instead")}
+              {t("清空表单", "Reset")}
             </button>
-          )}
-          <div style={{ flex: 1 }} />
-          <button
-            className="button secondary"
-            onClick={() => {
-              setBaseUrl("");
-              setApiKey("");
-              setModel("");
-              setProtocol("auto");
-              setModels([]);
-              setMessage(null);
-            }}
-            title={t(
-              "仅清空下方输入框，不影响已保存的配置",
-              "Clears the form only — keeps the saved config",
-            )}
-          >
-            {t("清空表单", "Reset")}
-          </button>
-          <button className="button secondary" onClick={onClose}>
-            {t("取消", "Cancel")}
-          </button>
-          <button className="button primary" disabled={!valid} onClick={save}>
-            <Check size={15} />
-            {t("保存", "Save")}
-          </button>
-        </div>
-      </section>
+            <button className="button secondary" onClick={onClose}>
+              {t("取消", "Cancel")}
+            </button>
+            <button className="button primary" disabled={!valid} onClick={save}>
+              <Check size={15} />
+              {t("保存", "Save")}
+            </button>
+          </div>
+        </section>
+      </FocusTrap>
     </div>
   );
 }

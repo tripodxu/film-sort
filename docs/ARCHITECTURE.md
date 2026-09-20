@@ -240,7 +240,17 @@ interface RankingState {
 3. 验证结果不改变排序，但记录偏好证据
 4. 验证数量：`min(MAX_BASELINE_VERIFICATIONS, max(1, ceil(topN/3)))`
 
-### 3.6 撤销
+### 3.6 排序三模式（quick/classic/precise）
+
+`RankingState.mode` 三选一（缺省 classic，零迁移）：
+
+- **quick（简易）**：未满员二分建榜；满员后候选先与**守门员**（末位）比较（`ActiveInsertion.stage="gate"`），输则 1 次出局，赢则升级 bisect 于守门员之前定位；验证仅守门员边界 1 次；
+- **classic（经典，默认）**：二分插入 + 冷却 + 回环检测 + 验证阶段（上文 §3.2–3.5）；
+- **precise（精确）**：验证数 max(4, ceil(topN/2)) + TopK 内未直接比较的相邻对主动入队 + 回环确认阈值 2× + `calibration` 校准一致率统计（完成时 notice 汇报）。
+
+旧快照/旧草稿反序列化自动补 `mode`/`calibration`/`stage`；`undoLastAction` 重放透传 mode。
+
+### 3.7 撤销
 
 撤销通过重放决策日志实现：
 
@@ -355,6 +365,7 @@ Worker 模块划分：
 | `netease.ts` | 网易云 weapi 加密、扫码（开放接口+weapi）、Cookie 保险库、用户歌单 |
 | `douban.ts` | 豆瓣扫码登录（qrlogin）、dbcl2 入库、Cookie 保险库 |
 | `audit.ts` | 管理操作审计写入 |
+| `ai.ts` | AI 点评通道：四协议适配（Chat/Responses/Anthropic/Gemini）+ auto 探测、模块化提示词（composePrompt）、自定义配置 SSRF 校验、模型列表代理、管理端提示词覆盖 |
 
 `worker/imdb-posters.json` 是内置海报索引数据（由 `media.ts` 导入）。
 
