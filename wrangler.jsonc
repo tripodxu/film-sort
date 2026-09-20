@@ -11,6 +11,13 @@
   "observability": {
     "enabled": true
   },
+  // 非敏感的内置 AI 配置随仓库同步（Dashboard 与 deploy 双向一致）；
+  // AI_API_KEY 是 Secret 类型，用 Dashboard 或 `wrangler secret put` 管理，勿写进本文件。
+  "vars": {
+    "AI_API_URL": "https://token-plan-cn.xiaomimimo.com/v1",
+    "AI_MODEL": "mimo-v2.5",
+    "AI_PROTOCOL": "chat"
+  },
   "d1_databases": [
     {
       "binding": "DB",
