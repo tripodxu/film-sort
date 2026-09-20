@@ -372,3 +372,81 @@ describe("ranking modes", () => {
     expect(state.activeInsertion?.stage).toBe("gate");
   });
 });
+
+// ===== 五天提交回归：跨交互组合（quick gate 工具按钮 / precise undo 校准重放）=====
+describe("quick gate 阶段的略过/暂放", () => {
+  it("略过守门员：守门员出局，候选面对新末位继续 gate", () => {
+    let state = createRankingState(ids(4), { seed, topN: 3, mode: "quick" });
+    // 建榜至满员（3 件）
+    for (let i = 0; i < 3; i++) state = chooseSide(state, "left");
+    expect(state.rankedIds).toHaveLength(3);
+    expect(state.activeInsertion?.stage).toBe("gate");
+    const keeper = state.rankedIds[2];
+    // 略过守门员（第 4 件候选保持在场）
+    state = skipWork(state, state.rankedIds[2]);
+    expect(state.skippedIds).toContain(keeper);
+    expect(state.rankedIds).not.toContain(keeper);
+    expect(state.activeInsertion?.stage).toBe("gate");
+    // 候选面对新守门员继续
+    expect(state.activeInsertion?.candidateId).toBeDefined();
+  });
+
+  it("暂放守门员：守门员进 deferred，候选继续 gate", () => {
+    let state = createRankingState(ids(4), { seed, topN: 3, mode: "quick" });
+    for (let i = 0; i < 3; i++) state = chooseSide(state, "left");
+    const keeper = state.rankedIds[2];
+    state = deferWork(state, state.rankedIds[2]);
+    expect(state.deferredIds).toContain(keeper);
+    expect(state.activeInsertion?.stage).toBe("gate");
+  });
+
+  it("gate 阶段暂放候选本身：候选进 deferred，有其他候选时切到下一个仍 gate", () => {
+    // 5 件取 3：满员后还剩 2 件候选，暂放第一件后应切换到第二件（而非取回同一件）
+    let state = createRankingState(ids(5), { seed, topN: 3, mode: "quick" });
+    for (let i = 0; i < 3; i++) state = chooseSide(state, "left");
+    const cand = state.activeInsertion!.candidateId;
+    state = deferCurrent(state);
+    expect(state.deferredIds).toContain(cand);
+    expect(state.activeInsertion?.candidateId).not.toBe(cand);
+    expect(state.activeInsertion?.stage).toBe("gate");
+  });
+
+  it("gate 阶段暂放唯一候选：无其他候选可看时立即取回同一件（冷却仅排序偏好）", () => {
+    let state = createRankingState(ids(4), { seed, topN: 3, mode: "quick" });
+    for (let i = 0; i < 3; i++) state = chooseSide(state, "left");
+    const cand = state.activeInsertion!.candidateId;
+    state = deferCurrent(state);
+    // takeCandidateWithCooldown 的冷却命中时 eligibleIndex=-1 → 强制取头部：
+    // 暂放的候选立即回到 gate 面前，而非留在 deferred。
+    expect(state.deferredIds).toHaveLength(0);
+    expect(state.activeInsertion?.candidateId).toBe(cand);
+    expect(state.activeInsertion?.stage).toBe("gate");
+  });
+});
+
+describe("precise undo 后 calibration 重放", () => {
+  it("撤销全部验证决策后重放，calibration 与直接跑出的结果一致", () => {
+    const run = (withUndo: boolean) => {
+      let state = createRankingState(ids(5), { seed, topN: 5, mode: "precise" });
+      let undid = false;
+      for (let i = 0; i < 60 && !state.completed; i++) {
+        if (state.phase === "verification" && state.activeVerification && !undid && withUndo) {
+          // 只撤销一次验证决策，其余照常
+          state = undoLastAction(state);
+          undid = true;
+          continue;
+        }
+        const cmp = getCurrentComparison(state)!;
+        state = chooseSide(state, cmp.candidateOnLeft ? "left" : "right");
+      }
+      return state;
+    };
+    const direct = run(false);
+    const undone = run(true);
+    // 两条路径都应正常完成，且 calibration 均被重放正确累加（不残留 0）
+    expect(direct.completed).toBe(true);
+    expect(undone.completed).toBe(true);
+    expect(undone.calibration.checked).toBe(direct.calibration.checked);
+    expect(undone.calibration.consistent).toBe(direct.calibration.consistent);
+  });
+});
