@@ -178,7 +178,7 @@ export function ArtworkDetail({
             {detail.loading ? (
               <p className="empty-state">
                 {isMusic
-                  ? t("正在读取专辑信息…", "Loading album details…")
+                  ? t("正在读取歌曲信息…", "Loading song details…")
                   : t("正在读取作品信息…", "Loading work details…")}
               </p>
             ) : detail.data ? (

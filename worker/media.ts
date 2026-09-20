@@ -579,7 +579,7 @@ export async function doubanTop250(limit: number): Promise<DoubanWork[]> {
 const TYPE_HINTS: Record<string, { zh: string[]; en: string[] }> = {
   movie: { zh: ["电影"], en: ["film"] },
   book: { zh: ["小说"], en: ["novel"] },
-  music: { zh: ["专辑"], en: ["album"] },
+  music: { zh: ["歌曲", "单曲", "专辑"], en: ["song", "single", "album"] },
 };
 
 // 消歧义页特征：「也可以指 / 可指以下 / 是以下条目」等枚举句式，这类摘要不是作品介绍
@@ -609,7 +609,7 @@ function declareType(text: string): "movie" | "book" | "music" | null {
   )
     return "movie";
   if (/(小说|长篇|中篇|短篇)/.test(head)) return "book";
-  if (/(专辑|唱片|录音室)/.test(head)) return "music";
+  if (/(歌曲|单曲|专辑|唱片|录音室)/.test(head)) return "music";
   return null;
 }
 
@@ -812,7 +812,7 @@ function qualifiedTitles(
     if (year) push(lang === "zh" ? `${year}年${hint}` : `${year} ${hint}`);
     push(hint);
   }
-  if (mediaType === "music") push(lang === "zh" ? "专辑名" : "album name");
+  if (mediaType === "music") push(lang === "zh" ? "歌曲名" : "song name");
   if (mediaType === "book") push(lang === "zh" ? "长篇小说" : "novel");
   return out;
 }

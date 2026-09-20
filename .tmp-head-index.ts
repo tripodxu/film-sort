@@ -7,6 +7,7 @@ import {
   doubanSearch,
   doubanBookDetail,
   doubanMovieDetail,
+  doubanMusicDetail,
   fetchContentIntro,
   proxyImage,
   resolvePosters,
@@ -2216,38 +2217,98 @@ async function route(request: Request, env: Env): Promise<Response> {
     });
   }
   if (url.pathname === "/api/music/detail" && request.method === "GET") {
+    const detailUrl = url.searchParams.get("url")?.trim();
     const title = url.searchParams.get("name")?.trim() || url.searchParams.get("title")?.trim();
-    if (!title) return json({ status: false, msg: "缺少参数 name", data: null }, 400);
-    if (title.length > 120) return json({ status: false, msg: "invalid_title", data: null }, 400);
-    const creator = url.searchParams.get("creator")?.trim() ?? "";
-    const year = url.searchParams.get("year")?.trim() ?? "";
+    if (!detailUrl && !title)
+      return json({ status: false, msg: "缺少参数 url 或 name", data: null }, 400);
 
-    const data: Record<string, unknown> = { title };
+    let musicTitle = title ?? "";
+    const data: Record<string, unknown> = {};
+    let subjectUrl = detailUrl ?? "";
 
-    // Step 1: 歌曲导向元数据——gdstudio 搜索按歌名+歌手匹配单曲/歌曲条目，
-    // 不做专辑联想（豆瓣音乐详情已移除：专辑导向且反爬不稳）。
-    try {
-      const { tracks } = await gdSearch(title, 10, env);
-      const track = pickTrack(tracks, title, creator || undefined);
-      if (track) {
-        if (track.name) data.matchedTitle = track.name;
-        const artist = Array.isArray(track.artist)
-          ? track.artist.join(" / ")
-          : String(track.artist ?? "");
-        if (artist) data.artist = artist;
-        if (track.album) data.album = track.album;
-      }
-    } catch {}
-
-    // Step 2: 简介——维基消歧打分（歌曲/单曲导向提示）→ 百度百科，均在 fetchContentIntro 内
-    const intro = await fetchContentIntro(title, "music", creator || undefined, year || undefined);
-    if (intro) {
-      data.content_intro = intro.intro;
-      data.content_source = intro.source;
+    // Step 1: Get basic info from search.douban.com
+    if (musicTitle || detailUrl) {
+      const musicId = detailUrl?.match(/subject\/(\d+)/)?.[1];
+      try {
+        const search = await doubanSearch("music", musicTitle || musicId!, 1);
+        const wantCreator = url.searchParams.get("creator")?.trim() ?? "";
+        const scoreHit = (i: (typeof search.data)[number]) => {
+          let sc = 0;
+          const hay = `${i.title ?? ""} ${i.artist ?? ""}`;
+          if (wantCreator && hay.includes(wantCreator)) sc += 4;
+          if ((i.title ?? "").startsWith(musicTitle)) sc += 1;
+          return sc;
+        };
+        const found = musicId
+          ? (search.data.find((i) => i.cover_link?.includes(`/subject/${musicId}/`)) ??
+            search.data[0])
+          : wantCreator
+            ? [...search.data].sort((a, b) => scoreHit(b) - scoreHit(a))[0]
+            : search.data[0];
+        if (found) {
+          musicTitle = found.title || musicTitle;
+          data.title = found.title;
+          data.pic = found.cover;
+          data.rating = String(found.rating ?? "");
+          data.artist = found.artist ?? "";
+          data.date = found.date ?? "";
+          data.album = found.album ?? "";
+          data.medium = found.medium ?? "";
+          data.schools = found.schools ?? "";
+          if (!subjectUrl && typeof found.cover_link === "string") subjectUrl = found.cover_link;
+        }
+      } catch {}
     }
 
-    return json({ status: true, msg: "ok", time: "0s", data }, 200, {
-      "cache-control": "public, max-age=86400",
+    // Step 2: 豆瓣官方详情页简介优先（零歧义；失败静默降级维基）
+    if (subjectUrl.includes("music.douban.com/subject/")) {
+      try {
+        const detail = await doubanMusicDetail(subjectUrl);
+        if (detail.status && detail.data) {
+          if (detail.data.content_intro) {
+            data.content_intro = detail.data.content_intro;
+            data.content_source = "douban";
+          }
+          if (detail.data.songs) data.songs = detail.data.songs;
+          for (const [k, v] of Object.entries(detail.data)) {
+            if (v && !data[k]) data[k] = v;
+          }
+        }
+      } catch {}
+    }
+
+    // Step 3: 维基兜底（简介 + douban 搜索失败时的标题/海报兜底）
+    if (!data.content_intro && musicTitle) {
+      const wikiTitle = title && musicTitle.includes(title) ? title : musicTitle;
+      const intro = await fetchContentIntro(
+        wikiTitle,
+        "music",
+        typeof data.artist === "string" ? data.artist.split("/")[0] : undefined,
+        data.date,
+      );
+      if (intro) {
+        data.content_intro = intro.intro;
+        data.content_source = intro.source;
+      }
+    }
+
+    // Step 4: douban 搜索完全失败时，用维基搜索兜底获取标题和简介
+    if (!data.title && title) {
+      const intro = await fetchContentIntro(title, "music");
+      if (intro) {
+        data.title = title;
+        data.content_intro = intro.intro;
+        data.content_source = intro.source;
+      }
+    }
+
+    if (data.title) {
+      return json({ status: true, msg: "ok", time: "0s", data }, 200, {
+        "cache-control": "public, max-age=86400",
+      });
+    }
+    return json({ status: false, msg: "未找到音乐信息", data: null }, 404, {
+      "cache-control": "public, max-age=60",
     });
   }
   if (url.pathname === "/api/artwork/detail" && request.method === "GET") {
@@ -2276,30 +2337,6 @@ async function route(request: Request, env: Env): Promise<Response> {
         });
       }
     }
-    // 歌曲导向（去豆瓣）：gdstudio 单曲元数据 + 维基/百科简介
-    if (kind === "music") {
-      const data: Record<string, unknown> = { title };
-      try {
-        const { tracks } = await gdSearch(title, 10, env);
-        const track = pickTrack(tracks, title, undefined);
-        if (track) {
-          if (track.name) data.matchedTitle = track.name;
-          const artist = Array.isArray(track.artist)
-            ? track.artist.join(" / ")
-            : String(track.artist ?? "");
-          if (artist) data.artist = artist;
-          if (track.album) data.album = track.album;
-        }
-      } catch {}
-      const intro = await fetchContentIntro(title, "music");
-      if (intro) {
-        data.content_intro = intro.intro;
-        data.content_source = intro.source;
-      }
-      return json({ status: true, msg: "ok", data }, 200, {
-        "cache-control": "public, max-age=86400",
-      });
-    }
     const type = kind === "film" ? "movie" : kind;
     try {
       const search = await doubanSearch(type, title, 1);
@@ -2311,11 +2348,12 @@ async function route(request: Request, env: Env): Promise<Response> {
         return json({ status: false, msg: "not_found", data: null }, 404, {
           "cache-control": "public, max-age=300",
         });
-      // music 已在上方早返回；此处只剩 film/book
       const detail =
         kind === "film"
           ? await doubanMovieDetail(subject.cover_link)
-          : await doubanBookDetail(subject.cover_link);
+          : kind === "book"
+            ? await doubanBookDetail(subject.cover_link)
+            : await doubanMusicDetail(subject.cover_link);
       return json({ ...detail, source_url: subject.cover_link }, detail.status ? 200 : 502, {
         "cache-control": detail.status ? "public, max-age=86400" : "public, max-age=300",
       });
