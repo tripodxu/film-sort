@@ -293,7 +293,8 @@ export function mergeRanking(
     while (
       existing.some(
         (entry) =>
-          entry.kind === ranking.kind && entry.collectionTitle === `${collectionTitle}（${suffix}）`,
+          entry.kind === ranking.kind &&
+          entry.collectionTitle === `${collectionTitle}（${suffix}）`,
       )
     )
       suffix += 1;
