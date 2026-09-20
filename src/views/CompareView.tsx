@@ -81,8 +81,16 @@ export function CompareView({
       /* 隐私模式 */
     }
   };
-  const ownRankings = profile?.rankings.filter((entry) => entry.kind === compareKind) ?? [];
-  const peerRankings = peer?.rankings.filter((entry) => entry.kind === compareKind) ?? [];
+  // memo 链：ownRankings → selectedOwn → result。不 memo 的话父组件一次无关重渲染
+  // （如深度切换的 localStorage 写入、AI 卡 busy 状态）都会触发 O(n·m) 的全量重算。
+  const ownRankings = useMemo(
+    () => profile?.rankings.filter((entry) => entry.kind === compareKind) ?? [],
+    [profile, compareKind],
+  );
+  const peerRankings = useMemo(
+    () => peer?.rankings.filter((entry) => entry.kind === compareKind) ?? [],
+    [peer, compareKind],
+  );
   // 手动模式下默认全选（首次进入或维度切换时）
   useEffect(() => {
     if (manualOwnSelections.size === 0 && ownRankings.length > 0) {
@@ -92,15 +100,21 @@ export function CompareView({
       setManualPeerSelections(new Set(peerRankings.map((_, i) => i)));
     }
   }, [compareKind, ownRankings.length, peerRankings.length]);
-  const selectedOwn =
-    compareMode === "manual"
-      ? ownRankings.filter((_, i) => manualOwnSelections.has(i))
-      : ownRankings;
-  const selectedPeer =
-    compareMode === "manual"
-      ? peerRankings.filter((_, i) => manualPeerSelections.has(i))
-      : peerRankings;
-  const result = (() => {
+  const selectedOwn = useMemo(
+    () =>
+      compareMode === "manual"
+        ? ownRankings.filter((_, i) => manualOwnSelections.has(i))
+        : ownRankings,
+    [compareMode, ownRankings, manualOwnSelections],
+  );
+  const selectedPeer = useMemo(
+    () =>
+      compareMode === "manual"
+        ? peerRankings.filter((_, i) => manualPeerSelections.has(i))
+        : peerRankings,
+    [compareMode, peerRankings, manualPeerSelections],
+  );
+  const result = useMemo(() => {
     // precise：多榜单合并用 median（更稳健）；simple/classic 用 best（现行）。
     const strategy = compareLevel === "precise" ? ("median" as const) : ("best" as const);
     if (compareMode === "manual") {
@@ -114,8 +128,21 @@ export function CompareView({
     const ownMerged = mergeDimensionRankings(ownRankings, strategy);
     const peerMerged = mergeDimensionRankings(peerRankings, strategy);
     return ownMerged && peerMerged ? compareDimensions(ownMerged, peerMerged) : null;
-  })();
-  const crossProfile = profile && peer ? compareProfiles(profile, peer) : null;
+  }, [
+    compareLevel,
+    compareMode,
+    selectedOwn,
+    selectedPeer,
+    ownRankings,
+    peerRankings,
+    compareRankings,
+    mergeDimensionRankings,
+    compareDimensions,
+  ]);
+  const crossProfile = useMemo(
+    () => (profile && peer ? compareProfiles(profile, peer) : null),
+    [profile, peer, compareProfiles],
+  );
   // AI 比较解读的数据：当前维度指标 + 跨媒介共识（§6.5 compare 规格）。
   const aiLocale = locale === "en" ? ("en" as const) : ("zh" as const);
   const aiCompareData = useMemo(

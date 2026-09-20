@@ -47,6 +47,10 @@ export function AiInsightCard({
   const [length, setLength] = useState<AiLength>(() => readAiLength());
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<AiInsightResult | null>(null);
+  /** 进行中请求的控制器：取消按钮/重复生成时掐断。 */
+  const abortRef = useRef<AbortController | null>(null);
+  const cardRef = useRef<HTMLDivElement | null>(null);
+  const [copied, setCopied] = useState(false);
   // 配置徽标：localStorage 不是响应式的，配置弹窗保存/停用后通过自定义事件通知刷新。
   const [hasCustom, setHasCustom] = useState(() => !!readAiConfig());
   useEffect(() => {
@@ -57,15 +61,26 @@ export function AiInsightCard({
 
   const generate = useCallback(
     async (force: boolean) => {
+      // 连点/切换时掐断上一次未完成的请求。
+      abortRef.current?.abort();
+      const ac = new AbortController();
+      abortRef.current = ac;
       setBusy(true);
       const outcome = await requestInsight(scene, data, {
         locale,
         length,
         config: readAiConfig(),
         force,
+        signal: ac.signal,
       });
+      if (ac.signal.aborted) {
+        setBusy(false);
+        return;
+      }
       setResult(outcome);
       setBusy(false);
+      // 生成完成后把结果带入视口（卡片可能在长榜单折叠区深处）。
+      cardRef.current?.scrollIntoView({ block: "nearest", behavior: "smooth" });
     },
     [scene, data, locale, length],
   );
@@ -123,6 +138,7 @@ export function AiInsightCard({
 
   return (
     <div
+      ref={cardRef}
       className="comparison-ai"
       style={compact ? { padding: "12px 14px" } : undefined}
       aria-live="polite"
@@ -134,7 +150,7 @@ export function AiInsightCard({
         {busy ? (
           <>
             <p>{t("正在生成 AI 点评…", "Generating AI commentary…")}</p>
-            <div style={{ display: "flex", gap: 6, marginTop: 8 }}>
+            <div style={{ display: "flex", gap: 6, marginTop: 8, alignItems: "center" }}>
               {[1, 2, 3].map((i) => (
                 <div
                   key={i}
@@ -147,6 +163,15 @@ export function AiInsightCard({
                   }}
                 />
               ))}
+              <button
+                className="text-button"
+                style={{ fontSize: 11, color: "var(--muted)" }}
+                onClick={() => {
+                  abortRef.current?.abort();
+                }}
+              >
+                {t("取消", "Cancel")}
+              </button>
             </div>
           </>
         ) : result && result.ok ? (
@@ -173,6 +198,21 @@ export function AiInsightCard({
                   ✏️ override
                 </span>
               )}
+              <button
+                className="text-button"
+                style={{ fontSize: 11 }}
+                onClick={() => {
+                  navigator.clipboard
+                    ?.writeText(result.insight)
+                    .then(() => {
+                      setCopied(true);
+                      setTimeout(() => setCopied(false), 1500);
+                    })
+                    .catch(() => {});
+                }}
+              >
+                {copied ? t("已复制", "Copied") : t("复制", "Copy")}
+              </button>
               <span>
                 {t("将把榜单标题发送至 AI 服务。", "Ranking titles are sent to the AI service.")}
               </span>

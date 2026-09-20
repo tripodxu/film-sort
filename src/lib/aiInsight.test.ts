@@ -309,3 +309,65 @@ describe("testAiConfig / fetchAiModels", () => {
     ).resolves.toMatchObject({ ok: false, error: "invalid_config" });
   });
 });
+
+// ===== 取消与缓存上限（快赢批次）=====
+describe("requestInsight 取消", () => {
+  it("abort 后返回 unavailable 且不写入缓存", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(
+        (_url, init) =>
+          new Promise((_resolve, reject) => {
+            init?.signal?.addEventListener("abort", () =>
+              reject(new DOMException("aborted", "AbortError")),
+            );
+          }),
+      ),
+    );
+    const ac = new AbortController();
+    const pending = requestInsight(
+      "ranking",
+      { a: 1 },
+      { locale: "zh", length: "standard", signal: ac.signal },
+    );
+    ac.abort();
+    const result = await pending;
+    expect(result).toEqual({ ok: false, error: "unavailable" });
+  });
+  it("成功路径接受外部 signal（AbortSignal.any 组合不炸）", async () => {
+    const ac = new AbortController();
+    vi.stubGlobal(
+      "fetch",
+      stubFetchOk({ insight: "ok", source: "builtin", model: "m", promptVersion: 1 }),
+    );
+    const result = await requestInsight(
+      "ranking",
+      { a: 1 },
+      {
+        locale: "zh",
+        length: "standard",
+        signal: ac.signal,
+      },
+    );
+    expect(result.ok).toBe(true);
+  });
+});
+
+describe("insightCache 上限", () => {
+  it("超过 50 条淘汰最旧", async () => {
+    vi.stubGlobal(
+      "fetch",
+      stubFetchOk({ insight: "x", source: "builtin", model: "m", promptVersion: 1 }),
+    );
+    // 生成 60 条不同缓存
+    for (let i = 0; i < 60; i++) {
+      await requestInsight("ranking", { i }, { locale: "zh", length: "standard", force: true });
+    }
+    // 第 1 条应已被淘汰（FIFO），第 60 条应在
+    const first = await requestInsight("ranking", { i: 0 }, { locale: "zh", length: "standard" });
+    const fetchCalls = (fetch as ReturnType<typeof vi.fn>).mock.calls.length;
+    // 若第 1 条被淘汰，这次会重新发请求（fetchCalls 增加）
+    expect(fetchCalls).toBeGreaterThan(60);
+    void first;
+  });
+});

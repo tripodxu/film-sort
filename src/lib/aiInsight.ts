@@ -245,6 +245,8 @@ export function buildCompareData(own: {
 // ===== 请求与会话内缓存 =====
 
 const insightCache = new Map<string, AiInsightSuccess>();
+/** 会话缓存上限：极端连续生成时淘汰最旧，防无界增长。 */
+const INSIGHT_CACHE_MAX = 50;
 
 export function clearInsightCache(): void {
   insightCache.clear();
@@ -277,7 +279,14 @@ export function getCachedInsight(
 export async function requestInsight(
   scene: AiScene,
   data: unknown,
-  opts: { locale: AiLocale; length: AiLength; config?: AiUserConfig | null; force?: boolean },
+  opts: {
+    locale: AiLocale;
+    length: AiLength;
+    config?: AiUserConfig | null;
+    force?: boolean;
+    /** 取消信号：中止后返回 { ok:false, error:"unavailable" }，调用方可用 signal.aborted 区分。 */
+    signal?: AbortSignal;
+  },
 ): Promise<AiInsightResult> {
   const { locale, length, config, force } = opts;
   const key = cacheKeyOf(scene, data, locale, length);
@@ -296,8 +305,10 @@ export async function requestInsight(
         length,
         ...(config ? { config } : {}),
       }),
-      // 服务端默认 60s（推理模型），前端留 10s 余量。
-      signal: AbortSignal.timeout(70000),
+      // 服务端默认 60s（推理模型），前端留 10s 余量；外部 signal（取消按钮）可提前掐断。
+      signal: opts.signal
+        ? AbortSignal.any([AbortSignal.timeout(70000), opts.signal])
+        : AbortSignal.timeout(70000),
     });
     if (response.ok) {
       const body = (await response.json()) as {
@@ -318,6 +329,10 @@ export async function requestInsight(
             ? body.promptVersion
             : "override",
       };
+      if (insightCache.size >= INSIGHT_CACHE_MAX) {
+        const oldest = insightCache.keys().next();
+        if (!oldest.done) insightCache.delete(oldest.value);
+      }
       insightCache.set(key, result);
       return result;
     }
