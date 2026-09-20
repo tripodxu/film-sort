@@ -316,7 +316,7 @@ describe("mergeRanking", () => {
     expect(profile.profileName).toBe("测试画像");
   });
 
-  it("replaces same kind+title ranking", () => {
+  it("same kind+title：不再覆盖，追加（2）后缀榜单", () => {
     const ranking1 = makeRanking({ collectionTitle: "榜单A" });
     const ranking2 = makeRanking({
       collectionTitle: "榜单A",
@@ -327,8 +327,21 @@ describe("mergeRanking", () => {
     });
     let profile = mergeRanking(null, ranking1);
     profile = mergeRanking(profile, ranking2);
-    expect(profile.rankings).toHaveLength(1);
-    expect(profile.rankings[0].items[0].title).toBe("X");
+    expect(profile.rankings).toHaveLength(2);
+    expect(profile.rankings[0].collectionTitle).toBe("榜单A");
+    expect(profile.rankings[1].collectionTitle).toBe("榜单A（2）");
+    expect(profile.rankings[1].items[0].title).toBe("X");
+  });
+
+  it("same kind+title：三连追加时后缀递增（2）（3）", () => {
+    let profile = mergeRanking(null, makeRanking({ collectionTitle: "榜单A" }));
+    profile = mergeRanking(profile, makeRanking({ collectionTitle: "榜单A" }));
+    profile = mergeRanking(profile, makeRanking({ collectionTitle: "榜单A" }));
+    expect(profile.rankings.map((r) => r.collectionTitle)).toEqual([
+      "榜单A",
+      "榜单A（2）",
+      "榜单A（3）",
+    ]);
   });
 
   it("appends different kind ranking", () => {

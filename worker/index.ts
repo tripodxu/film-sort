@@ -2449,6 +2449,10 @@ async function route(request: Request, env: Env): Promise<Response> {
       return json({ error: "data_too_large", msg: "数据过大" }, 413);
     const locale = body.locale === "en" ? "en" : "zh";
     const length = body.length === "brief" || body.length === "deep" ? body.length : "standard";
+    // 推理模型（mimo 等）的 reasoning 段与正文共享 max_tokens 预算：1000 会在长推理时
+    // 把 250 字正文拦腰截断（finish_reason=length）。按档位放宽，Worker 侧仍有 2000
+    // 字符的输出兜底截断。
+    const maxTokens = length === "deep" ? 4000 : length === "standard" ? 2500 : 1500;
     // 通道选择：带合法 config 走自定义（独立限流），否则内置 env（未配置即 503）。
     const custom = body.config !== undefined ? validateUserConfig(body.config) : null;
     if (body.config !== undefined && !custom)
@@ -2513,7 +2517,7 @@ async function route(request: Request, env: Env): Promise<Response> {
       const outcome = resolved as ResolvedAi; // custom 为 null 时上面分支必然已赋值
       return json(
         {
-          insight: await callAi(outcome, spec),
+          insight: await callAi(outcome, spec, { maxTokens }),
           source,
           model: outcome.model,
           protocol: outcome.protocol,

@@ -280,16 +280,31 @@ export function mergeRanking(
   ranking: RankingExport,
 ): ArtisticProfile {
   const existing = profile?.rankings ?? [];
-  // Replace if same collectionTitle+kind exists, otherwise append
-  const key = (r: RankingExport) => `${r.kind}|${r.collectionTitle}`;
-  const rankingKey = key(ranking);
-  const filtered = existing.filter((entry) => key(entry) !== rankingKey);
+  // 同 kind+collectionTitle 已存在时**不再覆盖**：自动加（2）（3）…后缀作为新榜单追加。
+  // （旧行为是静默替换——用户重新排序/导入时旧榜单会凭空消失，2026-09-20 依反馈改为后缀。
+  //   需要覆盖旧版的场景请用画像页的「编辑作品 / 手动调整」，它们是原地更新不走这里。）
+  let collectionTitle = ranking.collectionTitle;
+  if (
+    existing.some(
+      (entry) => entry.kind === ranking.kind && entry.collectionTitle === collectionTitle,
+    )
+  ) {
+    let suffix = 2;
+    while (
+      existing.some(
+        (entry) =>
+          entry.kind === ranking.kind && entry.collectionTitle === `${collectionTitle}（${suffix}）`,
+      )
+    )
+      suffix += 1;
+    collectionTitle = `${collectionTitle}（${suffix}）`;
+  }
   return {
     version: 2,
     profileId: profile?.profileId ?? crypto.randomUUID(),
     profileName: ranking.profileName,
     updatedAt: ranking.createdAt,
-    rankings: [...filtered, ranking].sort(
+    rankings: [...existing, { ...ranking, collectionTitle }].sort(
       (a, b) => Object.keys(mediaLabels).indexOf(a.kind) - Object.keys(mediaLabels).indexOf(b.kind),
     ),
   };
