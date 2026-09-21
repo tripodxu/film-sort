@@ -442,7 +442,7 @@ ART/RANK 后端 API 完整参考。所有接口由 Cloudflare Worker 处理，�
 
 **content_source 取值：** `douban`（豆瓣官方简介，优先） / `zhwiki` / `enwiki` / `baike`
 
-**消歧机制**（`worker/media.ts fetchContentIntro`）：并行发起「限定标题精确查询（中/英）+ 裸标题查询 + 搜索」多路，候选按打分取最优；完整评分规则见 `ARCHITECTURE.md` §5.4。
+**消歧机制**（`worker/media.ts fetchContentIntro`）：并行发起「限定标题精确查询（中/英）+ 裸标题查询 + 搜索」多路，候选按打分取最优；搜索候选必须真的提到作品名（榜单/合集页即使通篇像音乐/电影词条也拒绝——宁缺毋滥）；百度百科经三级传输探测（开放 API → 词条页 meta → anysearch 搜索摘要），结果有 isolate 级 24h 缓存。完整评分规则见 `ARCHITECTURE.md` §5.4。
 
 ### GET /api/book/detail
 
@@ -450,7 +450,15 @@ ART/RANK 后端 API 完整参考。所有接口由 Cloudflare Worker 处理，�
 
 ### GET /api/music/detail
 
-音乐详情。参数和响应格式同上（额外支持 `creator`，按标题+表演者择优；简介依次尝试 `v:summary` → `span.all` → `div.intro`），额外字段：`表演者`, `流派`, `专辑类型`, `介质`, `发行时间`, `songs`。
+音乐详情。参数 `name`（≤120 字符，必填）、`creator`、`year`。歌曲导向（不查豆瓣）：
+
+1. **gdstudio 搜索**（Step 1）：按歌名+歌手匹配单曲，返回 `matchedTitle` / `artist` / `album`；
+2. **简介**（Step 2，`fetchContentIntro`）：**中文歌名优先百度百科**（对华语流行单曲覆盖远好于维基），未命中回落维基消歧打分，最后再试百科兜底。
+
+| 字段 | 说明 |
+|------|------|
+| matchedTitle / artist / album | gdstudio 匹配到的曲目元数据（可能缺省） |
+| content_intro / content_source | 同上；中文歌名命中百科时 `content_source=baike` |
 
 > 三个详情路由的成功响应 `Cache-Control: public, max-age=86400`，未找到返回 `404`（`max-age=60`），缺 `name`/`title`/`url` 返回 `400`。
 

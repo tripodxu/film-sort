@@ -33,7 +33,7 @@ describe.skipIf(!apiAvailable)("detail APIs — content_intro", () => {
       const d = await getDetail("movie", "活着");
       expect(d.status).toBe(true);
       expect(d.data?.content_intro).toBeTruthy();
-      expect(["douban", "zhwiki", "enwiki"]).toContain(d.data?.content_source);
+      expect(["douban", "zhwiki", "enwiki", "baike"]).toContain(d.data?.content_source);
     },
     TIMEOUT,
   );

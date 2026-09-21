@@ -669,6 +669,8 @@ async function collectExtracts(
     converttitles: "1",
     format: "json",
   });
+  // zh 请求简体变体：标题与摘要统一为简体，与查询词/相关性判断的字符集一致
+  if (lang === "zh") params.set("variant", "zh-cn");
   try {
     const r = await fetch(`https://${lang}.wikipedia.org/w/api.php?${params}`, {
       headers: { "user-agent": USER_AGENTS[0], accept: "application/json" },
@@ -734,6 +736,7 @@ async function collectSearch(
     exlimit: "5",
     format: "json",
   });
+  if (lang === "zh") params.set("variant", "zh-cn");
   try {
     const r = await fetch(`https://${lang}.wikipedia.org/w/api.php?${params}`, {
       headers: { "user-agent": USER_AGENTS[0], accept: "application/json" },
@@ -747,10 +750,12 @@ async function collectSearch(
     for (const p of Object.values(d.query?.pages ?? {})) {
       if (!p.extract || p.missing || p.extract.length <= 30) continue;
       const title = p.title ?? "";
-      // 相关性门槛：标题含主标题，或首句声明与目标类型一致；否则视为搜索噪声
+      // 相关性门槛：页面标题或摘要必须真的提到作品名。仅靠「首句像音乐/
+      // 电影词条」会让榜单、合集类页面（如歌曲排行榜，整页不含该作品）
+      // 混进来成为错误简介——宁缺毋滥。
+      const base = opts.baseTitle?.toLowerCase();
       const relevant =
-        (opts.baseTitle && title.toLowerCase().includes(opts.baseTitle.toLowerCase())) ||
-        (opts.mediaType && declareType(p.extract) === opts.mediaType);
+        !!base && (title.toLowerCase().includes(base) || p.extract.toLowerCase().includes(base));
       if (!relevant) continue;
       const score = scoreCandidate(title, p.extract, opts);
       if (score >= 0) out.push({ intro: p.extract, source: `${lang}wiki`, score });
@@ -766,22 +771,115 @@ function bestOf(cands: Scored[]): Scored | null {
   return cands.reduce((a, b) => (b.score > a.score ? b : a));
 }
 
-async function fetchBaiduBaike(query: string): Promise<{ intro: string; source: string } | null> {
+function decodeEntities(raw: string): string {
+  return raw
+    .replace(/&quot;/g, '"')
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&#39;/g, "'")
+    .replace(/&nbsp;/g, " ");
+}
+
+/**
+ * 借 anysearch 搜索服务取百度百科词条摘要（其服务端抓取，绕开百度对
+ * 数据中心 IP 的安全验证）。对华语流行单曲的覆盖远好于维基——百科
+ * 词条名通常就是歌名本身（如「白月光与朱砂痣（大籽演唱的流行歌曲）」）。
+ * 响应为固定 markdown：`### n. 标题（可含「 - 百度百科」）` + `- **URL**: …`
+ * + `- 摘要`，只认 URL 指向词条页且标题含作品名的块。
+ */
+async function fetchBaikeViaAnySearch(
+  query: string,
+  mustContain: string,
+): Promise<{ intro: string; source: string } | null> {
   try {
-    const url = `https://baike.baidu.com/api/openapi/BaikeLemmaCardApi?scope=103&format=json&appid=379029&bk_key=${encodeURIComponent(query)}&bk_length=600`;
-    const response = await fetch(url, {
-      headers: { "user-agent": USER_AGENTS[0], accept: "application/json" },
+    const r = await fetch("https://api.anysearch.com/mcp", {
+      method: "POST",
+      headers: { "content-type": "application/json", "x-anysearch-client": "film-sort/1.0" },
+      body: JSON.stringify({
+        jsonrpc: "2.0",
+        id: 1,
+        method: "tools/call",
+        params: { name: "search", arguments: { query: `${query} 百度百科`, max_results: 5 } },
+      }),
       signal: AbortSignal.timeout(8000),
     });
-    if (!response.ok) return null;
-    const data = (await response.json()) as { abstract?: string };
-    if (data.abstract && data.abstract.length > 30) {
-      return { intro: data.abstract, source: "baike" };
+    if (!r.ok) return null;
+    const d = (await r.json()) as {
+      result?: { content?: Array<{ type?: string; text?: string }> };
+    };
+    const text = d.result?.content?.find((c) => c.type === "text")?.text ?? "";
+    for (const block of text.split(/^###\s+\d+\.\s+/m).slice(1)) {
+      const lines = block.split("\n");
+      const title = lines[0] ?? "";
+      const url = block.match(/\*\*URL\*\*:\s*(\S+)/)?.[1] ?? "";
+      if (!url.includes("baike.baidu.com/item/")) continue;
+      if (!title.includes(mustContain)) continue;
+      const snippet = lines
+        .filter((l) => l.startsWith("- ") && !l.includes("**URL**"))
+        .map((l) => l.slice(2).trim())
+        .join(" ")
+        .replace(/\s*\.{3}$|…+\s*$/, "")
+        .trim();
+      if (snippet.length > 30) return { intro: snippet, source: "baike" };
     }
     return null;
   } catch {
     return null;
   }
+}
+
+/**
+ * 百度百科简介，三级传输探测：
+ * 1) 开放 API（共享 demo appid，2026-09 起持续 errno:6，若恢复则是最干净的 JSON）；
+ * 2) 词条页 meta description——百度反爬对数据中心 IP 常下安全验证页（403/200），
+ *    命中算赚到；只读响应头部 96KB（meta 必在 head 内，词条正文可达数 MB）；
+ * 3) anysearch 搜索取词条摘要（fetchBaikeViaAnySearch）。
+ * 任一级命中即返回；全部失败返回 null，调用方回落维基或其它数据源。
+ */
+async function fetchBaiduBaike(query: string): Promise<{ intro: string; source: string } | null> {
+  try {
+    const url = `https://baike.baidu.com/api/openapi/BaikeLemmaCardApi?scope=103&format=json&appid=379029&bk_key=${encodeURIComponent(query)}&bk_length=600`;
+    const response = await fetch(url, {
+      headers: { "user-agent": USER_AGENTS[0], accept: "application/json" },
+      signal: AbortSignal.timeout(5000),
+    });
+    if (response.ok) {
+      const data = (await response.json()) as { abstract?: string };
+      if (data.abstract && data.abstract.length > 30) {
+        return { intro: data.abstract, source: "baike" };
+      }
+    }
+  } catch {}
+  try {
+    const response = await fetch(`https://baike.baidu.com/item/${encodeURIComponent(query)}`, {
+      headers: { "user-agent": USER_AGENTS[0], accept: "text/html" },
+      signal: AbortSignal.timeout(6000),
+    });
+    if (response.ok) {
+      const reader = response.body?.getReader();
+      let html = "";
+      if (reader) {
+        const decoder = new TextDecoder();
+        while (html.length < 96_000) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          html += decoder.decode(value, { stream: true });
+        }
+        void reader.cancel().catch(() => {});
+      } else {
+        html = await response.text();
+      }
+      const m =
+        html.match(/<meta\s+name="description"\s+content="([^"]*)"/i) ??
+        html.match(/<meta\s+content="([^"]*)"\s+name="description"/i);
+      const intro = decodeEntities(m?.[1] ?? "").trim();
+      if (intro.length > 30) return { intro, source: "baike" };
+    }
+  } catch {}
+  // 兜底调用会带类型提示词（如「白月光与朱砂痣 歌曲」），标题匹配只认作品名
+  const base = query.replace(/\s+(歌曲|单曲|专辑|电影|影片|长篇小说|书籍)$/, "").trim();
+  return fetchBaikeViaAnySearch(base || query, base || query);
 }
 
 /** 从 "2017-06"、"2008-1"、"1997" 之类的出版/上映信息提取 4 位年份 */
@@ -817,7 +915,41 @@ function qualifiedTitles(
   return out;
 }
 
+// ===== 简介缓存（isolate 内，FIFO 上界）=====
+// 详情端点未走 caches.default，而百科/anysearch 链路单次可达数秒且消耗
+// 外部配额（anysearch 匿名额度按来源 IP 计，CF 出口 IP 是共享的）。仅缓存
+// 成功结果——null 不缓存，上游失败多为瞬时；TTL 24h 与 detail 响应头一致。
+const INTRO_CACHE_MAX = 200;
+const INTRO_TTL_MS = 24 * 60 * 60 * 1000;
+const introCache = new Map<string, { intro: string; source: string; at: number }>();
+
+function introCacheKey(title: string, mediaType?: "movie" | "book" | "music"): string {
+  return `${mediaType ?? "*"}:${title.trim().toLowerCase()}`;
+}
+
 export async function fetchContentIntro(
+  title: string,
+  mediaType?: "movie" | "book" | "music",
+  creator?: string,
+  yearRaw?: unknown,
+): Promise<{ intro: string; source: string } | null> {
+  const key = introCacheKey(title, mediaType);
+  const cached = introCache.get(key);
+  if (cached && Date.now() - cached.at < INTRO_TTL_MS) {
+    return { intro: cached.intro, source: cached.source };
+  }
+  const result = await fetchContentIntroUncached(title, mediaType, creator, yearRaw);
+  if (result) {
+    if (introCache.size >= INTRO_CACHE_MAX) {
+      const oldest = introCache.keys().next().value;
+      if (oldest !== undefined) introCache.delete(oldest);
+    }
+    introCache.set(key, { ...result, at: Date.now() });
+  }
+  return result;
+}
+
+async function fetchContentIntroUncached(
   title: string,
   mediaType?: "movie" | "book" | "music",
   creator?: string,
