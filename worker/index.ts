@@ -2220,6 +2220,7 @@ async function route(request: Request, env: Env): Promise<Response> {
     });
   }
   if (url.pathname === "/api/music/detail" && request.method === "GET") {
+    const startedAt = Date.now();
     const title = url.searchParams.get("name")?.trim() || url.searchParams.get("title")?.trim();
     if (!title) return json({ status: false, msg: "缺少参数 name", data: null }, 400);
     if (title.length > 120) return json({ status: false, msg: "invalid_title", data: null }, 400);
@@ -2250,9 +2251,16 @@ async function route(request: Request, env: Env): Promise<Response> {
       data.content_source = intro.source;
     }
 
-    return json({ status: true, msg: "ok", time: "0s", data }, 200, {
-      "cache-control": "public, max-age=86400",
-    });
+    return json(
+      {
+        status: true,
+        msg: "ok",
+        time: `${((Date.now() - startedAt) / 1000).toFixed(1)}s`,
+        data,
+      },
+      200,
+      { "cache-control": "public, max-age=86400" },
+    );
   }
   if (url.pathname === "/api/artwork/detail" && request.method === "GET") {
     const kind = url.searchParams.get("kind");
