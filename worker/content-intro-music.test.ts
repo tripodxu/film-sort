@@ -60,7 +60,8 @@ describe("fetchContentIntro 音乐简介数据源", () => {
     expect(intro?.source).toBe("baike");
     expect(intro?.intro).toContain("大籽");
     expect(calls.some((u) => u.includes("wikipedia.org"))).toBe(false);
-    expect(calls.filter((u) => u.includes("baike.baidu.com"))).toHaveLength(1);
+    // openapi 命中即返回；词条页探测与 openapi 并行发出（设计如此），不算多余查询
+    expect(calls.filter((u) => u.includes("baike.baidu.com/api/openapi"))).toHaveLength(1);
   });
 
   it("中文歌名：openapi 失效 + 词条页被反爬拦截时，anysearch 取百科词条摘要", async () => {
@@ -135,6 +136,43 @@ describe("fetchContentIntro 音乐简介数据源", () => {
     );
     const intro = await fetchContentIntro("乌梅子酱", "music", "李荣浩", "2023");
     expect(intro).toBeNull();
+  });
+
+  it("百度直连熔断：连续失败满 3 次后，同 isolate 内不再请求百度直连", async () => {
+    // 自足触发：一首歌的失败链路含 baike-first 与维基全空后的百科兜底，
+    // 各记一次直连失败；前序用例可能已触发熔断，本用例不依赖其计数。
+    let baikeCalls = 0;
+    let currentSong = "测试歌名甲";
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: string | URL | Request) => {
+        const url = String(input instanceof Request ? input.url : input);
+        if (url.includes("baike.baidu.com")) {
+          baikeCalls += 1;
+          if (url.includes("/api/openapi")) return new Response(OPENAPI_ERRNO, { status: 200 });
+          return baikeItemBlocked();
+        }
+        if (url.includes("api.anysearch.com")) {
+          return anysearchOk([
+            {
+              title: `${currentSong}（歌曲） - 百度百科`,
+              url: "https://baike.baidu.com/item/%E6%B5%8B%E8%AF%95/59262888",
+              snippet: `《${currentSong}》是一首华语流行歌曲，发行后在各音乐平台进入热榜前列。`,
+            },
+          ]);
+        }
+        return new Response(JSON.stringify({ query: { pages: {} } }), { status: 200 });
+      }),
+    );
+    // 甲：走一遍失败链路（若前序用例尚未触发熔断，此处 3+ 次失败足以触发）
+    await fetchContentIntro("测试歌名甲", "music", "测试歌手", "2020");
+    expect(baikeCalls).toBeLessThanOrEqual(4);
+    // 乙：无论甲之前熔断与否，此时必已触发——不应再出现任何 baike.baidu.com 请求
+    baikeCalls = 0;
+    currentSong = "测试歌名乙";
+    const second = await fetchContentIntro("测试歌名乙", "music", "测试歌手", "2020");
+    expect(second?.source).toBe("baike");
+    expect(baikeCalls).toBe(0);
   });
 
   it("英文歌名：跳过百度百科，直接走维基", async () => {

@@ -2224,23 +2224,23 @@ async function route(request: Request, env: Env): Promise<Response> {
 
     const data: Record<string, unknown> = { title };
 
-    // Step 1: 歌曲导向元数据——gdstudio 搜索按歌名+歌手匹配单曲/歌曲条目，
-    // 不做专辑联想（豆瓣音乐详情已移除：专辑导向且反爬不稳）。
-    try {
-      const { tracks } = await gdSearch(title, 10, env);
-      const track = pickTrack(tracks, title, creator || undefined);
-      if (track) {
-        if (track.name) data.matchedTitle = track.name;
-        const artist = Array.isArray(track.artist)
-          ? track.artist.join(" / ")
-          : String(track.artist ?? "");
-        if (artist) data.artist = artist;
-        if (track.album) data.album = track.album;
-      }
-    } catch {}
-
-    // Step 2: 简介——维基消歧打分（歌曲/单曲导向提示）→ 百度百科，均在 fetchContentIntro 内
-    const intro = await fetchContentIntro(title, "music", creator || undefined, year || undefined);
+    // 两步并行（互不依赖）：Step 1 歌曲导向元数据——gdstudio 搜索按歌名+歌手
+    // 匹配单曲/歌曲条目，不做专辑联想（豆瓣音乐详情已移除：专辑导向且反爬不稳）；
+    // Step 2 简介——中文歌名百度百科优先 → 维基消歧打分，均在 fetchContentIntro 内。
+    const [track, intro] = await Promise.all([
+      gdSearch(title, 10, env)
+        .then(({ tracks }) => pickTrack(tracks, title, creator || undefined))
+        .catch(() => null),
+      fetchContentIntro(title, "music", creator || undefined, year || undefined),
+    ]);
+    if (track) {
+      if (track.name) data.matchedTitle = track.name;
+      const artist = Array.isArray(track.artist)
+        ? track.artist.join(" / ")
+        : String(track.artist ?? "");
+      if (artist) data.artist = artist;
+      if (track.album) data.album = track.album;
+    }
     if (intro) {
       data.content_intro = intro.intro;
       data.content_source = intro.source;

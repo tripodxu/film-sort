@@ -830,53 +830,110 @@ async function fetchBaikeViaAnySearch(
 }
 
 /**
- * 百度百科简介，三级传输探测：
- * 1) 开放 API（共享 demo appid，2026-09 起持续 errno:6，若恢复则是最干净的 JSON）；
- * 2) 词条页 meta description——百度反爬对数据中心 IP 常下安全验证页（403/200），
- *    命中算赚到；只读响应头部 96KB（meta 必在 head 内，词条正文可达数 MB）；
- * 3) anysearch 搜索取词条摘要（fetchBaikeViaAnySearch）。
- * 任一级命中即返回；全部失败返回 null，调用方回落维基或其它数据源。
+ * 百度直连探测熔断：开放 API 与词条页对数据中心 IP 的失败是持续性而非
+ * 瞬时的（反爬判定按 IP 段），每次白等满超时会让详情请求叠加 10s+ 延迟。
+ * 同一 isolate 内连续 3 次失败后停探 1 小时，只走 anysearch（若百度侧
+ * 恢复，isolate 回收后自然重试）。
  */
-async function fetchBaiduBaike(query: string): Promise<{ intro: string; source: string } | null> {
+type BaiduProbe = "openapi" | "item";
+const PROBE_FAIL_LIMIT = 3;
+const PROBE_COOLDOWN_MS = 60 * 60 * 1000;
+const probeFails = new Map<BaiduProbe, number>();
+const probeDeadUntil = new Map<BaiduProbe, number>();
+function probeSkipped(kind: BaiduProbe): boolean {
+  return (probeDeadUntil.get(kind) ?? 0) > Date.now();
+}
+function recordProbeFailure(kind: BaiduProbe) {
+  const fails = (probeFails.get(kind) ?? 0) + 1;
+  probeFails.set(kind, fails);
+  if (fails >= PROBE_FAIL_LIMIT) {
+    probeDeadUntil.set(kind, Date.now() + PROBE_COOLDOWN_MS);
+    probeFails.set(kind, 0);
+  }
+}
+function recordProbeSuccess(kind: BaiduProbe) {
+  probeFails.set(kind, 0);
+}
+
+/** 开放 API（共享 demo appid，2026-09 起持续 errno:6，若恢复则是最干净的 JSON） */
+async function baikeOpenApi(query: string): Promise<{ intro: string; source: string } | null> {
   try {
     const url = `https://baike.baidu.com/api/openapi/BaikeLemmaCardApi?scope=103&format=json&appid=379029&bk_key=${encodeURIComponent(query)}&bk_length=600`;
     const response = await fetch(url, {
       headers: { "user-agent": USER_AGENTS[0], accept: "application/json" },
-      signal: AbortSignal.timeout(5000),
+      signal: AbortSignal.timeout(4000),
     });
-    if (response.ok) {
-      const data = (await response.json()) as { abstract?: string };
-      if (data.abstract && data.abstract.length > 30) {
-        return { intro: data.abstract, source: "baike" };
-      }
+    if (!response.ok) {
+      recordProbeFailure("openapi");
+      return null;
     }
-  } catch {}
+    const data = (await response.json()) as { abstract?: string };
+    if (data.abstract && data.abstract.length > 30) {
+      recordProbeSuccess("openapi");
+      return { intro: data.abstract, source: "baike" };
+    }
+    recordProbeFailure("openapi");
+  } catch {
+    recordProbeFailure("openapi");
+  }
+  return null;
+}
+
+/** 词条页 meta description——只读响应头部 96KB（meta 必在 head 内，正文可达数 MB） */
+async function baikeItemPage(query: string): Promise<{ intro: string; source: string } | null> {
   try {
     const response = await fetch(`https://baike.baidu.com/item/${encodeURIComponent(query)}`, {
       headers: { "user-agent": USER_AGENTS[0], accept: "text/html" },
-      signal: AbortSignal.timeout(6000),
+      signal: AbortSignal.timeout(5000),
     });
-    if (response.ok) {
-      const reader = response.body?.getReader();
-      let html = "";
-      if (reader) {
-        const decoder = new TextDecoder();
-        while (html.length < 96_000) {
-          const { done, value } = await reader.read();
-          if (done) break;
-          html += decoder.decode(value, { stream: true });
-        }
-        void reader.cancel().catch(() => {});
-      } else {
-        html = await response.text();
-      }
-      const m =
-        html.match(/<meta\s+name="description"\s+content="([^"]*)"/i) ??
-        html.match(/<meta\s+content="([^"]*)"\s+name="description"/i);
-      const intro = decodeEntities(m?.[1] ?? "").trim();
-      if (intro.length > 30) return { intro, source: "baike" };
+    if (!response.ok) {
+      recordProbeFailure("item");
+      return null;
     }
-  } catch {}
+    const reader = response.body?.getReader();
+    let html = "";
+    if (reader) {
+      const decoder = new TextDecoder();
+      while (html.length < 96_000) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        html += decoder.decode(value, { stream: true });
+      }
+      void reader.cancel().catch(() => {});
+    } else {
+      html = await response.text();
+    }
+    const m =
+      html.match(/<meta\s+name="description"\s+content="([^"]*)"/i) ??
+      html.match(/<meta\s+content="([^"]*)"\s+name="description"/i);
+    const intro = decodeEntities(m?.[1] ?? "").trim();
+    // 安全验证页（403 之外的 200 变体）没有 description 或内容是验证文案
+    if (intro.length > 30 && !html.includes("百度安全验证")) {
+      recordProbeSuccess("item");
+      return { intro, source: "baike" };
+    }
+    recordProbeFailure("item");
+  } catch {
+    recordProbeFailure("item");
+  }
+  return null;
+}
+
+/**
+ * 百度百科简介，三级传输探测：
+ * 1) 开放 API + 2) 词条页 meta——两路百度直连并行（失败通常是 IP 级反爬，
+ *    双双命中超时也不叠加），均带 isolate 级熔断；
+ * 3) anysearch 搜索取词条摘要（fetchBaikeViaAnySearch）。
+ * 任一级命中即返回；全部失败返回 null，调用方回落维基或其它数据源。
+ */
+async function fetchBaiduBaike(query: string): Promise<{ intro: string; source: string } | null> {
+  const direct = (
+    await Promise.all([
+      probeSkipped("openapi") ? null : baikeOpenApi(query),
+      probeSkipped("item") ? null : baikeItemPage(query),
+    ])
+  ).find((r): r is { intro: string; source: string } => r !== null);
+  if (direct) return direct;
   // 兜底调用会带类型提示词（如「白月光与朱砂痣 歌曲」），标题匹配只认作品名
   const base = query.replace(/\s+(歌曲|单曲|专辑|电影|影片|长篇小说|书籍)$/, "").trim();
   return fetchBaikeViaAnySearch(base || query, base || query);
