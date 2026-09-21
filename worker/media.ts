@@ -836,6 +836,14 @@ export async function fetchContentIntro(
     creator ? `${title} ${creator.replace(/^\[[^\]]*\]\s*/, "").trim()}` : null,
   ].filter((q): q is string => !!q);
 
+  // 音乐：中文歌名优先百度百科——对华语流行单曲的覆盖远好于维基
+  //（词条名通常就是歌名本身）；未命中再走维基多路消歧，末尾百科兜底对
+  // music 换歌曲提示词二次尝试。英文等非中文歌名仍走维基。
+  if (mediaType === "music" && /[一-鿿]/.test(title)) {
+    const baikeFirst = await fetchBaiduBaike(title);
+    if (baikeFirst) return baikeFirst;
+  }
+
   const groups = await Promise.all([
     collectExtracts(zhQualified, "zh", 8000, opts),
     collectExtracts(enQualified, "en", 6000, opts),
