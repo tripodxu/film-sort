@@ -57,6 +57,7 @@ npx wrangler d1 migrations apply film-sort --remote
 | `AI_API_KEY` / `AI_API_URL` / `AI_MODEL` / `AI_PROTOCOL` | 内置 AI 通道（四协议，详见 PLAN-ai-insights.md）；未配置时用户仍可在网页端自带 API | AI 按钮提示「服务端未配置」，用户自带 API 通道不受影响 |
 | `COOKIE_ENC_KEY` | 覆盖 Cookie 保险库密钥（64 位十六进制 = AES-256） | 首次使用时自动生成并存入 `admin_config('cookie_enc_key')` |
 | `MUSIC_PROXY_URL` / `MUSIC_PROXY_KEY` | 音乐上游代理（`worker/gdstudio.ts`） | 直连上游 API |
+| `ANYSEARCH_API_KEY` | anysearch 搜索服务 key（`api.anysearch.com`，简介的百度百科传输）；缺省走匿名额度（限速更低） | 仍可用，但匿名额度按 CF 出口 IP 共享计，高峰可能命中限速 |
 
 Cookie 保险库密钥无需手工配置：首次使用时自动生成 AES-256 密钥存入 `admin_config('cookie_enc_key')`，网易云/豆瓣授权 Cookie 以 AES-GCM 加密存 `user_cookie_vault`（不落明文，断开即删）；`COOKIE_ENC_KEY` 只在需要覆盖该自动生成密钥时才配。
 

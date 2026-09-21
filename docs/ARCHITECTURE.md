@@ -441,7 +441,7 @@ Worker 模块划分：
 1. **豆瓣官方详情页 v:summary** — detail 路由 Step 2：由搜索得到的 subject 链接直达详情页，零歧义（`content_source=douban`）；
 2. **维基百科消歧打分择优** — 并行发起「限定标题精确查询（中/英，如「泰坦尼克号 (1997年电影)」）+ 裸标题 + 搜索」多路；候选按「首句类型声明一致 +3 / 类型词 +2 / 年份 +2 / 标题相关 +1 / 限定命中 +6」打分，消歧义页（"也可以指"等）直接剔除；zh 请求带 `variant=zh-cn`，标题与摘要统一简体后做匹配；搜索候选必须真的提到作品名（标题或摘要含作品名）——榜单/合集页即使通篇像该类型词条也拒绝，宁缺毋滥；
 3. **创作者组合搜索** — 如"三体 刘慈欣"；
-4. **百度百科** — 兜底；**中文歌名（音乐详情）优先于维基**，因百科词条名通常就是歌名本身，对华语流行单曲覆盖远好于维基。传输为三级探测：**开放 API + 词条页 meta 两路百度直连并行**（开放 API 为共享 demo appid，2026-09 起持续 `errno:6`；词条页对数据中心 IP 常下安全验证页，只读响应头部 96KB。直连失败是 IP 级且持续性的，故带 isolate 级熔断：连续 3 次失败停探 1 小时）→ **anysearch 搜索**（`api.anysearch.com/mcp`，JSON-RPC `tools/call search`，取词条页结果摘要；第三方服务，匿名额度，失败静默回落）。命中结果进 isolate 级简介缓存（FIFO 200 条，TTL 24h，仅缓存成功值）。`/api/music/detail` 的 gdstudio 元数据与简介两步并行请求。
+4. **百度百科** — 兜底；**中文歌名（音乐详情）优先于维基**，因百科词条名通常就是歌名本身，对华语流行单曲覆盖远好于维基。传输按实测可达性排序：**anysearch 搜索**（`api.anysearch.com/mcp`，JSON-RPC `tools/call search`，取词条页结果摘要；服务端抓取绕开百度反爬，带 key 约 4s，`ANYSEARCH_API_KEY` secret 可选）→ **两路百度直连并行兜底**（开放 API 共享 demo appid 自 2026-09 起持续 `errno:6`；词条页对数据中心 IP 常下安全验证页，只读响应头部 96KB。直连失败是 IP 级且持续性的，带 isolate 级熔断：连续 3 次失败停探 1 小时）。音乐中文路径的维基落空后只重试 anysearch（换类型提示词查询，不重复直连）。命中结果进 isolate 级简介缓存（FIFO 200 条，TTL 24h，仅缓存成功值）。`/api/music/detail` 的 gdstudio 元数据与简介两步并行请求。
 
 detail 路由接受 `year`/`creator` 参数辅助消歧（前端传作品已知元数据）。"其他"类别走 `worker/other.ts`（维基 opensearch + pageimages 取图，百科兜底）。
 

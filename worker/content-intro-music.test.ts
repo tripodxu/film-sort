@@ -66,16 +66,15 @@ describe("fetchContentIntro 音乐简介数据源", () => {
 
   it("中文歌名：openapi 失效 + 词条页被反爬拦截时，anysearch 取百科词条摘要", async () => {
     const calls: string[] = [];
+    let authHeader: string | undefined;
     vi.stubGlobal(
       "fetch",
-      vi.fn(async (input: string | URL | Request) => {
+      vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
         const url = String(input instanceof Request ? input.url : input);
         calls.push(url);
-        if (url.includes("baike.baidu.com/api/openapi")) {
-          return new Response(OPENAPI_ERRNO, { status: 200 });
-        }
-        if (url.includes("baike.baidu.com/item/")) return baikeItemBlocked();
         if (url.includes("api.anysearch.com")) {
+          const h = new Headers(init?.headers);
+          authHeader = h.get("authorization") ?? undefined;
           return anysearchOk([
             {
               title: "漠河舞厅（柳爽演唱的歌曲） - 百度百科",
@@ -90,13 +89,20 @@ describe("fetchContentIntro 音乐简介数据源", () => {
             },
           ]);
         }
+        if (url.includes("baike.baidu.com/api/openapi")) {
+          return new Response(OPENAPI_ERRNO, { status: 200 });
+        }
+        if (url.includes("baike.baidu.com/item/")) return baikeItemBlocked();
         return new Response(JSON.stringify({ query: { pages: {} } }), { status: 200 });
       }),
     );
-    const intro = await fetchContentIntro("漠河舞厅", "music", "柳爽", "2021");
+    const intro = await fetchContentIntro("漠河舞厅", "music", "柳爽", "2021", {
+      ANYSEARCH_API_KEY: "as_sk_test",
+    });
     expect(intro?.source).toBe("baike");
     expect(intro?.intro).toContain("柳爽");
     expect(intro?.intro).toContain("2020年");
+    expect(authHeader).toBe("Bearer as_sk_test");
     expect(calls.some((u) => u.includes("wikipedia.org"))).toBe(false);
     expect(calls.filter((u) => u.includes("api.anysearch.com"))).toHaveLength(1);
   });
@@ -138,10 +144,12 @@ describe("fetchContentIntro 音乐简介数据源", () => {
     expect(intro).toBeNull();
   });
 
-  it("百度直连熔断：连续失败满 3 次后，同 isolate 内不再请求百度直连", async () => {
-    // 自足触发：一首歌的失败链路含 baike-first 与维基全空后的百科兜底，
-    // 各记一次直连失败；前序用例可能已触发熔断，本用例不依赖其计数。
+  it("百度直连熔断：anysearch 连续未命中使直连失败累计满 3 次后，不再请求百度直连", async () => {
+    // 新顺序下直连探测只在 anysearch 未命中时发起。前序用例已各累计若干
+    // 失败；本用例用三首 anysearch 也搜不到的歌把 openapi/item 都推过
+    // 阈值，第四首 anysearch 命中时不应再出现任何 baike.baidu.com 请求。
     let baikeCalls = 0;
+    let miss = true;
     let currentSong = "测试歌名甲";
     vi.stubGlobal(
       "fetch",
@@ -153,6 +161,7 @@ describe("fetchContentIntro 音乐简介数据源", () => {
           return baikeItemBlocked();
         }
         if (url.includes("api.anysearch.com")) {
+          if (miss) return anysearchOk([]);
           return anysearchOk([
             {
               title: `${currentSong}（歌曲） - 百度百科`,
@@ -164,14 +173,20 @@ describe("fetchContentIntro 音乐简介数据源", () => {
         return new Response(JSON.stringify({ query: { pages: {} } }), { status: 200 });
       }),
     );
-    // 甲：走一遍失败链路（若前序用例尚未触发熔断，此处 3+ 次失败足以触发）
-    await fetchContentIntro("测试歌名甲", "music", "测试歌手", "2020");
-    expect(baikeCalls).toBeLessThanOrEqual(4);
-    // 乙：无论甲之前熔断与否，此时必已触发——不应再出现任何 baike.baidu.com 请求
+    for (const song of ["测试歌名甲", "测试歌名乙", "测试歌名丙"]) {
+      currentSong = song;
+      await fetchContentIntro(song, "music", "测试歌手", "2020");
+    }
+    const callsAfterMisses = baikeCalls;
+    expect(callsAfterMisses).toBeGreaterThan(0);
+    expect(callsAfterMisses).toBeLessThanOrEqual(6);
+    // 熔断已触发：第四首 anysearch 命中，直连零请求
     baikeCalls = 0;
-    currentSong = "测试歌名乙";
-    const second = await fetchContentIntro("测试歌名乙", "music", "测试歌手", "2020");
-    expect(second?.source).toBe("baike");
+    miss = false;
+    currentSong = "测试歌名丁";
+    const hit = await fetchContentIntro("测试歌名丁", "music", "测试歌手", "2020");
+    expect(hit?.source).toBe("baike");
+    expect(hit?.intro).toContain("测试歌名丁");
     expect(baikeCalls).toBe(0);
   });
 

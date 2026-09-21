@@ -90,6 +90,8 @@ export interface Env {
   AI_API_URL?: string;
   AI_MODEL?: string;
   AI_PROTOCOL?: string;
+  /** anysearch 搜索服务 key（简介百科传输）；缺省走匿名额度 */
+  ANYSEARCH_API_KEY?: string;
   COOKIE_ENC_KEY?: string;
   MUSIC_PROXY_URL?: string;
   MUSIC_PROXY_KEY?: string;
@@ -2095,6 +2097,7 @@ async function route(request: Request, env: Env): Promise<Response> {
         "book",
         typeof data.author === "string" ? data.author.split("/")[0] : undefined,
         data.date,
+        env,
       );
       if (intro) {
         data.content_intro = intro.intro;
@@ -2104,7 +2107,7 @@ async function route(request: Request, env: Env): Promise<Response> {
 
     // Step 4: douban 搜索完全失败时，用维基搜索兜底获取标题和简介
     if (!data.title && title) {
-      const intro = await fetchContentIntro(title, "book");
+      const intro = await fetchContentIntro(title, "book", undefined, undefined, env);
       if (intro) {
         data.title = title;
         data.content_intro = intro.intro;
@@ -2189,6 +2192,7 @@ async function route(request: Request, env: Env): Promise<Response> {
         "movie",
         typeof data.actors === "string" ? data.actors.split("/")[0] : undefined,
         data.year,
+        env,
       );
       if (intro) {
         data.content_intro = intro.intro;
@@ -2198,7 +2202,7 @@ async function route(request: Request, env: Env): Promise<Response> {
 
     // Step 4: douban 搜索完全失败时，用维基搜索兜底获取标题和简介
     if (!data.title && title) {
-      const intro = await fetchContentIntro(title, "movie");
+      const intro = await fetchContentIntro(title, "movie", undefined, undefined, env);
       if (intro) {
         data.title = title;
         data.content_intro = intro.intro;
@@ -2231,7 +2235,7 @@ async function route(request: Request, env: Env): Promise<Response> {
       gdSearch(title, 10, env)
         .then(({ tracks }) => pickTrack(tracks, title, creator || undefined))
         .catch(() => null),
-      fetchContentIntro(title, "music", creator || undefined, year || undefined),
+      fetchContentIntro(title, "music", creator || undefined, year || undefined, env),
     ]);
     if (track) {
       if (track.name) data.matchedTitle = track.name;
@@ -2291,7 +2295,7 @@ async function route(request: Request, env: Env): Promise<Response> {
           if (track.album) data.album = track.album;
         }
       } catch {}
-      const intro = await fetchContentIntro(title, "music");
+      const intro = await fetchContentIntro(title, "music", undefined, undefined, env);
       if (intro) {
         data.content_intro = intro.intro;
         data.content_source = intro.source;

@@ -791,11 +791,17 @@ function decodeEntities(raw: string): string {
 async function fetchBaikeViaAnySearch(
   query: string,
   mustContain: string,
+  apiKey?: string,
 ): Promise<{ intro: string; source: string } | null> {
   try {
+    const headers: Record<string, string> = {
+      "content-type": "application/json",
+      "x-anysearch-client": "film-sort/1.0",
+    };
+    if (apiKey) headers.authorization = `Bearer ${apiKey}`;
     const r = await fetch("https://api.anysearch.com/mcp", {
       method: "POST",
-      headers: { "content-type": "application/json", "x-anysearch-client": "film-sort/1.0" },
+      headers,
       body: JSON.stringify({
         jsonrpc: "2.0",
         id: 1,
@@ -920,23 +926,27 @@ async function baikeItemPage(query: string): Promise<{ intro: string; source: st
 }
 
 /**
- * 百度百科简介，三级传输探测：
- * 1) 开放 API + 2) 词条页 meta——两路百度直连并行（失败通常是 IP 级反爬，
- *    双双命中超时也不叠加），均带 isolate 级熔断；
- * 3) anysearch 搜索取词条摘要（fetchBaikeViaAnySearch）。
+ * 百度百科简介，三级传输探测（按实测可达性排序）：
+ * 1) anysearch 搜索取词条摘要——服务端抓取绕开百度反爬，当前唯一稳定可达
+ *    的传输（带 key 约 4s），故排首选；
+ * 2) 两路百度直连（开放 API + 词条页 meta）并行兜底——零外部依赖，但对数据
+ *    中心 IP 基本不可达（errno:6 / 安全验证页），仅在 anysearch 不可用时
+ *    尝试，且带 isolate 级熔断（连续 3 次失败停探 1 小时）；
  * 任一级命中即返回；全部失败返回 null，调用方回落维基或其它数据源。
  */
-async function fetchBaiduBaike(query: string): Promise<{ intro: string; source: string } | null> {
-  const direct = (
-    await Promise.all([
-      probeSkipped("openapi") ? null : baikeOpenApi(query),
-      probeSkipped("item") ? null : baikeItemPage(query),
-    ])
-  ).find((r): r is { intro: string; source: string } => r !== null);
-  if (direct) return direct;
+async function fetchBaiduBaike(
+  query: string,
+  apiKey?: string,
+): Promise<{ intro: string; source: string } | null> {
   // 兜底调用会带类型提示词（如「白月光与朱砂痣 歌曲」），标题匹配只认作品名
   const base = query.replace(/\s+(歌曲|单曲|专辑|电影|影片|长篇小说|书籍)$/, "").trim();
-  return fetchBaikeViaAnySearch(base || query, base || query);
+  const viaSearch = await fetchBaikeViaAnySearch(base || query, base || query, apiKey);
+  if (viaSearch) return viaSearch;
+  const [openapi, item] = await Promise.all([
+    probeSkipped("openapi") ? null : baikeOpenApi(query),
+    probeSkipped("item") ? null : baikeItemPage(query),
+  ]);
+  return openapi ?? item;
 }
 
 /** 从 "2017-06"、"2008-1"、"1997" 之类的出版/上映信息提取 4 位年份 */
@@ -989,13 +999,20 @@ export async function fetchContentIntro(
   mediaType?: "movie" | "book" | "music",
   creator?: string,
   yearRaw?: unknown,
+  env?: { ANYSEARCH_API_KEY?: string },
 ): Promise<{ intro: string; source: string } | null> {
   const key = introCacheKey(title, mediaType);
   const cached = introCache.get(key);
   if (cached && Date.now() - cached.at < INTRO_TTL_MS) {
     return { intro: cached.intro, source: cached.source };
   }
-  const result = await fetchContentIntroUncached(title, mediaType, creator, yearRaw);
+  const result = await fetchContentIntroUncached(
+    title,
+    mediaType,
+    creator,
+    yearRaw,
+    env?.ANYSEARCH_API_KEY,
+  );
   if (result) {
     if (introCache.size >= INTRO_CACHE_MAX) {
       const oldest = introCache.keys().next().value;
@@ -1011,6 +1028,7 @@ async function fetchContentIntroUncached(
   mediaType?: "movie" | "book" | "music",
   creator?: string,
   yearRaw?: unknown,
+  anysearchKey?: string,
 ): Promise<{ intro: string; source: string } | null> {
   const year = extractYear(yearRaw);
   // 年份仅用于「精确限定标题」猜测（不存在的标题自然落空，安全）；不进入打分/搜索（避免 2023 等噪声命中无关页面）
@@ -1026,10 +1044,12 @@ async function fetchContentIntroUncached(
   ].filter((q): q is string => !!q);
 
   // 音乐：中文歌名优先百度百科——对华语流行单曲的覆盖远好于维基
-  //（词条名通常就是歌名本身）；未命中再走维基多路消歧，末尾百科兜底对
-  // music 换歌曲提示词二次尝试。英文等非中文歌名仍走维基。
-  if (mediaType === "music" && /[一-鿿]/.test(title)) {
-    const baikeFirst = await fetchBaiduBaike(title);
+  //（词条名通常就是歌名本身）；未命中再走维基多路消歧，末尾只重试
+  // anysearch（直连两路刚随 baike-first 失败过，不重复烧 5s）。英文等
+  // 非中文歌名仍走维基。
+  const isChineseSong = mediaType === "music" && /[一-鿿]/.test(title);
+  if (isChineseSong) {
+    const baikeFirst = await fetchBaiduBaike(title, anysearchKey);
     if (baikeFirst) return baikeFirst;
   }
 
@@ -1059,9 +1079,15 @@ async function fetchContentIntroUncached(
   const best = qualifiedHit ?? bestOf(all);
   if (best) return { intro: best.intro, source: best.source };
 
-  // 百度百科兜底
+  if (isChineseSong) {
+    const baike = await fetchBaikeViaAnySearch(`${title} ${hint ?? "歌曲"}`, title, anysearchKey);
+    if (baike) return baike;
+    return null;
+  }
+
+  // 百度百科兜底（anysearch 首选 → 两路直连并行兜底）
   try {
-    const baike = await fetchBaiduBaike(hint ? `${title} ${hint}` : title);
+    const baike = await fetchBaiduBaike(hint ? `${title} ${hint}` : title, anysearchKey);
     if (baike) return baike;
   } catch (e) {
     console.error(`baike failed for "${title}":`, e instanceof Error ? e.message : e);
