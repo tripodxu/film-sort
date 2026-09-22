@@ -571,7 +571,7 @@ frontend-design 技能明文规则：禁 Inter/Roboto/Space Grotesk 独挑大梁
 | P5b 收尾批 | ✅ | simple/classic 人格、纹理配额 ≤3%、对比度复扫 keep 78%、六主题实拍 12/12 |
 | P5c 布局模式 | ✅ | `layout.ts`+切换 UI+journey/bento；18 组合矩阵 18/18；三模式高视口实证（journey 4.01% / bento 3.34%）；reduced-motion 专项补全 |
 | 发布前 | ✅ | CHANGELOG/README/回滚预案/遗留清单/真机清单（§10.8）；真机验收归发布窗口（该行本就标注不进阶段门禁） |
-| B1 重锚定 | 🔄 | `.tmp/ns/b1r`（`--profile b1r` 独立命名空间，warm+capture 双跑零 diff 核销中） |
+| B1 重锚定 | ✅ | `.tmp/ns/b1r`（`--profile b1r` 独立命名空间）**270×2 双跑、270/270 严格零 diff**（changed 0 / mismatches 0）——发布前 archive 基准落定 |
 
 **质量护栏终值**：**26 条**回归绊线 / **303 tests** 全绿；四门禁 exit 0；20+ 阶段独立 commit 可逐个 revert；6 个非确定源、3 条特异性战术、编码/并发/流程教训全数入册（§8.0/§10.x）。
 
