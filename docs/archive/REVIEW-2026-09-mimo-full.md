@@ -1,3 +1,5 @@
+> ⚠️ **【已过时 · 归档】**（2026-09-22 归档）内容停留在归档时点，**请勿据此操作**；现行结论见 `PLAN-ui-refresh.md`（§10）与各活跃文档。所载基线（274 tests 等）与修复清单为当时状态，最终基线见 PLAN-ui-refresh §10.9。
+
 # film-sort3 全量审查与修复记录（2026-09 · MiMo）
 
 > 范围：全仓阅读（src / worker / shared / migrations / docs / 基建）+ P0/P1/P2 代码修复。

@@ -1,3 +1,5 @@
+> ⚠️ **【已过时 · 归档】**（2026-09-22 归档）内容停留在归档时点，**请勿据此操作**；现行结论见 `PLAN-ui-refresh.md`（§10）与各活跃文档。多数条目已由 UI 焕新落地或由 `src/ui-fixes.test.ts` 绊线锁定；存续技术债见 PLAN-ui-refresh §10.8 遗留清单。
+
 # UI 前端全流程优化审查报告
 
 基于全量代码审查（App.tsx、所有视图组件、styles.css、Poster.tsx）的 UI 优化建议。

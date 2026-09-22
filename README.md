@@ -227,7 +227,7 @@ npm run build
 ```
 
 > `src/styles.css` 与 `docs/`、`*.md` 在 `.prettierignore` 中刻意排除，原因见
-> `docs/OPTIMIZATION.md` §5.3。
+> `docs/archive/OPTIMIZATION.md` §5.3（已归档）。
 
 ### 部署到 Cloudflare
 
@@ -333,17 +333,14 @@ film-sort3/
 
 | 文档 | 用途 |
 |------|------|
+| [`docs/PLAN-ui-refresh.md`](docs/PLAN-ui-refresh.md) | **UI 焕新总记录**（§10 执行盘点 / 运维预案 / 遗留清单） |
 | [`docs/FEATURES.md`](docs/FEATURES.md) | **已实现功能全量清单与回归走查基线**——改完 UI 逐条走查 |
 | [`docs/USAGE.md`](docs/USAGE.md) | 面向用户的操作指南 |
 | [`docs/API.md`](docs/API.md) | 后端 API 参考 |
 | [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | 技术架构与数据流 |
 | [`docs/CLOUDFLARE.md`](docs/CLOUDFLARE.md) | 部署方式与绑定配置 |
 | [`docs/DOUBAN_API.md`](docs/DOUBAN_API.md) | 豆瓣数据抓取细节 |
-| [`docs/OPTIMIZATION.md`](docs/OPTIMIZATION.md) | 优化路线图、实施状态与待办池 |
-| [`docs/PLAN-poster-pipeline.md`](docs/PLAN-poster-pipeline.md) | 海报管线计划（含实施记录与偏离说明） |
-| [`docs/PLAN-plaza.md`](docs/PLAN-plaza.md) | 广场功能计划 |
-| [`docs/UI_REVIEW.md`](docs/UI_REVIEW.md) | UI 审查记录 |
-| [`docs/REVIEW-2026-09-external-reports.md`](docs/REVIEW-2026-09-external-reports.md) | 对外部 AI 分析报告的核验结论（历史记录） |
+| [`docs/archive/`](docs/archive/) | **已过时归档**（历史计划 / 审查记录 / 优化路线图）——仅作追溯，**请勿据此操作** |
 
 ---
 
