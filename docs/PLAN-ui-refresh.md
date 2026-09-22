@@ -516,6 +516,11 @@ frontend-design 技能明文规则：禁 Inter/Roboto/Space Grotesk 独挑大梁
 - **CSS 死规则去重 5 条**（§2.5 纪律：只删可证实被完全遮蔽者）：toast 动画早本、guide-modal L36 + 其 600px 媒体重复块、rank-detail 行规则对（2→1 实例回填）、plaza-grid 非 `!important` 变体（被 `!important` 版本恒遮蔽）。`ranking-card-top3` "重复对"经产物核验为单实例（审计 `}` 切分口径误报）。
 - 玻璃计数变化备案：active backdrop selector 23→24（贵级玻璃两条新规则进、plaza-header 一条退哑光）——与两级制决策一致。
 
+**P1b 进行记录（P1b-1/P1b-2 完成 2026-09-22，P1b-3 + B1 待收口）**：
+- **P1b-1**（`bfa184d`）：圆角 21 语法值→五档 {3/6/12/18/999}+0/50%/复合值（映射表逐值，audit 干净）；弹簧 `cubic-bezier(.34,1.56,.64,1)` → `var(--ease-out)`（残留 0）；**玻璃两级制定案**——贵级 16px+saturate(1.2)（identity 胶囊 + 弹层面板）、普级 8px（topbar、medium-item）、17 类退哑光、`note-reader` 依 §9 不动。附带揪出**假绿门禁**：lint 4 errors 实为 `.tmp/chrome-profile-*` 内第三方扩展 JS 被扫（eslint 已忽略 `.tmp/**`），流程改为**逐项验 exit code**。
+- **P1b-2**：`scripts/ui-normalize.mjs`（映射表内置、dry-run 先行、--write 落盘、幂等）——间距 margin/padding/gap 族就近归 {4/8/12/16/24/32/48/64}（平手取小、<4px 向上映射＝呼吸只增不减、**|Δ|>6 保留原值**＝宏观留白 10 处留 P3/P5 视图阶段）；字阶 ±1px 归档（12→13/14→15/16→17/18→17/19→20/21→20/30→29，共 79 处）；负边距（出血拼贴）与定位/尺寸属性绝不触碰。dry-run 首版曾出 10 处超容差映射（130/140px→64px 级塌陷）——**被 dry-run 拦截**，工具纪律再次验证。
+- **B0 已随 P1a.5 78% 刷新**（270/270 确定性零 diff；刷新触达 270/270 屏＝muted 文本遍布全矩阵）。P1b 全部收口后正式捕获 **B1** 并出 B0→B1 容差判读报告。
+
 **B0 基线快照（2026-09-22，✅ 完成）**：**270 张** = 9 视图 × 6 主题 × 5 视口（540/600/720/800/1300），warm + capture 双跑共 540 张全部成功。确定性 **268/270 严格零 diff**；仅 2 张 `*-classic-600`（home/source）各 **55 像素 / maxDelta 22 / bbox 同位**（x≈589 CSS，顶栏图标区）＝**衬线字形 AA 微抖（非确定源 #5）**，classic 人格 × 600px 组合专属。**B0→B1 判读补充豁免**：≤100 像素且 maxDelta ≤25 且 bbox 稳定的差异按 AA 噪声处理，不计违规。存档 `.tmp/ns/b0/`（工具产物不进 git）；setup/sorting/compare 工作态截屏待 P3a 补拍补全为完整基线（当前为 URL 可达态，含守卫/空态——这些也是真实状态）。**BOM 教训（工程）**：Windows PowerShell 5.1 的 `Set-Content -Encoding UTF8` 写出带 BOM 的 UTF-8 会炸 `JSON.parse`，且窄输出过滤器会吞掉报错——`ui-shot.mjs` 解析层已做 BOM 容错，批任务输出禁止窄过滤器。
 
 **P1a / P1a.5 执行记录（2026-09-22，✅ 完成）**：
