@@ -93,3 +93,22 @@ describe("P1b/P2/P3 收敛绊线", () => {
     expect((app.match(/role="dialog"/g) ?? []).length).toBeGreaterThanOrEqual(9);
   });
 });
+
+describe("P5a 主题人格绊线（非色彩差异 ≥2/主题）", () => {
+  it("retro 旧式印刷所：直角 + 宋体栈 + 62ch 首行缩进 + 双线书眉", () => {
+    expect(css).toContain("[data-theme=retro]{--r-xs:0");
+    expect(css).toContain("Songti SC");
+    expect(css).toContain("max-width:62ch;text-indent:2em");
+    expect(css).toContain("[data-theme=retro] .topbar{border-bottom:3px double");
+  });
+  it("cyber 终端 HUD：mono 主导 + 人格发光（§5.1）+ 扫描线", () => {
+    expect(css).toContain('body[data-theme=cyber]{font-family:"Cascadia Mono"');
+    expect(css).toMatch(/\[data-theme=cyber\][^{]*\{[^}]*box-shadow:0 0 18px/);
+    expect(css).toContain("[data-theme=cyber] .topbar nav button.active{text-shadow");
+  });
+  it("minimal 瑞士网格：全直角 + 字重对比 + 加长 hairline", () => {
+    expect(css).toContain("[data-theme=minimal]{--r-xs:0;--r-sm:0;--r-md:0;--r-lg:0}");
+    expect(css).toContain("[data-theme=minimal] .section-heading h2::before{width:32px");
+    expect(css).toMatch(/\[data-theme=minimal\] h1,[^}]*font-weight:800/);
+  });
+});

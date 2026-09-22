@@ -527,6 +527,11 @@ frontend-design 技能明文规则：禁 Inter/Roboto/Space Grotesk 独挑大梁
 - **方法论沉淀**：容差判读不能只看 pct——≤6px 的整版平移级联即可产生 ~40% 像素 diff。判据＝**构造性位移上界 + 平移/重排签名抽查**；pct 只作异常探测器（>40% 或文本破碎才升级人工复核）。
 - **P2/P3a/P3b 合批 QA**（样张 `.tmp/ns/qa/`）：help 迁 topbar（44px IconButton + tooltip，hero 浮钮消失）、toast 24px 定案、footer colophon、对战卡四态 CSS、Setup 印刷标签/索引行、Profile 账簿行/名次牌——四层一次核验。弹层逐个开合实测并入 P4（与 FocusTrap 焦点工作同批）。
 
+**P3c/P4/P5a 执行记录（2026-09-22，✅）**：
+- **P3c 八界面** + **回归绊线套件**（`src/ui-fixes.test.ts`，累计 18 条断言 / 295 tests）把 P0-P5a 关键修复全部固化；绊线体系三连胜实录：提交-内容不符拦截、断言过严自红（卡片级浮起合法 vs 行级禁令的"法内之法"）、揪出漏网 `medium-item:hover` 行级浮起。
+- **P4 hover 分级治理**（§2.3 浮起分级）：6 处行/页签级浮起降级"背景+hairline"（collection-row !important 等量改写零膨胀）；卡片级 `--ev-2` 一档合规保留；骨架屏节奏 `--dur-pulse` token 化；内滚 fade mask；aria 意外收获——15 处 dialog `role="dialog" aria-modal` 已全覆盖（UI_REVIEW 旧账基本还清，余量 aria-label 命名）。
+- **P5a 主题人格化·机制 + retro/cyber/minimal 先行**（非色彩差异 ≥2/主题，绊线固化）：**retro 旧式印刷所**＝全直角（--r-*→0/2）+ 衬线全面主导（宋体族硬栈，修复 display 回落 Segoe 的老 bug）+ 双线书眉 + 信纸横线纹 + 慢半拍（--dur 200/320/420）+ 正文 62ch 首行缩进 2em（四轮追加项）；**cyber 终端 HUD**＝mono 全面主导 + 人格发光（§5.1 合法）+ 扫描线纹 + 快节奏（110/180ms）；**minimal 瑞士网格**＝全直角 + 字重对比（800/-0.02em）+ 加长 hairline 标记 + 全面 inset 网格线。
+
 **B0 基线快照（2026-09-22，✅ 完成）**：**270 张** = 9 视图 × 6 主题 × 5 视口（540/600/720/800/1300），warm + capture 双跑共 540 张全部成功。确定性 **268/270 严格零 diff**；仅 2 张 `*-classic-600`（home/source）各 **55 像素 / maxDelta 22 / bbox 同位**（x≈589 CSS，顶栏图标区）＝**衬线字形 AA 微抖（非确定源 #5）**，classic 人格 × 600px 组合专属。**B0→B1 判读补充豁免**：≤100 像素且 maxDelta ≤25 且 bbox 稳定的差异按 AA 噪声处理，不计违规。存档 `.tmp/ns/b0/`（工具产物不进 git）；setup/sorting/compare 工作态截屏待 P3a 补拍补全为完整基线（当前为 URL 可达态，含守卫/空态——这些也是真实状态）。**BOM 教训（工程）**：Windows PowerShell 5.1 的 `Set-Content -Encoding UTF8` 写出带 BOM 的 UTF-8 会炸 `JSON.parse`，且窄输出过滤器会吞掉报错——`ui-shot.mjs` 解析层已做 BOM 容错，批任务输出禁止窄过滤器。
 
 **P1a / P1a.5 执行记录（2026-09-22，✅ 完成）**：
