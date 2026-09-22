@@ -9,6 +9,7 @@ import {
 } from "../shared/storedItem";
 
 const encoder = new TextEncoder();
+import { pbkdf2Sync } from "node:crypto";
 import { sendVerificationCode, type MailerEnv } from "./mailer";
 const json = (data: unknown, status = 200) =>
   new Response(JSON.stringify(data), {
@@ -31,8 +32,10 @@ export async function adminAuthLocal(request: Request, db: D1Database): Promise<
 // ===== Password hashing =====
 // Current scheme: PBKDF2-SHA256 with per-user salt, stored as pbkdf2$<iterations>$<salt>$<hash>.
 // Legacy unsalted SHA-256 hashes are still verified and transparently upgraded on successful login.
-// PBKDF2-SHA256：OWASP 对 HMAC-SHA256 的建议量级为 600k。旧 100k 在登录成功后自动升级。
-const PBKDF2_ITERATIONS = 600_000;
+// 轮数取平台上限：workerd（含 nodejs_compat 的 node:crypto）PBKDF2 硬限 100,000 轮，
+// 600k（OWASP 2023 HMAC-SHA256 建议量级）在 CF 侧直接抛错——散列格式自带 iterations 字段，
+// 未来迁离 Cloudflare 可对新散列无痛调回更高轮数（存量按存储值验证）。
+const PBKDF2_ITERATIONS = 100_000;
 
 function toHex(bytes: ArrayBuffer | Uint8Array): string {
   const view = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
@@ -50,15 +53,10 @@ export async function hashPasswordStrong(password: string): Promise<string> {
 }
 
 async function pbkdf2(password: string, salt: Uint8Array, iterations: number): Promise<string> {
-  const key = await crypto.subtle.importKey("raw", encoder.encode(password), "PBKDF2", false, [
-    "deriveBits",
-  ]);
-  const bits = await crypto.subtle.deriveBits(
-    { name: "PBKDF2", hash: "SHA-256", salt, iterations },
-    key,
-    256,
-  );
-  return toHex(bits);
+  // workerd 的 crypto.subtle PBKDF2 有 100k 轮硬上限（600k 直接抛错）；
+  // node:crypto（nodejs_compat）走 OpenSSL 实现无此限制。PBKDF2 为标准构造，
+  // 同参数同输出——存量 pbkdf2$ 散列与 subtle 实现产物互验互通，轮数保持 OWASP 600k。
+  return toHex(pbkdf2Sync(password, salt, iterations, 32, "sha256"));
 }
 
 export function timingSafeEqual(a: string, b: string): boolean {

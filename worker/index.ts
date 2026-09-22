@@ -2963,7 +2963,10 @@ export default {
         error = err.message;
       } else {
         console.error("unhandled worker error", err instanceof Error ? err.stack : err);
-        response = json({ error: "internal_error" }, 500);
+        response = json(
+          { error: "internal_error", detail: err instanceof Error ? err.message : String(err) },
+          500,
+        );
         error = err instanceof Error ? err.message : "unknown";
       }
     }
