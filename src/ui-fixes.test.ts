@@ -78,4 +78,18 @@ describe("P1b/P2/P3 收敛绊线", () => {
       '<IconButton title={t("使用说明", "Guide")} onClick={() => setShowGuide(true)}>',
     );
   });
+  it("hover 浮起分级：行级/页签级浮起不复活（卡片级如 plaza-sticker 合法保留）", () => {
+    expect(css).not.toMatch(/\.collection-row:hover\{[^}]*translateY/);
+    expect(css).not.toMatch(/\.dim-chip:hover\{[^}]*translateY/);
+    expect(css).not.toMatch(/\.medium-item:hover\{[^}]*translateY/);
+    expect(css).not.toMatch(/\.custom-suggestion:hover\{[^}]*transform/);
+  });
+  it("骨架屏节奏 token 化（--dur-pulse）且内滚 fade 在位", () => {
+    expect(css).toContain("--dur-pulse:1.5s");
+    expect(css).toMatch(/\.artwork-info,\.candidate-scroll\{[^}]*mask-image/);
+  });
+  it("dialog 面板 role/aria-modal 覆盖不回退（无障碍等价）", () => {
+    const app = readFileSync("src/App.tsx", "utf8");
+    expect((app.match(/role="dialog"/g) ?? []).length).toBeGreaterThanOrEqual(9);
+  });
 });
