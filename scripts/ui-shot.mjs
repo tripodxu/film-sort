@@ -92,32 +92,38 @@ const shots = JSON.parse(readFileSync(shotsFile, "utf8").replace(/^\uFEFF/, ""))
 mkdirSync(outDir, { recursive: true });
 
 const server = createServer((req, res) => {
-  const url = new URL(req.url ?? "/", "http://x");
-  let file = join(DIST, decodeURIComponent(url.pathname));
-  if (!extname(file) || !existsSync(file) || statSync(file).isDirectory()) {
-    file = join(DIST, "index.html");
+  // 加固：handler 未捕获异常会杀整个进程（dist 被并发重建清空 = ENOENT 教训）
+  try {
+    const url = new URL(req.url ?? "/", "http://x");
+    let file = join(DIST, decodeURIComponent(url.pathname));
+    if (!extname(file) || !existsSync(file) || statSync(file).isDirectory()) {
+      file = join(DIST, "index.html");
+    }
+    const type = MIME[extname(file)] ?? "application/octet-stream";
+    res.setHeader("content-type", type);
+    if (type.startsWith("text/html") && seed) {
+      // 预置注入（工具层，零应用代码改动）：
+      // ① 抑制首访「使用说明」引导弹窗（App.tsx 读 art-rank:guide-dismissed）
+      // ② 确定性 PRNG 替换 Math.random —— 冻结 sampleByKind 每挂载随机挑封面（UI_REVIEW #2.4）
+      // ③ 图片去过渡 —— 消除 Poster.tsx opacity:0→onLoad 渐显的时序抖动
+      let html = readFileSync(file, "utf8");
+      const extra = extraSeed(shots[Number(url.searchParams.get("__shot") ?? -1)] ?? {});
+      html = html.replace(
+        "</head>",
+        `<script>try{localStorage.setItem("art-rank:guide-dismissed","1");` +
+          `Math.random=(function(){let s=0x9E3779B9|0;return function(){` +
+          `s=(s+0x6D2B79F5)|0;let t=Math.imul(s^(s>>>15),1|s);` +
+          `t=(t+Math.imul(t^(t>>>7),61|t))^t;return ((t^(t>>>14))>>>0)/4294967296;};})();` +
+          `${extra}}catch(e){}</script><style>img{transition:none!important;animation:none!important}</style></head>`,
+      );
+      res.end(html);
+      return;
+    }
+    createReadStream(file).pipe(res);
+  } catch (e) {
+    console.error(`  serve error: ${(e && e.message) || e}`);
+    res.end();
   }
-  const type = MIME[extname(file)] ?? "application/octet-stream";
-  res.setHeader("content-type", type);
-  if (type.startsWith("text/html") && seed) {
-    // 预置注入（工具层，零应用代码改动）：
-    // ① 抑制首访「使用说明」引导弹窗（App.tsx 读 art-rank:guide-dismissed）
-    // ② 确定性 PRNG 替换 Math.random —— 冻结 sampleByKind 每挂载随机挑封面（UI_REVIEW #2.4）
-    // ③ 图片去过渡 —— 消除 Poster.tsx opacity:0→onLoad 渐显的时序抖动
-    let html = readFileSync(file, "utf8");
-    const extra = extraSeed(shots[Number(url.searchParams.get("__shot") ?? -1)] ?? {});
-    html = html.replace(
-      "</head>",
-      `<script>try{localStorage.setItem("art-rank:guide-dismissed","1");` +
-        `Math.random=(function(){let s=0x9E3779B9|0;return function(){` +
-        `s=(s+0x6D2B79F5)|0;let t=Math.imul(s^(s>>>15),1|s);` +
-        `t=(t+Math.imul(t^(t>>>7),61|t))^t;return ((t^(t>>>14))>>>0)/4294967296;};})();` +
-        `${extra}}catch(e){}</script><style>img{transition:none!important;animation:none!important}</style></head>`,
-    );
-    res.end(html);
-    return;
-  }
-  createReadStream(file).pipe(res);
 });
 await new Promise((r) => server.listen(0, "127.0.0.1", r));
 const base = `http://127.0.0.1:${server.address().port}`;
