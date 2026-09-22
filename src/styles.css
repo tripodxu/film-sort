@@ -1086,7 +1086,7 @@ body[data-theme=classic]{
 @media(max-width:540px){
   [data-layout="journey"] .medium-grid{scroll-snap-type:x proximity}
 }
-[data-layout="bento"] .medium-grid{grid-template-columns:repeat(3,minmax(0,1fr))}
+[data-layout="bento"] .medium-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr))}
 [data-layout="bento"] .medium-grid>.medium-item:first-child{grid-column:span 2}
 [data-layout="bento"] .plaza-grid{--plaza-cols:3}
 [data-layout="bento"] .plaza-grid>:first-child{grid-column:span 2}

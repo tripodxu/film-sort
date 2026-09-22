@@ -145,7 +145,10 @@ describe("P5c 布局模式绊线", () => {
     expect(css).toContain('[data-layout="journey"] .journey-rail{');
     expect(css).toContain(".journey-chevron{");
   });
-  it("bento 零空洞纪律：仅首项扩格（禁 mod-3/dense 回潮）", () => {
+  it("bento 零空洞纪律：仅首项扩格（禁 mod-3/dense 回潮）+ 自带 display:grid（.medium-grid{display:block} 会使其失效）", () => {
+    expect(css).toContain(
+      '[data-layout="bento"] .medium-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr))}',
+    );
     expect(css).toContain(
       '[data-layout="bento"] .medium-grid>.medium-item:first-child{grid-column:span 2}',
     );
