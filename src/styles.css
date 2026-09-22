@@ -15,7 +15,7 @@
   --surface-glow:color-mix(in srgb,var(--accent) 10%,var(--bg));
   --text-hi:var(--text);
   --text-2:color-mix(in srgb,var(--text) 88%,var(--bg));
-  --text-3:color-mix(in srgb,var(--text) 74%,var(--bg));
+  --text-3:color-mix(in srgb,var(--text) 78%,var(--bg));
   --text-4:color-mix(in srgb,var(--text) 55%,var(--bg));
   --muted:var(--text-3);
   --line:color-mix(in srgb,var(--text) 17%,transparent);

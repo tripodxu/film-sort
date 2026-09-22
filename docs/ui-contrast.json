@@ -1,0 +1,555 @@
+{
+  "generatedAt": "2026-09-22T12:41:48.495Z",
+  "formulas": {
+    "surface": 7,
+    "surface3": 13,
+    "surfaceHover": 12,
+    "text2": 88,
+    "text3": 78
+  },
+  "themes": {
+    "modern": {
+      "bg": [
+        8,
+        10,
+        10
+      ],
+      "surface": [
+        24,
+        26,
+        26
+      ],
+      "surface3": [
+        38,
+        40,
+        39
+      ],
+      "surfaceHover": [
+        36,
+        38,
+        37
+      ],
+      "text": [
+        238,
+        242,
+        236
+      ],
+      "text2": [
+        210,
+        214,
+        209
+      ],
+      "text3": [
+        187,
+        191,
+        186
+      ]
+    },
+    "retro": {
+      "bg": [
+        244,
+        242,
+        236
+      ],
+      "surface": [
+        229,
+        228,
+        222
+      ],
+      "surface3": [
+        216,
+        215,
+        210
+      ],
+      "surfaceHover": [
+        218,
+        217,
+        212
+      ],
+      "text": [
+        29,
+        37,
+        33
+      ],
+      "text2": [
+        55,
+        62,
+        57
+      ],
+      "text3": [
+        76,
+        82,
+        78
+      ]
+    },
+    "minimal": {
+      "bg": [
+        250,
+        250,
+        250
+      ],
+      "surface": [
+        234,
+        234,
+        234
+      ],
+      "surface3": [
+        220,
+        220,
+        220
+      ],
+      "surfaceHover": [
+        222,
+        222,
+        222
+      ],
+      "text": [
+        20,
+        20,
+        20
+      ],
+      "text2": [
+        48,
+        48,
+        48
+      ],
+      "text3": [
+        71,
+        71,
+        71
+      ]
+    },
+    "simple": {
+      "bg": [
+        245,
+        247,
+        250
+      ],
+      "surface": [
+        231,
+        233,
+        237
+      ],
+      "surface3": [
+        218,
+        221,
+        225
+      ],
+      "surfaceHover": [
+        220,
+        223,
+        227
+      ],
+      "text": [
+        38,
+        49,
+        61
+      ],
+      "text2": [
+        63,
+        73,
+        84
+      ],
+      "text3": [
+        84,
+        93,
+        103
+      ]
+    },
+    "classic": {
+      "bg": [
+        243,
+        234,
+        214
+      ],
+      "surface": [
+        230,
+        221,
+        201
+      ],
+      "surface3": [
+        219,
+        210,
+        191
+      ],
+      "surfaceHover": [
+        221,
+        212,
+        192
+      ],
+      "text": [
+        58,
+        47,
+        34
+      ],
+      "text2": [
+        80,
+        69,
+        56
+      ],
+      "text3": [
+        99,
+        88,
+        74
+      ]
+    },
+    "cyber": {
+      "bg": [
+        5,
+        6,
+        10
+      ],
+      "surface": [
+        20,
+        23,
+        27
+      ],
+      "surface3": [
+        32,
+        37,
+        42
+      ],
+      "surfaceHover": [
+        30,
+        35,
+        39
+      ],
+      "text": [
+        215,
+        245,
+        255
+      ],
+      "text2": [
+        190,
+        216,
+        226
+      ],
+      "text3": [
+        169,
+        192,
+        201
+      ]
+    }
+  },
+  "matrix": [
+    {
+      "theme": "modern",
+      "pair": "text3 on bg",
+      "ratio": 10.66,
+      "need": "meta 11/12px → 需 4.5"
+    },
+    {
+      "theme": "modern",
+      "pair": "text3 on surface",
+      "ratio": 9.38,
+      "need": "meta 11/12px → 需 4.5"
+    },
+    {
+      "theme": "modern",
+      "pair": "text3 on surface3",
+      "ratio": 7.97,
+      "need": "meta 11/12px → 需 4.5"
+    },
+    {
+      "theme": "modern",
+      "pair": "text3 on surfaceHover",
+      "ratio": 8.18,
+      "need": "meta 11/12px → 需 4.5"
+    },
+    {
+      "theme": "modern",
+      "pair": "text2 on surface3",
+      "ratio": 10.09,
+      "need": "small 13px → 需 4.5"
+    },
+    {
+      "theme": "modern",
+      "pair": "text on bg",
+      "ratio": 17.53,
+      "need": "正文 → 需 4.5"
+    },
+    {
+      "theme": "retro",
+      "pair": "text3 on bg",
+      "ratio": 7.15,
+      "need": "meta 11/12px → 需 4.5"
+    },
+    {
+      "theme": "retro",
+      "pair": "text3 on surface",
+      "ratio": 6.28,
+      "need": "meta 11/12px → 需 4.5"
+    },
+    {
+      "theme": "retro",
+      "pair": "text3 on surface3",
+      "ratio": 5.55,
+      "need": "meta 11/12px → 需 4.5"
+    },
+    {
+      "theme": "retro",
+      "pair": "text3 on surfaceHover",
+      "ratio": 5.66,
+      "need": "meta 11/12px → 需 4.5"
+    },
+    {
+      "theme": "retro",
+      "pair": "text2 on surface3",
+      "ratio": 7.63,
+      "need": "small 13px → 需 4.5"
+    },
+    {
+      "theme": "retro",
+      "pair": "text on bg",
+      "ratio": 14.01,
+      "need": "正文 → 需 4.5"
+    },
+    {
+      "theme": "minimal",
+      "pair": "text3 on bg",
+      "ratio": 8.9,
+      "need": "meta 11/12px → 需 4.5"
+    },
+    {
+      "theme": "minimal",
+      "pair": "text3 on surface",
+      "ratio": 7.72,
+      "need": "meta 11/12px → 需 4.5"
+    },
+    {
+      "theme": "minimal",
+      "pair": "text3 on surface3",
+      "ratio": 6.78,
+      "need": "meta 11/12px → 需 4.5"
+    },
+    {
+      "theme": "minimal",
+      "pair": "text3 on surfaceHover",
+      "ratio": 6.91,
+      "need": "meta 11/12px → 需 4.5"
+    },
+    {
+      "theme": "minimal",
+      "pair": "text2 on surface3",
+      "ratio": 9.62,
+      "need": "small 13px → 需 4.5"
+    },
+    {
+      "theme": "minimal",
+      "pair": "text on bg",
+      "ratio": 17.65,
+      "need": "正文 → 需 4.5"
+    },
+    {
+      "theme": "simple",
+      "pair": "text3 on bg",
+      "ratio": 6.23,
+      "need": "meta 11/12px → 需 4.5"
+    },
+    {
+      "theme": "simple",
+      "pair": "text3 on surface",
+      "ratio": 5.5,
+      "need": "meta 11/12px → 需 4.5"
+    },
+    {
+      "theme": "simple",
+      "pair": "text3 on surface3",
+      "ratio": 4.91,
+      "need": "meta 11/12px → 需 4.5"
+    },
+    {
+      "theme": "simple",
+      "pair": "text3 on surfaceHover",
+      "ratio": 5,
+      "need": "meta 11/12px → 需 4.5"
+    },
+    {
+      "theme": "simple",
+      "pair": "text2 on surface3",
+      "ratio": 6.72,
+      "need": "small 13px → 需 4.5"
+    },
+    {
+      "theme": "simple",
+      "pair": "text on bg",
+      "ratio": 12.31,
+      "need": "正文 → 需 4.5"
+    },
+    {
+      "theme": "classic",
+      "pair": "text3 on bg",
+      "ratio": 5.8,
+      "need": "meta 11/12px → 需 4.5"
+    },
+    {
+      "theme": "classic",
+      "pair": "text3 on surface",
+      "ratio": 5.14,
+      "need": "meta 11/12px → 需 4.5"
+    },
+    {
+      "theme": "classic",
+      "pair": "text3 on surface3",
+      "ratio": 4.62,
+      "need": "meta 11/12px → 需 4.5"
+    },
+    {
+      "theme": "classic",
+      "pair": "text3 on surfaceHover",
+      "ratio": 4.71,
+      "need": "meta 11/12px → 需 4.5"
+    },
+    {
+      "theme": "classic",
+      "pair": "text2 on surface3",
+      "ratio": 6.22,
+      "need": "small 13px → 需 4.5"
+    },
+    {
+      "theme": "classic",
+      "pair": "text on bg",
+      "ratio": 10.9,
+      "need": "正文 → 需 4.5"
+    },
+    {
+      "theme": "cyber",
+      "pair": "text3 on bg",
+      "ratio": 10.68,
+      "need": "meta 11/12px → 需 4.5"
+    },
+    {
+      "theme": "cyber",
+      "pair": "text3 on surface",
+      "ratio": 9.48,
+      "need": "meta 11/12px → 需 4.5"
+    },
+    {
+      "theme": "cyber",
+      "pair": "text3 on surface3",
+      "ratio": 8.14,
+      "need": "meta 11/12px → 需 4.5"
+    },
+    {
+      "theme": "cyber",
+      "pair": "text3 on surfaceHover",
+      "ratio": 8.36,
+      "need": "meta 11/12px → 需 4.5"
+    },
+    {
+      "theme": "cyber",
+      "pair": "text2 on surface3",
+      "ratio": 10.38,
+      "need": "small 13px → 需 4.5"
+    },
+    {
+      "theme": "cyber",
+      "pair": "text on bg",
+      "ratio": 17.74,
+      "need": "正文 → 需 4.5"
+    }
+  ],
+  "search": [
+    {
+      "pct": 78,
+      "minRatio": 4.62,
+      "worst": "classic/text3 on surface3"
+    },
+    {
+      "pct": 79,
+      "minRatio": 4.77,
+      "worst": "classic/text3 on surface3"
+    },
+    {
+      "pct": 80,
+      "minRatio": 4.92,
+      "worst": "classic/text3 on surface3"
+    },
+    {
+      "pct": 81,
+      "minRatio": 5.02,
+      "worst": "classic/text3 on surface3"
+    },
+    {
+      "pct": 82,
+      "minRatio": 5.18,
+      "worst": "classic/text3 on surface3"
+    },
+    {
+      "pct": 83,
+      "minRatio": 5.34,
+      "worst": "classic/text3 on surface3"
+    },
+    {
+      "pct": 84,
+      "minRatio": 5.49,
+      "worst": "classic/text3 on surface3"
+    },
+    {
+      "pct": 85,
+      "minRatio": 5.66,
+      "worst": "classic/text3 on surface3"
+    },
+    {
+      "pct": 86,
+      "minRatio": 5.84,
+      "worst": "classic/text3 on surface3"
+    },
+    {
+      "pct": 87,
+      "minRatio": 6.03,
+      "worst": "classic/text3 on surface3"
+    },
+    {
+      "pct": 88,
+      "minRatio": 6.22,
+      "worst": "classic/text3 on surface3"
+    },
+    {
+      "pct": 89,
+      "minRatio": 6.34,
+      "worst": "classic/text3 on surface3"
+    },
+    {
+      "pct": 90,
+      "minRatio": 6.52,
+      "worst": "classic/text3 on surface3"
+    },
+    {
+      "pct": 91,
+      "minRatio": 6.73,
+      "worst": "classic/text3 on surface3"
+    },
+    {
+      "pct": 92,
+      "minRatio": 6.94,
+      "worst": "classic/text3 on surface3"
+    },
+    {
+      "pct": 93,
+      "minRatio": 7.15,
+      "worst": "classic/text3 on surface3"
+    },
+    {
+      "pct": 94,
+      "minRatio": 7.37,
+      "worst": "classic/text3 on surface3"
+    },
+    {
+      "pct": 95,
+      "minRatio": 7.6,
+      "worst": "classic/text3 on surface3"
+    },
+    {
+      "pct": 96,
+      "minRatio": 7.84,
+      "worst": "classic/text3 on surface3"
+    }
+  ],
+  "recommendation": {
+    "text3Pct": 78,
+    "minRatio": 4.62,
+    "worst": "classic/text3 on surface3",
+    "action": "keep 78%"
+  }
+}
