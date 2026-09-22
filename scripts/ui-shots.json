@@ -1,0 +1,5 @@
+[
+  { "name": "home-540", "path": "/", "width": 540, "height": 960 },
+  { "name": "home-800", "path": "/", "width": 800, "height": 1000 },
+  { "name": "profile-800", "path": "/myself", "width": 800, "height": 1000 }
+]
