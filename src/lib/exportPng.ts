@@ -332,8 +332,7 @@ export async function renderProfilePng({
 
   // ===== 各榜单 =====
   let cursor = headerH;
-  const rankLabel = (rank: number) =>
-    rank <= 3 ? ["🥇", "🥈", "🥉"][rank - 1] : String(rank).padStart(2, "0");
+  const rankLabel = (rank: number) => String(rank).padStart(2, "0");
 
   for (const entry of exportRankings) {
     const kc = resolveColor(kindColor(p, entry.kind));

@@ -315,7 +315,7 @@ export function CompareView({
                           {entry.items.slice(0, 3).map((item, i) => (
                             <div className="ranking-card-top3-item" key={item.id}>
                               <span className="ranking-card-top3-medal">
-                                {i === 0 ? "🥇" : i === 1 ? "🥈" : "🥉"}
+                                {String(i + 1).padStart(2, "0")}
                               </span>
                               <Poster work={item} kind={entry.kind} />
                               <span className="ranking-card-top3-name">{item.title}</span>
@@ -436,7 +436,7 @@ export function CompareView({
                           {entry.items.slice(0, 3).map((item, i) => (
                             <div className="ranking-card-top3-item" key={item.id}>
                               <span className="ranking-card-top3-medal">
-                                {i === 0 ? "🥇" : i === 1 ? "🥈" : "🥉"}
+                                {String(i + 1).padStart(2, "0")}
                               </span>
                               <Poster work={item} kind={entry.kind} />
                               <span className="ranking-card-top3-name">{item.title}</span>

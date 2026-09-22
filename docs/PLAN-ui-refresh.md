@@ -367,7 +367,7 @@ body{background-color:var(--bg);
 | P0 | 清理工作区 + **本计划提交入 git**（§8.3 前置）→ 基线重锚定（行数口径脚本钉死、断点全表、!important/hex 口径统一，刷新 §10.3） | 无 | — | 0.5d |
 | P0.5 | **可行性验证门**：headless Chrome 批量出图 + 像素 diff 全链路跑通？tsc/eslint/format 全绿？工作区干净？——任一失败先停 | 无 | 三项通过制 | 0.5d |
 | P0.7 | **北极星屏（四轮 #二.1，全计划最高杠杆）**：Home（hero+四媒介入口+collection 行）+ Profile 榜单页**两屏真实 CSS**，以 `.note-reader` 为质感基准；真实内容上试出圆角/字阶/噪点/hairline/玻璃两级/打印材质 → **反推 token 档位**（§2.1 数值在此定案）；两屏成为全计划审美验收基准；含 medium-grid 胶囊 vs 索引对比稿（0.2d，§4.1）与玻璃/材质取舍定案 | 中（定方向） | 两屏 × 六主题快照 + 对比稿评审 | 1d（✅ 完成 2026-09-22，实耗约 0.5d，§10.7） |
-| P0.9 | **速赢批**（三轮 #三：小时级、独立可交付）：kind 徽章统一媒介色（职责表回收）；toast 避让 FAB（过渡措施）；8/9px 字号清零；**poster hover 三重收敛一重**（删 jellyBounce + L65 弹簧过渡）；plaza-header 压平；CSS 死规则去重（§2.5）；**奖牌四处替换 + 同步去 `aria-hidden`**；scroll-top 触控补 44px（help-dot 随 P2 迁 topbar 解决）→ 收尾拍 **B0**（B0 定义 = 速赢后状态，见 §5.4） | 低 | 四门禁 + 局部矩阵 + 奖牌/字号逐处核对 | 0.5d |
+| P0.9 | **速赢批**（三轮 #三：小时级、独立可交付）：kind 徽章统一媒介色（职责表回收）；toast 避让 FAB（过渡措施）；8/9px 字号清零；**poster hover 三重收敛一重**（删 jellyBounce + L65 弹簧过渡）；plaza-header 压平；CSS 死规则去重（§2.5）；**奖牌四处替换 + 同步去 `aria-hidden`**；scroll-top 触控补 44px（help-dot 随 P2 迁 topbar 解决）→ 收尾拍 **B0**（B0 定义 = 速赢后状态，见 §5.4） | 低 | 四门禁 + 局部矩阵 + 奖牌/字号逐处核对 | 0.5d（✅ 完成 2026-09-22，§10.7） |
 | P1a | Token 声明（5 档圆角/间距/字阶/两档字号/L2）+ **散落 hex 归零（17 处）** + kind 徽章 token 引用核验 + 媒介色越界使用回收（前置：§2.5 去重已完成）（纯增量、**零 diff 可证**） | 极低 | 四门禁 + **零 diff 快照（seed 模式 `--tol 0` 严格零；非 seed `--tol 8`，见 §8.0）** | 0.5d |
 | P1a.5 | **浅色四主题对比度扫描与 `--text-3` 定案（四轮 #三.6，纯脚本）**：retro/minimal/simple/classic 的 `color-mix` surface + `--text-3`（74% 混合，承担 44×11px + 44×12px meta）从未做过 4.5:1 验证——结果决定是否上调混合比；**若上调属 L1 token 变更，必须在 P1b 前定案**，否则 P1b/P2/P3 全部基线重拍。本计划唯一"先后顺序显著影响成本"的依赖 | 低 | 对比度报告（组合×字号矩阵）+ L1 定案记录 | 0.5d |
 | P1b | 裸数值归一 + 字体栈 + 噪点（§2 余下）——**顺序：圆角收敛先行**（12 值→5 档、弹层统一单档）**再间距**（三轮 #一.1）；交付物明列 **玻璃两级制（贵级 2 类 + 普级 2 类，其余 17 类退哑光）**、阴影 36→2、动效曲线统一（含 jelly 残留清理） | 低（有容差位移） | 四门禁 + **B0→B1** 快照按 §2.1 容差判 + 动效节奏录屏 + 移动端滚动帧率手测 | 1.5d |
@@ -507,6 +507,14 @@ frontend-design 技能明文规则：禁 Inter/Roboto/Space Grotesk 独挑大梁
 - **工程教训**：CSS 特异性陷阱——旧 `.medium-item`（0-1-0）在 minified 产物中胜出新规则（渲染成旧内部网格、描述文案漂到右下角），统一 `.medium-grid>` 前缀（0-2-0）后按设计渲染；特异性问题**必须以渲染事实裁决**，产物 grep 只能证明"存在"不能证明"获胜"。
 - **二稿（用户评审：「和之前相比没什么变化」→ 一稿是打磨不是改造，批评成立）**：v2 动构图骨架——masthead 报头（h1 上下 1px+3px-double 夹线、字号拉到 clamp 138px）、**竖排书脊**（`writing-mode:vertical-rl` 中文副标，CJK 一等公民手法）、**目录巨号行**（46px mono 编号 + 64×92 海报 + 点线引线，替掉四列卡）、**名录账簿**（38px 名次巨号 + 前三名 accent 色 + 23px 标题）、**索引页签**（dim-chip 直角 + 3px 媒介色顶边 + 激活上浮 4px）、**角标著录卡**（export-tools accent 裁切角）。实测 v1→v2 Home **20.0% 像素变化 / maxDelta 232**。原则沉淀：**北极星迭代的验收线是「形态骨架变化」而非「细节精致度」，每稿先问：拿掉颜色还认得出是新版吗？**
 - **三稿（用户「再加半档力度」）+ 收尾修复**：衬线**三行叠印报名**（ART / 巨型斜体 lime 斜杠 / RANK，斜杠即分隔线）、**海报出血叠压**（冲破行线 + 静态深度阴影 + 巨号左悬挂）、**名次满版墨块**（前三名 accent 实底名次牌）、**CJK 首字下沉**、accent 粗段落标记。收尾三修复：hero 高度 auto（3 行报名撑爆 570px 固定高）、`home-actions` 旧 absolute 定位钉子（引文被按钮压住的真凶）、meta 点线引线显形。**特异性钉子沉淀**：medium 全系 `.x.x>.y.y` 类权重翻倍（0-4-0 级）压过旧隐藏规则；`.orb-hero.orb-hero`/`.home-actions.home-actions` 同理。
+
+**P0.9 速赢批执行记录（2026-09-22，✅ 完成）**：
+- **奖牌实为 5 处**（审查口径 4 处 + **`exportPng.ts:336` 漏计**——导出 PNG 的画布里同样画奖牌，跨平台渲染问题在导出物上更严重）：全部换 mono `01/02/03`（padStart 等价文本，三元塌缩零逻辑变化），`RankingDetail` 与 `PlazaView` 两处 `aria-hidden` **同步移除**（新文本是名次信息非装饰——硬规从 1 处扩到 2 处）。
+- **hover 三重收敛一重**：删 `@keyframes jellyBounce` + L66 挂载 + L65 `.4s` 弹簧过渡；单反馈 = `img scale(1.03)`（`.22s` 普通 ease）+ hairline 变 accent。
+- **字号清零口径修正**：8px 实为 **2 处**（row-number 徽章 8→10 数字白名单 / metrics-more-grid help 8→11）、9px 实为 **3 处**（metric-help 9→11 ×2 / comparison 区 1 处 9→11）——审查"8×2/9×2"少算 1 处 9px；复跑 `ui-audit.mjs` 确认 8px=0、9px=0（10px 19→20：row-number 徽章入白名单）。
+- **kind 徽章并入媒介色职责表**（`--ok/--indigo/--pink/--warn` → `--film/--book/--music/--other`）；toast `bottom:88px` 避让 FAB（过渡，P2 help 迁 topbar 后定夺）；plaza-header 压平（三重渐变 + blur20 + r20 → 平面 + hairline + r6）；scroll-top 40→44px。
+- **CSS 死规则去重 5 条**（§2.5 纪律：只删可证实被完全遮蔽者）：toast 动画早本、guide-modal L36 + 其 600px 媒体重复块、rank-detail 行规则对（2→1 实例回填）、plaza-grid 非 `!important` 变体（被 `!important` 版本恒遮蔽）。`ranking-card-top3` "重复对"经产物核验为单实例（审计 `}` 切分口径误报）。
+- 玻璃计数变化备案：active backdrop selector 23→24（贵级玻璃两条新规则进、plaza-header 一条退哑光）——与两级制决策一致。
 
 ---
 

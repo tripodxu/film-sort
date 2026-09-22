@@ -627,15 +627,7 @@ export function ProfileView({
             <ol className="ranking-list">
               {activeRanking.items.map((work) => (
                 <li key={work.id}>
-                  <span className="row-number">
-                    {work.rank <= 3
-                      ? work.rank === 1
-                        ? "🥇"
-                        : work.rank === 2
-                          ? "🥈"
-                          : "🥉"
-                      : String(work.rank).padStart(2, "0")}
-                  </span>
+                  <span className="row-number">{String(work.rank).padStart(2, "0")}</span>
                   <div
                     className="ranking-card-poster"
                     style={{ cursor: "pointer" }}

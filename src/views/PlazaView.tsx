@@ -302,9 +302,7 @@ export function PlazaView({
               <div className="plaza-sticker-posters">
                 {(post.top_items ?? post.items ?? []).slice(0, 3).map((work, idx) => (
                   <div key={work.id} className="plaza-sticker-poster">
-                    <span className="plaza-sticker-medal" aria-hidden="true">
-                      {idx === 0 ? "🥇" : idx === 1 ? "🥈" : "🥉"}
-                    </span>
+                    <span className="plaza-sticker-medal">{String(idx + 1).padStart(2, "0")}</span>
                     <Poster work={work} kind={(post.kind ?? "other") as MediaKind} />
                   </div>
                 ))}
