@@ -46,10 +46,12 @@ export function useAuth(deps: Omit<AuthDeps, "setDraft"> & { setDraft?: (d: unkn
   const [accountEmail, setAccountEmail] = useState("");
   const [accountNickname, setAccountNickname] = useState("");
   const [accountToken, setAccountToken] = useState(() => stored("art-rank:account-token") ?? "");
-  const [authMode, setAuthMode] = useState<"login" | "register">("login");
+  const [authMode, setAuthMode] = useState<"login" | "register" | "reset">("login");
   const [authEmail, setAuthEmail] = useState("");
   const [authPassword, setAuthPassword] = useState("");
   const [authNickname, setAuthNickname] = useState("");
+  const [authCode, setAuthCode] = useState("");
+  const [codeCooldown, setCodeCooldown] = useState(0);
   const [authError, setAuthError] = useState("");
   const [needNickname, setNeedNickname] = useState(false);
   const [editingNickname, setEditingNickname] = useState(false);
@@ -175,8 +177,45 @@ export function useAuth(deps: Omit<AuthDeps, "setDraft"> & { setDraft?: (d: unkn
     }
   }, []);
 
+  // 验证码下发（注册/修改密码共用）——60s 倒计时防连点
+  useEffect(() => {
+    if (codeCooldown <= 0) return;
+    const timer = window.setTimeout(() => setCodeCooldown((c) => c - 1), 1000);
+    return () => window.clearTimeout(timer);
+  }, [codeCooldown]);
+
+  const sendAuthCode = useCallback(async () => {
+    const d = depsRef.current;
+    setAuthError("");
+    if (!authEmail.trim()) {
+      setAuthError(d.t("请填写邮箱", "Please enter your email"));
+      return;
+    }
+    if (codeCooldown > 0 || busy) return;
+    setBusy(true);
+    try {
+      const purpose = authMode === "register" ? "register" : "reset";
+      const response = await fetch("/api/account/send-code", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ email: authEmail, purpose }),
+      });
+      const data = (await response.json()) as { error?: string; msg?: string };
+      if (!response.ok) {
+        setAuthError(data.msg ?? data.error ?? d.t("发送失败", "Failed"));
+        return;
+      }
+      setCodeCooldown(60);
+      d.setNotice(d.t("验证码已发送，请查收邮箱。", "Verification code sent."));
+    } catch {
+      setAuthError(d.t("网络错误", "Network error"));
+    } finally {
+      setBusy(false);
+    }
+  }, [authEmail, authMode, codeCooldown, busy]);
+
   const accountAuth = useCallback(
-    async (mode: "login" | "register") => {
+    async (mode: "login" | "register" | "reset") => {
       const d = depsRef.current;
       setAuthError("");
       setBusy(true);
@@ -186,6 +225,28 @@ export function useAuth(deps: Omit<AuthDeps, "setDraft"> & { setDraft?: (d: unkn
           setBusy(false);
           return;
         }
+        if (mode !== "login" && !authCode.trim()) {
+          setAuthError(d.t("请填写邮箱验证码", "Please enter the email code"));
+          setBusy(false);
+          return;
+        }
+        if (mode === "reset") {
+          const response = await fetch("/api/account/change-password", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ email: authEmail, code: authCode, password: authPassword }),
+          });
+          const data = (await response.json()) as { error?: string; msg?: string };
+          if (!response.ok) {
+            setAuthError(data.msg ?? data.error ?? d.t("操作失败", "Failed"));
+            return;
+          }
+          d.setNotice(d.t("密码已修改，请用新密码登录。", "Password changed. Sign in with it."));
+          setAuthMode("login");
+          setAuthCode("");
+          setAuthPassword("");
+          return;
+        }
         const response = await fetch(`/api/account/${mode}`, {
           method: "POST",
           headers: { "content-type": "application/json" },
@@ -193,6 +254,7 @@ export function useAuth(deps: Omit<AuthDeps, "setDraft"> & { setDraft?: (d: unkn
             email: authEmail,
             password: authPassword,
             nickname: authNickname || undefined,
+            ...(mode === "register" ? { code: authCode } : {}),
           }),
         });
         const data = (await response.json()) as {
@@ -212,6 +274,7 @@ export function useAuth(deps: Omit<AuthDeps, "setDraft"> & { setDraft?: (d: unkn
         setAuthEmail("");
         setAuthPassword("");
         setAuthNickname("");
+        setAuthCode("");
         try {
           localStorage.setItem("art-rank:account-token", data.token);
         } catch {}
@@ -254,7 +317,7 @@ export function useAuth(deps: Omit<AuthDeps, "setDraft"> & { setDraft?: (d: unkn
         setBusy(false);
       }
     },
-    [authEmail, authPassword, authNickname],
+    [authEmail, authPassword, authNickname, authCode, authMode],
   );
 
   const saveNickname = useCallback(async () => {
@@ -434,6 +497,10 @@ export function useAuth(deps: Omit<AuthDeps, "setDraft"> & { setDraft?: (d: unkn
     setBusy,
     // Functions
     accountAuth,
+    sendAuthCode,
+    authCode,
+    setAuthCode,
+    codeCooldown,
     accountSave,
     accountLoad,
     syncProfile,

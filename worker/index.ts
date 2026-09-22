@@ -2806,7 +2806,9 @@ async function route(request: Request, env: Env): Promise<Response> {
       const authWrite =
         url.pathname === "/api/account/register" ||
         url.pathname === "/api/account/login" ||
-        url.pathname === "/api/account/oauth/exchange";
+        url.pathname === "/api/account/oauth/exchange" ||
+        url.pathname === "/api/account/send-code" ||
+        url.pathname === "/api/account/change-password";
       const bucket = authWrite ? "account_auth" : "account";
       const limit = authWrite ? 8 : 30;
       if (!(await allowUpstreamRequest(request, bucket, limit)))

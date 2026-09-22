@@ -222,6 +222,10 @@ export default function App() {
     cloudConflict,
     setCloudConflict,
     accountAuth,
+    sendAuthCode,
+    authCode,
+    setAuthCode,
+    codeCooldown,
     accountSave,
     accountLoad,
     saveNickname,
@@ -2058,6 +2062,16 @@ export default function App() {
                   >
                     {t("注册", "Register")}
                   </button>
+                  <button
+                    className={`button ${authMode === "reset" ? "primary" : "secondary"}`}
+                    onClick={() => {
+                      setAuthMode("reset");
+                      setAuthError("");
+                    }}
+                    style={{ flex: 1 }}
+                  >
+                    {t("修改密码", "Change password")}
+                  </button>
                 </div>
                 {authError && (
                   <p style={{ color: "#f87171", fontSize: 13, marginBottom: 8 }}>{authError}</p>
@@ -2078,9 +2092,32 @@ export default function App() {
                   onChange={(e) => setAuthEmail(e.target.value)}
                   style={{ marginBottom: 8 }}
                 />
+                {authMode !== "login" && (
+                  <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
+                    <input
+                      type="text"
+                      placeholder={t("邮箱验证码", "Email code")}
+                      value={authCode}
+                      onChange={(e) => setAuthCode(e.target.value)}
+                      style={{ flex: 1 }}
+                    />
+                    <button
+                      className="button secondary"
+                      disabled={busy || codeCooldown > 0}
+                      onClick={() => void sendAuthCode()}
+                      style={{ whiteSpace: "nowrap" }}
+                    >
+                      {codeCooldown > 0 ? `${codeCooldown}s` : t("获取验证码", "Get code")}
+                    </button>
+                  </div>
+                )}
                 <input
                   type="password"
-                  placeholder={t("密码（至少6位）", "Password (6+ chars)")}
+                  placeholder={
+                    authMode === "reset"
+                      ? t("新密码（至少6位）", "New password (6+ chars)")
+                      : t("密码（至少6位）", "Password (6+ chars)")
+                  }
                   value={authPassword}
                   onChange={(e) => setAuthPassword(e.target.value)}
                   onKeyDown={(e) => {
@@ -2093,7 +2130,11 @@ export default function App() {
                   disabled={busy}
                   onClick={() => void accountAuth(authMode)}
                 >
-                  {authMode === "login" ? t("登录", "Sign in") : t("注册", "Register")}
+                  {authMode === "login"
+                    ? t("登录", "Sign in")
+                    : authMode === "register"
+                      ? t("注册", "Register")
+                      : t("修改密码", "Change password")}
                 </button>
               </>
             )}

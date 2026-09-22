@@ -243,7 +243,7 @@ npx wrangler login
 npx wrangler d1 create film-sort
 # 记下 database_id，填入 wrangler.jsonc
 
-# 应用数据库迁移（共 23 个，最新 0022_poster_urls 海报地址侧表）
+# 应用数据库迁移（共 24 个，最新 0023_verification_codes 邮箱验证码）
 npx wrangler d1 migrations apply film-sort --remote
 
 # 部署
