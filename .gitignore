@@ -16,3 +16,5 @@ _doulist_probe*
 .zcode/
 ch1.json
 ch2.json
+
+.tmp/
