@@ -538,7 +538,7 @@ frontend-design 技能明文规则：禁 Inter/Roboto/Space Grotesk 独挑大梁
 
 ## 10.8 发布前执行记录与运维预案（2026-09-22）
 
-**回滚预案**：全程每阶段独立 commit（P0→P5c 共 20+ 个），`git revert <sha>` 单阶段整体回滚；`src/ui-fixes.test.ts` **24 条绊线**守护全部已修事实，任何回退在测试层先红。CSS 与 className 改动未混入任何逻辑 commit（§0 承诺兑现）。
+**回滚预案**：全程每阶段独立 commit（P0→P5c 共 20+ 个），`git revert <sha>` 单阶段整体回滚；`src/ui-fixes.test.ts` **25 条绊线**守护全部已修事实，任何回退在测试层先红。CSS 与 className 改动未混入任何逻辑 commit（§0 承诺兑现）。
 
 **遗留清单（下期）**：dialog `aria-label` 命名补齐；journey 轨道接线余量（candidate/collection/plaza 的 chevron 包裹，CSS 已备）；WorkEditor/Reorder 深度样式；`.guide-help-btn` 死规则 + 阴影源码级折叠；setup/sorting/compare 工作态 B 系补拍；display 族 22px+ 档位表与宏观留白 10 处的视图阶段定夺。
 
@@ -569,11 +569,11 @@ frontend-design 技能明文规则：禁 Inter/Roboto/Space Grotesk 独挑大梁
 | P4 全站收编 | ✅ | hover 浮起分级治理 6 处、骨架屏 token、内滚 fade、表单收编；dialog aria 覆盖 15 处 |
 | P5a 主题人格化 | ✅ | retro/cyber/minimal 人格（非色彩差异 4-6 项/主题）+ 绊线 |
 | P5b 收尾批 | ✅ | simple/classic 人格、纹理配额 ≤3%、对比度复扫 keep 78%、六主题实拍 12/12 |
-| P5c 布局模式 | ✅ | `layout.ts`+切换 UI+journey/bento；18 组合矩阵 18/18；三模式高视口实证 |
+| P5c 布局模式 | ✅ | `layout.ts`+切换 UI+journey/bento；18 组合矩阵 18/18；三模式高视口实证（journey 4.01% / bento 3.34%）；reduced-motion 专项补全 |
 | 发布前 | ✅ | CHANGELOG/README/回滚预案/遗留清单/真机清单（§10.8）；真机验收归发布窗口（该行本就标注不进阶段门禁） |
 | B1 重锚定 | 🔄 | `.tmp/ns/b1r`（`--profile b1r` 独立命名空间，warm+capture 双跑零 diff 核销中） |
 
-**质量护栏终值**：24 条回归绊线 / **301 tests** 全绿；四门禁 exit 0；20+ 阶段独立 commit 可逐个 revert；6 个非确定源、3 条特异性战术、编码/并发/流程教训全数入册（§8.0/§10.x）。
+**质量护栏终值**：**25 条**回归绊线 / **302 tests** 全绿；四门禁 exit 0；20+ 阶段独立 commit 可逐个 revert；6 个非确定源、3 条特异性战术、编码/并发/流程教训全数入册（§8.0/§10.x）。
 
 **B0 基线快照（2026-09-22，✅ 完成）**：**270 张** = 9 视图 × 6 主题 × 5 视口（540/600/720/800/1300），warm + capture 双跑共 540 张全部成功。确定性 **268/270 严格零 diff**；仅 2 张 `*-classic-600`（home/source）各 **55 像素 / maxDelta 22 / bbox 同位**（x≈589 CSS，顶栏图标区）＝**衬线字形 AA 微抖（非确定源 #5）**，classic 人格 × 600px 组合专属。**B0→B1 判读补充豁免**：≤100 像素且 maxDelta ≤25 且 bbox 稳定的差异按 AA 噪声处理，不计违规。存档 `.tmp/ns/b0/`（工具产物不进 git）；setup/sorting/compare 工作态截屏待 P3a 补拍补全为完整基线（当前为 URL 可达态，含守卫/空态——这些也是真实状态）。**BOM 教训（工程）**：Windows PowerShell 5.1 的 `Set-Content -Encoding UTF8` 写出带 BOM 的 UTF-8 会炸 `JSON.parse`，且窄输出过滤器会吞掉报错——`ui-shot.mjs` 解析层已做 BOM 容错，批任务输出禁止窄过滤器。
 
