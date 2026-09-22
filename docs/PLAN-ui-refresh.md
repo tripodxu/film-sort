@@ -548,6 +548,33 @@ frontend-design 技能明文规则：禁 Inter/Roboto/Space Grotesk 独挑大梁
 
 **部署文档结论**：CSP 不变（`font-src 'self' data:`）；零新增运行时依赖（`layout.ts` 31 行为唯一新增 lib 模块）；Worker/数据面零改动——CLOUDFLARE/ARCHITECTURE 无需变更，README/CHANGELOG 已增补。
 
+---
+
+## 10.9 全目标完成盘点（PLAN-ui-refresh.md 任务清单逐项证据）
+
+| 阶段 | 状态 | 证据 |
+|---|---|---|
+| P0 清树+提交+基线重锚定 | ✅ | 三组逻辑提交；`ui-audit.mjs` 口径钉死 → `docs/ui-baseline.json` |
+| P0.5 可行性验证门 | ✅ | `ui-shot`/`ui-diff` 全链路；确定性判据定标（噪底→tol0 演进）；三条早期教训入库 |
+| P0.7 北极星屏 | ✅ | 两屏三轮迭代（v1 精修→v2 动骨架→v3 半档）；token 反推定案；对比稿裁决；6 主题快照 |
+| P0.9 速赢批 | ✅ | 奖牌 **5 处**换 01/02/03+去 aria-hidden；hover 三重→一重；8/9px 清零；kind 职责表；死规则去重 5 条 |
+| B0 基线 | ✅ | 270×2，确定性 268/270（AA 例外已豁免留档） |
+| P1a token+hex 归零 | ✅ | scattered 17→**0**；验证矩阵 **270/270 tol-0 零 diff** |
+| P1a.5 对比度定案 | ✅ | 实测破线 4.11→**78% 定案 4.62**；`ui-contrast.mjs` + `docs/ui-contrast.json`；B0 刷新 |
+| P1b 裸数值归一 | ✅ | 圆角 21→五档、间距 8px 阶梯（violations=0）、字阶 ±1px×79、阴影 36→2、玻璃两级制；B1 捕获 270/270 零 diff；**B0→B1 容差判读 PASS**（构造性上界+签名抽查） |
+| P2 壳层 | ✅ | help 迁 topbar（第六类豁免）、toast 定案、footer colophon、弹层 scrim |
+| P3a Home/Setup/Sorting | ✅ | 对战卡四态、内滚治本（第七类豁免）、Setup 印刷标签/索引行、品味年轮收编 |
+| P3b Profile 余部 | ✅ | rank-pill 印刷标签、rank-date mono、页头双线收口 |
+| P3c 八界面 | ✅ | Compare/Share/Plaza/PlazaPost/评论线/批注底栏收编；**回归绊线套件**诞生 |
+| P4 全站收编 | ✅ | hover 浮起分级治理 6 处、骨架屏 token、内滚 fade、表单收编；dialog aria 覆盖 15 处 |
+| P5a 主题人格化 | ✅ | retro/cyber/minimal 人格（非色彩差异 4-6 项/主题）+ 绊线 |
+| P5b 收尾批 | ✅ | simple/classic 人格、纹理配额 ≤3%、对比度复扫 keep 78%、六主题实拍 12/12 |
+| P5c 布局模式 | ✅ | `layout.ts`+切换 UI+journey/bento；18 组合矩阵 18/18；三模式高视口实证 |
+| 发布前 | ✅ | CHANGELOG/README/回滚预案/遗留清单/真机清单（§10.8）；真机验收归发布窗口（该行本就标注不进阶段门禁） |
+| B1 重锚定 | 🔄 | `.tmp/ns/b1r`（`--profile b1r` 独立命名空间，warm+capture 双跑零 diff 核销中） |
+
+**质量护栏终值**：24 条回归绊线 / **301 tests** 全绿；四门禁 exit 0；20+ 阶段独立 commit 可逐个 revert；6 个非确定源、3 条特异性战术、编码/并发/流程教训全数入册（§8.0/§10.x）。
+
 **B0 基线快照（2026-09-22，✅ 完成）**：**270 张** = 9 视图 × 6 主题 × 5 视口（540/600/720/800/1300），warm + capture 双跑共 540 张全部成功。确定性 **268/270 严格零 diff**；仅 2 张 `*-classic-600`（home/source）各 **55 像素 / maxDelta 22 / bbox 同位**（x≈589 CSS，顶栏图标区）＝**衬线字形 AA 微抖（非确定源 #5）**，classic 人格 × 600px 组合专属。**B0→B1 判读补充豁免**：≤100 像素且 maxDelta ≤25 且 bbox 稳定的差异按 AA 噪声处理，不计违规。存档 `.tmp/ns/b0/`（工具产物不进 git）；setup/sorting/compare 工作态截屏待 P3a 补拍补全为完整基线（当前为 URL 可达态，含守卫/空态——这些也是真实状态）。**BOM 教训（工程）**：Windows PowerShell 5.1 的 `Set-Content -Encoding UTF8` 写出带 BOM 的 UTF-8 会炸 `JSON.parse`，且窄输出过滤器会吞掉报错——`ui-shot.mjs` 解析层已做 BOM 容错，批任务输出禁止窄过滤器。
 
 **P1a / P1a.5 执行记录（2026-09-22，✅ 完成）**：
