@@ -107,6 +107,11 @@ function isValidEmail(email: string): boolean {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
 }
 
+// 邮箱统一规范化（小写）：SQLite `=` 大小写敏感，大小写不一致会"查无此码/查无此人"。
+function normalizeEmail(email: string): string {
+  return email.trim().toLowerCase();
+}
+
 function validateCollectionBody(body: Record<string, unknown> | null): {
   kind: "film" | "book" | "music" | "other";
   title: string;
@@ -369,23 +374,30 @@ async function consumeVerificationCode(
   email: string,
   purpose: "register" | "reset",
   code: string,
-): Promise<boolean> {
+): Promise<{ ok: true } | { error: string; msg: string }> {
+  const normalizedEmail = normalizeEmail(email);
+  // 码值去空白：复制粘贴/字距产生的空白不再把对码打成错码。
+  const normalizedCode = code.replace(/\s+/g, "");
   const row = await db
     .prepare(
-      "SELECT id, code_hash, attempts FROM verification_codes WHERE email = ? AND purpose = ? AND expires_at > datetime('now') ORDER BY id DESC LIMIT 1",
+      "SELECT id, code_hash, attempts, expires_at > datetime('now') AS alive FROM verification_codes WHERE email = ? AND purpose = ? ORDER BY id DESC LIMIT 1",
     )
-    .bind(email, purpose)
-    .first<{ id: number; code_hash: string; attempts: number }>();
-  if (!row || row.attempts >= CODE_MAX_ATTEMPTS) return false;
-  if ((await sha256Hex(code)) !== row.code_hash) {
+    .bind(normalizedEmail, purpose)
+    .first<{ id: number; code_hash: string; attempts: number; alive: number }>();
+  if (!row) return { error: "code_not_requested", msg: "请先获取验证码" };
+  if (!row.alive) return { error: "code_expired", msg: "验证码已过期，请重新获取" };
+  if (row.attempts >= CODE_MAX_ATTEMPTS)
+    return { error: "code_locked", msg: "尝试次数过多，请重新获取验证码" };
+  if ((await sha256Hex(normalizedCode)) !== row.code_hash) {
     await db
       .prepare("UPDATE verification_codes SET attempts = attempts + 1 WHERE id = ?")
       .bind(row.id)
       .run();
-    return false;
+    const left = Math.max(0, CODE_MAX_ATTEMPTS - row.attempts - 1);
+    return { error: "invalid_code", msg: `验证码错误，还可尝试 ${left} 次` };
   }
   await db.prepare("DELETE FROM verification_codes WHERE id = ?").bind(row.id).run();
-  return true;
+  return { ok: true };
 }
 
 export async function accountRoute(request: Request, env: Env): Promise<Response> {
@@ -396,7 +408,7 @@ export async function accountRoute(request: Request, env: Env): Promise<Response
   // POST /api/account/register
   if (path === "/api/account/register" && request.method === "POST") {
     const body = await readJsonObject(request);
-    const email = cleanString(body?.email, 160);
+    const email = cleanString(body?.email, 160)?.toLowerCase() ?? null;
     const password = cleanString(body?.password, 128);
     const nickname = cleanString(body?.nickname, 40);
     const code = cleanString(body?.code, 12);
@@ -409,8 +421,9 @@ export async function accountRoute(request: Request, env: Env): Promise<Response
       .bind(email)
       .first();
     if (existing) return json({ error: "email_exists" }, 409);
-    if (!code || !(await consumeVerificationCode(env.DB, email, "register", code)))
-      return json({ error: "invalid_code", msg: "验证码错误或已过期" }, 400);
+    if (!code) return json({ error: "invalid_code", msg: "请输入邮箱验证码" }, 400);
+    const consumed = await consumeVerificationCode(env.DB, email, "register", code);
+    if ("error" in consumed) return json(consumed, 400);
     const hash = await hashPasswordStrong(password);
     const result = await env.DB.prepare(
       "INSERT INTO user_accounts (email, password_hash, nickname) VALUES (?, ?, ?)",
@@ -424,7 +437,7 @@ export async function accountRoute(request: Request, env: Env): Promise<Response
   // POST /api/account/login
   if (path === "/api/account/login" && request.method === "POST") {
     const body = await readJsonObject(request);
-    const email = cleanString(body?.email, 160);
+    const email = cleanString(body?.email, 160)?.toLowerCase() ?? null;
     const password = cleanString(body?.password, 128);
     if (!email || !password) return json({ error: "missing_fields" }, 400);
     const user = await env.DB.prepare(
@@ -453,7 +466,7 @@ export async function accountRoute(request: Request, env: Env): Promise<Response
   // POST /api/account/send-code —— 注册/修改密码共用的邮箱验证码下发（luckycola customMail 通道）
   if (path === "/api/account/send-code" && request.method === "POST") {
     const body = await readJsonObject(request);
-    const email = cleanString(body?.email, 160);
+    const email = cleanString(body?.email, 160)?.toLowerCase() ?? null;
     const purpose = cleanString(body?.purpose, 16);
     if (!email || !isValidEmail(email)) return json({ error: "invalid_email" }, 400);
     if (purpose !== "register" && purpose !== "reset")
@@ -476,7 +489,7 @@ export async function accountRoute(request: Request, env: Env): Promise<Response
   // POST /api/account/change-password —— 修改密码（邮箱验证码核验身份，免旧密码；改密吊销全部旧会话）
   if (path === "/api/account/change-password" && request.method === "POST") {
     const body = await readJsonObject(request);
-    const email = cleanString(body?.email, 160);
+    const email = cleanString(body?.email, 160)?.toLowerCase() ?? null;
     const code = cleanString(body?.code, 12);
     const password = cleanString(body?.password, 128);
     if (!email || !isValidEmail(email)) return json({ error: "invalid_email" }, 400);
@@ -488,8 +501,8 @@ export async function accountRoute(request: Request, env: Env): Promise<Response
       .first<{ id: number; disabled_at: string | null }>();
     if (!user) return json({ error: "email_notfound" }, 404);
     if (user.disabled_at) return json({ error: "account_disabled" }, 403);
-    if (!(await consumeVerificationCode(env.DB, email, "reset", code)))
-      return json({ error: "invalid_code", msg: "验证码错误或已过期" }, 400);
+    const consumed = await consumeVerificationCode(env.DB, email, "reset", code);
+    if ("error" in consumed) return json(consumed, 400);
     await env.DB.prepare("UPDATE user_accounts SET password_hash = ? WHERE id = ?")
       .bind(await hashPasswordStrong(password), user.id)
       .run();
