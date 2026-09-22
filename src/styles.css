@@ -656,23 +656,8 @@ body{
   background-color:var(--bg);
   background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='g'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='140' height='140' filter='url(%23g)' opacity='.045'/%3E%3C/svg%3E");
 }
-/* ---- 档案标头语言：mono eyebrow + 前置 16px 短线 + 11px（中英皆生效） ---- */
-.home-heading .eyebrow{
-  font-family:var(--font-mono);font-size:var(--t-meta);letter-spacing:var(--ls-wide);
-  color:var(--text-3);text-transform:uppercase;display:inline-flex;align-items:center;gap:10px
-}
-.home-heading .eyebrow::before{content:"";width:16px;height:1px;background:currentColor;opacity:.7}
-.home-heading h1{letter-spacing:-.005em;line-height:.88}
-.home-heading h1>span{color:var(--accent)}
-.home-heading h1>small{
-  display:block;margin-top:18px;font-family:var(--font-body);font-size:var(--t-small);
-  font-weight:500;letter-spacing:.34em;color:var(--text-3);line-height:1.6
-}
-.home-heading p{
-  font-family:var(--font-serif);font-size:var(--t-body);line-height:1.95;color:var(--text-2);
-  max-width:30em;margin-top:20px
-}
-.orb-hero{border-bottom:1px solid var(--line)}
+/* ---- v2 封面式构图（2026-09-22 二稿：动骨架，不是打磨） ---- */
+.orb-hero{border-bottom:3px double var(--line)}
 /* 半调网点：hero 底纹（印刷材质候选；radial-gradient 仅作图案非渐变铺底） */
 .orb-hero::after{
   content:"";position:absolute;inset:0;z-index:0;pointer-events:none;
@@ -681,17 +666,59 @@ body{
   -webkit-mask-image:linear-gradient(to bottom,transparent 0%,black 78%);
   mask-image:linear-gradient(to bottom,transparent 0%,black 78%)
 }
-.orb-hero-inner{z-index:1}
-/* ---- 玻璃两级：贵级（hero 胶囊）blur16+saturate，普级（卡片）blur8 ---- */
-.identity.glass-capsule,.home-actions.glass-capsule{
+.orb-hero-inner{
+  z-index:1;display:grid;grid-template-columns:minmax(0,1fr) auto;grid-template-rows:auto 1fr auto;
+  column-gap:48px;align-content:stretch
+}
+.home-heading{grid-column:1;grid-row:1/3;position:relative;align-self:center}
+.home-actions{grid-column:1;grid-row:3;align-self:end}
+.orb-index{grid-column:2;grid-row:3;justify-self:end;align-self:end}
+/* 档案标头：mono eyebrow + 前置 16px 短线 + 11px（中英皆生效） */
+.home-heading .eyebrow{
+  font-family:var(--font-mono);font-size:var(--t-meta);letter-spacing:var(--ls-wide);
+  color:var(--text-3);text-transform:uppercase;display:inline-flex;align-items:center;gap:10px
+}
+.home-heading .eyebrow::before{content:"";width:16px;height:1px;background:currentColor;opacity:.7}
+/* masthead 报头：上下夹线 + 大字 */
+.home-heading h1{
+  margin:24px 0 0;padding:16px 0 22px;border-top:1px solid var(--line);border-bottom:3px double var(--line);
+  letter-spacing:-.02em;line-height:.84;font-size:clamp(64px,9.5vw,138px)
+}
+.home-heading h1>span{color:var(--accent);padding-inline:.04em}
+/* 竖排书脊：中文副标沿右缘竖排（writing-mode 对 CJK 是一等公民） */
+.home-heading h1>small{
+  position:absolute;right:0;top:6px;writing-mode:vertical-rl;margin:0;
+  font-family:var(--font-mono);font-size:12px;font-weight:500;letter-spacing:.5em;color:var(--text-3)
+}
+.home-heading p{
+  position:relative;margin-top:28px;padding-left:56px;max-width:27em;
+  font-family:var(--font-serif);font-size:var(--t-body);line-height:2;color:var(--text-2)
+}
+.home-heading p::before{content:"";position:absolute;left:0;top:.85em;width:40px;height:1px;background:var(--text-3)}
+/* ---- 玻璃两级 v2：塑封档案卡（identity）+ 冲切标签条（home-actions）——几何从胶囊改直角 ---- */
+.identity.glass-capsule{
+  position:relative;border-radius:var(--r-xs);
   backdrop-filter:blur(16px) saturate(1.2);-webkit-backdrop-filter:blur(16px) saturate(1.2);
   background:color-mix(in srgb,var(--surface-3) 55%,transparent);
-  border:1px solid color-mix(in srgb,var(--text) 18%,transparent);
+  border:1px solid color-mix(in srgb,var(--text) 22%,transparent);
   box-shadow:0 16px 45px rgba(0,0,0,.22),inset 0 1px 0 color-mix(in srgb,var(--text) 8%,transparent)
 }
+.identity.glass-capsule::after{
+  content:"";position:absolute;top:-1px;left:-1px;width:10px;height:10px;
+  border-top:2px solid var(--accent);border-left:2px solid var(--accent)
+}
+.home-actions.glass-capsule{
+  border-radius:var(--r-xs);padding:5px;gap:5px;
+  backdrop-filter:blur(16px) saturate(1.2);-webkit-backdrop-filter:blur(16px) saturate(1.2);
+  background:color-mix(in srgb,var(--surface-3) 55%,transparent);
+  border:1px solid color-mix(in srgb,var(--text) 22%,transparent);
+  box-shadow:0 16px 45px rgba(0,0,0,.22)
+}
+.orb-hero .home-actions .button{border-radius:var(--r-xs);letter-spacing:.05em}
+.orb-hero .home-actions .button+.button{border-left:1px solid var(--line)}
 /* ---- 分区标头 ---- */
 .medium-section .section-heading,.profile-overview .section-heading,.profile-layout .section-heading{
-  border-top:1px solid var(--line);padding-top:16px;align-items:baseline
+  border-top:3px double var(--line);padding-top:18px;align-items:baseline
 }
 .medium-section .section-heading h2,.profile-overview .section-heading h2,.profile-layout .section-heading h2{
   display:flex;align-items:center;gap:12px;font-family:var(--font-body);font-size:16px;
@@ -707,56 +734,68 @@ body{
 /* ---- 媒介色职责表：3px 顶部短标 + 小色块（仅此处与 poster 兜底用媒介色） ---- */
 .medium-film{--media:var(--film)}.medium-book{--media:var(--book)}
 .medium-music{--media:var(--music)}.medium-other{--media:var(--other)}
-/* ---- medium 索引卡（默认稿 A，桌面；容器断点全接管：4列/2列/胶囊） ---- */
-.medium-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px}
+/* ---- medium 目录巨号行（v2 默认稿）：印刷目录 —— 巨号 + 小海报 + 点线引 ---- */
+.medium-grid{display:block}
 .medium-grid>.medium-item{
   --media:var(--text-3);
-  position:relative;display:flex;flex-direction:column;align-items:flex-start;gap:var(--sp-3);
-  padding:14px;border:1px solid var(--line);border-radius:var(--r-sm);
-  background:color-mix(in srgb,var(--surface) 55%,transparent);
-  box-shadow:inset 0 1px 0 color-mix(in srgb,var(--text) 5%,transparent);
-  transition:border-color var(--dur-1) var(--ease-out),background var(--dur-1) var(--ease-out)
+  position:relative;display:grid;grid-template-columns:84px 64px minmax(0,1fr) 28px;grid-template-rows:auto auto;
+  align-items:center;column-gap:26px;row-gap:2px;width:100%;text-align:left;
+  padding:24px 6px;border:0;border-bottom:1px solid var(--line);border-radius:0;background:transparent;box-shadow:none;
+  transition:background var(--dur-1) var(--ease-out)
 }
 .medium-grid>.medium-item::before{
-  content:"";position:absolute;left:0;right:0;top:0;height:3px;background:var(--media);opacity:.85;
-  border-radius:var(--r-sm) var(--r-sm) 0 0
+  content:"";position:absolute;left:0;top:calc(50% - 14px);width:3px;height:28px;background:var(--media);opacity:.9
 }
-.medium-grid>.medium-item:hover{border-color:color-mix(in srgb,var(--accent) 55%,transparent);background:color-mix(in srgb,var(--surface-3) 55%,transparent)}
-.medium-number{
-  font-family:var(--font-mono);font-size:var(--t-micro);letter-spacing:var(--ls-mid);
-  color:var(--text-3);font-variant-numeric:tabular-nums;order:0
+.medium-grid>.medium-item:hover{background:color-mix(in srgb,var(--text) 3.5%,transparent)}
+.medium-grid>.medium-number{
+  grid-column:1;grid-row:1/3;font-family:var(--font-mono);font-size:46px;line-height:.9;
+  letter-spacing:.02em;color:color-mix(in srgb,var(--text) 26%,transparent);
+  font-variant-numeric:tabular-nums;transition:color var(--dur-1) var(--ease-out)
 }
+.medium-grid>.medium-item:hover>.medium-number{color:var(--accent)}
 .medium-grid>.medium-item .poster-small,.medium-grid>.medium-item .poster-large{
-  width:100%;height:auto;aspect-ratio:3/4;max-height:170px;object-fit:cover;
-  border-radius:var(--r-xs);box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--text) 8%,transparent)
+  grid-column:2;grid-row:1/3;width:64px;height:92px;aspect-ratio:auto;max-height:none;object-fit:cover;
+  border-radius:var(--r-xs);box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--text) 10%,transparent)
 }
-.medium-grid>.medium-item>strong{font-family:var(--font-display);font-size:18px;font-weight:600;letter-spacing:.01em;color:var(--text-hi)}
-.medium-grid>.medium-item>small{font-family:var(--font-mono);font-size:var(--t-meta);color:var(--text-3);letter-spacing:.04em;text-align:left;padding-right:0}
+.medium-grid>.medium-item>strong{
+  grid-column:3;grid-row:1;align-self:end;font-family:var(--font-display);font-size:27px;
+  font-weight:600;letter-spacing:.01em;color:var(--text-hi)
+}
+.medium-grid>.medium-item>small{
+  grid-column:3;grid-row:2;align-self:start;display:flex;align-items:center;gap:14px;
+  font-family:var(--font-mono);font-size:var(--t-meta);color:var(--text-3);letter-spacing:.04em;text-align:left;padding-right:0
+}
+.medium-grid>.medium-item>small::after{
+  content:"";flex:1;border-bottom:1px dotted color-mix(in srgb,var(--text) 22%,transparent)
+}
 .medium-grid>.medium-item>svg:last-child{
-  position:absolute;right:14px;bottom:14px;color:var(--text-3);
+  grid-column:4;grid-row:1/3;position:static;color:var(--text-3);
   transition:color var(--dur-1) var(--ease-out),transform var(--dur-2) var(--ease-out)
 }
-.medium-grid>.medium-item:hover>svg:last-child{color:var(--accent);transform:translateX(2px)}
+.medium-grid>.medium-item:hover>svg:last-child{color:var(--accent);transform:translateX(3px)}
 @media(max-width:800px){
-  .medium-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
-  .medium-grid>.medium-item{padding:13px 14px}
-  .medium-grid>.medium-item .poster-small,.medium-grid>.medium-item .poster-large{max-height:130px}
+  .medium-grid>.medium-item{grid-template-columns:64px 56px minmax(0,1fr) 24px;column-gap:18px;padding:20px 4px}
+  .medium-grid>.medium-number{font-size:36px}
+  .medium-grid>.medium-item>strong{font-size:22px}
 }
 @media(max-width:540px){
   /* 结构性例外保留：小屏仍是胶囊横排（§2.1） */
   .medium-grid{display:flex;flex-wrap:wrap;gap:10px;border:0}
   .medium-grid>.medium-item{
     display:grid;grid-template-columns:auto auto minmax(0,1fr) auto;grid-template-rows:auto auto;
-    align-items:center;gap:4px 10px;min-height:58px;padding:9px 14px;border-radius:var(--r-pill)
+    align-items:center;gap:4px 10px;min-height:58px;padding:9px 14px;border-radius:var(--r-pill);border-bottom:0
   }
   .medium-grid>.medium-item::before{display:none}
   .medium-grid>.medium-item .poster-small,.medium-grid>.medium-item .poster-large{
     width:34px;height:48px;grid-row:1/3;grid-column:2;aspect-ratio:auto;max-height:none
   }
   .medium-grid>.medium-item>.medium-number{display:none}
-  .medium-grid>.medium-item>strong{grid-row:1;grid-column:3;font-size:15px;line-height:1.2}
-  .medium-grid>.medium-item>small{grid-row:2;grid-column:3;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:var(--t-micro)}
-  .medium-grid>.medium-item>svg:last-child{position:static;grid-row:1/3;grid-column:4;align-self:center}
+  .medium-grid>.medium-item>strong{grid-row:1;grid-column:3;font-size:15px;line-height:1.2;align-self:auto}
+  .medium-grid>.medium-item>small{
+    grid-row:2;grid-column:3;display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:var(--t-micro)
+  }
+  .medium-grid>.medium-item>small::after{display:none}
+  .medium-grid>.medium-item>svg:last-child{grid-row:1/3;grid-column:4;align-self:center}
 }
 /* ---- 对比稿 B：档案索引条目（[data-ns="index"]，≥541px 生效） ---- */
 @media(min-width:541px){
@@ -781,47 +820,58 @@ body{
     border-radius:0;background:transparent;box-shadow:none
   }
 }
-/* ---- Profile 榜单页 ---- */
-.profile-dimensions{gap:10px;margin-bottom:var(--sp-6);border-block:0}
+/* ---- Profile 榜单页 v2：名录账簿 —— 巨号名次 + 双线分区 + 索引页签 ---- */
+.profile-dimensions{gap:8px;margin-bottom:var(--sp-7);border-block:0;align-items:end}
 .dim-chip{
-  position:relative;overflow:hidden;border:1px solid var(--line);border-radius:var(--r-sm);
-  background:color-mix(in srgb,var(--surface) 55%,transparent);padding:11px 14px;gap:12px;
-  transition:border-color var(--dur-1) var(--ease-out),background var(--dur-1) var(--ease-out)
+  position:relative;overflow:visible;border:1px solid var(--line);border-top:3px solid var(--media,var(--text-3));
+  border-radius:var(--r-xs);background:color-mix(in srgb,var(--surface) 55%,transparent);padding:12px 16px;gap:12px;
+  transition:border-color var(--dur-1) var(--ease-out),background var(--dur-1) var(--ease-out),transform var(--dur-2) var(--ease-out)
 }
-.dim-chip::before{content:"";position:absolute;left:0;right:0;top:0;height:3px;background:var(--media,var(--text-3))}
-.dim-chip.active{border-color:color-mix(in srgb,var(--accent) 55%,transparent);background:color-mix(in srgb,var(--accent) 7%,transparent)}
+.dim-chip.active{transform:translateY(-4px);border-color:color-mix(in srgb,var(--accent) 55%,transparent);background:color-mix(in srgb,var(--accent) 7%,transparent)}
 .dim-chip-meta{
   font-family:var(--font-mono);font-size:var(--t-micro);letter-spacing:var(--ls-mid);
   color:var(--text-3);text-transform:uppercase
 }
 .dim-chip-text strong{display:block;font-family:var(--font-display);font-size:16px;font-weight:600;color:var(--text-hi);margin-top:3px}
-.ranking-list{border-top:1px solid var(--line)}
+.ranking-list{border-top:3px double var(--line)}
 .ranking-list>li{
-  display:grid;grid-template-columns:48px 52px minmax(0,1fr) 40px;gap:16px;align-items:center;
-  padding:13px 6px;border-bottom:1px solid var(--line);
+  display:grid;grid-template-columns:92px 52px minmax(0,1fr) auto;gap:24px;align-items:center;
+  padding:16px 4px;border-bottom:1px solid var(--line);
   transition:background var(--dur-1) var(--ease-out)
 }
 .ranking-list>li:hover{background:color-mix(in srgb,var(--text) 3.5%,transparent)}
 .row-number{
-  font-family:var(--font-mono);font-size:var(--t-small);color:var(--text-3);
-  font-variant-numeric:tabular-nums;text-align:right
+  font-family:var(--font-mono);font-size:38px;line-height:.9;color:color-mix(in srgb,var(--text) 30%,transparent);
+  font-variant-numeric:tabular-nums;text-align:left
 }
+.ranking-list>li:nth-child(-n+3) .row-number{color:var(--accent)}
 .ranking-card-poster .poster-small{
-  width:50px;height:72px;border-radius:var(--r-xs);
-  box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--text) 8%,transparent)
+  width:52px;height:76px;border-radius:var(--r-xs);
+  box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--text) 10%,transparent)
 }
-.ranking-list>li strong{display:block;font-family:var(--font-display);font-size:17px;font-weight:600;letter-spacing:.01em;color:var(--text-hi)}
-.ranking-list>li small{font-family:var(--font-mono);font-size:var(--t-micro);letter-spacing:.05em;color:var(--text-3)}
-.export-tools{border-left:1px solid var(--line);padding-left:var(--sp-5)}
+.ranking-list>li strong{display:block;font-family:var(--font-display);font-size:23px;font-weight:600;letter-spacing:.01em;color:var(--text-hi)}
+.ranking-list>li small{font-family:var(--font-mono);font-size:var(--t-meta);letter-spacing:.05em;color:var(--text-3)}
+/* 档案著录卡：角标裁切 + mono 标签 */
+.export-tools{position:relative;border:1px solid var(--line);border-radius:var(--r-xs);padding:20px}
+.export-tools::before{
+  content:"";position:absolute;top:-1px;left:-1px;width:12px;height:12px;
+  border-top:2px solid var(--accent);border-left:2px solid var(--accent)
+}
+.export-tools::after{
+  content:"";position:absolute;bottom:-1px;right:-1px;width:12px;height:12px;
+  border-bottom:2px solid var(--accent);border-right:2px solid var(--accent)
+}
 .export-tools label{
   font-family:var(--font-mono);font-size:var(--t-micro);letter-spacing:var(--ls-wide);
   text-transform:uppercase;color:var(--text-3)
 }
 @media(max-width:600px){
   .dim-chip{min-height:46px;padding:6px 12px 6px 6px}
+  .dim-chip.active{transform:none}
   .dim-chip-text strong{max-width:110px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 }
 @media(max-width:540px){
-  .ranking-list>li{grid-template-columns:36px 44px minmax(0,1fr) 36px;gap:12px}
+  .ranking-list>li{grid-template-columns:56px 44px minmax(0,1fr) 36px;gap:12px}
+  .row-number{font-size:24px}
   .ranking-card-poster .poster-small{width:44px;height:64px}
 }
