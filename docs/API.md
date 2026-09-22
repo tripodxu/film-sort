@@ -1251,7 +1251,7 @@ OAuth 回调。校验 `state` 与 `oauth_state` Cookie 一致（CSRF），自动
 
 | 方法 | 路径 | 说明 |
 |---|---|---|
-| POST | `/api/account/send-code` | 下发验证码（注册/修改密码共用）。体 `{ email, purpose: "register"\|"reset" }`。同邮箱同用途 **60s 冷却**（429 `code_cooldown`）；register 撞已注册 → 409，reset 未注册 → 404；邮件发送失败 → 502 `mail_failed`。环境变量 `MAIL_COLA_KEY` / `MAIL_SMTP_EMAIL` / `MAIL_SMTP_CODE` / `MAIL_SMTP_TYPE`（未配置走开发兜底：验证码仅写日志） |
+| POST | `/api/account/send-code` | 下发验证码（注册/修改密码共用）。体 `{ email, purpose: "register"\|"reset" }`。同邮箱同用途 **60s 冷却**（429 `code_cooldown`）；register 撞已注册 → 409，reset 未注册 → 404；邮件发送失败 → 502 `mail_failed`（`detail` 带双通道病因）。发信双通道：**Resend 主**（`RESEND_API_KEY`，可选 `MAIL_FROM`）+ luckycola 兜底（`MAIL_COLA_KEY` / `MAIL_SMTP_EMAIL` / `MAIL_SMTP_CODE` / `MAIL_SMTP_TYPE`，契约同 `scripts/mail_sender.py`）；全未配置走开发兜底（验证码仅写日志） |
 | POST | `/api/account/change-password` | 修改密码（**免旧密码**，码证身份）。体 `{ email, code, password }`，password ≥6 位；成功后吊销该用户全部旧会话 |
 
 `POST /api/account/register` 新增必填字段 `code`（purpose=register 的验证码）。验证码规格：6 位数字、**10 分钟有效**、**5 次容错**（超限作废）、一次性消耗（SHA-256 散列入库，`verification_codes` 表，迁移 `0023`）。

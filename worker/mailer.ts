@@ -1,61 +1,174 @@
-// 发信通道：luckycola customMail —— API 契约与配置键 1:1 照抄 scripts/mail_sender.py（temp_mail 工作区）。
-// 环境变量覆盖名与 mail_sender.py 完全一致：MAIL_COLA_KEY / MAIL_SMTP_EMAIL / MAIL_SMTP_CODE / MAIL_SMTP_TYPE。
+// 发信通道 v3（2026-09-22）：Resend 主通道（全球可达）+ luckycola customMail 兜底（CN 出口）。
+//
+// 定罪记录：luckycola 对 Cloudflare 海外出口返回业务拒绝 code:-14（同 key 同 payload 本机 CN IP 恒通；
+// 编码/UA/文案/收件人变量已逐一实验排除）——纯 CF 架构下它只能作兜底，不能作主通道。
+// luckycola 契约与配置键仍 1:1 照抄 scripts/mail_sender.py（temp_mail 工作区）。
+//
+// 环境变量：
+//   RESEND_API_KEY            —— Resend API key（主通道）
+//   MAIL_FROM                 —— 发件人显示（默认 "ART/RANK <onboarding@resend.dev>"；
+//                                Resend 未验证域名前仅可用 onboarding@resend.dev 且只能发到账号自有邮箱）
+//   MAIL_COLA_KEY / MAIL_SMTP_EMAIL / MAIL_SMTP_CODE / MAIL_SMTP_TYPE —— luckycola 兜底（同 mail_sender.py）
 
 export interface MailerEnv {
+  RESEND_API_KEY?: string;
+  MAIL_FROM?: string;
   MAIL_COLA_KEY?: string;
   MAIL_SMTP_EMAIL?: string;
   MAIL_SMTP_CODE?: string;
   MAIL_SMTP_TYPE?: string;
 }
 
-const API_URL = "https://luckycola.com.cn/tools/customMail"; // 文档建议优先 https
+export interface SendResult {
+  ok: boolean;
+  reason?: string;
+}
 
-/** 下发验证码邮件（注册 / 修改密码共用）。通道未配置时走开发兜底：验证码仅写日志。 */
+const RESEND_URL = "https://api.resend.com/emails";
+const LUCKYCOLA_URLS = [
+  "https://luckycola.com/tools/customMail",
+  "https://luckycola.com.cn/tools/customMail",
+];
+
+function buildHtml(action: string, code: string): string {
+  return (
+    `<div style="font-family:sans-serif;max-width:420px;margin:0 auto">` +
+    `<h3 style="margin-bottom:8px">ART/RANK · ${action}</h3>` +
+    `<p>你正在${action}，验证码 10 分钟内有效：</p>` +
+    `<p style="font-size:30px;letter-spacing:8px;font-weight:700;color:#2563eb">${code}</p>` +
+    `<p style="color:#888;font-size:12px">若非本人操作，请忽略本邮件。</p></div>`
+  );
+}
+
+/** Resend 主通道。 */
+async function sendViaResend(
+  apiKey: string,
+  from: string,
+  to: string,
+  subject: string,
+  html: string,
+): Promise<SendResult> {
+  try {
+    const response = await fetch(RESEND_URL, {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${apiKey}`,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({ from, to: [to], subject, html }),
+    });
+    const raw = await response.text();
+    let body: { id?: string; name?: string; message?: string } = {};
+    try {
+      body = JSON.parse(raw) as typeof body;
+    } catch {
+      return { ok: false, reason: `resend_bad_response_${response.status}` };
+    }
+    if (response.ok && body.id) return { ok: true };
+    return {
+      ok: false,
+      reason: `resend_${body.name ?? `http_${response.status}`}:${(body.message ?? "").slice(0, 80)}`,
+    };
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    return { ok: false, reason: /time/i.test(msg) ? "resend_timeout" : "resend_fetch_error" };
+  }
+}
+
+/** luckycola 兜底（双出口：.com 全球可解析 / .com.cn 仅 CN；契约同 mail_sender.py）。 */
+async function sendViaLuckyCola(
+  env: MailerEnv,
+  to: string,
+  subject: string,
+  html: string,
+): Promise<SendResult> {
+  const { MAIL_COLA_KEY, MAIL_SMTP_EMAIL, MAIL_SMTP_CODE } = env;
+  if (!MAIL_COLA_KEY || !MAIL_SMTP_EMAIL || !MAIL_SMTP_CODE)
+    return { ok: false, reason: "luckycola_unconfigured" };
+  const payload = JSON.stringify({
+    ColaKey: MAIL_COLA_KEY,
+    tomail: to,
+    fromTitle: "ART/RANK",
+    subject,
+    content: html,
+    isTextContent: false,
+    smtpCode: MAIL_SMTP_CODE,
+    smtpEmail: MAIL_SMTP_EMAIL,
+    smtpCodeType: env.MAIL_SMTP_TYPE ?? "163",
+  });
+  let lastReason = "luckycola_unknown";
+  for (const apiUrl of LUCKYCOLA_URLS) {
+    try {
+      const response = await fetch(apiUrl, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: payload,
+      });
+      const raw = await response.text();
+      let body: { code?: number; status?: number } = {};
+      try {
+        body = JSON.parse(raw) as { code?: number; status?: number };
+      } catch {
+        lastReason = `luckycola_bad_response_${response.status}`;
+        continue;
+      }
+      if (!response.ok) {
+        lastReason = `luckycola_http_${response.status}`;
+        continue;
+      }
+      // luckycola 成功形状（实测）：{ code: 0, msg, data }
+      if (typeof body.code === "number") {
+        if (body.code === 0 || body.code === 200) return { ok: true };
+        lastReason = `luckycola_code_${body.code}`;
+        continue;
+      }
+      if (typeof body.status === "number") {
+        if (body.status === 0 || body.status === 200) return { ok: true };
+        lastReason = `luckycola_status_${body.status}`;
+        continue;
+      }
+      return { ok: true };
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      lastReason = /time/i.test(msg) ? "luckycola_timeout" : "luckycola_fetch_error";
+      continue;
+    }
+  }
+  return { ok: false, reason: lastReason };
+}
+
+/** 下发验证码邮件（注册 / 修改密码共用）：Resend 优先，luckycola 兜底，全灭才失败。 */
 export async function sendVerificationCode(
   env: MailerEnv,
   to: string,
   code: string,
   purpose: "register" | "reset",
-): Promise<boolean> {
+): Promise<SendResult> {
   const action = purpose === "register" ? "完成注册" : "修改密码";
   const subject = `ART/RANK ${action}验证码`;
-  const content =
-    `<div style="font-family:sans-serif;max-width:420px;margin:0 auto">` +
-    `<h3 style="margin-bottom:8px">ART/RANK · ${action}</h3>` +
-    `<p>你正在${action}，验证码 10 分钟内有效：</p>` +
-    `<p style="font-size:30px;letter-spacing:8px;font-weight:700;color:#2563eb">${code}</p>` +
-    `<p style="color:#888;font-size:12px">若非本人操作，请忽略本邮件。</p></div>`;
+  const html = buildHtml(action, code);
 
-  const { MAIL_COLA_KEY, MAIL_SMTP_EMAIL, MAIL_SMTP_CODE } = env;
-  const smtpCodeType = env.MAIL_SMTP_TYPE ?? "163";
-  if (!MAIL_COLA_KEY || !MAIL_SMTP_EMAIL || !MAIL_SMTP_CODE) {
-    // 开发兜底：本地联调不被通道配置卡住；生产未配置时也只暴露到日志，不返回给调用方。
+  if (env.RESEND_API_KEY) {
+    const result = await sendViaResend(
+      env.RESEND_API_KEY,
+      env.MAIL_FROM ?? "ART-RANK <onboarding@resend.dev>",
+      to,
+      subject,
+      html,
+    );
+    if (result.ok) return result;
+    // Resend 失败不直接报死——落 luckycola 兜底；两边都死才返回失败（保留两边病因）。
+    const fallback = await sendViaLuckyCola(env, to, subject, html);
+    if (fallback.ok) return fallback;
+    return { ok: false, reason: `${result.reason}+${fallback.reason}` };
+  }
+
+  const fallback = await sendViaLuckyCola(env, to, subject, html);
+  if (fallback.ok) return fallback;
+  if (fallback.reason === "luckycola_unconfigured") {
+    // 双通道全未配置：开发兜底，验证码仅写日志。
     console.warn(`[mailer:dev] 发信通道未配置，验证码（${purpose} ${to}）：${code}`);
-    return true;
+    return { ok: true, reason: "dev" };
   }
-  try {
-    const response = await fetch(API_URL, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        ColaKey: MAIL_COLA_KEY,
-        tomail: to,
-        fromTitle: "ART/RANK",
-        subject,
-        content,
-        isTextContent: false,
-        smtpCode: MAIL_SMTP_CODE,
-        smtpEmail: MAIL_SMTP_EMAIL,
-        smtpCodeType,
-      }),
-    });
-    if (!response.ok) return false;
-    const body = (await response.json().catch(() => ({}))) as { code?: number; status?: number };
-    // luckycola 成功形状兼容：code 0/200；无显式状态码时以 HTTP 200 为准。
-    if (typeof body.code === "number") return body.code === 0 || body.code === 200;
-    if (typeof body.status === "number") return body.status === 0 || body.status === 200;
-    return true;
-  } catch {
-    return false;
-  }
+  return fallback;
 }
