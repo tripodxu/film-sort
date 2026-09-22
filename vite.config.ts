@@ -5,6 +5,7 @@ export default defineConfig({
   plugins: [react()],
   build: {
     target: "es2022",
-    sourcemap: true,
+    // 生产不外泄可下载的 source map（REVIEW P2 #15）
+    sourcemap: false,
   },
 });

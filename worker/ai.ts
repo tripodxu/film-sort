@@ -599,6 +599,8 @@ export async function callAi(
     response = await Promise.race([
       fetchImpl(url, {
         ...init,
+        // 不跟随 3xx：自定义 baseUrl 可用跳转绕过 SSRF 字面量校验。
+        redirect: "manual",
         // 推理型模型（如 mimo）生成 250 字点评实测 ~15-30s：默认超时给足 60s，
         // 否则 AbortSignal 会在上游仍在推理时掐断，表现为 upstream_error。
         signal: AbortSignal.timeout(timeoutMs),
@@ -612,6 +614,8 @@ export async function callAi(
   } catch {
     throw new AiError("upstream_error", 502, "AI upstream unreachable");
   }
+  if (response.status >= 300 && response.status < 400)
+    throw new AiError("invalid_config", 400, "AI baseUrl redirects are not allowed");
   if (response.status === 401 || response.status === 403)
     throw new AiError("upstream_auth_failed", 502, "AI upstream rejected credentials");
   if (response.status === 404 || response.status === 405)

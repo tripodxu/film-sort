@@ -62,6 +62,13 @@ describe("pickTracks 只认歌名对得上的命中", () => {
     const withDuet = [track("9", "广岛之恋", ["莫文蔚", "张洪量"])];
     expect(pickTracks(withDuet, "广岛之恋", "莫文蔚")).toHaveLength(1);
   });
+
+  it("繁简归一：告白氣球 能命中 告白气球", () => {
+    const sc = [track("10", "告白气球", ["周杰伦"])];
+    expect(pickTracks(sc, "告白氣球", "周杰伦").map((t) => t.id)).toEqual(["10"]);
+    const tc = [track("11", "告白氣球", ["周杰倫"])];
+    expect(pickTracks(tc, "告白气球", "周杰伦").map((t) => t.id)).toEqual(["11"]);
+  });
 });
 
 describe("gdSearch 的缓存只吃结构性正确的响应", () => {

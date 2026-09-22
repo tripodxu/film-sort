@@ -2,6 +2,7 @@ import type { Env } from "./index";
 import { recordAudit } from "./audit";
 import {
   MAX_PAYLOAD_BYTES,
+  encodeStoredNotes,
   encodeStoredProfile,
   encodeStoredWorks,
   healStoredProfile,
@@ -29,7 +30,8 @@ export async function adminAuthLocal(request: Request, db: D1Database): Promise<
 // ===== Password hashing =====
 // Current scheme: PBKDF2-SHA256 with per-user salt, stored as pbkdf2$<iterations>$<salt>$<hash>.
 // Legacy unsalted SHA-256 hashes are still verified and transparently upgraded on successful login.
-const PBKDF2_ITERATIONS = 100_000;
+// PBKDF2-SHA256：OWASP 对 HMAC-SHA256 的建议量级为 600k。旧 100k 在登录成功后自动升级。
+const PBKDF2_ITERATIONS = 600_000;
 
 function toHex(bytes: ArrayBuffer | Uint8Array): string {
   const view = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
@@ -171,7 +173,8 @@ async function findOrCreateOAuthUser(
   db: D1Database,
   provider: string,
   providerId: string,
-  email: string,
+  email: string | null,
+  emailVerified: boolean,
   nickname?: string,
 ): Promise<number> {
   // Check if this OAuth account already exists
@@ -191,25 +194,40 @@ async function findOrCreateOAuthUser(
     return existing.user_id;
   }
 
-  // Check if email already exists
-  const user = await db
-    .prepare("SELECT id FROM user_accounts WHERE email = ?")
-    .bind(email)
-    .first<{ id: number }>();
+  // 仅当 provider 声明邮箱已验证时才允许按邮箱并号；否则合成不可与真实邮箱碰撞的
+  // 占位地址，杜绝「未验证 OAuth 邮箱 → 接管同邮箱密码账号」。
+  const canMergeByEmail = Boolean(email && emailVerified);
+  const accountEmail = canMergeByEmail
+    ? (email as string)
+    : `oauth.${provider}.${providerId}@users.invalid`;
+
+  // Check if email already exists (verified OAuth only)
   let userId: number;
-  if (user) {
-    userId = user.id;
-    if (nickname)
-      await db
-        .prepare(
-          "UPDATE user_accounts SET nickname = ? WHERE id = ? AND (nickname IS NULL OR nickname = '')",
-        )
-        .bind(nickname, userId)
+  if (canMergeByEmail) {
+    const user = await db
+      .prepare("SELECT id FROM user_accounts WHERE email = ?")
+      .bind(accountEmail)
+      .first<{ id: number }>();
+    if (user) {
+      userId = user.id;
+      if (nickname)
+        await db
+          .prepare(
+            "UPDATE user_accounts SET nickname = ? WHERE id = ? AND (nickname IS NULL OR nickname = '')",
+          )
+          .bind(nickname, userId)
+          .run();
+    } else {
+      const result = await db
+        .prepare("INSERT INTO user_accounts (email, password_hash, nickname) VALUES (?, '', ?)")
+        .bind(accountEmail, nickname ?? null)
         .run();
+      userId = result.meta.last_row_id as number;
+    }
   } else {
     const result = await db
       .prepare("INSERT INTO user_accounts (email, password_hash, nickname) VALUES (?, '', ?)")
-      .bind(email, nickname ?? null)
+      .bind(accountEmail, nickname ?? null)
       .run();
     userId = result.meta.last_row_id as number;
   }
@@ -231,7 +249,7 @@ interface OAuthProvider {
   scope: string;
   clientId(env: Env): string | undefined;
   clientSecret(env: Env): string | undefined;
-  parseUser(data: unknown): { id: string; email: string } | null;
+  parseUser(data: unknown): { id: string; email: string | null; emailVerified: boolean } | null;
 }
 
 const oauthProviders: Record<string, OAuthProvider> = {
@@ -244,8 +262,15 @@ const oauthProviders: Record<string, OAuthProvider> = {
     clientId: (env) => env.GOOGLE_CLIENT_ID,
     clientSecret: (env) => env.GOOGLE_CLIENT_SECRET,
     parseUser(data) {
-      const d = data as { id?: string; email?: string };
-      return d.id && d.email ? { id: d.id, email: d.email } : null;
+      const d = data as { id?: string; email?: string; email_verified?: boolean };
+      if (!d.id || !d.email) return null;
+      return {
+        id: d.id,
+        email: d.email,
+        // Google userinfo 的 email_verified 缺省视为已验证（该字段存在且为 true 才是官方语义，
+        // 这里对显式 false 保守拒绝）。
+        emailVerified: d.email_verified !== false,
+      };
     },
   },
   github: {
@@ -257,15 +282,38 @@ const oauthProviders: Record<string, OAuthProvider> = {
     clientId: (env) => env.GITHUB_CLIENT_ID,
     clientSecret: (env) => env.GITHUB_CLIENT_SECRET,
     parseUser(data) {
-      const d = data as { id?: number; email?: string; login?: string };
+      const d = data as { id?: number; email?: string; verified_email?: boolean };
       if (!d.id) return null;
-      const email = d.email ?? `${d.login}@github.local`;
-      return { id: String(d.id), email };
+      // 禁止合成可并号的邮箱（旧 `${login}@github.local` 会撞真实本地域）。
+      // 无邮箱或未验证时只按 provider_id 建号，不参与邮箱并号。
+      return {
+        id: String(d.id),
+        email: d.email ?? null,
+        emailVerified: Boolean(d.email && d.verified_email),
+      };
     },
   },
 };
 
 // ===== Route Handler =====
+/** 与 index.readJson 同口径的 body 读取：限长 + 必须是 JSON 对象。 */
+const MAX_REQUEST_BYTES = 48 * 1024;
+
+async function readJsonObject(
+  request: Request,
+  maxBytes = MAX_REQUEST_BYTES,
+): Promise<Record<string, unknown> | null> {
+  const raw = await request.text();
+  if (encoder.encode(raw).byteLength > maxBytes) return null;
+  try {
+    const value: unknown = JSON.parse(raw);
+    if (typeof value !== "object" || value === null || Array.isArray(value)) return null;
+    return value as Record<string, unknown>;
+  } catch {
+    return null;
+  }
+}
+
 export async function accountRoute(request: Request, env: Env): Promise<Response> {
   if (!env.DB) return json({ error: "database_unavailable" }, 503);
   const url = new URL(request.url);
@@ -273,7 +321,7 @@ export async function accountRoute(request: Request, env: Env): Promise<Response
 
   // POST /api/account/register
   if (path === "/api/account/register" && request.method === "POST") {
-    const body = (await request.json().catch(() => null)) as Record<string, unknown> | null;
+    const body = await readJsonObject(request);
     const email = cleanString(body?.email, 160);
     const password = cleanString(body?.password, 128);
     const nickname = cleanString(body?.nickname, 40);
@@ -298,7 +346,7 @@ export async function accountRoute(request: Request, env: Env): Promise<Response
 
   // POST /api/account/login
   if (path === "/api/account/login" && request.method === "POST") {
-    const body = (await request.json().catch(() => null)) as Record<string, unknown> | null;
+    const body = await readJsonObject(request);
     const email = cleanString(body?.email, 160);
     const password = cleanString(body?.password, 128);
     if (!email || !password) return json({ error: "missing_fields" }, 400);
@@ -344,7 +392,7 @@ export async function accountRoute(request: Request, env: Env): Promise<Response
   // POST /api/account/oauth/exchange — trade a one-time code (from the OAuth redirect) for the session token
   if (path === "/api/account/oauth/exchange" && request.method === "POST") {
     if (!env.DB) return json({ error: "database_unavailable" }, 503);
-    const body = (await request.json().catch(() => null)) as Record<string, unknown> | null;
+    const body = await readJsonObject(request);
     const exchangeCode = cleanString(body?.code, 80);
     if (!exchangeCode) return json({ error: "invalid_code" }, 400);
     const row = await env.DB.prepare(
@@ -412,17 +460,17 @@ export async function accountRoute(request: Request, env: Env): Promise<Response
       const raw = userData as Record<string, unknown>;
       const providerNickname = (providerKey === "google" ? raw.name : raw.login) as
         string | undefined;
+      const emailLocal = parsed.email?.split("@")[0] || `user-${parsed.id}`;
       const nickname =
-        providerNickname && providerNickname.length > 0
-          ? providerNickname
-          : parsed.email.split("@")[0];
+        providerNickname && providerNickname.length > 0 ? providerNickname : emailLocal;
 
-      // Find or create user
+      // Find or create user（仅已验证邮箱才允许并号）
       const userId = await findOrCreateOAuthUser(
         env.DB,
         providerKey,
         parsed.id,
         parsed.email,
+        parsed.emailVerified,
         nickname,
       );
       const session = await createSession(env.DB, userId);
@@ -435,7 +483,7 @@ export async function accountRoute(request: Request, env: Env): Promise<Response
         .bind(
           exchangeCode,
           session.token,
-          parsed.email,
+          parsed.email ?? `oauth.${providerKey}.${parsed.id}@users.invalid`,
           nickname,
           new Date(Date.now() + 5 * 60 * 1000).toISOString(),
         )
@@ -542,8 +590,11 @@ export async function accountRoute(request: Request, env: Env): Promise<Response
         ? json({ error: "profile_too_large", msg: "画像数据过大，请减少作品数量。" }, 413)
         : json({ error: "invalid_profile" }, 400);
     }
-    const notesJson =
-      notes && typeof notes === "object" && !Array.isArray(notes) ? JSON.stringify(notes) : null;
+    // 批注走唯一白名单编码出口（与 share/plaza 同口径），禁止任意 JSON 整包入库；
+    // 空/全非法批注 → null → SQL COALESCE 保留原值（既有语义）。
+    const notesEncoded = encodeStoredNotes(notes);
+    if (!notesEncoded.ok) return json({ error: "notes_too_large" }, 413);
+    const notesJson = notesEncoded.json;
     await env.DB.prepare(
       "INSERT INTO user_profiles_v2 (user_id, profile, notes) VALUES (?, ?, ?) ON CONFLICT(user_id) DO UPDATE SET profile = excluded.profile, notes = COALESCE(excluded.notes, user_profiles_v2.notes), updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')",
     )
@@ -556,7 +607,7 @@ export async function accountRoute(request: Request, env: Env): Promise<Response
   if (path === "/api/account/nickname" && request.method === "PUT") {
     const user = await getUserFromToken(request, env.DB);
     if (!user) return json({ error: "authentication_required" }, 401);
-    const body = (await request.json().catch(() => null)) as Record<string, unknown> | null;
+    const body = await readJsonObject(request);
     const nickname = cleanString(body?.nickname, 40);
     if (!nickname || nickname.length < 1)
       return json({ error: "invalid_nickname", msg: "昵称必填" }, 400);
@@ -586,7 +637,8 @@ export async function accountRoute(request: Request, env: Env): Promise<Response
   if (path === "/api/account/collections" && request.method === "POST") {
     const user = await getUserFromToken(request, env.DB);
     if (!user) return json({ error: "authentication_required" }, 401);
-    const body = (await request.json().catch(() => null)) as Record<string, unknown> | null;
+    // 收藏清单可达 512KB（与 encodeStoredWorks 上限一致），不能沿用小 body 的 48KB。
+    const body = await readJsonObject(request, MAX_PAYLOAD_BYTES);
     const collection = validateCollectionBody(body);
     if (!collection) return json({ error: "invalid_collection" }, 400);
     // 唯一编码出口：收藏清单是「无 rank 的作品数组」，白名单同样只留可落库字段。
@@ -773,7 +825,7 @@ export async function accountRoute(request: Request, env: Env): Promise<Response
     if (!env.DB || !(await adminAuthLocal(request, env.DB)))
       return json({ error: "auth_required" }, 401);
     const userId = Number(resetMatch[1]);
-    const body = (await request.json().catch(() => null)) as Record<string, unknown> | null;
+    const body = await readJsonObject(request);
     const newPassword = cleanString(body?.password, 128);
     if (!newPassword || newPassword.length < 6)
       return json({ error: "invalid_password", msg: "密码至少6位" }, 400);

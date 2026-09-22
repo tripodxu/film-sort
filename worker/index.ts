@@ -16,7 +16,12 @@ import {
 } from "./media";
 import { loadPosterUrls, normalizePosterItem, saveResolvedPosters } from "./posterStore";
 import { RATE_WINDOW_MS, consumeIsolateWindow, type RateWindow } from "./rateWindow";
-import { MAX_PAYLOAD_BYTES, encodeStoredProfile, healStoredProfile } from "../shared/storedItem";
+import {
+  MAX_PAYLOAD_BYTES,
+  encodeStoredNotes,
+  encodeStoredProfile,
+  healStoredProfile,
+} from "../shared/storedItem";
 import {
   accountRoute,
   hashPasswordStrong,
@@ -176,6 +181,9 @@ async function allowUpstreamRequest(
     | "music_play"
     | "music_lyric"
     | "auth"
+    | "account"
+    | "account_auth"
+    | "plaza_write"
     | "share"
     | "import"
     | "netease"
@@ -950,14 +958,22 @@ function getAdminToken(request: Request): string | null {
 
 function assertSameOrigin(request: Request): void {
   const origin = request.headers.get("origin");
-  if (origin && origin !== new URL(request.url).origin) {
-    throw new HttpError(403, "cross_origin_forbidden", "Cross-origin writes are not allowed.");
+  if (origin) {
+    if (origin !== new URL(request.url).origin) {
+      throw new HttpError(403, "cross_origin_forbidden", "Cross-origin writes are not allowed.");
+    }
+    return;
   }
+  // 无 Origin 时必须另有明确的同源信号；两者皆缺（curl/表单跨站等）一律拒绝。
+  // 浏览器对同源 fetch 的非 GET 请求总会带 Origin 或 Sec-Fetch-Site: same-origin。
+  const site = request.headers.get("sec-fetch-site");
+  if (site === "same-origin") return;
+  throw new HttpError(403, "cross_origin_forbidden", "Cross-origin writes are not allowed.");
 }
 
-function parseContentLength(request: Request): void {
+function parseContentLength(request: Request, maxBytes = MAX_REQUEST_BYTES): void {
   const value = request.headers.get("content-length");
-  if (value && Number(value) > MAX_REQUEST_BYTES) {
+  if (value && Number(value) > maxBytes) {
     throw new HttpError(413, "payload_too_large", "Request body is too large.");
   }
 }
@@ -2764,10 +2780,38 @@ async function route(request: Request, env: Env): Promise<Response> {
     return withSecurityHeaders(await importRoute(request, env));
   }
   if (url.pathname.startsWith("/api/plaza/") || url.pathname.startsWith("/api/comments/")) {
+    if (request.method !== "GET" && request.method !== "HEAD") {
+      assertSameOrigin(request);
+      // posts 创建/编辑的 body 携带完整清单，与 handler 的 MAX_PAYLOAD_BYTES（512KB）对齐；
+      // 其余写接口（点赞/评论/可见性）都是小 body，保持 48KB。
+      const bulkWrite =
+        (url.pathname === "/api/plaza/posts" && request.method === "POST") ||
+        (url.pathname.startsWith("/api/plaza/posts/") && request.method === "PUT");
+      parseContentLength(request, bulkWrite ? MAX_PAYLOAD_BYTES : MAX_REQUEST_BYTES);
+      if (!(await allowUpstreamRequest(request, "plaza_write", 30)))
+        return withSecurityHeaders(json({ error: "rate_limited" }, 429, { "retry-after": "600" }));
+    }
     return withSecurityHeaders(await plazaRoute(request, env));
   }
   if (url.pathname.startsWith("/api/account/")) {
-    if (request.method !== "GET") assertSameOrigin(request);
+    if (request.method !== "GET") {
+      assertSameOrigin(request);
+      // profile 保存 / collections 创建携带完整清单（与 handler 的 MAX_PAYLOAD_BYTES 对齐）；
+      // 登录/注册/昵称等小 body 保持 48KB。
+      const bulkWrite =
+        (url.pathname === "/api/account/profile" && request.method === "PUT") ||
+        (url.pathname === "/api/account/collections" && request.method === "POST");
+      parseContentLength(request, bulkWrite ? MAX_PAYLOAD_BYTES : MAX_REQUEST_BYTES);
+      // 注册/登录/换票更严，其余账号写操作用宽松桶。
+      const authWrite =
+        url.pathname === "/api/account/register" ||
+        url.pathname === "/api/account/login" ||
+        url.pathname === "/api/account/oauth/exchange";
+      const bucket = authWrite ? "account_auth" : "account";
+      const limit = authWrite ? 8 : 30;
+      if (!(await allowUpstreamRequest(request, bucket, limit)))
+        return withSecurityHeaders(json({ error: "rate_limited" }, 429, { "retry-after": "600" }));
+    }
     return withSecurityHeaders(await accountRoute(request, env));
   }
   // Short-link sharing
@@ -2803,7 +2847,10 @@ async function route(request: Request, env: Env): Promise<Response> {
         : json({ error: "invalid_profile" }, 400);
     }
     const profileStr = encoded.json;
-    const notesJson = isObject(body.notes) ? JSON.stringify(body.notes) : null;
+    // 批注走白名单编码出口，禁止任意 JSON 整包入库。
+    const notesEncoded = encodeStoredNotes(body.notes);
+    if (!notesEncoded.ok) return json({ error: "notes_too_large" }, 413);
+    const notesJson = notesEncoded.json;
     const expires = new Date(Date.now() + expiresDays * 24 * 60 * 60 * 1000).toISOString();
     let code = "";
     let inserted = false;

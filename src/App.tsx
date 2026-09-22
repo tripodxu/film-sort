@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import {
   ArrowLeft,
   CloudDownload,
@@ -9,26 +9,7 @@ import {
   X,
 } from "lucide-react";
 
-import {
-  createRankingState,
-  chooseSide,
-  deferWork,
-  deserializeRankingState,
-  getCurrentComparison,
-  getRankingProgress,
-  getRankingResult,
-  serializeRankingState,
-  skipWork,
-  undoLastAction,
-  type RankingState,
-} from "./lib/ranking";
-import {
-  getCollectionsByKind,
-  mediaLabels,
-  type Artwork,
-  type MediaCollection,
-  type MediaKind,
-} from "./data/media";
+import { mediaLabels, type MediaKind } from "./data/media";
 import {
   compareDimensions,
   compareProfiles,
@@ -51,7 +32,7 @@ import {
   type RankedArtwork,
 } from "./lib/profile";
 import { importCollection } from "./lib/collections";
-import { renderProfilePng, pngFileName, type ExportLayout } from "./lib/exportPng";
+import type { ExportLayout } from "./lib/exportPng";
 import { FocusTrap } from "./components/FocusTrap";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { AiConfigDialog } from "./components/AiConfigDialog";
@@ -74,11 +55,10 @@ import { PlazaView } from "./views/PlazaView";
 import { PlazaPostView } from "./views/PlazaPostView";
 
 import { stored, track, decode, saveFile, type Locale } from "./lib/utils";
-import { useRouter, pathToView, type View } from "./lib/useRouter";
+import { useRouter, type View } from "./lib/useRouter";
 import { useAuth } from "./lib/useAuth";
 import { useSorting } from "./lib/useSorting";
 
-type Draft = { collection: MediaCollection; ranking: string; profileName: string };
 const DRAFT_KEY = "art-rank:draft:v2";
 const PEER_KEY = "art-rank:peer:v2";
 const kinds = Object.keys(mediaLabels) as MediaKind[];
@@ -87,26 +67,6 @@ const englishKinds = { film: "Films", book: "Books", music: "Music", other: "Oth
 function loadPeer() {
   try {
     return parseProfile(JSON.parse(stored(PEER_KEY) ?? ""));
-  } catch {
-    return null;
-  }
-}
-function loadDraft(): Draft | null {
-  try {
-    const data = JSON.parse(stored(DRAFT_KEY) ?? "") as Draft;
-    const state = deserializeRankingState(data.ranking);
-    if (
-      state.completed ||
-      !kinds.includes(data.collection.kind) ||
-      !Array.isArray(data.collection.works) ||
-      data.collection.works.length > 300 ||
-      !state.sourceIds.every((id) =>
-        data.collection.works.some((work) => work.id === id && typeof work.title === "string"),
-      )
-    )
-      return null;
-    getCurrentComparison(state);
-    return data;
   } catch {
     return null;
   }
@@ -149,7 +109,16 @@ export default function App() {
   const [compareSortBy, setCompareSortBy] = useState<"own" | "peer">("own");
   const [peerRankPickOpen, setPeerRankPickOpen] = useState(false);
   const [aiConfigOpen, setAiConfigOpen] = useState(false);
-  const [notice, setNotice] = useState("");
+  // toast 队列：后到的通知排在后面，避免互相顶掉（最多保留 5 条）
+  const [noticeQueue, setNoticeQueue] = useState<string[]>([]);
+  const notice = noticeQueue[0] ?? "";
+  const setNotice = (n: string) => {
+    if (!n) {
+      setNoticeQueue([]);
+      return;
+    }
+    setNoticeQueue((q) => [...q, n].slice(-5));
+  };
   const [format, setFormat] = useState<"json" | "txt" | "md" | "csv" | "png">("json");
   const [exportLayout, setExportLayout] = useState<ExportLayout>("editorial");
   const [shareUrl, setShareUrl] = useState("");
@@ -541,10 +510,10 @@ export default function App() {
     setReorderItems([]);
   }, [view]);
   useEffect(() => {
-    if (!notice) return;
-    const timer = setTimeout(() => setNotice(""), 4000);
+    if (!noticeQueue.length) return;
+    const timer = setTimeout(() => setNoticeQueue((q) => q.slice(1)), 4000);
     return () => clearTimeout(timer);
-  }, [notice]);
+  }, [noticeQueue]);
   useEffect(() => {
     const handler = (event: KeyboardEvent) => {
       if (
@@ -652,12 +621,15 @@ export default function App() {
     setDraft(null);
     setPeer(null);
     setPeerNotes({});
+    setNotes({});
     // 备份键也要一起清掉，否则读取端会把「已清除」的画像从备份里再恢复回来。
+    // notes 与登出清理集合对齐（REVIEW §6）。
     try {
       localStorage.removeItem(LIBRARY_KEY);
       localStorage.removeItem(RECOVERY_KEY);
       localStorage.removeItem(DRAFT_KEY);
       localStorage.removeItem(PEER_KEY);
+      localStorage.removeItem("art-rank:notes");
     } catch {}
     setNotice(t("本地数据已清除。", "Local data cleared."));
   }
@@ -734,6 +706,8 @@ export default function App() {
     if (format === "png") {
       setBusy(true);
       try {
+        // PNG 导出模块按需加载，不进首屏关键路径。
+        const { renderProfilePng, pngFileName } = await import("./lib/exportPng");
         const blob = await renderProfilePng({
           profile: next,
           layout: exportLayout,
@@ -1469,10 +1443,13 @@ export default function App() {
         <span>ART/RANK</span>
         <span>{t("偏好没有标准答案", "Preference has no answer key")}</span>
       </footer>
-      {notice && (
-        <div className="toast" role="status">
+      {(noticeQueue.length > 0 || notice) && (
+        <div className="toast" role="status" aria-live="polite">
           <span>{notice}</span>
-          <IconButton title={t("关闭提示", "Dismiss")} onClick={() => setNotice("")}>
+          <IconButton
+            title={t("关闭提示", "Dismiss")}
+            onClick={() => setNoticeQueue((q) => q.slice(1))}
+          >
             <X size={16} />
           </IconButton>
         </div>

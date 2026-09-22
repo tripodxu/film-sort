@@ -203,6 +203,54 @@ export function countStoredProfileWorks(profile: StoredProfile): number {
   return "rankings" in profile ? countStoredWorks(profile.rankings) : profile.items.length;
 }
 
+/** 单条批注的键与正文上限（键形如 `work:film:tt0111161` / `ranking:<kind>:<榜单名>` / `profile:…`）。 */
+const MAX_NOTE_KEY = 256;
+const MAX_NOTE_TEXT = 5000;
+const MAX_NOTE_ENTRIES = 500;
+// 键的尾段是用户自由文本（榜单名可含半角/全角空格，如「My Top 10」「我的 2024 榜单」），
+// 只禁控制字符、不禁空白——旧 `[^\s…]` 会把这类键整条静默丢掉。
+const NOTE_KEY_RE = /^(profile|ranking|work):[^\x00-\x1f\x7f]{1,248}$/;
+// 正文允许 \t\n\r（多行批注是常态），只禁其余控制字符。
+const NOTE_TEXT_BAD_RE = /[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/;
+
+/**
+ * 投影可落批注：`Record<key, string>` 白名单。
+ * 未知形状（数组/嵌套对象/超长正文/非法键）按条丢弃，不让整包任意 JSON 入库。
+ */
+export function toStoredNotes(value: unknown): Record<string, string> {
+  if (!record(value)) return {};
+  const notes: Record<string, string> = {};
+  let count = 0;
+  for (const [key, raw] of Object.entries(value)) {
+    if (count >= MAX_NOTE_ENTRIES) break;
+    const k = key.trim();
+    if (!NOTE_KEY_RE.test(k) || k.length > MAX_NOTE_KEY) continue;
+    if (typeof raw !== "string") continue;
+    const trimmed = raw.trim();
+    if (!trimmed || trimmed.length > MAX_NOTE_TEXT) continue;
+    if (NOTE_TEXT_BAD_RE.test(trimmed)) continue;
+    notes[k] = trimmed;
+    count += 1;
+  }
+  return notes;
+}
+
+/**
+ * 唯一能产出「可落库批注」字符串的出口。
+ * 空批注返回 `json: null`（库里就是 NULL），不写 `{}`，与既有读取路径一致。
+ */
+export function encodeStoredNotes(
+  value: unknown,
+  limit = MAX_PAYLOAD_BYTES,
+): { ok: true; json: string | null; count: number } | { ok: false; error: "payload_too_large" } {
+  const notes = toStoredNotes(value);
+  const count = Object.keys(notes).length;
+  if (count === 0) return { ok: true, json: null, count: 0 };
+  const json = JSON.stringify(notes);
+  if (byteLength(json) > limit) return { ok: false, error: "payload_too_large" };
+  return { ok: true, json, count };
+}
+
 export type StoredEncodeResult =
   | { ok: true; json: string; count: number }
   | { ok: false; error: "payload_too_large" | "empty_payload" };

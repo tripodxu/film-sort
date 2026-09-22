@@ -324,6 +324,7 @@ export function useAuth(deps: Omit<AuthDeps, "setDraft"> & { setDraft?: (d: unkn
     try {
       localStorage.removeItem("art-rank:account-token");
       localStorage.removeItem(LIBRARY_KEY);
+      localStorage.removeItem(`${LIBRARY_KEY}:recovery`);
       localStorage.removeItem(DRAFT_KEY);
       localStorage.removeItem(PEER_KEY);
       localStorage.removeItem("art-rank:notes");

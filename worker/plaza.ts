@@ -4,6 +4,7 @@ import { recordAudit } from "./audit";
 import { resolveStoredPosterUrls } from "./posterStore";
 import {
   MAX_PAYLOAD_BYTES,
+  encodeStoredNotes,
   encodeStoredRankings,
   encodeStoredWorks,
   toStoredRankings,
@@ -22,12 +23,26 @@ function cleanString(value: unknown, max: number): string | null {
   return !cleaned || cleaned.length > max || /[\u0000-\u001f\u007f]/.test(cleaned) ? null : cleaned;
 }
 
+/** 与 index.readJson 同口径：限长 + 必须是 JSON 对象。 */
+const MAX_REQUEST_BYTES = 48 * 1024;
+
+async function readJsonObject(request: Request): Promise<Record<string, unknown> | null> {
+  const raw = await request.text();
+  if (new TextEncoder().encode(raw).byteLength > MAX_REQUEST_BYTES) return null;
+  try {
+    const value: unknown = JSON.parse(raw);
+    if (typeof value !== "object" || value === null || Array.isArray(value)) return null;
+    return value as Record<string, unknown>;
+  } catch {
+    return null;
+  }
+}
+
 export async function plazaRoute(request: Request, env: Env): Promise<Response> {
   if (!env.DB) return json({ error: "database_unavailable" }, 503);
   const url = new URL(request.url);
   const path = url.pathname;
   const method = request.method;
-
   // GET /api/plaza/posts — list posts (paginated, filterable by kind, searchable, server-side sort)
   // 登录用户额外可见自己的隐藏帖（is_public = 0），便于找回与恢复
   if (path === "/api/plaza/posts" && method === "GET") {
@@ -187,15 +202,18 @@ export async function plazaRoute(request: Request, env: Env): Promise<Response> 
     if (!collectionTitle) return json({ error: "invalid_collection_title" }, 400);
     const description = cleanString(body.description, 500);
     const notesRaw = body.notes;
-    const notes =
-      notesRaw &&
-      typeof notesRaw === "object" &&
-      !Array.isArray(notesRaw) &&
-      Object.keys(notesRaw).length > 0
-        ? JSON.stringify(notesRaw)
-        : typeof notesRaw === "string"
-          ? cleanString(notesRaw, 50000)
-          : null;
+    // 批注走白名单编码出口；字符串形态仅接受已是对象 JSON 的兼容路径，不再整包转发。
+    let notesInput: unknown = notesRaw;
+    if (typeof notesRaw === "string" && notesRaw.trim().startsWith("{")) {
+      try {
+        notesInput = JSON.parse(notesRaw) as unknown;
+      } catch {
+        notesInput = null;
+      }
+    }
+    const notesEncoded = encodeStoredNotes(notesInput);
+    if (!notesEncoded.ok) return json({ error: "notes_too_large" }, 413);
+    const notes = notesEncoded.json;
     const isPublic =
       body.is_public === undefined || body.is_public === null ? 1 : body.is_public ? 1 : 0;
 
@@ -276,7 +294,13 @@ export async function plazaRoute(request: Request, env: Env): Promise<Response> 
     const kind = cleanString(body.kind, 20);
     const collectionTitle = cleanString(body.collection_title, 200);
     const description = cleanString(body.description, 500);
-    const notes = cleanString(body.notes, 2000);
+    // 与创建路径同一白名单口径；COALESCE 更新，null 表示不改。
+    let notes: string | null | undefined;
+    if (body.notes !== undefined) {
+      const notesEncoded = encodeStoredNotes(body.notes);
+      if (!notesEncoded.ok) return json({ error: "notes_too_large" }, 413);
+      notes = notesEncoded.json;
+    }
     const isPublic =
       body.is_public === undefined || body.is_public === null ? undefined : body.is_public ? 1 : 0;
 
@@ -376,7 +400,7 @@ export async function plazaRoute(request: Request, env: Env): Promise<Response> 
     if (!existing) return json({ error: "post_not_found" }, 404);
     if (existing.user_id !== user.id) return json({ error: "forbidden" }, 403);
 
-    const body = (await request.json().catch(() => null)) as Record<string, unknown> | null;
+    const body = await readJsonObject(request);
     const isPublic = body?.is_public ? 1 : 0;
     await env.DB.prepare(
       "UPDATE plaza_posts SET is_public = ?, updated_at = datetime('now') WHERE id = ?",
@@ -656,7 +680,7 @@ export async function adminPlazaRoute(request: Request, env: Env): Promise<Respo
   const visibilityMatch = path.match(/^\/api\/admin\/plaza\/posts\/(\d+)\/visibility$/);
   if (visibilityMatch && method === "POST") {
     const postId = Number(visibilityMatch[1]);
-    const body = (await request.json().catch(() => null)) as Record<string, unknown> | null;
+    const body = await readJsonObject(request);
     const isPublic = body?.is_public ? 1 : 0;
     const existing = await env.DB.prepare(
       "SELECT id, collection_title FROM plaza_posts WHERE id = ?",

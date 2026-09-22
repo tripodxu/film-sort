@@ -28,17 +28,18 @@ self.addEventListener("fetch", (event) => {
   // Skip API calls
   if (request.url.includes("/api/")) return;
   // 页面导航请求 network-first：部署新版本后立即生效，离线时回退到缓存的 index.html
+  // 只把 SPA shell（/index.html）写入缓存，避免任意路径把 Cache Storage 撑爆
   if (request.mode === "navigate") {
     event.respondWith(
       fetch(request)
         .then((response) => {
           if (response && response.status === 200 && response.type === "basic") {
             const clone = response.clone();
-            caches.open(CACHE_NAME).then((cache) => cache.put(request, clone));
+            caches.open(CACHE_NAME).then((cache) => cache.put("/index.html", clone));
           }
           return response;
         })
-        .catch(() => caches.match(request).then((cached) => cached || caches.match("/index.html"))),
+        .catch(() => caches.match("/index.html")),
     );
     return;
   }
