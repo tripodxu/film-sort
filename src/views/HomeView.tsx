@@ -106,36 +106,60 @@ export function HomeView({
           <h2>{t("选择一个维度", "Choose a medium")}</h2>
           <span>01 / 04</span>
         </div>
-        <div className="medium-grid">
-          {kinds.map((item) => {
-            const Icon = icons[item];
-            const saved = profile?.rankings.filter((entry) => entry.kind === item) ?? [];
-            const latest = saved[0];
-            const randomWork = sampleByKind[item];
-            return (
-              <button
-                className={`medium-item medium-${item}`}
-                key={item}
-                onClick={() => chooseKind(item)}
-              >
-                <span className="medium-number">{mediaLabels[item].symbol}</span>
-                {latest ? (
-                  <Poster work={latest.items[0]} kind={item} />
-                ) : randomWork ? (
-                  <Poster work={randomWork} kind={item} />
-                ) : (
-                  <Icon size={20} />
-                )}
-                <strong>{label(item)}</strong>
-                <small>
-                  {saved.length > 0
-                    ? `${saved.length}${t("个榜单", "lists")} / ${saved.reduce((s, r) => s + r.items.length, 0)}${t("件", "")}`
-                    : t(mediaLabels[item].description, "New ranking")}
-                </small>
-                <ArrowRight size={16} />
-              </button>
-            );
-          })}
+        <div className="journey-rail">
+          <button
+            className="journey-chevron journey-prev"
+            aria-label={t("向左滚动", "Scroll left")}
+            onClick={(e) => {
+              e.currentTarget.parentElement
+                ?.querySelector(".medium-grid")
+                ?.scrollBy({ left: -360, behavior: "smooth" });
+            }}
+          >
+            ‹
+          </button>
+          <div className="medium-grid">
+            {kinds.map((item) => {
+              const Icon = icons[item];
+              const saved = profile?.rankings.filter((entry) => entry.kind === item) ?? [];
+              const latest = saved[0];
+              const randomWork = sampleByKind[item];
+              return (
+                <button
+                  className={`medium-item medium-${item}`}
+                  key={item}
+                  onClick={() => chooseKind(item)}
+                >
+                  <span className="medium-number">{mediaLabels[item].symbol}</span>
+                  {latest ? (
+                    <Poster work={latest.items[0]} kind={item} />
+                  ) : randomWork ? (
+                    <Poster work={randomWork} kind={item} />
+                  ) : (
+                    <Icon size={20} />
+                  )}
+                  <strong>{label(item)}</strong>
+                  <small>
+                    {saved.length > 0
+                      ? `${saved.length}${t("个榜单", "lists")} / ${saved.reduce((s, r) => s + r.items.length, 0)}${t("件", "")}`
+                      : t(mediaLabels[item].description, "New ranking")}
+                  </small>
+                  <ArrowRight size={16} />
+                </button>
+              );
+            })}
+          </div>
+          <button
+            className="journey-chevron journey-next"
+            aria-label={t("向右滚动", "Scroll right")}
+            onClick={(e) => {
+              e.currentTarget.parentElement
+                ?.querySelector(".medium-grid")
+                ?.scrollBy({ left: 360, behavior: "smooth" });
+            }}
+          >
+            ›
+          </button>
         </div>
       </section>
       <section className="profile-overview">

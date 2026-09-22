@@ -2,12 +2,15 @@ import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import App from "./App";
 import { readTheme } from "./lib/theme";
+import { readLayout } from "./lib/layout";
 import "./styles.css";
 
 // Apply the saved theme before React mounts to avoid a first-frame flash.
 try {
   const theme = readTheme();
   if (theme !== "modern") document.documentElement.setAttribute("data-theme", theme);
+  const layout = readLayout();
+  if (layout !== "archive") document.documentElement.setAttribute("data-layout", layout);
 } catch {
   /* Private browsing can disable storage. */
 }

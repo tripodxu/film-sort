@@ -45,6 +45,7 @@ import { ThemeSwitcher } from "./components/ThemeSwitcher";
 import { SettingsMenu } from "./components/SettingsMenu";
 import { applyTheme, readTheme } from "./lib/theme";
 import { HomeView } from "./views/HomeView";
+import { applyLayout, readLayout } from "./lib/layout";
 import { SourceView } from "./views/SourceView";
 import { SetupView } from "./views/SetupView";
 import { SortingView } from "./views/SortingView";
@@ -152,6 +153,11 @@ export default function App() {
   const [peerUrl, setPeerUrl] = useState("");
   const [peerUrlBusy, setPeerUrlBusy] = useState(false);
   const [sharePeer, setSharePeer] = useState<ArtisticProfile | null>(null);
+  // P5c：布局模式兜底（双点位之一——main.tsx 预挂载为主，此 effect 兜底）
+  useEffect(() => {
+    applyLayout(readLayout());
+  }, []);
+
   const [showGuide, setShowGuide] = useState(() => {
     try {
       return !localStorage.getItem("art-rank:guide-dismissed");
