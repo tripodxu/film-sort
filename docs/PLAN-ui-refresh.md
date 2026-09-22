@@ -516,6 +516,8 @@ frontend-design 技能明文规则：禁 Inter/Roboto/Space Grotesk 独挑大梁
 - **CSS 死规则去重 5 条**（§2.5 纪律：只删可证实被完全遮蔽者）：toast 动画早本、guide-modal L36 + 其 600px 媒体重复块、rank-detail 行规则对（2→1 实例回填）、plaza-grid 非 `!important` 变体（被 `!important` 版本恒遮蔽）。`ranking-card-top3` "重复对"经产物核验为单实例（审计 `}` 切分口径误报）。
 - 玻璃计数变化备案：active backdrop selector 23→24（贵级玻璃两条新规则进、plaza-header 一条退哑光）——与两级制决策一致。
 
+**B0 基线快照（2026-09-22，✅ 完成）**：**270 张** = 9 视图 × 6 主题 × 5 视口（540/600/720/800/1300），warm + capture 双跑共 540 张全部成功。确定性 **268/270 严格零 diff**；仅 2 张 `*-classic-600`（home/source）各 **55 像素 / maxDelta 22 / bbox 同位**（x≈589 CSS，顶栏图标区）＝**衬线字形 AA 微抖（非确定源 #5）**，classic 人格 × 600px 组合专属。**B0→B1 判读补充豁免**：≤100 像素且 maxDelta ≤25 且 bbox 稳定的差异按 AA 噪声处理，不计违规。存档 `.tmp/ns/b0/`（工具产物不进 git）；setup/sorting/compare 工作态截屏待 P3a 补拍补全为完整基线（当前为 URL 可达态，含守卫/空态——这些也是真实状态）。**BOM 教训（工程）**：Windows PowerShell 5.1 的 `Set-Content -Encoding UTF8` 写出带 BOM 的 UTF-8 会炸 `JSON.parse`，且窄输出过滤器会吞掉报错——`ui-shot.mjs` 解析层已做 BOM 容错，批任务输出禁止窄过滤器。
+
 ---
 
 ## 附：改动文件清单（预期）

@@ -47,7 +47,7 @@ const dsf = opt("--dsf", "2");
 const seed = !argv.includes("--no-seed");
 // fixtures/ui-fixture 注入：按 shot 预置 localStorage（主题/演示画像）与 data-ns 变体开关
 const fixtures = existsSync(join(ROOT, "scripts/ui-fixtures.json"))
-  ? JSON.parse(readFileSync(join(ROOT, "scripts/ui-fixtures.json"), "utf8"))
+  ? JSON.parse(readFileSync(join(ROOT, "scripts/ui-fixtures.json"), "utf8").replace(/^\uFEFF/, ""))
   : {};
 const extraSeed = (s) => {
   const parts = [];
@@ -80,7 +80,7 @@ if (!existsSync(CHROME)) {
   console.error(`Chrome 不存在：${CHROME}（可用 CHROME_PATH 覆盖）`);
   process.exit(1);
 }
-const shots = JSON.parse(readFileSync(shotsFile, "utf8"));
+const shots = JSON.parse(readFileSync(shotsFile, "utf8").replace(/^\uFEFF/, ""));
 mkdirSync(outDir, { recursive: true });
 
 const server = createServer((req, res) => {
