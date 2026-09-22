@@ -26,6 +26,8 @@ export default tseslint.config(
       ".mimocode/**",
       ".localappdata/**",
       ".npm-cache/**",
+      // 截图工具链的产物与 Chrome 热缓存 profile（内含第三方扩展 JS，非本仓代码）。
+      ".tmp/**",
       // Deno Deploy 的独立代理脚本，运行环境不同（Deno 全局、无 tsconfig）。
       "gd-proxy/**",
     ],
