@@ -154,7 +154,13 @@ for (const [shotIdx, s] of shots.entries()) {
       child.stderr?.on("data", (d) => {
         err += d.toString();
       });
-      const kill = setTimeout(() => child.kill("SIGKILL"), 60_000);
+      const kill = setTimeout(() => {
+        try {
+          child.kill("SIGKILL");
+        } catch {
+          /* 已退出 */
+        }
+      }, 60_000);
       const done = (c) => {
         clearTimeout(kill);
         resolve({ code: c, err });
@@ -162,16 +168,23 @@ for (const [shotIdx, s] of shots.entries()) {
       child.on("exit", done);
       child.on("error", () => done(-1));
     });
-  let shot = await runShot(args);
-  let ok = existsSync(file);
-  if (!ok) {
-    await new Promise((r) => setTimeout(r, 1200));
-    shot = await runShot(args);
-    ok = existsSync(file);
+  // 加固：单张失败不再杀掉整轮（此前一处未捕获异常即中断 270 张长跑——warm 114 处崩溃教训）
+  try {
+    let shot = await runShot(args);
+    let ok = existsSync(file);
+    if (!ok) {
+      await new Promise((r) => setTimeout(r, 1200));
+      shot = await runShot(args);
+      ok = existsSync(file);
+    }
+    if (!ok) failed += 1;
+    if (!ok && shot.err) console.error(`  chrome stderr: ${shot.err.slice(0, 300)}`);
+    console.log(`${ok ? "OK  " : "FAIL"} ${s.name} (exit ${shot.code}) -> ${file}`);
+  } catch (e) {
+    failed += 1;
+    console.error(`  shot error [${s.name}]: ${(e && e.stack) || e}`);
+    console.log(`FAIL ${s.name} (exception) -> ${file}`);
   }
-  if (!ok) failed += 1;
-  if (!ok && shot.err) console.error(`  chrome stderr: ${shot.err.slice(0, 300)}`);
-  console.log(`${ok ? "OK  " : "FAIL"} ${s.name} (exit ${shot.code}) -> ${file}`);
 }
 server.closeAllConnections?.();
 server.close();
