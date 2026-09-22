@@ -954,3 +954,15 @@ footer{
 .coordinate,.empty-profile{border-top:1px solid var(--line);padding-top:20px}
 .empty-profile h3{font-family:var(--font-display);font-size:var(--t-h3);color:var(--text-hi)}
 .empty-profile span{font-family:var(--font-mono);font-size:var(--t-micro);letter-spacing:var(--ls-mid);color:var(--text-3)}
+
+/* ===== P3b Profile 余部（2026-09-22）：rank-pill 工具群收编印刷标签 / 名次日期 mono / 页头双线收口 ===== */
+.rank-pill{
+  border-radius:6px;font-family:var(--font-mono);font-size:var(--t-meta);letter-spacing:.05em;
+  transition:background var(--dur-1) var(--ease-out),color var(--dur-1) var(--ease-out),border-color var(--dur-1) var(--ease-out)
+}
+.rank-pill:hover{border-color:color-mix(in srgb,var(--accent) 55%,transparent)}
+.rank-pill.accent{letter-spacing:.08em}
+.rank-date{font-family:var(--font-mono);font-size:var(--t-micro);letter-spacing:.06em;color:var(--text-3);font-variant-numeric:tabular-nums}
+.page-heading{border-bottom:3px double var(--line);padding-bottom:22px;margin-bottom:var(--sp-6)}
+.page-heading h1{letter-spacing:-.01em}
+.page-heading p{font-family:var(--font-mono);font-size:var(--t-meta);letter-spacing:.08em;color:var(--text-3);margin-top:10px}
