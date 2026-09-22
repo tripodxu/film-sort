@@ -122,8 +122,9 @@ const server = createServer((req, res) => {
 await new Promise((r) => server.listen(0, "127.0.0.1", r));
 const base = `http://127.0.0.1:${server.address().port}`;
 
-// 固定 profile 目录 + 保留不清除：热缓存让远程海报加载跨轮确定（冷缓存是第 3 号非确定源）
-const profile = join(ROOT, ".tmp", "chrome-profile-shots");
+// 固定 profile 目录 + 保留不清除：热缓存让远程海报加载跨轮确定（冷缓存是第 3 号非确定源）。
+// --profile <name> 命名空间隔离：并发任务各用各的 profile（第 6 号坑：并发抢锁 exit 21 隔发）。
+const profile = join(ROOT, ".tmp", `chrome-profile-${opt("--profile", "shots")}`);
 let failed = 0;
 for (const [shotIdx, s] of shots.entries()) {
   const file = join(outDir, `${s.name}-${s.width}x${s.height}.png`);
@@ -145,19 +146,32 @@ for (const [shotIdx, s] of shots.entries()) {
     `${base}${s.path}${sep}__shot=${shotIdx}`,
   ];
   // 注意：必须用异步 spawn——spawnSync 会阻塞事件循环，静态服务器无法响应 chrome 的请求（互等死锁）
-  const code = await new Promise((resolve) => {
-    const child = spawn(CHROME, args, { stdio: "ignore" });
-    const kill = setTimeout(() => child.kill("SIGKILL"), 60_000);
-    const done = (c) => {
-      clearTimeout(kill);
-      resolve(c);
-    };
-    child.on("exit", done);
-    child.on("error", () => done(-1));
-  });
-  const ok = existsSync(file);
+  // 稳健化：runShot 可重入——chrome profile 锁竞态（exit 21 隔发即此症）对策 = 失败重试一轮
+  const runShot = (shotArgs) =>
+    new Promise((resolve) => {
+      let err = "";
+      const child = spawn(CHROME, shotArgs, { stdio: ["ignore", "ignore", "pipe"] });
+      child.stderr?.on("data", (d) => {
+        err += d.toString();
+      });
+      const kill = setTimeout(() => child.kill("SIGKILL"), 60_000);
+      const done = (c) => {
+        clearTimeout(kill);
+        resolve({ code: c, err });
+      };
+      child.on("exit", done);
+      child.on("error", () => done(-1));
+    });
+  let shot = await runShot(args);
+  let ok = existsSync(file);
+  if (!ok) {
+    await new Promise((r) => setTimeout(r, 1200));
+    shot = await runShot(args);
+    ok = existsSync(file);
+  }
   if (!ok) failed += 1;
-  console.log(`${ok ? "OK  " : "FAIL"} ${s.name} (exit ${code}) -> ${file}`);
+  if (!ok && shot.err) console.error(`  chrome stderr: ${shot.err.slice(0, 300)}`);
+  console.log(`${ok ? "OK  " : "FAIL"} ${s.name} (exit ${shot.code}) -> ${file}`);
 }
 server.closeAllConnections?.();
 server.close();

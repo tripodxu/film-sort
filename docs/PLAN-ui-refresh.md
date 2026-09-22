@@ -531,6 +531,22 @@ frontend-design 技能明文规则：禁 Inter/Roboto/Space Grotesk 独挑大梁
 - **P3c 八界面** + **回归绊线套件**（`src/ui-fixes.test.ts`，累计 18 条断言 / 295 tests）把 P0-P5a 关键修复全部固化；绊线体系三连胜实录：提交-内容不符拦截、断言过严自红（卡片级浮起合法 vs 行级禁令的"法内之法"）、揪出漏网 `medium-item:hover` 行级浮起。
 - **P4 hover 分级治理**（§2.3 浮起分级）：6 处行/页签级浮起降级"背景+hairline"（collection-row !important 等量改写零膨胀）；卡片级 `--ev-2` 一档合规保留；骨架屏节奏 `--dur-pulse` token 化；内滚 fade mask；aria 意外收获——15 处 dialog `role="dialog" aria-modal` 已全覆盖（UI_REVIEW 旧账基本还清，余量 aria-label 命名）。
 - **P5a 主题人格化·机制 + retro/cyber/minimal 先行**（非色彩差异 ≥2/主题，绊线固化）：**retro 旧式印刷所**＝全直角（--r-*→0/2）+ 衬线全面主导（宋体族硬栈，修复 display 回落 Segoe 的老 bug）+ 双线书眉 + 信纸横线纹 + 慢半拍（--dur 200/320/420）+ 正文 62ch 首行缩进 2em（四轮追加项）；**cyber 终端 HUD**＝mono 全面主导 + 人格发光（§5.1 合法）+ 扫描线纹 + 快节奏（110/180ms）；**minimal 瑞士网格**＝全直角 + 字重对比（800/-0.02em）+ 加长 hairline 标记 + 全面 inset 网格线。
+- **P5b**（`0386c21`）：simple 亲和蓝（圆角升档+按钮胶囊+快节奏柔和）、classic 文学博物馆（衬线标题+双线框+印章红方块标头+纸纹）、纹理配额 ≤3% 绊线执法、**对比度复扫 keep 78%**（L1 未动）、六主题中文实拍 12/12。
+- **P5c 布局模式**（`0d1750a`/`85a545b`）：`layout.ts`（31 行 theme.ts 同构，archive 移除属性=零 diff 机制保证）、双点位挂载、切换 UI 并入 ThemeSwitcher（三 t() 名 + mono 方格缩略）、journey 胶片盘（snap/mask/44px chevron/触屏 proximity 降级四安全项）、bento 档案格（**仅首项扩格**——mod-3 反例正解、零空洞构造保证、禁 dense）、Home medium-grid 接线。**18 组合矩阵**（6 主题 × 3 布局）18/18 出图。
+
+---
+
+## 10.8 发布前执行记录与运维预案（2026-09-22）
+
+**回滚预案**：全程每阶段独立 commit（P0→P5c 共 20+ 个），`git revert <sha>` 单阶段整体回滚；`src/ui-fixes.test.ts` **24 条绊线**守护全部已修事实，任何回退在测试层先红。CSS 与 className 改动未混入任何逻辑 commit（§0 承诺兑现）。
+
+**遗留清单（下期）**：dialog `aria-label` 命名补齐；journey 轨道接线余量（candidate/collection/plaza 的 chevron 包裹，CSS 已备）；WorkEditor/Reorder 深度样式；`.guide-help-btn` 死规则 + 阴影源码级折叠；setup/sorting/compare 工作态 B 系补拍；display 族 22px+ 档位表与宏观留白 10 处的视图阶段定夺。
+
+**真机触控清单（发布前人工验收）**：iOS Safari + Android Chrome——journey 横滑（mandatory→proximity 降级验证）、`hover:none` 按压态、44px 目标抽查、`prefers-reduced-motion`、toast/FAB 位置、双指缩放不误触。
+
+**B1 重锚定**：`.tmp/ns/b1r/`（270×2 双跑）＝**发布前 archive 基准**——P2-P5 可见变更已随各阶段门禁结算，此后「archive 逐像素保持」以 b1r 为尺；journey/bento 差异属模式预期差异（同阶段 archive 对照，§5.4 三把尺不混用）。
+
+**部署文档结论**：CSP 不变（`font-src 'self' data:`）；零新增运行时依赖（`layout.ts` 31 行为唯一新增 lib 模块）；Worker/数据面零改动——CLOUDFLARE/ARCHITECTURE 无需变更，README/CHANGELOG 已增补。
 
 **B0 基线快照（2026-09-22，✅ 完成）**：**270 张** = 9 视图 × 6 主题 × 5 视口（540/600/720/800/1300），warm + capture 双跑共 540 张全部成功。确定性 **268/270 严格零 diff**；仅 2 张 `*-classic-600`（home/source）各 **55 像素 / maxDelta 22 / bbox 同位**（x≈589 CSS，顶栏图标区）＝**衬线字形 AA 微抖（非确定源 #5）**，classic 人格 × 600px 组合专属。**B0→B1 判读补充豁免**：≤100 像素且 maxDelta ≤25 且 bbox 稳定的差异按 AA 噪声处理，不计违规。存档 `.tmp/ns/b0/`（工具产物不进 git）；setup/sorting/compare 工作态截屏待 P3a 补拍补全为完整基线（当前为 URL 可达态，含守卫/空态——这些也是真实状态）。**BOM 教训（工程）**：Windows PowerShell 5.1 的 `Set-Content -Encoding UTF8` 写出带 BOM 的 UTF-8 会炸 `JSON.parse`，且窄输出过滤器会吞掉报错——`ui-shot.mjs` 解析层已做 BOM 容错，批任务输出禁止窄过滤器。
 
