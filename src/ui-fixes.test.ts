@@ -130,3 +130,26 @@ describe("P5a 主题人格绊线（非色彩差异 ≥2/主题）", () => {
     }
   });
 });
+
+describe("P5c 布局模式绊线", () => {
+  it("layout.ts 机制在位：archive 移除属性（零 diff 由机制保证）", () => {
+    const lt = readFileSync("src/lib/layout.ts", "utf8");
+    expect(lt).toContain('removeAttribute("data-layout")');
+    expect(lt).toContain('LAYOUT_KEY = "art-rank:layout"');
+    const main = readFileSync("src/main.tsx", "utf8");
+    expect(main).toContain('document.documentElement.setAttribute("data-layout", layout)');
+  });
+  it("journey 胶片盘：snap/mask/chevron/触屏降级四项齐备", () => {
+    expect(css).toContain("scroll-snap-type:x mandatory");
+    expect(css).toContain("scroll-snap-type:x proximity");
+    expect(css).toContain('[data-layout="journey"] .journey-rail{');
+    expect(css).toContain(".journey-chevron{");
+  });
+  it("bento 零空洞纪律：仅首项扩格（禁 mod-3/dense 回潮）", () => {
+    expect(css).toContain(
+      '[data-layout="bento"] .medium-grid>.medium-item:first-child{grid-column:span 2}',
+    );
+    expect(css).not.toContain("grid-auto-flow:dense");
+    expect(css).not.toMatch(/:last-child:nth-child/);
+  });
+});

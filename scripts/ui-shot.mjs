@@ -61,6 +61,14 @@ const extraSeed = (s) => {
     );
   }
   if (s?.theme) parts.push(`localStorage.setItem("art-rank:theme",${JSON.stringify(s.theme)});`);
+  if (s?.layout) {
+    parts.push(`localStorage.setItem("art-rank:layout",${JSON.stringify(s.layout)});`);
+    if (s.layout !== "archive") {
+      parts.push(
+        `document.documentElement.setAttribute("data-layout",${JSON.stringify(s.layout)});`,
+      );
+    }
+  }
   if (s?.fixture && fixtures[s.fixture]) {
     parts.push(
       `localStorage.setItem("art-rank:library:v2",${JSON.stringify(JSON.stringify(fixtures[s.fixture]))});`,
