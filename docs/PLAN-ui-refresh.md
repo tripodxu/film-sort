@@ -505,6 +505,7 @@ frontend-design 技能明文规则：禁 Inter/Roboto/Space Grotesk 独挑大梁
 - **工具链增强**：`ui-shot.mjs` per-shot 注入 `theme` / `fixture` / `ns` 变体开关 + **自证标签**（shot 名烙进像素左上角——根治多图批读的附件错位）；`scripts/ui-fixtures.json` demo 画像「夜航西飞」（2 领域 18 件作品）。⚠️ fixture 坑：`parseProfile` 要求 `version` 为**数字** 2（字符串 "2.0" 会被拒并回落守卫页）。
 - **新非确定源 #3（远程海报加载竞态）**：冷缓存 chrome profile 每轮重拉远程海报，r5 有图 / r6 兜底——**固定热缓存 profile + warm-pass 双跑**解决，实测 warm vs capture **8/8 严格零 diff**（`--tol 0`，含海报区）；已并入 §8.0 判据。
 - **工程教训**：CSS 特异性陷阱——旧 `.medium-item`（0-1-0）在 minified 产物中胜出新规则（渲染成旧内部网格、描述文案漂到右下角），统一 `.medium-grid>` 前缀（0-2-0）后按设计渲染；特异性问题**必须以渲染事实裁决**，产物 grep 只能证明"存在"不能证明"获胜"。
+- **二稿（用户评审：「和之前相比没什么变化」→ 一稿是打磨不是改造，批评成立）**：v2 动构图骨架——masthead 报头（h1 上下 1px+3px-double 夹线、字号拉到 clamp 138px）、**竖排书脊**（`writing-mode:vertical-rl` 中文副标，CJK 一等公民手法）、**目录巨号行**（46px mono 编号 + 64×92 海报 + 点线引线，替掉四列卡）、**名录账簿**（38px 名次巨号 + 前三名 accent 色 + 23px 标题）、**索引页签**（dim-chip 直角 + 3px 媒介色顶边 + 激活上浮 4px）、**角标著录卡**（export-tools accent 裁切角）。实测 v1→v2 Home **20.0% 像素变化 / maxDelta 232**。原则沉淀：**北极星迭代的验收线是「形态骨架变化」而非「细节精致度」，每稿先问：拿掉颜色还认得出是新版吗？**
 
 ---
 
