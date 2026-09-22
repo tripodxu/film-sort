@@ -10,6 +10,8 @@
 //                                Resend 未验证域名前仅可用 onboarding@resend.dev 且只能发到账号自有邮箱）
 //   MAIL_COLA_KEY / MAIL_SMTP_EMAIL / MAIL_SMTP_CODE / MAIL_SMTP_TYPE —— luckycola 兜底（同 mail_sender.py）
 
+//   MAIL_FROM                 —— 发件人显示（默认 "ART-RANK <noreply@email.logicc.top>"，域名已验证）
+
 export interface MailerEnv {
   RESEND_API_KEY?: string;
   MAIL_FROM?: string;
@@ -24,6 +26,11 @@ export interface SendResult {
   reason?: string;
 }
 
+import { createElement } from "react";
+// 显式 browser 入口：react-dom/server 默认导出条件在 workerd 下解析到 Node 版（node:stream → 崩）。
+import { renderToStaticMarkup } from "react-dom/server.browser";
+import { VerificationCodeEmail } from "./VerificationCodeEmail";
+
 const RESEND_URL = "https://api.resend.com/emails";
 const LUCKYCOLA_URLS = [
   "https://luckycola.com/tools/customMail",
@@ -31,12 +38,9 @@ const LUCKYCOLA_URLS = [
 ];
 
 function buildHtml(action: string, code: string): string {
+  // React Email 模板（worker/VerificationCodeEmail.tsx）→ 静态标记；react-dom/server 在 Workers 运行时安全。
   return (
-    `<div style="font-family:sans-serif;max-width:420px;margin:0 auto">` +
-    `<h3 style="margin-bottom:8px">ART/RANK · ${action}</h3>` +
-    `<p>你正在${action}，验证码 10 分钟内有效：</p>` +
-    `<p style="font-size:30px;letter-spacing:8px;font-weight:700;color:#2563eb">${code}</p>` +
-    `<p style="color:#888;font-size:12px">若非本人操作，请忽略本邮件。</p></div>`
+    "<!DOCTYPE html>" + renderToStaticMarkup(createElement(VerificationCodeEmail, { action, code }))
   );
 }
 
@@ -151,7 +155,7 @@ export async function sendVerificationCode(
   if (env.RESEND_API_KEY) {
     const result = await sendViaResend(
       env.RESEND_API_KEY,
-      env.MAIL_FROM ?? "ART-RANK <onboarding@resend.dev>",
+      env.MAIL_FROM ?? "ART-RANK <noreply@email.logicc.top>",
       to,
       subject,
       html,

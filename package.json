@@ -19,6 +19,7 @@
     "ai:mock": "node scripts/ai-mock-server.mjs"
   },
   "dependencies": {
+    "@react-email/components": "^1.0.11",
     "fflate": "^0.8.2",
     "lucide-react": "^0.468.0",
     "qrcode": "^1.5.4",

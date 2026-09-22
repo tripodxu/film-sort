@@ -328,7 +328,7 @@ async function issueVerificationCode(
   env: Env,
   email: string,
   purpose: "register" | "reset",
-): Promise<{ ok: true } | { error: string; msg: string }> {
+): Promise<{ ok: true } | { error: string; msg: string; detail?: string }> {
   const recent = await db
     .prepare(
       "SELECT id FROM verification_codes WHERE email = ? AND purpose = ? AND created_at > datetime('now','-60 seconds') LIMIT 1",
@@ -349,8 +349,18 @@ async function issueVerificationCode(
     )
     .bind(email, purpose, await sha256Hex(code))
     .run();
-  const sent = await sendVerificationCode(env as unknown as MailerEnv, email, code, purpose);
-  if (!sent) return { error: "mail_failed", msg: "邮件发送失败，请稍后再试" };
+  let sent: { ok: boolean; reason?: string };
+  try {
+    sent = await sendVerificationCode(env as unknown as MailerEnv, email, code, purpose);
+  } catch (e) {
+    return {
+      error: "mail_failed",
+      msg: "邮件发送失败，请稍后再试",
+      detail: `exception:${e instanceof Error ? e.message : String(e)}`,
+    };
+  }
+  if (!sent.ok)
+    return { error: "mail_failed", msg: "邮件发送失败，请稍后再试", detail: sent.reason };
   return { ok: true };
 }
 
@@ -458,7 +468,7 @@ export async function accountRoute(request: Request, env: Env): Promise<Response
     const issued = await issueVerificationCode(env.DB, env, email, purpose);
     if ("error" in issued) {
       const status = issued.error === "code_cooldown" ? 429 : 502;
-      return json({ error: issued.error, msg: issued.msg }, status);
+      return json({ error: issued.error, msg: issued.msg, detail: issued.detail }, status);
     }
     return json({ ok: true });
   }

@@ -5,6 +5,7 @@
     "types": ["@cloudflare/workers-types"],
     "module": "ESNext",
     "moduleResolution": "Bundler",
+    "jsx": "react-jsx",
     "resolveJsonModule": true,
     "strict": true,
     "skipLibCheck": true,
