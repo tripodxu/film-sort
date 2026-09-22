@@ -309,7 +309,7 @@ export function encodeStoredProfile(value: unknown, limit?: number): StoredEncod
 
 ### Phase 4 — 验证
 
-**单元测试（✅ 已落地：全套 179 passed | 9 skipped）**
+**单元测试（✅ 已落地：全套 273 passed | 9 skipped）**
 - 白名单丢弃未知字段（含 posterUrls、tags、缓存字段）；超限返回 `payload_too_large`；字节口径对中文正确 → `shared/storedItem.test.ts`
 - `known` 短路、空数组按未命中、`retry` 只影响 `throttled` 分支 → `worker/posterCache.test.ts`
 - **静态守卫测试**：故意在某路由加 `JSON.stringify(body.items)`，确认测试变红 → `worker/payloadGuard.test.ts`（含守卫自身的有效性用例）
@@ -465,7 +465,7 @@ curl.exe -s -o NUL -H "User-Agent: Mozilla/5.0 … Chrome/131" -w "%{http_code} 
 npx tsc --noEmit -p tsconfig.app.json     # 客户端
 npx tsc --noEmit -p tsconfig.worker.json  # Worker（含 shared）
 npx tsc --noEmit -p tsconfig.node.json
-npm test                                  # 179 passed | 9 skipped
+npm test                                  # 273 passed | 9 skipped
 npx vite build                            # 客户端产物
 npx wrangler deploy --dry-run             # Worker 打包（含 ../shared 引用）
 ```

@@ -54,16 +54,16 @@ npx wrangler d1 migrations apply film-sort --remote
 | `ADMIN_PASSWORD` | `/admin` 登录（优先于 DB hash） | 用首次登录写入的 DB hash |
 | `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | Google OAuth | 隐藏该登录入口 |
 | `GITHUB_CLIENT_ID` / `GITHUB_CLIENT_SECRET` | GitHub OAuth | 隐藏该登录入口 |
-| `AI_API_KEY` / `AI_API_URL` / `AI_MODEL` / `AI_PROTOCOL` | 内置 AI 通道（四协议，详见 PLAN-ai-insights.md）；未配置时用户仍可在网页端自带 API | AI 按钮提示「服务端未配置」，用户自带 API 通道不受影响 |
-| `COOKIE_ENC_KEY` | 覆盖 Cookie 保险库密钥（64 位十六进制 = AES-256） | 首次使用时自动生成并存入 `admin_config('cookie_enc_key')` |
+| `AI_API_KEY` | 内置 AI 通道密钥（`worker/ai.ts`）；`AI_API_URL`/`AI_MODEL`/`AI_PROTOCOL` 是 **vars**（见 `wrangler.jsonc`），不是 secret | 未配 key 时用户仍可在网页端自带 API | AI 按钮提示「服务端未配置」，用户自带 API 通道不受影响 |
+| `COOKIE_ENC_KEY` | 覆盖 Cookie 保险库密钥（64 位十六进制 = AES-256）；**生产建议配置 secret**，避免密钥与密文同落 D1 | 首次使用时自动生成并存入 `admin_config('cookie_enc_key')`（仅适合开发/过渡） |
 | `MUSIC_PROXY_URL` / `MUSIC_PROXY_KEY` | 音乐上游代理（`worker/gdstudio.ts`） | 直连上游 API |
 | `ANYSEARCH_API_KEY` | anysearch 搜索服务 key（`api.anysearch.com`，简介的百度百科传输）；缺省走匿名额度（限速更低） | 仍可用，但匿名额度按 CF 出口 IP 共享计，高峰可能命中限速 |
 
-Cookie 保险库密钥无需手工配置：首次使用时自动生成 AES-256 密钥存入 `admin_config('cookie_enc_key')`，网易云/豆瓣授权 Cookie 以 AES-GCM 加密存 `user_cookie_vault`（不落明文，断开即删）；`COOKIE_ENC_KEY` 只在需要覆盖该自动生成密钥时才配。
+生产环境应配置 `COOKIE_ENC_KEY` wrangler secret，使密钥与 `user_cookie_vault` 密文分离；未配置时首次使用会自动生成 AES-256 密钥存入 `admin_config('cookie_enc_key')`（密钥与密文同库，仅作过渡）。网易云/豆瓣授权 Cookie 以 AES-GCM 加密（不落明文，断开即删）。
 
 ## 账号体系（现行）
 
-邮箱密码（PBKDF2-SHA256 10 万次迭代；存量无盐 SHA-256 登录时透明升级）+ Google/GitHub OAuth（state 存 HttpOnly Cookie 防 CSRF；回调换取一次性 `oauth_exchanges` code，前端 `POST /api/account/oauth/exchange` 换 token，**会话 token 不进 URL**）。30 天会话存 `user_sessions`。画像与云端清单各 ≤512KB；登录态下画像防抖自动云同步，切后台/断网/关页用 `keepalive` 补发；同步失败不覆盖本地。
+邮箱密码（PBKDF2-SHA256 60 万次迭代；存量 10 万次 / 无盐 SHA-256 登录时透明升级）+ Google/GitHub OAuth（state 存 HttpOnly Cookie 防 CSRF；回调换取一次性 `oauth_exchanges` code，前端 `POST /api/account/oauth/exchange` 换 token，**会话 token 不进 URL**）。30 天会话存 `user_sessions`。画像与云端清单各 ≤512KB；登录态下画像防抖自动云同步，切后台/断网/关页用 `keepalive` 补发；同步失败不覆盖本地。
 
 > 旧版 Cloudflare Access JWT 账号同步方案（`ACCESS_TEAM_DOMAIN`/`ACCESS_AUD`）已废弃，Env 中仅存类型声明、无消费代码。
 

@@ -40,7 +40,7 @@ src/
 esbuild 把两侧压成 minified 产物逐字节比较（JSX 文本会变成字符串字面量，任何文案
 空白变化都会暴露），67 个代码文件确认只有排版变化。
 
-**仍待处理**：`worker/index.ts` 1999 行、`src/views/PlazaPostView.tsx` 1139 行仍偏大，
+**仍待处理**：`worker/index.ts` ~2848 行、`src/views/PlazaPostView.tsx` ~1101 行仍偏大，
 按路由/子组件继续拆分（见文末待办池）。
 
 **风险**：
@@ -445,7 +445,7 @@ async function shareSingleRanking(ranking: RankingExport) {
 
 ### 5.1 测试覆盖
 
-**现状**（2026-09-18）：15 个测试文件、**179 项通过 / 9 项跳过**。`npm test` 全绿；CI 每次都跑。
+**现状**（2026-09-22）：18 个测试文件、**273 项通过 / 9 项跳过**。`npm test` 全绿；CI 每次都跑。
 
 已覆盖的核心模块：
 
@@ -571,8 +571,9 @@ const estimatedRemaining = Math.round(remaining * avgComparisonsPerItem);
 
 - `public/manifest.json`：PWA 清单文件（名称、主题色、图标）
 - `public/sw.js`：Service Worker 缓存静态资源（JS/CSS/HTML/图片）
-  - Cache-first 策略：优先读取缓存，回退到网络
-  - 导航请求离线回退到 `/index.html`（SPA 路由兼容）
+  - 带 hash 的静态资源 cache-first；**导航请求 network-first**（部署后立即生效）
+  - 导航成功只刷新 SPA shell（`/index.html`）缓存，避免任意路径撑爆 Cache Storage
+  - 离线时导航回退到 `/index.html`（SPA 路由兼容）
   - API 请求不缓存（`/api/*` 跳过）
   - 新版本自动清除旧缓存
 - `index.html`：注册 Service Worker + 链接 manifest
@@ -584,7 +585,7 @@ const estimatedRemaining = Math.round(remaining * avgComparisonsPerItem);
 |------|------|------|
 | 排序卡片缺少 ARIA 角色 | `<div role="group" aria-label="选择更偏好的作品">` | ✅ |
 | 进度条缺少 ARIA 属性 | 已有 `role="progressbar"` + `aria-valuenow` 动态更新 | ✅ |
-| 弹窗缺少焦点陷阱 | 使用 Radix Dialog 或手动实现焦点捕获 | ❌ 待实现 |
+| 弹窗焦点陷阱 | `FocusTrap.tsx` 已存在；引导与 AI 配置已接入，其余 modal 待推广 | 🟡 部分 |
 | 海报图片 alt 文本 | 改为「作品名 - 创作者 (年份)」格式 | ✅ |
 | 颜色对比度 | `--muted` (#a1a8a2) 在深色背景上对比度偏低 | ❌ 待调整 |
 | 广场筛选/排序按钮 | 添加 `role="tab"` + `aria-selected` + `aria-label` | ✅ |
@@ -743,7 +744,7 @@ jobs:
 
 ### UI / 组件精修
 - [x] `src/styles.css`：~~修掉 4 处 U+FFFD 损坏的 `content` 声明~~ ✅ 2026-09-19 已修复（含根因分析见 §5.3）；~~清理历史重复定义~~ ✅ 同日清理 9 条 byte-identical 重复（`.rank-detail-dialog` border 组 / `.guide-help-btn` 主+媒体 / `.profile-layout section` / `.ranking-card-poster`+top3 四连各 2 份，删前留后 cascade 等价）；~~补 `mini-note`/`badge` 系缺失类~~ ✅（`.mini-note`/`.badge`/`.badge-visit` 以主题令牌补定义）；新增手机端 `.metrics{overflow-x:clip}` 兜底比较页瞬态溢出。剩余：注释内 8 个无害 U+FFFD 文字
-- [ ] `worker/index.ts`（1999 行）按资源拆成 `worker/routes/*`；`src/views/PlazaPostView.tsx`（1139 行）拆出评论区、作者编辑区子组件
+- [ ] `worker/index.ts`（~2848 行）按资源拆成 `worker/routes/*`；`src/views/PlazaPostView.tsx`（~1101 行）拆出评论区、作者编辑区子组件
 - [ ] **无障碍剩余项（详见 `UI_REVIEW.md` 的「剩余未完成项」）**：`ExpandableNote` 是 `<p onClick>`，没有 `tabIndex`/`role`/`onKeyDown`，键盘无法触发"查看全文"；14 处 modal backdrop 缺 `aria-hidden`；焦点陷阱只接了新手引导一处（`FocusTrap`）；`RankingDetail` 行首奖牌 emoji 缺 `aria-hidden`
 - [ ] toast 通知队列化（现在多条会互相顶掉）+ `aria-live` 播报
 - [ ] `OrbScene` 移动端降级（低 dpr / 小屏减粒子或静态图）

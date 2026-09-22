@@ -567,4 +567,4 @@ npm run lint          # eslint（react-hooks/recommended + no-unused-vars=warn�
 npm run format:check  # prettier --check（printWidth 100）
 ```
 
-测试使用 Vitest（`vitest.config.ts` 只收集 `src/**`、`worker/**`、`shared/**` 下的 `*.test.ts`），当前 15 个测试文件、179 passed / 9 skipped，覆盖排序算法、画像比较/解析、集合导入、海报管线、限流窗口与 Worker 载荷校验。CI 步骤见 `OPTIMIZATION.md` §7.1。
+测试使用 Vitest（`vitest.config.ts` 只收集 `src/**`、`worker/**`、`shared/**` 下的 `*.test.ts`），当前 18 个测试文件、273 passed / 9 skipped，覆盖排序算法、画像比较/解析、集合导入、海报管线、限流窗口、批注白名单与 Worker 载荷校验。CI 步骤见 `OPTIMIZATION.md` §7.1。
