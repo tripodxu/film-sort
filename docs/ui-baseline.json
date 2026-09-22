@@ -1,0 +1,123 @@
+{
+  "generatedAt": "2026-09-22T10:02:04.147Z",
+  "convention": "行数 = split(/\\r?\\n/) 去单一尾空串（ReadAllLines 兼容，含空行/含尾行）；其余为正则 occurrence 计数",
+  "lines": {
+    "src/styles.css": {
+      "total": 639,
+      "blank": 79,
+      "nonEmpty": 560
+    },
+    "src/App.tsx": {
+      "total": 2444,
+      "blank": 13,
+      "nonEmpty": 2431
+    }
+  },
+  "important": {
+    "total": 37,
+    "rules": 15,
+    "byClass": {
+      "collectionRowList": 32,
+      "reducedMotion": 4,
+      "other": 1
+    }
+  },
+  "hex": {
+    "total": 140,
+    "tokenDef": 123,
+    "scattered": 17
+  },
+  "media": [
+    "@media (max-width:520px)",
+    "@media (max-width:850px)",
+    "@media(hover:none)",
+    "@media(max-width:540px)",
+    "@media(max-width:600px)",
+    "@media(max-width:720px)",
+    "@media(max-width:800px)",
+    "@media(max-width:850px)",
+    "@media(min-width:1300px) and (max-height:880px)",
+    "@media(prefers-reduced-motion:reduce)"
+  ],
+  "blur": {
+    "activeSelectors": 23,
+    "noneOverrides": 8,
+    "radii": [
+      "10px",
+      "12px",
+      "14px",
+      "16px",
+      "18px",
+      "20px",
+      "22px",
+      "24px",
+      "28px",
+      "2px",
+      "6px",
+      "8px"
+    ]
+  },
+  "radii": [
+    "0",
+    "0 0 6px 6px",
+    "0!important",
+    "10px",
+    "10px 10px 0 0",
+    "12px",
+    "14px",
+    "16px",
+    "18px",
+    "20px",
+    "2px",
+    "3px",
+    "4px",
+    "50%",
+    "5px",
+    "6px",
+    "6px 6px 0 0",
+    "8px",
+    "8px!important",
+    "999px",
+    "99px"
+  ],
+  "shadows": {
+    "distinct": 36,
+    "byClass": {
+      "inset": 8,
+      "blackDrop": 14,
+      "colorGlow": 13,
+      "other": 1
+    }
+  },
+  "fontSizePx": {
+    "8px": 2,
+    "9px": 2,
+    "10px": 19,
+    "11px": 44,
+    "12px": 44,
+    "13px": 35,
+    "14px": 15,
+    "15px": 3,
+    "16px": 5,
+    "17px": 7,
+    "18px": 3,
+    "19px": 6,
+    "20px": 5,
+    "21px": 2,
+    "22px": 5,
+    "24px": 5,
+    "27px": 2,
+    "29px": 2,
+    "30px": 1,
+    "31px": 1,
+    "32px": 2,
+    "38px": 1,
+    "45px": 1,
+    "48px": 1,
+    "52px": 1,
+    "54px": 1,
+    "64px": 1,
+    "68px": 1,
+    "80px": 1
+  }
+}
