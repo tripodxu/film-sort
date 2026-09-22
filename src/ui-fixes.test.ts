@@ -111,4 +111,22 @@ describe("P5a 主题人格绊线（非色彩差异 ≥2/主题）", () => {
     expect(css).toContain("[data-theme=minimal] .section-heading h2::before{width:32px");
     expect(css).toMatch(/\[data-theme=minimal\] h1,[^}]*font-weight:800/);
   });
+  it("simple 亲和蓝：圆角升档 + 按钮胶囊 + 快节奏", () => {
+    expect(css).toContain("[data-theme=simple]{--r-xs:4px;--r-sm:8px;--r-md:14px;--r-lg:22px");
+    expect(css).toContain(
+      "[data-theme=simple] .button,[data-theme=simple] .rank-pill{border-radius:var(--r-pill)}",
+    );
+  });
+  it("classic 文学博物馆：衬线标题 + 双线框 + 印章红方块标头", () => {
+    expect(css).toContain(
+      "[data-theme=classic] .section-heading h2::before{width:10px;height:10px;background:var(--accent)}",
+    );
+    expect(css).toContain("[data-theme=classic] .section-heading{border-top:3px double");
+    expect(css).toMatch(/\[data-theme=classic\] h1,[^}]*Songti SC/);
+  });
+  it("纹理配额：主题人格纹 ≤3% 不透明度", () => {
+    for (const m of css.matchAll(/opacity='\.(\d+)'\/>/g)) {
+      expect(Number(m[1])).toBeLessThanOrEqual(5); // .05 = 信纸线纹（线纹例外）
+    }
+  });
 });
