@@ -113,7 +113,7 @@ export function SortingView({
                   </span>
                 </div>
                 <Poster key={work.id} work={work} kind={kind} large />
-                <div className="artwork-info">
+                <div className="artwork-info" onClick={(event) => event.stopPropagation()}>
                   <h2>{work.title}</h2>
                   <p>
                     {work.creator || work.subtitle || label(kind)} {work.year}

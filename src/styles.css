@@ -906,3 +906,26 @@ footer{
 }
 .modal-backdrop{background:var(--scrim)}
 .topbar nav button{letter-spacing:.02em}
+
+/* ===== P3a-1 Sorting 对战卡四态规格 + 内滚区治本（2026-09-22）====================
+   四态：默认 / hover / focus-visible / 按压已选——0.2s 可辨、非单色（对角裁切角标 + 按压缩放
+   两个非颜色线索）、触屏无 hover 依赖（hover:none 下 :active 承载）。
+   内滚区治本：overscroll-behavior:contain + 简介区事件守卫（SortingView 一处，§0 第七类）。 */
+.artwork-card .artwork-info{overscroll-behavior:contain}
+.artwork-card .artwork-main{position:relative;transition:border-color var(--dur-1) var(--ease-out),transform var(--dur-1) var(--ease-out),background var(--dur-1) var(--ease-out)}
+.artwork-card .artwork-main::after{
+  content:"";position:absolute;top:-1px;right:-1px;width:12px;height:12px;
+  border-top:2px solid var(--accent);border-right:2px solid var(--accent);
+  opacity:0;transition:opacity var(--dur-2) var(--ease-out)
+}
+.artwork-card .artwork-main:hover{border-color:color-mix(in srgb,var(--accent) 55%,transparent)}
+.artwork-card .artwork-main:hover::after{opacity:1}
+.artwork-card .artwork-main:focus-visible::after{opacity:1}
+.artwork-card .artwork-main:focus-visible{outline:2px solid var(--accent);outline-offset:3px}
+.artwork-card .artwork-main:active{transform:scale(.985);border-color:var(--accent)}
+.artwork-card .artwork-main:active::after{opacity:1;border-width:3px}
+@media(hover:none){
+  .artwork-card .artwork-main:hover{border-color:var(--line)}
+  .artwork-card .artwork-main:hover::after{opacity:0}
+  .artwork-card .artwork-main:active{transform:none;background:color-mix(in srgb,var(--accent) 8%,transparent)}
+}
