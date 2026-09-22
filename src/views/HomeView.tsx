@@ -19,7 +19,6 @@ export function HomeView({
   t,
   accountEmail,
   setAccountOpen,
-  setShowGuide,
   kind,
   chooseKind,
   navigateTo,
@@ -79,14 +78,6 @@ export function HomeView({
               <ArrowRight size={13} />
             </button>
           </div>
-          <button
-            className="guide-help-btn"
-            onClick={() => setShowGuide(true)}
-            aria-label={t("使用说明", "Guide")}
-            title={t("使用说明", "Guide")}
-          >
-            ?
-          </button>
           <div className="home-actions glass-capsule">
             <button className="button primary" onClick={() => chooseKind(kind)}>
               <Play size={16} />

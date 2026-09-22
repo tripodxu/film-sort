@@ -1061,7 +1061,6 @@ export default function App() {
         t={t}
         accountEmail={accountEmail}
         setAccountOpen={setAccountOpen}
-        setShowGuide={setShowGuide}
         kind={kind}
         chooseKind={chooseKind}
         navigateTo={navigateTo}
@@ -1375,6 +1374,12 @@ export default function App() {
         <div className="header-tools">
           <SettingsMenu zh={locale === "zh"} cap={importCap} onCap={setImportCap} />
           <ThemeSwitcher zh={locale === "zh"} />
+          <IconButton title={t("使用说明", "Guide")} onClick={() => setShowGuide(true)}>
+            ?
+            <span className="tooltip" role="tooltip">
+              {t("使用说明", "Guide")}
+            </span>
+          </IconButton>
           <IconButton
             title={locale === "zh" ? "English" : "中文"}
             onClick={() => {

@@ -885,8 +885,8 @@ body{
   .ranking-card-poster .poster-small{width:44px;height:64px}
 }
 
-/* ===== P0.9 速赢批补位（2026-09-22）：toast 避让 FAB + 海报单反馈收尾 ===== */
-.toast{bottom:88px}
+/* ===== P0.9 速赢批补位（2026-09-22）：toast 位置 P2 定案（help 迁 topbar 后回到近底）+ 海报单反馈收尾 ===== */
+.toast{bottom:24px;right:24px}
 .poster img{transition:transform .22s ease}
 
 /* ===== P1b-1 玻璃两级制定案（2026-09-22）：贵级 16px+saturate(1.2) / 普级 8px / 其余 17 类退哑光 =====
@@ -898,3 +898,11 @@ body{
 :is(.segmented,.artwork-main,.toast,.dim-chip,.rank-pill,.rank-menu,.plaza-header,.scroll-top,.guide-help-btn,.custom-suggestions,details,.collection-row .row-number){
   backdrop-filter:none;-webkit-backdrop-filter:none
 }
+
+/* ===== P2 壳层（2026-09-22）：footer 版本记录行 + 弹层 scrim 统一 + topbar 导航微调 ===== */
+footer{
+  border-top:1px solid var(--line);padding-block:24px;
+  font-family:var(--font-mono);font-size:var(--t-micro);letter-spacing:var(--ls-mid);color:var(--text-3)
+}
+.modal-backdrop{background:var(--scrim)}
+.topbar nav button{letter-spacing:.02em}

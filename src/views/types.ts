@@ -10,7 +10,6 @@ export interface HomeViewProps {
   t: (zh: string, en: string) => string;
   accountEmail: string;
   setAccountOpen: (open: boolean) => void;
-  setShowGuide: (show: boolean) => void;
   kind: MediaKind;
   chooseKind: (kind: MediaKind) => void;
   navigateTo: (view: "home" | "source" | "setup" | "sorting" | "profile" | "compare") => void;
