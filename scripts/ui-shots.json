@@ -1,5 +1,10 @@
 [
-  { "name": "home-540", "path": "/", "width": 540, "height": 960 },
-  { "name": "home-800", "path": "/", "width": 800, "height": 1000 },
-  { "name": "profile-800", "path": "/myself", "width": 800, "height": 1000 }
+  { "name": "ns-home-1300", "path": "/", "width": 1300, "height": 900, "fixture": "demo-profile" },
+  { "name": "ns-home-800", "path": "/", "width": 800, "height": 1000, "fixture": "demo-profile" },
+  { "name": "ns-home-540", "path": "/", "width": 540, "height": 960, "fixture": "demo-profile" },
+  { "name": "ns-home-1300-index", "path": "/", "width": 1300, "height": 900, "fixture": "demo-profile", "ns": "index" },
+  { "name": "ns-home-800-index", "path": "/", "width": 800, "height": 1000, "fixture": "demo-profile", "ns": "index" },
+  { "name": "ns-profile-1300", "path": "/myself", "width": 1300, "height": 900, "fixture": "demo-profile" },
+  { "name": "ns-profile-800", "path": "/myself", "width": 800, "height": 1000, "fixture": "demo-profile" },
+  { "name": "ns-profile-540", "path": "/myself", "width": 540, "height": 960, "fixture": "demo-profile" }
 ]

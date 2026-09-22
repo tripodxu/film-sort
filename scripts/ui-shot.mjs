@@ -45,6 +45,32 @@ const outDir = resolve(ROOT, opt("--out", ".tmp/ui-shots"));
 const shotsFile = resolve(ROOT, opt("--shots", "scripts/ui-shots.json"));
 const dsf = opt("--dsf", "2");
 const seed = !argv.includes("--no-seed");
+// fixtures/ui-fixture 注入：按 shot 预置 localStorage（主题/演示画像）与 data-ns 变体开关
+const fixtures = existsSync(join(ROOT, "scripts/ui-fixtures.json"))
+  ? JSON.parse(readFileSync(join(ROOT, "scripts/ui-fixtures.json"), "utf8"))
+  : {};
+const extraSeed = (s) => {
+  const parts = [];
+  if (s?.name) {
+    // 自证标签：把 shot 名烙进像素，根治多图批读时的附件错位问题（评审也更清晰）
+    parts.push(
+      `document.addEventListener("DOMContentLoaded",()=>{const d=document.createElement("div");` +
+        `d.textContent=${JSON.stringify(String(s.name))};d.setAttribute("aria-hidden","true");` +
+        `d.style.cssText="position:fixed;top:4px;left:4px;z-index:2147483647;font:10px/1.4 monospace;` +
+        `letter-spacing:.08em;color:rgba(120,255,120,.6);pointer-events:none";document.body.appendChild(d);});`,
+    );
+  }
+  if (s?.theme) parts.push(`localStorage.setItem("art-rank:theme",${JSON.stringify(s.theme)});`);
+  if (s?.fixture && fixtures[s.fixture]) {
+    parts.push(
+      `localStorage.setItem("art-rank:library:v2",${JSON.stringify(JSON.stringify(fixtures[s.fixture]))});`,
+    );
+  }
+  if (s?.ns) {
+    parts.push(`document.documentElement.setAttribute("data-ns",${JSON.stringify(s.ns)});`);
+  }
+  return parts.join("");
+};
 
 if (!existsSync(DIST)) {
   console.error("dist/ 不存在，先 npm run build");
@@ -71,13 +97,14 @@ const server = createServer((req, res) => {
     // ② 确定性 PRNG 替换 Math.random —— 冻结 sampleByKind 每挂载随机挑封面（UI_REVIEW #2.4）
     // ③ 图片去过渡 —— 消除 Poster.tsx opacity:0→onLoad 渐显的时序抖动
     let html = readFileSync(file, "utf8");
+    const extra = extraSeed(shots[Number(url.searchParams.get("__shot") ?? -1)] ?? {});
     html = html.replace(
       "</head>",
       `<script>try{localStorage.setItem("art-rank:guide-dismissed","1");` +
         `Math.random=(function(){let s=0x9E3779B9|0;return function(){` +
         `s=(s+0x6D2B79F5)|0;let t=Math.imul(s^(s>>>15),1|s);` +
         `t=(t+Math.imul(t^(t>>>7),61|t))^t;return ((t^(t>>>14))>>>0)/4294967296;};})();` +
-        `}catch(e){}</script><style>img{transition:none!important;animation:none!important}</style></head>`,
+        `${extra}}catch(e){}</script><style>img{transition:none!important;animation:none!important}</style></head>`,
     );
     res.end(html);
     return;
@@ -87,10 +114,12 @@ const server = createServer((req, res) => {
 await new Promise((r) => server.listen(0, "127.0.0.1", r));
 const base = `http://127.0.0.1:${server.address().port}`;
 
-const profile = join(ROOT, ".tmp", `chrome-profile-${process.pid}`);
+// 固定 profile 目录 + 保留不清除：热缓存让远程海报加载跨轮确定（冷缓存是第 3 号非确定源）
+const profile = join(ROOT, ".tmp", "chrome-profile-shots");
 let failed = 0;
-for (const s of shots) {
+for (const [shotIdx, s] of shots.entries()) {
   const file = join(outDir, `${s.name}-${s.width}x${s.height}.png`);
+  const sep = s.path.includes("?") ? "&" : "?";
   const args = [
     "--headless=new",
     "--disable-gpu",
@@ -103,9 +132,9 @@ for (const s of shots) {
     `--user-data-dir=${profile}`,
     `--force-device-scale-factor=${dsf}`,
     `--window-size=${s.width},${s.height}`,
-    "--virtual-time-budget=4000",
+    "--virtual-time-budget=10000",
     `--screenshot=${file}`,
-    `${base}${s.path}`,
+    `${base}${s.path}${sep}__shot=${shotIdx}`,
   ];
   // 注意：必须用异步 spawn——spawnSync 会阻塞事件循环，静态服务器无法响应 chrome 的请求（互等死锁）
   const code = await new Promise((resolve) => {
@@ -124,10 +153,5 @@ for (const s of shots) {
 }
 server.closeAllConnections?.();
 server.close();
-try {
-  rmSync(profile, { recursive: true, force: true });
-} catch {
-  /* Windows 下 Chrome 可能短暂占用目录，忽略 */
-}
 console.log(`done: ${shots.length} shots, ${failed} failed`);
 process.exitCode = failed > 0 ? 1 : 0;
