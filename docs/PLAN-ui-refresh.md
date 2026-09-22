@@ -354,6 +354,12 @@ body{background-color:var(--bg);
 - **截图工具链（不用 Playwright）**：Playwright 未安装且装浏览器需联网；改用**本机 headless Chrome** 直接出图（`chrome --headless=new --screenshot --window-size=W,H --force-device-scale-factor=2`），已于 2026-09-22 实测跑通。驱动脚本用纯 Node `child_process`（stdio 取 `ignore`/`inherit`，规避沙箱管道限制）+ 文件命名约定，不引入任何依赖。
 - **P0.5 可行性验证门**（§8.1）先验证「批量出图 + 像素 diff」全链路半天内可跑；跑不通则 §8.2 整体降级为人工截图清单、工时上调。
 
+**P0.5 实测结论（2026-09-22，✅ 通过；全链路三次迭代后收敛）**：6/6 出图、同页双轮 **`--tol 0` 严格零 diff**（逐字节确定性达成）、异页 diff 76.9% 大差异检出、构建 7.2s、四门禁全绿。**迭代中证伪并修正的三个非确定源**（差异图目视定案——品红斑块即 3 张随机封面缩略图）：
+① 首访引导弹窗每轮弹出（`art-rank:guide-dismissed` 未设）→ 注入 localStorage 预置；
+② `sampleByKind` 每挂载随机挑封面（UI_REVIEW #2.4 特性）→ 注入**确定性 PRNG 替换 `Math.random`**；
+③ `Poster.tsx:289` 图片 `opacity:0→onLoad` 渐显过渡的时序抖动——**这才是 ≤5 LSB 噪底的真正来源**（此前误判为 `backdrop-filter` 合成噪声，被差异图证伪）→ 注入 `img{transition:none!important}` + `--virtual-time-budget` 稳定截图时机。
+三项均为**工具层注入**（`ui-shot.mjs` seed 模式，默认开、`--no-seed` 关），零应用代码改动。**diff 判据定标**：seed 模式「零 diff」= `--tol 0`（严格零）；非 seed 模式/含随机内容用 `--tol 8` 噪底豁免；「真变更」= 超过对应阈值的任意像素，几何位移另按 §2.1 容差判。**两条工程教训**：`spawnSync` 阻塞事件循环 → 本地服务器与 chrome 互等死锁（截图必须异步 `spawn`）；`--virtual-time-budget` 首跑挂起的真凶是该死锁而非 flag 本身——异步 spawn 后工作正常（已保留）。
+
 ### 8.1 阶段划分（每阶段独立可交付、独立可回滚）
 
 | 阶段 | 内容 | 风险 | 门禁 | 工时 |
@@ -362,7 +368,7 @@ body{background-color:var(--bg);
 | P0.5 | **可行性验证门**：headless Chrome 批量出图 + 像素 diff 全链路跑通？tsc/eslint/format 全绿？工作区干净？——任一失败先停 | 无 | 三项通过制 | 0.5d |
 | P0.7 | **北极星屏（四轮 #二.1，全计划最高杠杆）**：Home（hero+四媒介入口+collection 行）+ Profile 榜单页**两屏真实 CSS**，以 `.note-reader` 为质感基准；真实内容上试出圆角/字阶/噪点/hairline/玻璃两级/打印材质 → **反推 token 档位**（§2.1 数值在此定案）；两屏成为全计划审美验收基准；含 medium-grid 胶囊 vs 索引对比稿（0.2d，§4.1）与玻璃/材质取舍定案 | 中（定方向） | 两屏 × 六主题快照 + 对比稿评审 | 1d |
 | P0.9 | **速赢批**（三轮 #三：小时级、独立可交付）：kind 徽章统一媒介色（职责表回收）；toast 避让 FAB（过渡措施）；8/9px 字号清零；**poster hover 三重收敛一重**（删 jellyBounce + L65 弹簧过渡）；plaza-header 压平；CSS 死规则去重（§2.5）；**奖牌四处替换 + 同步去 `aria-hidden`**；scroll-top 触控补 44px（help-dot 随 P2 迁 topbar 解决）→ 收尾拍 **B0**（B0 定义 = 速赢后状态，见 §5.4） | 低 | 四门禁 + 局部矩阵 + 奖牌/字号逐处核对 | 0.5d |
-| P1a | Token 声明（5 档圆角/间距/字阶/两档字号/L2）+ **散落 hex 归零（17 处）** + kind 徽章 token 引用核验 + 媒介色越界使用回收（前置：§2.5 去重已完成）（纯增量、**零 diff 可证**） | 极低 | 四门禁 + **像素级零 diff** 快照 | 0.5d |
+| P1a | Token 声明（5 档圆角/间距/字阶/两档字号/L2）+ **散落 hex 归零（17 处）** + kind 徽章 token 引用核验 + 媒介色越界使用回收（前置：§2.5 去重已完成）（纯增量、**零 diff 可证**） | 极低 | 四门禁 + **零 diff 快照（seed 模式 `--tol 0` 严格零；非 seed `--tol 8`，见 §8.0）** | 0.5d |
 | P1a.5 | **浅色四主题对比度扫描与 `--text-3` 定案（四轮 #三.6，纯脚本）**：retro/minimal/simple/classic 的 `color-mix` surface + `--text-3`（74% 混合，承担 44×11px + 44×12px meta）从未做过 4.5:1 验证——结果决定是否上调混合比；**若上调属 L1 token 变更，必须在 P1b 前定案**，否则 P1b/P2/P3 全部基线重拍。本计划唯一"先后顺序显著影响成本"的依赖 | 低 | 对比度报告（组合×字号矩阵）+ L1 定案记录 | 0.5d |
 | P1b | 裸数值归一 + 字体栈 + 噪点（§2 余下）——**顺序：圆角收敛先行**（12 值→5 档、弹层统一单档）**再间距**（三轮 #一.1）；交付物明列 **玻璃两级制（贵级 2 类 + 普级 2 类，其余 17 类退哑光）**、阴影 36→2、动效曲线统一（含 jelly 残留清理） | 低（有容差位移） | 四门禁 + **B0→B1** 快照按 §2.1 容差判 + 动效节奏录屏 + 移动端滚动帧率手测 | 1.5d |
 | P2 | 壳层：topbar/footer/toast/弹层体系（§3）+ **help 入口迁 topbar**（§0 第六类，四轮 #三.5，一次解决触控/遮挡/发现性三件事） | 低 | 四门禁 + 弹层逐个开合手测 + help 发现性手测 + toast 位置定案 | 1d |
@@ -443,9 +449,9 @@ body{background-color:var(--bg);
 frontend-design 技能明文规则：禁 Inter/Roboto/Space Grotesk 独挑大梁、禁紫蓝渐变、禁模板化布局、禁 emoji 图标——§1 反清单逐条对应，非主观臆断。其「不同主题配不同字体与审美（different fonts, different aesthetics）」原则是 §7 主题人格化（不止换色）的直接依据。
 
 ### 10.3 基线事实（对本仓的完整盘点）
-9 视图（views/ 11 个 .tsx = 9 视图 + IconButton + helpers）/ 11 弹层 / **13 组件**（components/ 12 + views/IconButton，口径注明于此）/ styles.css **639 行**（ReadAllLines 含空行口径；审查方 read 工具报 638——1 行差异系空行/尾行口径差，P0 用统一脚本钉死后单向更新本节）/ App.tsx **2444 行**（工作区含 WIP ±28/−51；HEAD 2467；审查方报 2414，同为口径差，以统一脚本为准）/ !important **37 处 occurrence**（= collection-row 一族 32 + reduced-motion 4 + 断点 1；按规则数 15 条含 !important、其中 collection 族 12 条——UI_REVIEW.md「一族 32 处」与审查「15 处」分别是 occurrence/rule 口径，**已统一**）/ hex **140 处**（token 定义层 123 + 散落 17，P1a 归零对象）/ `var(--font-serif)` 使用点 2 处（`.cover-fallback span`、`.note-reader-body`）/ 6 主题 / CSP 头（`font-src 'self' data:`，仅 worker 下发、无 `_headers`）/ 断点分布（**max-width 520/540/600/720/800/850 + min-width 1300**，另 hover:none、prefers-reduced-motion 两条能力查询；850 有带空格/无空格两种写法；**520 系 2026-09 审查补录**——`@media (max-width:520px)` 带空格写法，前两轮正则均漏，前轮"520 非断点"的结论**作废**）。
+9 视图（views/ 11 个 .tsx = 9 视图 + IconButton + helpers）/ 11 弹层 / **13 组件**（components/ 12 + views/IconButton，口径注明于此）/ styles.css **639 行**（79 空 / 560 非空；审查方报 638 系口径差，已由脚本钉死）/ App.tsx **2444 行**（13 空 / 2431 非空；审查方报 2414 系口径差，已钉死）/ !important **37 处 occurrence**（= collection 族 32 + reduced-motion 4 + 其他 1；15 条规则含 !important；32/15/37 = occurrence/rule/总数三口径，已统一）/ hex **140 处**（token 定义层 123 + 散落 17，P1a 归零对象）/ `var(--font-serif)` 使用点 2 处（`.cover-fallback span`、`.note-reader-body`）/ 6 主题 / CSP 头（`font-src 'self' data:`，仅 worker 下发、无 `_headers`）/ 断点分布（**max-width 520/540/600/720/800/850 + min-width 1300**，另 hover:none、prefers-reduced-motion 两条能力查询；850 有带空格/无空格两种写法；**520 系 2026-09 审查补录**——`@media (max-width:520px)` 带空格写法，前两轮正则均漏，前轮"520 非断点"的结论**作废**）。
 
-**基线时效声明**：本计划起草于 2026-09-22、对照 HEAD 2026-09-21——此前文本中"2026-09"日期戳系笔误（已全量更正）；审查所称"快照落后 7 个月"即由该笔误引起，实际快照差距 <2 天。但 P0 重锚定照做（口径统一的需要）。§0-§8 的方案全部锚定在这些事实上。
+**基线时效声明**：本计划起草于 2026-09-22、对照 HEAD 2026-09-21——此前文本中"2026-09"日期戳系笔误（此处应为 2026-02；已全量更正）。审查所称"快照落后 7 个月"即由该笔误引起，实际快照差距 <2 天。但 P0 重锚定照做（口径统一的需要）。§0-§8 的方案全部锚定在这些事实上。blur/圆角/阴影/字号的精确计数以 `docs/ui-baseline.json` 与 §10.6 表为准。
 
 ### 10.4 量化设计数据库校验（2026-09 补做，ui-ux-pro-max `--design-system` + `--domain typography`）
 **采纳**：
@@ -504,5 +510,7 @@ frontend-design 技能明文规则：禁 Inter/Roboto/Space Grotesk 独挑大梁
 | `src/lib/layout.ts`（新增） | ≤30 行，1:1 复刻 `theme.ts`（readLayout/applyLayout/持久化） |
 | `src/lib/theme.ts` | 仅顶部注释更新（注释级改动，逻辑零变化） |
 | `src/components/ThemeSwitcher.tsx` / `SettingsMenu.tsx` | 增加布局切换组（同款 menu-item，mono 方格图标预览） |
+| `scripts/ui-audit.mjs` / `ui-shot.mjs` / `ui-diff.mjs` / `ui-shots.json`（新增，开发工具） | P0/P0.5 工具链：基线盘点（口径钉死）、headless Chrome 批量截图、纯 Node PNG 像素 diff；零依赖、不进产物（§8.0/§8.2） |
+| `docs/ui-baseline.json`（新增） | P0 基线快照（`ui-audit.mjs` 输出存档，数字争议以此重跑为准） |
 | `public/` | 噪点纹理（默认 data-URI 零文件）；自托管字体已移出本计划（§9） |
 | `index.html` | 仅 meta theme-color 相关（如需） |
