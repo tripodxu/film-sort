@@ -657,7 +657,9 @@ body{
   background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='g'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='140' height='140' filter='url(%23g)' opacity='.045'/%3E%3C/svg%3E");
 }
 /* ---- v2 封面式构图（2026-09-22 二稿：动骨架，不是打磨） ---- */
-.orb-hero{border-bottom:3px double var(--line)}
+.orb-hero.orb-hero{
+  border-bottom:3px double var(--line);height:auto;min-height:min(680px,calc(100svh - 124px))
+}
 /* 半调网点：hero 底纹（印刷材质候选；radial-gradient 仅作图案非渐变铺底） */
 .orb-hero::after{
   content:"";position:absolute;inset:0;z-index:0;pointer-events:none;
@@ -671,7 +673,10 @@ body{
   column-gap:48px;align-content:stretch
 }
 .home-heading{grid-column:1;grid-row:1/3;position:relative;align-self:center}
-.home-actions{grid-column:1;grid-row:3;align-self:end}
+.home-actions.home-actions{
+  position:static;inset:auto;
+  grid-column:1;grid-row:3;align-self:end;justify-self:start;margin-top:36px
+}
 .orb-index{grid-column:2;grid-row:3;justify-self:end;align-self:end}
 /* 档案标头：mono eyebrow + 前置 16px 短线 + 11px（中英皆生效） */
 .home-heading .eyebrow{
@@ -679,12 +684,13 @@ body{
   color:var(--text-3);text-transform:uppercase;display:inline-flex;align-items:center;gap:10px
 }
 .home-heading .eyebrow::before{content:"";width:16px;height:1px;background:currentColor;opacity:.7}
-/* masthead 报头：上下夹线 + 大字 */
+/* masthead 报头 v3：衬线报名体三行叠印（ART / 斜杠 / RANK，斜杠即分隔线）+ 上下夹线 */
 .home-heading h1{
-  margin:24px 0 0;padding:16px 0 22px;border-top:1px solid var(--line);border-bottom:3px double var(--line);
-  letter-spacing:-.02em;line-height:.84;font-size:clamp(64px,9.5vw,138px)
+  margin:24px 0 0;padding:18px 0 24px;border-top:1px solid var(--line);border-bottom:3px double var(--line);
+  font-family:var(--font-serif);font-weight:700;letter-spacing:-.01em;line-height:.8;font-size:clamp(58px,8.6vw,126px);
+  display:flex;flex-direction:column;align-items:flex-start
 }
-.home-heading h1>span{color:var(--accent);padding-inline:.04em}
+.home-heading h1>span{color:var(--accent);font-style:italic;padding-block:.02em}
 /* 竖排书脊：中文副标沿右缘竖排（writing-mode 对 CJK 是一等公民） */
 .home-heading h1>small{
   position:absolute;right:0;top:6px;writing-mode:vertical-rl;margin:0;
@@ -695,6 +701,11 @@ body{
   font-family:var(--font-serif);font-size:var(--t-body);line-height:2;color:var(--text-2)
 }
 .home-heading p::before{content:"";position:absolute;left:0;top:.85em;width:40px;height:1px;background:var(--text-3)}
+/* CJK 首字下沉：印刷正文的经典起手式 */
+.home-heading p::first-letter{
+  float:left;font-family:var(--font-serif);font-size:52px;line-height:.84;
+  padding:6px 12px 0 0;color:var(--text-hi)
+}
 /* ---- 玻璃两级 v2：塑封档案卡（identity）+ 冲切标签条（home-actions）——几何从胶囊改直角 ---- */
 .identity.glass-capsule{
   position:relative;border-radius:var(--r-xs);
@@ -725,7 +736,7 @@ body{
   font-weight:600;letter-spacing:var(--ls-mid);color:var(--text-hi)
 }
 .medium-section .section-heading h2::before,.profile-overview .section-heading h2::before,.profile-layout .section-heading h2::before{
-  content:"";width:16px;height:1px;background:var(--text-3);flex:none
+  content:"";width:22px;height:3px;background:var(--accent);flex:none
 }
 .section-heading>span{
   font-family:var(--font-mono);font-size:var(--t-meta);letter-spacing:var(--ls-mid);
@@ -736,66 +747,71 @@ body{
 .medium-music{--media:var(--music)}.medium-other{--media:var(--other)}
 /* ---- medium 目录巨号行（v2 默认稿）：印刷目录 —— 巨号 + 小海报 + 点线引 ---- */
 .medium-grid{display:block}
-.medium-grid>.medium-item{
+.medium-grid.medium-grid>.medium-item.medium-item{
   --media:var(--text-3);
   position:relative;display:grid;grid-template-columns:84px 64px minmax(0,1fr) 28px;grid-template-rows:auto auto;
   align-items:center;column-gap:26px;row-gap:2px;width:100%;text-align:left;
   padding:24px 6px;border:0;border-bottom:1px solid var(--line);border-radius:0;background:transparent;box-shadow:none;
   transition:background var(--dur-1) var(--ease-out)
 }
-.medium-grid>.medium-item::before{
+.medium-grid.medium-grid>.medium-item.medium-item::before{
   content:"";position:absolute;left:0;top:calc(50% - 14px);width:3px;height:28px;background:var(--media);opacity:.9
 }
-.medium-grid>.medium-item:hover{background:color-mix(in srgb,var(--text) 3.5%,transparent)}
-.medium-grid>.medium-number{
-  grid-column:1;grid-row:1/3;font-family:var(--font-mono);font-size:46px;line-height:.9;
-  letter-spacing:.02em;color:color-mix(in srgb,var(--text) 26%,transparent);
+.medium-grid.medium-grid>.medium-item.medium-item:hover{background:color-mix(in srgb,var(--text) 3.5%,transparent)}
+.medium-grid.medium-grid>.medium-item.medium-item>.medium-number{
+  grid-column:1;grid-row:1/3;position:relative;z-index:0;margin-left:-16px;
+  font-family:var(--font-mono);font-size:52px;line-height:.9;
+  letter-spacing:.02em;color:color-mix(in srgb,var(--text) 30%,transparent);
   font-variant-numeric:tabular-nums;transition:color var(--dur-1) var(--ease-out)
 }
-.medium-grid>.medium-item:hover>.medium-number{color:var(--accent)}
-.medium-grid>.medium-item .poster-small,.medium-grid>.medium-item .poster-large{
-  grid-column:2;grid-row:1/3;width:64px;height:92px;aspect-ratio:auto;max-height:none;object-fit:cover;
-  border-radius:var(--r-xs);box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--text) 10%,transparent)
+.medium-grid.medium-grid>.medium-item.medium-item:hover>.medium-number{color:var(--accent)}
+/* 海报出血叠压：冲破上下行线 + 静态深度（印刷拼贴，非 hover 浮起） */
+.medium-grid.medium-grid>.medium-item.medium-item .poster-small,.medium-grid.medium-grid>.medium-item.medium-item .poster-large{
+  grid-column:2;grid-row:1/3;position:relative;z-index:1;width:68px;height:98px;
+  aspect-ratio:auto;max-height:none;object-fit:cover;margin-left:-14px;margin-block:-12px;
+  border-radius:var(--r-xs);
+  box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--text) 10%,transparent),0 8px 20px rgba(0,0,0,.32)
 }
-.medium-grid>.medium-item>strong{
+.medium-grid.medium-grid>.medium-item.medium-item>strong{
   grid-column:3;grid-row:1;align-self:end;font-family:var(--font-display);font-size:27px;
   font-weight:600;letter-spacing:.01em;color:var(--text-hi)
 }
-.medium-grid>.medium-item>small{
+.medium-grid.medium-grid>.medium-item.medium-item>small{
   grid-column:3;grid-row:2;align-self:start;display:flex;align-items:center;gap:14px;
-  font-family:var(--font-mono);font-size:var(--t-meta);color:var(--text-3);letter-spacing:.04em;text-align:left;padding-right:0
+  justify-content:flex-start;margin:0;padding-right:0;
+  font-family:var(--font-mono);font-size:var(--t-meta);color:var(--text-3);letter-spacing:.04em;text-align:left
 }
-.medium-grid>.medium-item>small::after{
-  content:"";flex:1;border-bottom:1px dotted color-mix(in srgb,var(--text) 22%,transparent)
+.medium-grid.medium-grid>.medium-item.medium-item>small::after{
+  content:"";flex:1 1 auto;border-bottom:1px dotted color-mix(in srgb,var(--text) 38%,transparent)
 }
-.medium-grid>.medium-item>svg:last-child{
+.medium-grid.medium-grid>.medium-item.medium-item>svg:last-child{
   grid-column:4;grid-row:1/3;position:static;color:var(--text-3);
   transition:color var(--dur-1) var(--ease-out),transform var(--dur-2) var(--ease-out)
 }
-.medium-grid>.medium-item:hover>svg:last-child{color:var(--accent);transform:translateX(3px)}
+.medium-grid.medium-grid>.medium-item.medium-item:hover>svg:last-child{color:var(--accent);transform:translateX(3px)}
 @media(max-width:800px){
-  .medium-grid>.medium-item{grid-template-columns:64px 56px minmax(0,1fr) 24px;column-gap:18px;padding:20px 4px}
-  .medium-grid>.medium-number{font-size:36px}
-  .medium-grid>.medium-item>strong{font-size:22px}
+  .medium-grid.medium-grid>.medium-item.medium-item{grid-template-columns:64px 56px minmax(0,1fr) 24px;column-gap:18px;padding:20px 4px}
+  .medium-grid.medium-grid>.medium-item.medium-item>.medium-number{font-size:36px}
+  .medium-grid.medium-grid>.medium-item.medium-item>strong{font-size:22px}
 }
 @media(max-width:540px){
   /* 结构性例外保留：小屏仍是胶囊横排（§2.1） */
   .medium-grid{display:flex;flex-wrap:wrap;gap:10px;border:0}
-  .medium-grid>.medium-item{
+  .medium-grid.medium-grid>.medium-item.medium-item{
     display:grid;grid-template-columns:auto auto minmax(0,1fr) auto;grid-template-rows:auto auto;
     align-items:center;gap:4px 10px;min-height:58px;padding:9px 14px;border-radius:var(--r-pill);border-bottom:0
   }
-  .medium-grid>.medium-item::before{display:none}
-  .medium-grid>.medium-item .poster-small,.medium-grid>.medium-item .poster-large{
+  .medium-grid.medium-grid>.medium-item.medium-item::before{display:none}
+  .medium-grid.medium-grid>.medium-item.medium-item .poster-small,.medium-grid.medium-grid>.medium-item.medium-item .poster-large{
     width:34px;height:48px;grid-row:1/3;grid-column:2;aspect-ratio:auto;max-height:none
   }
-  .medium-grid>.medium-item>.medium-number{display:none}
-  .medium-grid>.medium-item>strong{grid-row:1;grid-column:3;font-size:15px;line-height:1.2;align-self:auto}
-  .medium-grid>.medium-item>small{
+  .medium-grid.medium-grid>.medium-item.medium-item>.medium-number{display:none}
+  .medium-grid.medium-grid>.medium-item.medium-item>strong{grid-row:1;grid-column:3;font-size:15px;line-height:1.2;align-self:auto}
+  .medium-grid.medium-grid>.medium-item.medium-item>small{
     grid-row:2;grid-column:3;display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:var(--t-micro)
   }
-  .medium-grid>.medium-item>small::after{display:none}
-  .medium-grid>.medium-item>svg:last-child{grid-row:1/3;grid-column:4;align-self:center}
+  .medium-grid.medium-grid>.medium-item.medium-item>small::after{display:none}
+  .medium-grid.medium-grid>.medium-item.medium-item>svg:last-child{grid-row:1/3;grid-column:4;align-self:center}
 }
 /* ---- 对比稿 B：档案索引条目（[data-ns="index"]，≥541px 生效） ---- */
 @media(min-width:541px){
@@ -814,7 +830,7 @@ body{
   [data-ns="index"] .medium-item>small{grid-column:3;grid-row:2;margin-top:2px;text-align:left}
   [data-ns="index"] .medium-item>svg:last-child{position:static;grid-column:4;grid-row:1/3}
   [data-ns="index"] .medium-item:hover{background:color-mix(in srgb,var(--text) 3.5%,transparent);border-bottom-color:color-mix(in srgb,var(--accent) 45%,transparent)}
-  [data-ns="index"] .medium-grid>.medium-item{
+  [data-ns="index"] .medium-grid.medium-grid>.medium-item.medium-item{
     display:grid;grid-template-columns:34px 54px minmax(0,1fr) 28px;align-items:center;
     width:100%;min-height:104px;gap:18px;padding:16px 10px;border:0;border-bottom:1px solid var(--line);
     border-radius:0;background:transparent;box-shadow:none
@@ -841,10 +857,13 @@ body{
 }
 .ranking-list>li:hover{background:color-mix(in srgb,var(--text) 3.5%,transparent)}
 .row-number{
+  align-self:stretch;display:flex;align-items:center;padding-inline:20px;margin-inline:-8px;
   font-family:var(--font-mono);font-size:38px;line-height:.9;color:color-mix(in srgb,var(--text) 30%,transparent);
+  background:color-mix(in srgb,var(--text) 5%,transparent);
   font-variant-numeric:tabular-nums;text-align:left
 }
-.ranking-list>li:nth-child(-n+3) .row-number{color:var(--accent)}
+/* 前三名满版墨块：印刷名录的名次牌 */
+.ranking-list>li:nth-child(-n+3) .row-number{background:var(--accent);color:var(--bg);font-weight:600}
 .ranking-card-poster .poster-small{
   width:52px;height:76px;border-radius:var(--r-xs);
   box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--text) 10%,transparent)

@@ -506,6 +506,7 @@ frontend-design 技能明文规则：禁 Inter/Roboto/Space Grotesk 独挑大梁
 - **新非确定源 #3（远程海报加载竞态）**：冷缓存 chrome profile 每轮重拉远程海报，r5 有图 / r6 兜底——**固定热缓存 profile + warm-pass 双跑**解决，实测 warm vs capture **8/8 严格零 diff**（`--tol 0`，含海报区）；已并入 §8.0 判据。
 - **工程教训**：CSS 特异性陷阱——旧 `.medium-item`（0-1-0）在 minified 产物中胜出新规则（渲染成旧内部网格、描述文案漂到右下角），统一 `.medium-grid>` 前缀（0-2-0）后按设计渲染；特异性问题**必须以渲染事实裁决**，产物 grep 只能证明"存在"不能证明"获胜"。
 - **二稿（用户评审：「和之前相比没什么变化」→ 一稿是打磨不是改造，批评成立）**：v2 动构图骨架——masthead 报头（h1 上下 1px+3px-double 夹线、字号拉到 clamp 138px）、**竖排书脊**（`writing-mode:vertical-rl` 中文副标，CJK 一等公民手法）、**目录巨号行**（46px mono 编号 + 64×92 海报 + 点线引线，替掉四列卡）、**名录账簿**（38px 名次巨号 + 前三名 accent 色 + 23px 标题）、**索引页签**（dim-chip 直角 + 3px 媒介色顶边 + 激活上浮 4px）、**角标著录卡**（export-tools accent 裁切角）。实测 v1→v2 Home **20.0% 像素变化 / maxDelta 232**。原则沉淀：**北极星迭代的验收线是「形态骨架变化」而非「细节精致度」，每稿先问：拿掉颜色还认得出是新版吗？**
+- **三稿（用户「再加半档力度」）+ 收尾修复**：衬线**三行叠印报名**（ART / 巨型斜体 lime 斜杠 / RANK，斜杠即分隔线）、**海报出血叠压**（冲破行线 + 静态深度阴影 + 巨号左悬挂）、**名次满版墨块**（前三名 accent 实底名次牌）、**CJK 首字下沉**、accent 粗段落标记。收尾三修复：hero 高度 auto（3 行报名撑爆 570px 固定高）、`home-actions` 旧 absolute 定位钉子（引文被按钮压住的真凶）、meta 点线引线显形。**特异性钉子沉淀**：medium 全系 `.x.x>.y.y` 类权重翻倍（0-4-0 级）压过旧隐藏规则；`.orb-hero.orb-hero`/`.home-actions.home-actions` 同理。
 
 ---
 
