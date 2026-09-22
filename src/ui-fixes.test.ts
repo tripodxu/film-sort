@@ -159,4 +159,11 @@ describe("P5c 布局模式绊线", () => {
     const home = readFileSync("src/views/HomeView.tsx", "utf8");
     expect(home).toContain('matches ? "auto" : "smooth"');
   });
+  it("journey 键盘专项：chevron 为原生 button（Tab 可达）且带 aria-label", () => {
+    const home = readFileSync("src/views/HomeView.tsx", "utf8");
+    expect((home.match(/className="journey-chevron/g) ?? []).length).toBe(2);
+    expect(home).toContain('<button\n            className="journey-chevron journey-prev"');
+    expect(home).toContain('<button\n            className="journey-chevron journey-next"');
+    expect((home.match(/aria-label=\{t\("向(左|右)滚动"/g) ?? []).length).toBe(2);
+  });
 });
