@@ -13,6 +13,12 @@ const icons: Record<string, React.ComponentType<{ size?: number }>> = {
   other: Library,
 };
 const kinds = Object.keys(mediaLabels) as MediaKind[];
+// P5c 门禁「reduced-motion 专项」：scroll-behavior 仅按钮触发且尊重系统减动效开关（§5.2）
+const railScroll = (el: Element | null | undefined, dx: number) =>
+  el?.scrollBy({
+    left: dx,
+    behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth",
+  });
 
 export function HomeView({
   locale,
@@ -110,11 +116,9 @@ export function HomeView({
           <button
             className="journey-chevron journey-prev"
             aria-label={t("向左滚动", "Scroll left")}
-            onClick={(e) => {
-              e.currentTarget.parentElement
-                ?.querySelector(".medium-grid")
-                ?.scrollBy({ left: -360, behavior: "smooth" });
-            }}
+            onClick={(e) =>
+              railScroll(e.currentTarget.parentElement?.querySelector(".medium-grid"), -360)
+            }
           >
             ‹
           </button>
@@ -152,11 +156,9 @@ export function HomeView({
           <button
             className="journey-chevron journey-next"
             aria-label={t("向右滚动", "Scroll right")}
-            onClick={(e) => {
-              e.currentTarget.parentElement
-                ?.querySelector(".medium-grid")
-                ?.scrollBy({ left: 360, behavior: "smooth" });
-            }}
+            onClick={(e) =>
+              railScroll(e.currentTarget.parentElement?.querySelector(".medium-grid"), 360)
+            }
           >
             ›
           </button>

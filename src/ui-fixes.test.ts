@@ -152,4 +152,8 @@ describe("P5c 布局模式绊线", () => {
     expect(css).not.toContain("grid-auto-flow:dense");
     expect(css).not.toMatch(/:last-child:nth-child/);
   });
+  it("journey 滚动尊重 prefers-reduced-motion（JS 行为层，CSS 豁免覆盖不到）", () => {
+    const home = readFileSync("src/views/HomeView.tsx", "utf8");
+    expect(home).toContain('matches ? "auto" : "smooth"');
+  });
 });
