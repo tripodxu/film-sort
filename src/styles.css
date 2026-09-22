@@ -966,3 +966,28 @@ footer{
 .page-heading{border-bottom:3px double var(--line);padding-bottom:22px;margin-bottom:var(--sp-6)}
 .page-heading h1{letter-spacing:-.01em}
 .page-heading p{font-family:var(--font-mono);font-size:var(--t-meta);letter-spacing:.08em;color:var(--text-3);margin-top:10px}
+
+/* ===== P3c 八界面（2026-09-22）：Compare/Share/Plaza/PlazaPost/RankingDetail/批注底栏 =====
+   NoteReader 主体依 §9 保护清单不动，仅收编其批注底栏按钮 chrome。 */
+.comparison-row .row-number,.reorder-item .row-number{font-variant-numeric:tabular-nums}
+.comparison-row{transition:background var(--dur-1) var(--ease-out)}
+.comparison-row:hover{background:color-mix(in srgb,var(--text) 3.5%,transparent)}
+.metrics strong,.metrics-wide strong{font-variant-numeric:tabular-nums;letter-spacing:-.01em}
+.metrics>div>span,.metrics-wide>div>span{font-family:var(--font-mono);font-size:var(--t-micro);letter-spacing:var(--ls-mid);text-transform:uppercase;color:var(--text-3)}
+.plaza-post-detail{border-top:1px solid var(--line);padding-top:20px}
+.plaza-sticker-medal{
+  font-family:var(--font-mono);font-size:var(--t-micro);font-weight:600;
+  font-variant-numeric:tabular-nums;letter-spacing:.04em
+}
+.plaza-ability,.badge-visit{
+  border-radius:6px;font-family:var(--font-mono);font-size:var(--t-micro);letter-spacing:.05em
+}
+.comment-item{border-bottom:1px solid var(--line);padding:14px 2px}
+.comment-author{font-family:var(--font-display);font-size:var(--t-body);color:var(--text-hi)}
+.comment-time{font-family:var(--font-mono);font-size:var(--t-micro);letter-spacing:.05em;color:var(--text-3);font-variant-numeric:tabular-nums}
+.comment-content{font-family:var(--font-serif);line-height:1.9;color:var(--text-2);margin-top:6px}
+.share-section{border-top:3px double var(--line);padding-top:20px}
+.note-footer-btn{
+  border-radius:6px;font-family:var(--font-mono);font-size:var(--t-meta);letter-spacing:.05em
+}
+.note-footer-primary{letter-spacing:.08em}
