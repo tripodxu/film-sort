@@ -929,3 +929,28 @@ footer{
   .artwork-card .artwork-main:hover::after{opacity:0}
   .artwork-card .artwork-main:active{transform:none;background:color-mix(in srgb,var(--accent) 8%,transparent)}
 }
+
+/* ===== P3a-2 Setup 屏 + Home 品味年轮（2026-09-22）============================
+   印刷标签化 segmented / 索引化 candidate 行 / 滚动域 contain / 分区标头全量接入 /
+   品味年轮（coordinate/empty-profile/sample-covers）收编档案语言。 */
+.section-heading{
+  border-top:3px double var(--line);padding-top:18px;align-items:baseline
+}
+.section-heading h2{display:flex;align-items:center;gap:12px;font-family:var(--font-body);font-size:16px;font-weight:600;letter-spacing:var(--ls-mid);color:var(--text-hi)}
+.section-heading h2::before{content:"";width:22px;height:3px;background:var(--accent);flex:none}
+.segmented button{
+  border-radius:6px;font-family:var(--font-mono);font-size:var(--t-meta);letter-spacing:.06em;
+  transition:background var(--dur-1) var(--ease-out),color var(--dur-1) var(--ease-out)
+}
+.segmented button.active{box-shadow:inset 0 -2px 0 var(--accent)}
+.candidate-scroll{overscroll-behavior:contain}
+.candidate-row{
+  border-bottom:1px solid var(--line);padding:12px 6px;
+  transition:background var(--dur-1) var(--ease-out)
+}
+.candidate-row:hover{background:color-mix(in srgb,var(--text) 3.5%,transparent)}
+.candidate-row:has(input:checked){box-shadow:inset 3px 0 0 var(--accent)}
+.check-all{font-family:var(--font-mono);font-size:var(--t-micro);letter-spacing:var(--ls-mid);color:var(--text-3)}
+.coordinate,.empty-profile{border-top:1px solid var(--line);padding-top:20px}
+.empty-profile h3{font-family:var(--font-display);font-size:var(--t-h3);color:var(--text-hi)}
+.empty-profile span{font-family:var(--font-mono);font-size:var(--t-micro);letter-spacing:var(--ls-mid);color:var(--text-3)}
