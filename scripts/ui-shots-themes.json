@@ -1,14 +1,96 @@
 [
-  { "name": "th-modern-home", "path": "/", "width": 1300, "height": 900, "fixture": "demo-profile" },
-  { "name": "th-modern-profile", "path": "/myself", "width": 1300, "height": 900, "fixture": "demo-profile" },
-  { "name": "th-retro-home", "path": "/", "width": 1300, "height": 900, "fixture": "demo-profile", "theme": "retro" },
-  { "name": "th-retro-profile", "path": "/myself", "width": 1300, "height": 900, "fixture": "demo-profile", "theme": "retro" },
-  { "name": "th-minimal-home", "path": "/", "width": 1300, "height": 900, "fixture": "demo-profile", "theme": "minimal" },
-  { "name": "th-minimal-profile", "path": "/myself", "width": 1300, "height": 900, "fixture": "demo-profile", "theme": "minimal" },
-  { "name": "th-simple-home", "path": "/", "width": 1300, "height": 900, "fixture": "demo-profile", "theme": "simple" },
-  { "name": "th-simple-profile", "path": "/myself", "width": 1300, "height": 900, "fixture": "demo-profile", "theme": "simple" },
-  { "name": "th-classic-home", "path": "/", "width": 1300, "height": 900, "fixture": "demo-profile", "theme": "classic" },
-  { "name": "th-classic-profile", "path": "/myself", "width": 1300, "height": 900, "fixture": "demo-profile", "theme": "classic" },
-  { "name": "th-cyber-home", "path": "/", "width": 1300, "height": 900, "fixture": "demo-profile", "theme": "cyber" },
-  { "name": "th-cyber-profile", "path": "/myself", "width": 1300, "height": 900, "fixture": "demo-profile", "theme": "cyber" }
+  {
+    "name": "th-modern-home",
+    "path": "/",
+    "width": 1300,
+    "height": 900,
+    "fixture": "demo-profile"
+  },
+  {
+    "name": "th-modern-profile",
+    "path": "/myself",
+    "width": 1300,
+    "height": 900,
+    "fixture": "demo-profile"
+  },
+  {
+    "name": "th-retro-home",
+    "path": "/",
+    "width": 1300,
+    "height": 900,
+    "fixture": "demo-profile",
+    "theme": "retro"
+  },
+  {
+    "name": "th-retro-profile",
+    "path": "/myself",
+    "width": 1300,
+    "height": 900,
+    "fixture": "demo-profile",
+    "theme": "retro"
+  },
+  {
+    "name": "th-minimal-home",
+    "path": "/",
+    "width": 1300,
+    "height": 900,
+    "fixture": "demo-profile",
+    "theme": "minimal"
+  },
+  {
+    "name": "th-minimal-profile",
+    "path": "/myself",
+    "width": 1300,
+    "height": 900,
+    "fixture": "demo-profile",
+    "theme": "minimal"
+  },
+  {
+    "name": "th-simple-home",
+    "path": "/",
+    "width": 1300,
+    "height": 900,
+    "fixture": "demo-profile",
+    "theme": "simple"
+  },
+  {
+    "name": "th-simple-profile",
+    "path": "/myself",
+    "width": 1300,
+    "height": 900,
+    "fixture": "demo-profile",
+    "theme": "simple"
+  },
+  {
+    "name": "th-classic-home",
+    "path": "/",
+    "width": 1300,
+    "height": 900,
+    "fixture": "demo-profile",
+    "theme": "classic"
+  },
+  {
+    "name": "th-classic-profile",
+    "path": "/myself",
+    "width": 1300,
+    "height": 900,
+    "fixture": "demo-profile",
+    "theme": "classic"
+  },
+  {
+    "name": "th-cyber-home",
+    "path": "/",
+    "width": 1300,
+    "height": 900,
+    "fixture": "demo-profile",
+    "theme": "cyber"
+  },
+  {
+    "name": "th-cyber-profile",
+    "path": "/myself",
+    "width": 1300,
+    "height": 900,
+    "fixture": "demo-profile",
+    "theme": "cyber"
+  }
 ]

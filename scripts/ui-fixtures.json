@@ -14,14 +14,50 @@
         "createdAt": "2026-09-20T10:00:00.000Z",
         "items": [
           { "id": "ns-film-1", "title": "花样年华", "rank": 1, "creator": "王家卫", "year": 2000 },
-          { "id": "ns-film-2", "title": "The Substance", "rank": 2, "creator": "Coralie Fargeat", "year": 2024 },
-          { "id": "ns-film-3", "title": "过往人生", "rank": 3, "creator": "Celine Song", "year": 2023 },
-          { "id": "ns-film-4", "title": "燃烧女子的肖像", "rank": 4, "creator": "Céline Sciamma", "year": 2019 },
+          {
+            "id": "ns-film-2",
+            "title": "The Substance",
+            "rank": 2,
+            "creator": "Coralie Fargeat",
+            "year": 2024
+          },
+          {
+            "id": "ns-film-3",
+            "title": "过往人生",
+            "rank": 3,
+            "creator": "Celine Song",
+            "year": 2023
+          },
+          {
+            "id": "ns-film-4",
+            "title": "燃烧女子的肖像",
+            "rank": 4,
+            "creator": "Céline Sciamma",
+            "year": 2019
+          },
           { "id": "ns-film-5", "title": "千与千寻", "rank": 5, "creator": "宫崎骏", "year": 2001 },
-          { "id": "ns-film-6", "title": "Aftersun", "rank": 6, "creator": "Charlotte Wells", "year": 2022 },
+          {
+            "id": "ns-film-6",
+            "title": "Aftersun",
+            "rank": 6,
+            "creator": "Charlotte Wells",
+            "year": 2022
+          },
           { "id": "ns-film-7", "title": "爱情神话", "rank": 7, "creator": "邵艺辉", "year": 2021 },
-          { "id": "ns-film-8", "title": "Drive My Car", "rank": 8, "creator": "濱口竜介", "year": 2021 },
-          { "id": "ns-film-9", "title": "布达佩斯大饭店", "rank": 9, "creator": "Wes Anderson", "year": 2014 },
+          {
+            "id": "ns-film-8",
+            "title": "Drive My Car",
+            "rank": 8,
+            "creator": "濱口竜介",
+            "year": 2021
+          },
+          {
+            "id": "ns-film-9",
+            "title": "布达佩斯大饭店",
+            "rank": 9,
+            "creator": "Wes Anderson",
+            "year": 2014
+          },
           { "id": "ns-film-10", "title": "让子弹飞", "rank": 10, "creator": "姜文", "year": 2010 }
         ]
       },
@@ -33,13 +69,49 @@
         "collectionTitle": "循环歌单",
         "createdAt": "2026-09-21T10:00:00.000Z",
         "items": [
-          { "id": "ns-music-1", "title": "山海", "rank": 1, "creator": "草东没有派对", "year": 2016 },
-          { "id": "ns-music-2", "title": "杀死那个石家庄人", "rank": 2, "creator": "万能青年旅店", "year": 2010 },
-          { "id": "ns-music-3", "title": "Nights", "rank": 3, "creator": "Frank Ocean", "year": 2016 },
+          {
+            "id": "ns-music-1",
+            "title": "山海",
+            "rank": 1,
+            "creator": "草东没有派对",
+            "year": 2016
+          },
+          {
+            "id": "ns-music-2",
+            "title": "杀死那个石家庄人",
+            "rank": 2,
+            "creator": "万能青年旅店",
+            "year": 2010
+          },
+          {
+            "id": "ns-music-3",
+            "title": "Nights",
+            "rank": 3,
+            "creator": "Frank Ocean",
+            "year": 2016
+          },
           { "id": "ns-music-4", "title": "晴天", "rank": 4, "creator": "周杰伦", "year": 2003 },
-          { "id": "ns-music-5", "title": "Weird Fishes", "rank": 5, "creator": "Radiohead", "year": 2007 },
-          { "id": "ns-music-6", "title": "大石碎胸口", "rank": 6, "creator": "腰乐队", "year": 2005 },
-          { "id": "ns-music-7", "title": "Redbone", "rank": 7, "creator": "Childish Gambino", "year": 2016 },
+          {
+            "id": "ns-music-5",
+            "title": "Weird Fishes",
+            "rank": 5,
+            "creator": "Radiohead",
+            "year": 2007
+          },
+          {
+            "id": "ns-music-6",
+            "title": "大石碎胸口",
+            "rank": 6,
+            "creator": "腰乐队",
+            "year": 2005
+          },
+          {
+            "id": "ns-music-7",
+            "title": "Redbone",
+            "rank": 7,
+            "creator": "Childish Gambino",
+            "year": 2016
+          },
           { "id": "ns-music-8", "title": "我记得", "rank": 8, "creator": "赵雷", "year": 2022 }
         ]
       }
