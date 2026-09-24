@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { OutboundError, fetchBounded, parseAllowedUrl, readBoundedText } from "./outbound";
 
 const doubanPolicy = {
@@ -7,6 +7,10 @@ const doubanPolicy = {
   timeoutMs: 1000,
   maxRedirects: 2,
 } as const;
+
+afterEach(() => {
+  vi.useRealTimers();
+});
 
 function createOversizedMultibyteBody(maxBytes: number) {
   const characters = "界".repeat(Math.floor(maxBytes / 3) + 1);
@@ -32,11 +36,76 @@ function createOversizedMultibyteBody(maxBytes: number) {
   return { bytes, characters, stream, wasCancelled: () => cancelled };
 }
 
+function createExactMaxBytesText(maxBytes: number) {
+  const multibytePrefix = "界".repeat(Math.floor(maxBytes / 3));
+  return multibytePrefix + "x".repeat(maxBytes % 3);
+}
+
+function createCumulativeOversizedBody(maxBytes: number) {
+  const characters = "界".repeat(Math.floor((maxBytes - 1) / 3));
+  const chunks = [characters, characters].map((text) => new TextEncoder().encode(text));
+  let nextChunk = 0;
+  let cancelled = false;
+
+  const stream = new ReadableStream<Uint8Array>({
+    pull(controller) {
+      if (nextChunk === chunks.length) {
+        controller.close();
+        return;
+      }
+
+      controller.enqueue(chunks[nextChunk++]);
+    },
+    cancel() {
+      cancelled = true;
+    },
+  });
+
+  return { chunks, stream, wasCancelled: () => cancelled };
+}
+
 describe("outbound policy", () => {
   it("accepts an exact allowed host and subject path", () => {
     const url = parseAllowedUrl("https://book.douban.com/subject/123/", doubanPolicy);
 
     expect(url.href).toBe("https://book.douban.com/subject/123/");
+  });
+
+  it("rejects a disallowed initial host before invoking fetch", async () => {
+    const fetchImpl = vi.fn(async () => new Response("unexpected", { status: 200 }));
+
+    await expect(
+      fetchBounded("https://attacker.example/subject/123", {}, doubanPolicy, fetchImpl),
+    ).rejects.toThrow(OutboundError);
+    expect(fetchImpl).not.toHaveBeenCalled();
+  });
+
+  it("aborts and wraps a timed-out request", async () => {
+    vi.useFakeTimers();
+    const fetchImpl = vi.fn(
+      (_input: string | URL | Request, init?: RequestInit) =>
+        new Promise<Response>((_, reject) => {
+          init?.signal?.addEventListener("abort", () => {
+            reject(new DOMException("aborted", "AbortError"));
+          });
+        }),
+    );
+    const fallbackDelayMs = 50;
+    const fallback = new Promise<never>((_, reject) => {
+      setTimeout(
+        () => reject(new Error("timeout test fallback")),
+        doubanPolicy.timeoutMs + fallbackDelayMs,
+      );
+    });
+    const result = Promise.race([
+      fetchBounded("https://book.douban.com/subject/123", {}, doubanPolicy, fetchImpl),
+      fallback,
+    ]);
+
+    await vi.advanceTimersByTimeAsync(doubanPolicy.timeoutMs + fallbackDelayMs + 1);
+    await expect(result).rejects.toThrow(OutboundError);
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+    expect(fetchImpl.mock.calls[0]?.[1]?.signal).toBeInstanceOf(AbortSignal);
   });
 
   it("rejects a host that only contains the allowed substring", () => {
@@ -116,6 +185,26 @@ describe("outbound policy", () => {
       fetchBounded("https://book.douban.com/subject/123", {}, doubanPolicy, fetchImpl),
     ).rejects.toThrow(OutboundError);
     expect(fetchImpl).toHaveBeenCalledTimes(3);
+  });
+
+  it("allows a response body exactly at maxBytes", async () => {
+    const text = createExactMaxBytesText(doubanPolicy.maxBytes);
+    expect(new TextEncoder().encode(text).byteLength).toBe(doubanPolicy.maxBytes);
+    const response = new Response(text, { status: 200 });
+
+    await expect(readBoundedText(response, doubanPolicy.maxBytes)).resolves.toBe(text);
+  });
+
+  it("rejects cumulative stream bytes over maxBytes and cancels the reader", async () => {
+    const body = createCumulativeOversizedBody(doubanPolicy.maxBytes);
+    const totalBytes = body.chunks.reduce((total, chunk) => total + chunk.byteLength, 0);
+    expect(body.chunks.every((chunk) => chunk.byteLength < doubanPolicy.maxBytes)).toBe(true);
+    expect(totalBytes).toBeGreaterThan(doubanPolicy.maxBytes);
+
+    const response = new Response(body.stream, { status: 200 });
+
+    await expect(readBoundedText(response, doubanPolicy.maxBytes)).rejects.toThrow(OutboundError);
+    expect(body.wasCancelled()).toBe(true);
   });
 
   it("rejects a multibyte response body over maxBytes without draining it", async () => {

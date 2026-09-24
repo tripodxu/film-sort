@@ -8,7 +8,14 @@ type MailerTestEnv = Omit<Parameters<typeof sendVerificationCode>[0], "ENVIRONME
 let fetchMock: ReturnType<typeof vi.fn>;
 
 function stringifyMockCallArguments(calls: unknown[][]): string {
-  return calls.flat().map(String).join(" ");
+  return calls
+    .flat()
+    .map((value) => {
+      if (typeof value === "string") return value;
+      if (value !== null && typeof value === "object") return JSON.stringify(value);
+      return String(value);
+    })
+    .join(" ");
 }
 
 beforeEach(() => {
