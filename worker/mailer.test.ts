@@ -1,9 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { sendVerificationCode } from "./mailer";
 
-type MailerTestEnv = Omit<Parameters<typeof sendVerificationCode>[0], "ENVIRONMENT"> & {
-  ENVIRONMENT?: "production" | "development" | "test" | "staging";
-};
+type MailerTestEnv = Parameters<typeof sendVerificationCode>[0];
 
 let fetchMock: ReturnType<typeof vi.fn>;
 
@@ -50,8 +48,12 @@ describe("verification mailer", () => {
 
   it("fails closed when ENVIRONMENT is unknown", async () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
-    const env = { ENVIRONMENT: "staging" } as unknown as Parameters<typeof sendVerificationCode>[0];
-    const result = await sendVerificationCode(env, "a@example.com", "123456", "register");
+    const result = await sendVerificationCode(
+      { ENVIRONMENT: "staging" } as unknown as MailerTestEnv,
+      "a@example.com",
+      "123456",
+      "register",
+    );
 
     expect(result).toEqual({ ok: false, reason: "mailer_unconfigured" });
     expect(fetchMock).not.toHaveBeenCalled();

@@ -91,7 +91,7 @@ describe("outbound policy", () => {
   });
 
   it("aborts and wraps a timed-out request", async () => {
-    vi.useFakeTimers();
+    const timeoutPolicy = { ...doubanPolicy, timeoutMs: 5 };
     let capturedSignal: AbortSignal | undefined;
     let abortObserved = false;
     const fetchImpl = vi.fn(
@@ -104,22 +104,25 @@ describe("outbound policy", () => {
           });
         }),
     );
-    const fallbackDelayMs = 50;
+    let fallbackTimeout: ReturnType<typeof setTimeout> | undefined;
     const fallback = new Promise<never>((_, reject) => {
-      setTimeout(
-        () => reject(new Error("timeout test fallback")),
-        doubanPolicy.timeoutMs + fallbackDelayMs,
-      );
+      fallbackTimeout = setTimeout(() => reject(new Error("timeout test fallback")), 250);
     });
     const result = Promise.race([
-      fetchBounded("https://book.douban.com/subject/123", {}, doubanPolicy, fetchImpl),
+      fetchBounded("https://book.douban.com/subject/123", {}, timeoutPolicy, fetchImpl),
       fallback,
     ]);
 
-    await vi.advanceTimersByTimeAsync(doubanPolicy.timeoutMs + fallbackDelayMs + 1);
-    await expect(result).rejects.toThrow(OutboundError);
-    expect(fetchImpl).toHaveBeenCalledTimes(1);
+    expect(capturedSignal).toBeDefined();
     expect(capturedSignal).toBeInstanceOf(AbortSignal);
+    expect(capturedSignal?.aborted).toBe(false);
+
+    try {
+      await expect(result).rejects.toThrow(OutboundError);
+    } finally {
+      if (fallbackTimeout !== undefined) clearTimeout(fallbackTimeout);
+    }
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
     expect(capturedSignal?.aborted).toBe(true);
     expect(abortObserved).toBe(true);
   });
@@ -164,6 +167,19 @@ describe("outbound policy", () => {
     );
   });
 
+  it.each([
+    "http://book.douban.com/subject/456/",
+    "https://user:password@book.douban.com/subject/456/",
+    "https://book.douban.com:8443/subject/456/",
+  ])("rejects a redirect to %s before following it", async (location) => {
+    const fetchImpl = vi.fn(async () => new Response(null, { status: 302, headers: { location } }));
+
+    await expect(
+      fetchBounded("https://book.douban.com/subject/123", {}, doubanPolicy, fetchImpl),
+    ).rejects.toThrow(OutboundError);
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+  });
+
   it("follows an allowed same-host redirect without automatic redirects", async () => {
     const fetchImpl = vi
       .fn()
@@ -197,13 +213,15 @@ describe("outbound policy", () => {
   });
 
   it("rejects after exhausting the same-host redirect budget", async () => {
-    const fetchImpl = vi.fn(
-      async () =>
-        new Response(null, {
-          status: 302,
-          headers: { location: "https://book.douban.com/subject/456/" },
-        }),
-    );
+    let callCount = 0;
+    const fetchImpl = vi.fn(async () => {
+      callCount += 1;
+      if (callCount > 8) throw new Error("redirect budget fixture exceeded");
+      return new Response(null, {
+        status: 302,
+        headers: { location: "https://book.douban.com/subject/456/" },
+      });
+    });
 
     await expect(
       fetchBounded("https://book.douban.com/subject/123", {}, doubanPolicy, fetchImpl),
