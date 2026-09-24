@@ -18,3 +18,4 @@ ch1.json
 ch2.json
 
 .tmp/
+.worktrees/
