@@ -103,6 +103,21 @@ describe("outbound policy", () => {
     );
   });
 
+  it("rejects after exhausting the same-host redirect budget", async () => {
+    const fetchImpl = vi.fn(
+      async () =>
+        new Response(null, {
+          status: 302,
+          headers: { location: "https://book.douban.com/subject/456/" },
+        }),
+    );
+
+    await expect(
+      fetchBounded("https://book.douban.com/subject/123", {}, doubanPolicy, fetchImpl),
+    ).rejects.toThrow(OutboundError);
+    expect(fetchImpl).toHaveBeenCalledTimes(3);
+  });
+
   it("rejects a multibyte response body over maxBytes without draining it", async () => {
     const body = createOversizedMultibyteBody(doubanPolicy.maxBytes);
     expect(body.characters.length).toBeLessThan(doubanPolicy.maxBytes);
