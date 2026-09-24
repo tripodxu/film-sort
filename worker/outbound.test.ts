@@ -113,6 +113,7 @@ describe("outbound policy", () => {
       fallback,
     ]);
 
+    await Promise.resolve();
     expect(capturedSignal).toBeDefined();
     expect(capturedSignal).toBeInstanceOf(AbortSignal);
     expect(capturedSignal?.aborted).toBe(false);

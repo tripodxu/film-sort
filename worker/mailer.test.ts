@@ -1,7 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { sendVerificationCode } from "./mailer";
 
-type MailerTestEnv = Parameters<typeof sendVerificationCode>[0];
+type MailerTestEnv = Omit<Parameters<typeof sendVerificationCode>[0], "ENVIRONMENT"> & {
+  ENVIRONMENT?: string;
+};
+
+function asMailerEnv(env: MailerTestEnv) {
+  return env as unknown as Parameters<typeof sendVerificationCode>[0];
+}
 
 let fetchMock: ReturnType<typeof vi.fn>;
 
@@ -30,7 +36,12 @@ describe("verification mailer", () => {
   it("fails closed when no provider is configured in production", async () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     const env: MailerTestEnv = { ENVIRONMENT: "production" };
-    const result = await sendVerificationCode(env, "a@example.com", "123456", "register");
+    const result = await sendVerificationCode(
+      asMailerEnv(env),
+      "a@example.com",
+      "123456",
+      "register",
+    );
 
     expect(result).toEqual({ ok: false, reason: "mailer_unconfigured" });
     expect(fetchMock).not.toHaveBeenCalled();
@@ -39,7 +50,12 @@ describe("verification mailer", () => {
 
   it("fails closed when ENVIRONMENT is omitted", async () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
-    const result = await sendVerificationCode({}, "a@example.com", "123456", "register");
+    const result = await sendVerificationCode(
+      asMailerEnv({}),
+      "a@example.com",
+      "123456",
+      "register",
+    );
 
     expect(result).toEqual({ ok: false, reason: "mailer_unconfigured" });
     expect(fetchMock).not.toHaveBeenCalled();
@@ -48,8 +64,9 @@ describe("verification mailer", () => {
 
   it("fails closed when ENVIRONMENT is unknown", async () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const env: MailerTestEnv = { ENVIRONMENT: "staging" };
     const result = await sendVerificationCode(
-      { ENVIRONMENT: "staging" } as unknown as MailerTestEnv,
+      asMailerEnv(env),
       "a@example.com",
       "123456",
       "register",
@@ -65,7 +82,12 @@ describe("verification mailer", () => {
     async (environment) => {
       const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
       const env: MailerTestEnv = { ENVIRONMENT: environment };
-      const result = await sendVerificationCode(env, "a@example.com", "123456", "reset");
+      const result = await sendVerificationCode(
+        asMailerEnv(env),
+        "a@example.com",
+        "123456",
+        "reset",
+      );
 
       expect(result).toEqual({ ok: true, reason: "dev" });
       expect(fetchMock).not.toHaveBeenCalled();
