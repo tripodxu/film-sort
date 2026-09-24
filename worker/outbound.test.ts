@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { OutboundError, fetchBounded, parseAllowedUrl, readBoundedText } from "./outbound";
 
 const doubanPolicy = {
@@ -8,8 +8,18 @@ const doubanPolicy = {
   maxRedirects: 2,
 } as const;
 
+beforeEach(() => {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async () => {
+      throw new Error("unexpected global fetch call");
+    }),
+  );
+});
+
 afterEach(() => {
   vi.useRealTimers();
+  vi.unstubAllGlobals();
 });
 
 function createOversizedMultibyteBody(maxBytes: number) {
@@ -82,10 +92,14 @@ describe("outbound policy", () => {
 
   it("aborts and wraps a timed-out request", async () => {
     vi.useFakeTimers();
+    let capturedSignal: AbortSignal | undefined;
+    let abortObserved = false;
     const fetchImpl = vi.fn(
       (_input: string | URL | Request, init?: RequestInit) =>
         new Promise<Response>((_, reject) => {
-          init?.signal?.addEventListener("abort", () => {
+          capturedSignal = init?.signal ?? undefined;
+          capturedSignal?.addEventListener("abort", () => {
+            abortObserved = true;
             reject(new DOMException("aborted", "AbortError"));
           });
         }),
@@ -105,7 +119,9 @@ describe("outbound policy", () => {
     await vi.advanceTimersByTimeAsync(doubanPolicy.timeoutMs + fallbackDelayMs + 1);
     await expect(result).rejects.toThrow(OutboundError);
     expect(fetchImpl).toHaveBeenCalledTimes(1);
-    expect(fetchImpl.mock.calls[0]?.[1]?.signal).toBeInstanceOf(AbortSignal);
+    expect(capturedSignal).toBeInstanceOf(AbortSignal);
+    expect(capturedSignal?.aborted).toBe(true);
+    expect(abortObserved).toBe(true);
   });
 
   it("rejects a host that only contains the allowed substring", () => {
@@ -114,14 +130,22 @@ describe("outbound policy", () => {
     ).toThrow(OutboundError);
   });
 
+  it("rejects an allowed host embedded in the path", () => {
+    expect(() =>
+      parseAllowedUrl("https://attacker.example/book.douban.com/subject/123", doubanPolicy),
+    ).toThrow(OutboundError);
+  });
+
   it("rejects http, credentials, and non-allowed ports", () => {
-    expect(() => parseAllowedUrl("http://book.douban.com/subject/123", doubanPolicy)).toThrow();
-    expect(() =>
-      parseAllowedUrl("https://u:p@book.douban.com/subject/123", doubanPolicy),
-    ).toThrow();
-    expect(() =>
-      parseAllowedUrl("https://book.douban.com:8443/subject/123", doubanPolicy),
-    ).toThrow();
+    expect(() => parseAllowedUrl("http://book.douban.com/subject/123", doubanPolicy)).toThrow(
+      OutboundError,
+    );
+    expect(() => parseAllowedUrl("https://u:p@book.douban.com/subject/123", doubanPolicy)).toThrow(
+      OutboundError,
+    );
+    expect(() => parseAllowedUrl("https://book.douban.com:8443/subject/123", doubanPolicy)).toThrow(
+      OutboundError,
+    );
   });
 
   it("does not follow a redirect to another host", async () => {
@@ -193,6 +217,26 @@ describe("outbound policy", () => {
     const response = new Response(text, { status: 200 });
 
     await expect(readBoundedText(response, doubanPolicy.maxBytes)).resolves.toBe(text);
+  });
+
+  it("decodes a multibyte character split across stream chunks", async () => {
+    const character = "界";
+    const encodedCharacter = new TextEncoder().encode(character);
+    const chunks = [encodedCharacter.slice(0, 1), encodedCharacter.slice(1)];
+    let nextChunk = 0;
+    const stream = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        if (nextChunk === chunks.length) {
+          controller.close();
+          return;
+        }
+
+        controller.enqueue(chunks[nextChunk++]);
+      },
+    });
+    const response = new Response(stream, { status: 200 });
+
+    await expect(readBoundedText(response, doubanPolicy.maxBytes)).resolves.toBe(character);
   });
 
   it("rejects cumulative stream bytes over maxBytes and cancels the reader", async () => {

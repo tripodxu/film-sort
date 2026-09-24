@@ -68,6 +68,7 @@ describe("verification mailer", () => {
       expect(result).toEqual({ ok: true, reason: "dev" });
       expect(fetchMock).not.toHaveBeenCalled();
       expect(warn).toHaveBeenCalledTimes(1);
+      expect(warn.mock.calls.flat().every((argument) => typeof argument === "string")).toBe(true);
       const warningText = stringifyMockCallArguments(warn.mock.calls);
       expect(warningText).not.toContain("a@example.com");
       expect(warningText).not.toContain("123456");
