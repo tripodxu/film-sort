@@ -41,7 +41,7 @@ describe("outbound policy", () => {
 
   it("rejects a host that only contains the allowed substring", () => {
     expect(() =>
-      parseAllowedUrl("https://attacker.example/book.douban.com/subject/123", doubanPolicy),
+      parseAllowedUrl("https://book.douban.com.attacker.example/subject/123", doubanPolicy),
     ).toThrow(OutboundError);
   });
 

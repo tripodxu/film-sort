@@ -7,6 +7,10 @@ type MailerTestEnv = Omit<Parameters<typeof sendVerificationCode>[0], "ENVIRONME
 
 let fetchMock: ReturnType<typeof vi.fn>;
 
+function stringifyMockCallArguments(calls: unknown[][]): string {
+  return calls.flat().map(String).join(" ");
+}
+
 beforeEach(() => {
   fetchMock = vi.fn();
   vi.stubGlobal("fetch", fetchMock);
@@ -39,7 +43,7 @@ describe("verification mailer", () => {
 
   it("fails closed when ENVIRONMENT is unknown", async () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
-    const env: MailerTestEnv = { ENVIRONMENT: "staging" };
+    const env = { ENVIRONMENT: "staging" } as unknown as Parameters<typeof sendVerificationCode>[0];
     const result = await sendVerificationCode(env, "a@example.com", "123456", "register");
 
     expect(result).toEqual({ ok: false, reason: "mailer_unconfigured" });
@@ -57,6 +61,9 @@ describe("verification mailer", () => {
       expect(result).toEqual({ ok: true, reason: "dev" });
       expect(fetchMock).not.toHaveBeenCalled();
       expect(warn).toHaveBeenCalledTimes(1);
+      const warningText = stringifyMockCallArguments(warn.mock.calls);
+      expect(warningText).not.toContain("a@example.com");
+      expect(warningText).not.toContain("123456");
     },
   );
 });
