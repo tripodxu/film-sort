@@ -1,4 +1,4 @@
-const CACHE_NAME = "art-rank-v2";
+const CACHE_NAME = "art-rank-v3";
 const STATIC_ASSETS = ["/", "/index.html"];
 
 self.addEventListener("install", (event) => {
@@ -28,12 +28,19 @@ self.addEventListener("fetch", (event) => {
   // Skip API calls
   if (request.url.includes("/api/")) return;
   // 页面导航请求 network-first：部署新版本后立即生效，离线时回退到缓存的 index.html
-  // 只把 SPA shell（/index.html）写入缓存，避免任意路径把 Cache Storage 撑爆
+  // 只有 SPA 壳本身的响应才写进 "/index.html" 缓存键：/admin（服务端看板）、/share/* 等
+  // 非壳页若也写进同一键，网络失败回退时会互相顶替（离线开看板得到 App、离线开 App 得到看板）。
   if (request.mode === "navigate") {
     event.respondWith(
       fetch(request)
         .then((response) => {
-          if (response && response.status === 200 && response.type === "basic") {
+          const pathname = new URL(request.url).pathname;
+          if (
+            (pathname === "/" || pathname === "/index.html") &&
+            response &&
+            response.status === 200 &&
+            response.type === "basic"
+          ) {
             const clone = response.clone();
             caches.open(CACHE_NAME).then((cache) => cache.put("/index.html", clone));
           }

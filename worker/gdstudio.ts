@@ -297,7 +297,7 @@ const TC_TO_SC: Record<string, string> = {
   謝: "谢",
 };
 
-function toSc(s: string): string {
+export function toSc(s: string): string {
   let out = "";
   for (const ch of s) out += TC_TO_SC[ch] ?? ch;
   return out;

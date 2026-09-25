@@ -27,3 +27,4 @@ docs
 # 只为了把 `--bg:#x` 改成 `--bg: #x` 而引入一次 1276 节点的重排并附赠一个
 # 真实视觉改动，不划算。
 src/styles.css
+public/vendor/

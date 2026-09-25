@@ -1,5 +1,5 @@
 import curatedPosters from "./imdb-posters.json";
-import { gdPicUrl, gdSearch, pickTracks, type GdProxyEnv } from "./gdstudio";
+import { gdPicUrl, gdSearch, pickTracks, toSc, type GdProxyEnv } from "./gdstudio";
 import { fetchBounded, parseAllowedUrl, readBoundedText, type OutboundPolicy } from "./outbound";
 
 export interface DoubanWork {
@@ -927,6 +927,20 @@ async function baikeItemPage(query: string): Promise<{ intro: string; source: st
 }
 
 /**
+ * 泛义词条防线：摘要里找不到任一歌手名，说明命中的多半不是这首歌的词条
+ * （词典/文学体裁/同名电影等），整条结果必须丢弃而不是当作歌曲简介返回。
+ */
+function introMentionsArtist(intro: string, creator?: string): boolean {
+  if (!creator) return true;
+  const haystack = toSc(intro);
+  return creator
+    .split("/")
+    .map((part) => toSc(part.replace(/^\[[^\]]*\]\s*/, "").trim()))
+    .filter(Boolean)
+    .some((name) => haystack.includes(name));
+}
+
+/**
  * 百度百科简介，三级传输探测（按实测可达性排序）：
  * 1) anysearch 搜索取词条摘要——服务端抓取绕开百度反爬，当前唯一稳定可达
  *    的传输（带 key 约 4s），故排首选；
@@ -938,10 +952,16 @@ async function baikeItemPage(query: string): Promise<{ intro: string; source: st
 async function fetchBaiduBaike(
   query: string,
   apiKey?: string,
+  /** anysearch 搜索词；直连两路用 query（可含提示词），搜索则允许单独指定（如「童话 歌曲」）。 */
+  searchQuery?: string,
 ): Promise<{ intro: string; source: string } | null> {
   // 兜底调用会带类型提示词（如「白月光与朱砂痣 歌曲」），标题匹配只认作品名
   const base = query.replace(/\s+(歌曲|单曲|专辑|电影|影片|长篇小说|书籍)$/, "").trim();
-  const viaSearch = await fetchBaikeViaAnySearch(base || query, base || query, apiKey);
+  const viaSearch = await fetchBaikeViaAnySearch(
+    searchQuery?.trim() || base || query,
+    base || query,
+    apiKey,
+  );
   if (viaSearch) return viaSearch;
   const [openapi, item] = await Promise.all([
     probeSkipped("openapi") ? null : baikeOpenApi(query),
@@ -1050,8 +1070,12 @@ async function fetchContentIntroUncached(
   // 非中文歌名仍走维基。
   const isChineseSong = mediaType === "music" && /[一-鿿]/.test(title);
   if (isChineseSong) {
-    const baikeFirst = await fetchBaiduBaike(title, anysearchKey);
-    if (baikeFirst) return baikeFirst;
+    // 歌名常与日常词同名（童话/遇见/后来）：裸歌名查百科会命中词典、文学体裁等
+    // 泛义词条，返回驴唇不对马嘴的简介。检索带类型提示词，且摘要必须提及歌手
+    // 才算命中——否则落回维基消歧，宁缺毋滥。
+    const baikeQuery = hint ? `${title} ${hint}` : title;
+    const baikeFirst = await fetchBaiduBaike(baikeQuery, anysearchKey, baikeQuery);
+    if (baikeFirst && introMentionsArtist(baikeFirst.intro, creator)) return baikeFirst;
   }
 
   const groups = await Promise.all([

@@ -64,6 +64,108 @@ describe("fetchContentIntro 音乐简介数据源", () => {
     expect(calls.filter((u) => u.includes("baike.baidu.com/api/openapi"))).toHaveLength(1);
   });
 
+  it("泛义词条防线：直连 openapi 返回同名非歌曲词条（摘要不含歌手）时丢弃，检索词带类型提示并落回维基", async () => {
+    let anysearchQuery = "";
+    let openapiKey = "";
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+        const url = String(input instanceof Request ? input.url : input);
+        if (url.includes("api.anysearch.com")) {
+          anysearchQuery = (JSON.parse(String(init?.body ?? "{}")).params?.arguments?.query ??
+            "") as string;
+          return anysearchOk([]);
+        }
+        if (url.includes("baike.baidu.com/api/openapi")) {
+          const key = new URL(url).searchParams.get("bk_key") ?? "";
+          openapiKey = key;
+          // 「童话」裸词命中文学体裁词条——摘要通篇不提歌手
+          return new Response(
+            JSON.stringify({
+              abstract: "童话是一种小说题材的通俗文学作品，通常是写给孩子看的，常含有超自然人物。",
+            }),
+            { status: 200 },
+          );
+        }
+        if (url.includes("baike.baidu.com/item/")) return baikeItemBlocked();
+        if (url.includes("wikipedia.org")) {
+          if (url.includes("generator=search")) {
+            return new Response(
+              JSON.stringify({
+                query: {
+                  pages: {
+                    s1: {
+                      title: "童话 (歌曲)",
+                      extract:
+                        "《童话》是光良演唱的一首歌曲，由光良作词作曲，收录于2005年发行的同名专辑《童话》中。",
+                    },
+                  },
+                },
+              }),
+              { status: 200 },
+            );
+          }
+          return new Response(JSON.stringify({ query: { pages: {} } }), { status: 200 });
+        }
+        return new Response("", { status: 599 });
+      }),
+    );
+    const intro = await fetchContentIntro("童话", "music", "光良", "2005");
+    // 泛义词条必须被丢弃：最终采用提及歌手的维基结果，而不是百科返回的文学体裁简介
+    expect(intro?.source).toBe("zhwiki");
+    expect(intro?.intro).toContain("光良");
+    expect(intro?.intro).not.toContain("文学");
+    // 检索词带类型提示词，裸歌名不再作为百科查询
+    expect(openapiKey).toContain("歌曲");
+    expect(anysearchQuery).toContain("歌曲");
+  });
+
+  it("泛义词条防线：anysearch 首条是同名非歌曲词条（摘要不含歌手）时丢弃，不把词典简介当歌曲返回", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: string | URL | Request) => {
+        const url = String(input instanceof Request ? input.url : input);
+        if (url.includes("api.anysearch.com")) {
+          return anysearchOk([
+            {
+              title: "童话（汉语词语） - 百度百科",
+              url: "https://baike.baidu.com/item/%E7%AB%A5%E8%AF%9D",
+              snippet: "童话是一种儿童文学体裁，通过丰富的想象和夸张来编写适合于儿童欣赏的故事。",
+            },
+          ]);
+        }
+        if (url.includes("baike.baidu.com/api/openapi")) {
+          return new Response(OPENAPI_ERRNO, { status: 200 });
+        }
+        if (url.includes("baike.baidu.com/item/")) return baikeItemBlocked();
+        if (url.includes("wikipedia.org")) {
+          if (url.includes("generator=search")) {
+            return new Response(
+              JSON.stringify({
+                query: {
+                  pages: {
+                    s1: {
+                      title: "童话 (歌曲)",
+                      extract:
+                        "《童话》是光良演唱的一首歌曲，由光良作词作曲，收录于2005年发行的同名专辑《童话》中。",
+                    },
+                  },
+                },
+              }),
+              { status: 200 },
+            );
+          }
+          return new Response(JSON.stringify({ query: { pages: {} } }), { status: 200 });
+        }
+        return new Response("", { status: 599 });
+      }),
+    );
+    const intro = await fetchContentIntro("童话", "music", "光良", "2005");
+    expect(intro?.source).toBe("zhwiki");
+    expect(intro?.intro).toContain("光良");
+    expect(intro?.intro).not.toContain("儿童文学");
+  });
+
   it("中文歌名：openapi 失效 + 词条页被反爬拦截时，anysearch 取百科词条摘要", async () => {
     const calls: string[] = [];
     let authHeader: string | undefined;
