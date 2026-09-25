@@ -51,6 +51,13 @@ export function ThemeSwitcher({ zh, onNotice }: { zh: boolean; onNotice?: (m: st
     setOpen(false);
   }
 
+  function pickOrbEffect(id: string) {
+    if (writeOrbEffectId(id)) {
+      setOrbEffect(id);
+      notifyOrbEffectChanged();
+    }
+  }
+
   function removeCustom(id: string) {
     const wasActive = theme === id;
     deleteCustomTheme(id);
@@ -145,6 +152,25 @@ export function ThemeSwitcher({ zh, onNotice }: { zh: boolean; onNotice?: (m: st
             <Plus size={14} />
             <span className="theme-name">{t("导入主题包…", "Import theme…")}</span>
           </button>
+          <div className="rank-menu-sep" role="separator" />
+          <div className="settings-group-label">{t("开场特效", "Intro effect")}</div>
+          {listOrbEffects().map((effect) => (
+            <button
+              key={effect.id}
+              role="menuitemradio"
+              aria-checked={orbEffect === effect.id}
+              className={orbEffect === effect.id ? "active" : ""}
+              onClick={() => pickOrbEffect(effect.id)}
+            >
+              <span
+                className="theme-dot"
+                style={{ background: "var(--accent)" }}
+                aria-hidden="true"
+              />
+              <span className="theme-name">{zh ? effect.name.zh : effect.name.en}</span>
+              {orbEffect === effect.id && <Check size={14} className="theme-check" />}
+            </button>
+          ))}
           <div className="rank-menu-sep" role="separator" />
           {LAYOUTS.map((item) => (
             <button
