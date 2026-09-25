@@ -1011,8 +1011,11 @@ const INTRO_CACHE_MAX = 200;
 const INTRO_TTL_MS = 24 * 60 * 60 * 1000;
 const introCache = new Map<string, { intro: string; source: string; at: number }>();
 
+// 简介逻辑/数据源每次修正都要 bump：键里没有代次的话，旧 isolate 里最长 24h 的
+// 陈旧条目（如"童话"命中文学体裁词条的旧结果）会跨部署继续命中。
+const INTRO_CACHE_GENERATION = "v2";
 function introCacheKey(title: string, mediaType?: "movie" | "book" | "music"): string {
-  return `${mediaType ?? "*"}:${title.trim().toLowerCase()}`;
+  return `${mediaType ?? "*"}:${INTRO_CACHE_GENERATION}:${title.trim().toLowerCase()}`;
 }
 
 export async function fetchContentIntro(

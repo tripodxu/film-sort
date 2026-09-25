@@ -2276,7 +2276,7 @@ async function route(request: Request, env: Env): Promise<Response> {
         data,
       },
       200,
-      { "cache-control": "public, max-age=86400" },
+      { "cache-control": "public, max-age=3600" },
     );
   }
   if (url.pathname === "/api/artwork/detail" && request.method === "GET") {
@@ -2297,7 +2297,7 @@ async function route(request: Request, env: Env): Promise<Response> {
             "cache-control": "public, max-age=300",
           });
         return json({ status: true, msg: "ok", data: work }, 200, {
-          "cache-control": "public, max-age=86400",
+          "cache-control": "public, max-age=3600",
         });
       } catch {
         return json({ status: false, msg: "wiki_unavailable", data: null }, 502, {
@@ -2326,7 +2326,7 @@ async function route(request: Request, env: Env): Promise<Response> {
         data.content_source = intro.source;
       }
       return json({ status: true, msg: "ok", data }, 200, {
-        "cache-control": "public, max-age=86400",
+        "cache-control": "public, max-age=3600",
       });
     }
     const type = kind === "film" ? "movie" : kind;
@@ -2381,7 +2381,7 @@ async function route(request: Request, env: Env): Promise<Response> {
           "cache-control": "public, max-age=300",
         });
       return json({ status: true, msg: "ok", data: work }, 200, {
-        "cache-control": "public, max-age=86400",
+        "cache-control": "public, max-age=3600",
       });
     } catch {
       return json({ status: false, msg: "wiki_unavailable", data: null }, 502, {
