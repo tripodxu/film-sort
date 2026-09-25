@@ -43,6 +43,7 @@ import {
   neteaseAccountInfo,
   neteaseUserPlaylists,
 } from "./netease";
+import { consumeQrTransaction, getQrTransaction, registerQrTransaction } from "./qrTransactions";
 import {
   doubanQrIssue,
   doubanQrPoll,
@@ -2625,12 +2626,20 @@ async function route(request: Request, env: Env): Promise<Response> {
     try {
       if (url.pathname === "/api/netease/qr/issue" && request.method === "GET") {
         const { unikey, qrValue, ttl } = await neteaseQrIssue();
+        // 所有权绑定（SEC-03）：key 只属于发起账户，轮询确认时才能把凭证写入自己的 vault。
+        await registerQrTransaction(env.DB, "netease", unikey, user.id, ttl * 1000);
         return json({ unikey, qr_value: qrValue, ttl });
       }
       if (url.pathname === "/api/netease/qr/poll" && request.method === "GET") {
         const unikey = url.searchParams.get("unikey")?.trim() ?? "";
         if (!unikey || unikey.length > 64) return json({ error: "invalid_key" }, 400);
-        return json(await neteaseQrPoll(unikey, env, user.id));
+        const tx = await getQrTransaction(env.DB, "netease", unikey, user.id);
+        if (!tx) return json({ state: "expired", error: "qr_expired_or_invalid" });
+        const result = await neteaseQrPoll(unikey, env, user.id);
+        // 终态一次性消费事务；waiting/scanned 保留供后续轮询。
+        if (result.state === "confirmed" || result.state === "expired" || result.state === "risk")
+          await consumeQrTransaction(env.DB, "netease", unikey, user.id);
+        return json(result);
       }
       if (url.pathname === "/api/netease/status" && request.method === "GET") {
         const connected = await hasProviderCookie(env, user.id, "netease");
@@ -2716,12 +2725,18 @@ async function route(request: Request, env: Env): Promise<Response> {
     try {
       if (url.pathname === "/api/douban/qr/issue" && request.method === "GET") {
         const { code, qrImage, ttl } = await doubanQrIssue();
+        await registerQrTransaction(env.DB, "douban", code, user.id, ttl * 1000);
         return json({ code, qr_image: qrImage, ttl });
       }
       if (url.pathname === "/api/douban/qr/poll" && request.method === "GET") {
         const code = url.searchParams.get("code")?.trim() ?? "";
         if (!code || code.length > 128) return json({ error: "invalid_key" }, 400);
-        return json(await doubanQrPoll(code, env, user.id));
+        const tx = await getQrTransaction(env.DB, "douban", code, user.id);
+        if (!tx) return json({ state: "expired", error: "qr_expired_or_invalid" });
+        const result = await doubanQrPoll(code, env, user.id);
+        if (result.state === "confirmed" || result.state === "expired" || result.state === "risk")
+          await consumeQrTransaction(env.DB, "douban", code, user.id);
+        return json(result);
       }
       if (url.pathname === "/api/douban/status" && request.method === "GET") {
         const connected = await hasProviderCookie(env, user.id, "douban");
@@ -3006,6 +3021,7 @@ export default {
         env.DB.prepare("DELETE FROM admin_sessions WHERE expires_at < datetime('now')"),
         env.DB.prepare("DELETE FROM user_sessions WHERE expires_at < datetime('now')"),
         env.DB.prepare("DELETE FROM oauth_exchanges WHERE expires_at < datetime('now')"),
+        env.DB.prepare("DELETE FROM qr_transactions WHERE expires_at <= datetime('now')"),
         env.DB.prepare("DELETE FROM shared_links WHERE expires_at < datetime('now')"),
       ]);
     } catch (error) {

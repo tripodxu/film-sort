@@ -1,5 +1,29 @@
 import type { Env } from "./index";
 import { saveProviderCookie, loadProviderCookie } from "./netease";
+import { fetchBounded, readBoundedBytes, readBoundedJson, type OutboundPolicy } from "./outbound";
+
+// accounts.douban.com 的两个 JSON 接口与图床家族（实测 QR 图在 img3.doubanio.com）；
+// 全部走受限出站策略：manual redirect、超时、响应字节上限（findings SEC-03/OPS-01）。
+const ACCOUNTS_POLICY: OutboundPolicy = {
+  allowedHosts: ["accounts.douban.com"],
+  maxBytes: 64 * 1024,
+  timeoutMs: 15_000,
+  maxRedirects: 2,
+};
+const QR_IMAGE_MAX_BYTES = 256 * 1024;
+const DOUBAN_IMAGE_HOST_RE = /^(?:img[1-9]\.doubanio\.com|img[1-4]\.douban\.com)$/;
+
+function requireDoubanImageUrl(value: string): URL {
+  let url: URL;
+  try {
+    url = new URL(value);
+  } catch {
+    throw new Error("douban_qr_image_failed");
+  }
+  if (url.protocol !== "https:" || !DOUBAN_IMAGE_HOST_RE.test(url.hostname))
+    throw new Error("douban_qr_image_failed");
+  return url;
+}
 
 // ===== 豆瓣扫码登录（协议参考 github.com/ZegWe/douban-cli 实测验证）=====
 // accounts.douban.com/j/mobile/login/qrlogin_code   GET → payload{code, img, login_url}
@@ -72,8 +96,7 @@ function setCookieList(response: Response): string[] {
     : [];
 }
 
-function toBase64(buffer: ArrayBuffer): string {
-  const bytes = new Uint8Array(buffer);
+function toBase64(bytes: Uint8Array): string {
   let binary = "";
   for (let i = 0; i < bytes.length; i += 1) binary += String.fromCharCode(bytes[i]);
   return btoa(binary);
@@ -87,11 +110,12 @@ export interface DoubanQrIssue {
 
 /** 签发豆瓣登录二维码：服务端代理下载二维码图片，转 data URL 返回（前端免跨域） */
 export async function doubanQrIssue(): Promise<DoubanQrIssue> {
-  const response = await fetch(QR_CODE_URL, {
-    headers: browserHeaders(),
-    signal: AbortSignal.timeout(15000),
-  });
-  const data = (await response.json()) as {
+  const response = await fetchBounded(
+    QR_CODE_URL,
+    { headers: browserHeaders(), redirect: "manual" },
+    ACCOUNTS_POLICY,
+  );
+  const data = (await readBoundedJson(response, ACCOUNTS_POLICY.maxBytes)) as {
     status?: string;
     payload?: { code?: string; img?: string };
   };
@@ -100,14 +124,28 @@ export async function doubanQrIssue(): Promise<DoubanQrIssue> {
   if (data.status !== "success" || !code || !imgRaw) throw new Error("douban_qr_issue_failed");
   jarAbsorb(code, setCookieList(response));
   const imageUrl = imgRaw.split("\\/").join("/");
-  const image = await fetch(imageUrl, {
-    headers: { ...browserHeaders(jarHeader(code)), accept: "image/png,image/*,*/*;q=0.8" },
-    signal: AbortSignal.timeout(15000),
-  });
-  const imageBuffer = await image.arrayBuffer();
-  if (!image.ok || !imageBuffer.byteLength) throw new Error("douban_qr_image_failed");
+  // 图床 URL 来自豆瓣 payload，仍按已知图床 host 白名单精确校验后再取图；
+  // 失败/超大/非图片响应一律拒绝，不转成 data URL。
+  const parsedImage = requireDoubanImageUrl(imageUrl);
+  const image = await fetchBounded(
+    parsedImage.href,
+    {
+      headers: { ...browserHeaders(jarHeader(code)), accept: "image/png,image/*,*/*;q=0.8" },
+      redirect: "manual",
+    },
+    {
+      allowedHosts: [parsedImage.hostname],
+      maxBytes: QR_IMAGE_MAX_BYTES,
+      timeoutMs: 15_000,
+      maxRedirects: 2,
+      allowedContentTypes: ["image/"],
+    },
+  );
+  if (!image.ok) throw new Error("douban_qr_image_failed");
+  const imageBytes = await readBoundedBytes(image, QR_IMAGE_MAX_BYTES);
+  if (!imageBytes.byteLength) throw new Error("douban_qr_image_failed");
   const mime = image.headers.get("content-type") ?? "image/png";
-  return { code, qrImage: `data:${mime};base64,${toBase64(imageBuffer)}`, ttl: 120 };
+  return { code, qrImage: `data:${mime};base64,${toBase64(imageBytes)}`, ttl: 120 };
 }
 
 export interface DoubanQrPollResult {
@@ -122,15 +160,16 @@ export async function doubanQrPoll(
   userId: number,
 ): Promise<DoubanQrPollResult> {
   const url = `${QR_STATUS_URL}?code=${encodeURIComponent(code)}`;
-  const response = await fetch(url, {
-    headers: browserHeaders(jarHeader(code)),
-    signal: AbortSignal.timeout(15000),
-  });
+  const response = await fetchBounded(
+    url,
+    { headers: browserHeaders(jarHeader(code)), redirect: "manual" },
+    ACCOUNTS_POLICY,
+  );
   if (!response.ok) return { state: "waiting" };
   jarAbsorb(code, setCookieList(response));
   let data: { status?: string; payload?: { login_status?: string } };
   try {
-    data = (await response.json()) as typeof data;
+    data = (await readBoundedJson(response, ACCOUNTS_POLICY.maxBytes)) as typeof data;
   } catch {
     return { state: "waiting" };
   }

@@ -164,6 +164,40 @@ export async function readBoundedText(response: Response, maxBytes: number): Pro
   }
 }
 
+/** 限量读取二进制响应体（图片等）：累计字节超限立即取消 reader 并拒绝。 */
+export async function readBoundedBytes(response: Response, maxBytes: number): Promise<Uint8Array> {
+  const body = response.body;
+  if (!body) {
+    const buffer = new Uint8Array(await response.arrayBuffer());
+    if (buffer.byteLength > maxBytes)
+      throw new OutboundError("body_too_large", `response body exceeds ${maxBytes} bytes`);
+    return buffer;
+  }
+  const reader = body.getReader();
+  const chunks: Uint8Array[] = [];
+  let received = 0;
+  try {
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      received += value.byteLength;
+      if (received > maxBytes)
+        throw new OutboundError("body_too_large", `response body exceeds ${maxBytes} bytes`);
+      chunks.push(value);
+    }
+  } catch (error) {
+    await reader.cancel(error instanceof Error ? error : undefined).catch(() => {});
+    throw error;
+  }
+  const out = new Uint8Array(received);
+  let offset = 0;
+  for (const chunk of chunks) {
+    out.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return out;
+}
+
 /** 限量读取并解析 JSON。 */
 export async function readBoundedJson(response: Response, maxBytes: number): Promise<unknown> {
   const text = await readBoundedText(response, maxBytes);
