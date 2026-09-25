@@ -11,9 +11,9 @@ import { DASHBOARD_HTML } from "./index";
  */
 describe("后台看板内联脚本语法（模板字面量转义回归）", () => {
   it("每个内联 <script> 块都必须能通过语法解析", () => {
-    const blocks = [...DASHBOARD_HTML.matchAll(/<script(?![^>]*src)[^>]*>([\s\S]*?)<\/script>/g)].map(
-      (m) => m[1],
-    );
+    const blocks = [
+      ...DASHBOARD_HTML.matchAll(/<script(?![^>]*src)[^>]*>([\s\S]*?)<\/script>/g),
+    ].map((m) => m[1]);
     expect(blocks.length).toBeGreaterThan(0);
     for (const [index, code] of blocks.entries()) {
       // new Function 只做语法解析不执行；内联脚本必须完整可解析，
