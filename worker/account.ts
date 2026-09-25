@@ -889,6 +889,20 @@ export async function accountRoute(request: Request, env: Env): Promise<Response
     if (!env.DB || !(await adminAuthLocal(request, env.DB)))
       return json({ error: "auth_required" }, 401);
     const userId = Number(deleteMatch[1]);
+    // 该用户评论/点赞过的帖子（含其自己的帖子）：行删掉后计数必须按剩余行数重算，
+    // 否则其它帖子的 comment_count/like_count 全部漂移（findings PLAZA-01）。
+    const affected = await env.DB.prepare(
+      "SELECT DISTINCT post_id FROM plaza_comments WHERE user_id = ? UNION SELECT DISTINCT post_id FROM plaza_likes WHERE user_id = ?",
+    )
+      .bind(userId, userId)
+      .all<{ post_id: number }>();
+    const affectedIds = (affected.results ?? []).map((row) => row.post_id);
+    const recompute =
+      affectedIds.length > 0
+        ? env.DB.prepare(
+            `UPDATE plaza_posts SET comment_count = (SELECT COUNT(*) FROM plaza_comments WHERE post_id = plaza_posts.id), like_count = (SELECT COUNT(*) FROM plaza_likes WHERE post_id = plaza_posts.id) WHERE id IN (${affectedIds.map(() => "?").join(", ")})`,
+          ).bind(...affectedIds)
+        : null;
     await env.DB.batch([
       // 广场内容引用 user_accounts(id)：须先清该用户的帖子/历史/评论/点赞，再删账户
       env.DB.prepare(
@@ -906,6 +920,7 @@ export async function accountRoute(request: Request, env: Env): Promise<Response
       env.DB.prepare("DELETE FROM user_oauth WHERE user_id = ?").bind(userId),
       env.DB.prepare("DELETE FROM user_profiles_v2 WHERE user_id = ?").bind(userId),
       env.DB.prepare("DELETE FROM user_collections WHERE user_id = ?").bind(userId),
+      ...(recompute ? [recompute] : []),
       env.DB.prepare("DELETE FROM user_accounts WHERE id = ?").bind(userId),
     ]);
     await recordAudit(env, "account:delete", `删除账户 #${userId}`, request);

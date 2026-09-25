@@ -38,6 +38,52 @@ async function readJsonObject(request: Request): Promise<Record<string, unknown>
   }
 }
 
+/** 已读出的原始文本 → JSON 对象：null/数组/标量在 JSON 里合法，但直接访问 body.post_type 会 500（findings PLAZA-02）。 */
+function readBodyObject(raw: string): Record<string, unknown> | null {
+  try {
+    const value: unknown = JSON.parse(raw);
+    if (typeof value !== "object" || value === null || Array.isArray(value)) return null;
+    return value as Record<string, unknown>;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * 可见性只接受 true/false/0/1（缺省 undefined）。
+ * 旧实现用 truthiness：字符串 "false"/"0" 会被当成 true 把帖子误开成公开。
+ * 返回 null 表示提供了非法值。
+ */
+function parseVisibility(value: unknown): 0 | 1 | undefined | null {
+  if (value === undefined || value === null) return undefined;
+  if (value === true || value === 1) return 1;
+  if (value === false || value === 0) return 0;
+  return null;
+}
+
+/** 分页参数：Infinity/NaN 等非有限数回落默认值；有限值收敛到 [min,max] 内的整数。 */
+function finiteIntParam(value: string | null, fallback: number, min: number, max: number): number {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) return fallback;
+  return Math.min(max, Math.max(min, Math.floor(parsed)));
+}
+
+/** 递归收集评论子树（含根）：parent_id 外键不允许孤儿行，必须整棵删除且先删后代。 */
+async function collectCommentSubtree(db: D1Database, rootId: number): Promise<number[]> {
+  const doomed: number[] = [];
+  let frontier = [rootId];
+  while (frontier.length && doomed.length < 500) {
+    doomed.push(...frontier);
+    const placeholders = frontier.map(() => "?").join(", ");
+    const rows = await db
+      .prepare(`SELECT id FROM plaza_comments WHERE parent_id IN (${placeholders})`)
+      .bind(...frontier)
+      .all<{ id: number }>();
+    frontier = (rows.results ?? []).map((row) => row.id);
+  }
+  return doomed;
+}
+
 export async function plazaRoute(request: Request, env: Env): Promise<Response> {
   if (!env.DB) return json({ error: "database_unavailable" }, 503);
   const url = new URL(request.url);
@@ -46,8 +92,8 @@ export async function plazaRoute(request: Request, env: Env): Promise<Response> 
   // GET /api/plaza/posts — list posts (paginated, filterable by kind, searchable, server-side sort)
   // 登录用户额外可见自己的隐藏帖（is_public = 0），便于找回与恢复
   if (path === "/api/plaza/posts" && method === "GET") {
-    const page = Math.max(1, Number(url.searchParams.get("page") ?? "1") || 1);
-    const limit = Math.min(50, Math.max(1, Number(url.searchParams.get("limit") ?? "20") || 20));
+    const page = finiteIntParam(url.searchParams.get("page"), 1, 1, 1_000_000);
+    const limit = finiteIntParam(url.searchParams.get("limit"), 20, 1, 50);
     const kind = url.searchParams.get("kind")?.trim() || null;
     const sort = url.searchParams.get("sort") === "hottest" ? "hottest" : "newest";
     const q = url.searchParams.get("q")?.trim() || null;
@@ -187,12 +233,8 @@ export async function plazaRoute(request: Request, env: Env): Promise<Response> 
     const raw = await request.text();
     if (new TextEncoder().encode(raw).byteLength > MAX_PAYLOAD_BYTES)
       return json({ error: "payload_too_large" }, 413);
-    let body: Record<string, unknown>;
-    try {
-      body = JSON.parse(raw);
-    } catch {
-      return json({ error: "invalid_json" }, 400);
-    }
+    const body = readBodyObject(raw);
+    if (!body) return json({ error: "invalid_json" }, 400);
 
     const postType = cleanString(body.post_type, 40);
     if (postType !== "ranking" && postType !== "profile")
@@ -214,8 +256,9 @@ export async function plazaRoute(request: Request, env: Env): Promise<Response> 
     const notesEncoded = encodeStoredNotes(notesInput);
     if (!notesEncoded.ok) return json({ error: "notes_too_large" }, 413);
     const notes = notesEncoded.json;
-    const isPublic =
-      body.is_public === undefined || body.is_public === null ? 1 : body.is_public ? 1 : 0;
+    const visibility = parseVisibility(body.is_public);
+    if (visibility === null) return json({ error: "invalid_is_public" }, 400);
+    const isPublic = visibility ?? 1;
 
     // ranking 帖 items 为作品数组；profile 帖 items 为 RankingExport 数组（各维度榜单整体）
     if (!Array.isArray(body.items) || body.items.length < 1)
@@ -283,14 +326,14 @@ export async function plazaRoute(request: Request, env: Env): Promise<Response> 
     const raw = await request.text();
     if (new TextEncoder().encode(raw).byteLength > MAX_PAYLOAD_BYTES)
       return json({ error: "payload_too_large" }, 413);
-    let body: Record<string, unknown>;
-    try {
-      body = JSON.parse(raw);
-    } catch {
-      return json({ error: "invalid_json" }, 400);
-    }
+    const body = readBodyObject(raw);
+    if (!body) return json({ error: "invalid_json" }, 400);
 
+    // post_type 是帖子的形状判别字段：允许 PUT 改类型而不提供匹配 items 会留下不兼容 JSON
+    //（findings PLAZA-02）。类型一律不可变；客户端原样回传才被接受。
     const postType = cleanString(body.post_type, 40);
+    if (postType !== null && postType !== existing.post_type)
+      return json({ error: "post_type_immutable" }, 400);
     const kind = cleanString(body.kind, 20);
     const collectionTitle = cleanString(body.collection_title, 200);
     const description = cleanString(body.description, 500);
@@ -301,8 +344,9 @@ export async function plazaRoute(request: Request, env: Env): Promise<Response> 
       if (!notesEncoded.ok) return json({ error: "notes_too_large" }, 413);
       notes = notesEncoded.json;
     }
-    const isPublic =
-      body.is_public === undefined || body.is_public === null ? undefined : body.is_public ? 1 : 0;
+    const visibility = parseVisibility(body.is_public);
+    if (visibility === null) return json({ error: "invalid_is_public" }, 400);
+    const isPublic = visibility;
 
     // 这里正是 512KB 故障的复发点：客户端编辑帖子时会把详情接口拿到的 items 原样
     // 提交回来。只要详情接口不再把 posterUrls 注进 items（本文件 GET 分支已改为旁路），
@@ -453,33 +497,34 @@ export async function plazaRoute(request: Request, env: Env): Promise<Response> 
       .first();
     if (!post) return json({ error: "post_not_found" }, 404);
 
-    const existing = await env.DB.prepare(
-      "SELECT id FROM plaza_likes WHERE post_id = ? AND user_id = ?",
+    // 条件写入（findings PLAZA-01）：先 INSERT OR IGNORE / 条件 DELETE，用 meta.changes
+    // 判定行是否真的变更，只有变更才动计数——并发双击不再撞 UNIQUE 500 或让计数漂移。
+    const claimed = await env.DB.prepare(
+      "INSERT OR IGNORE INTO plaza_likes (post_id, user_id) VALUES (?, ?)",
     )
       .bind(postId, user.id)
-      .first();
-
-    if (existing) {
-      // Unlike
-      await env.DB.prepare("DELETE FROM plaza_likes WHERE post_id = ? AND user_id = ?")
-        .bind(postId, user.id)
+      .run();
+    if (claimed.meta.changes === 1) {
+      await env.DB.prepare("UPDATE plaza_posts SET like_count = like_count + 1 WHERE id = ?")
+        .bind(postId)
         .run();
+      return json({ liked: true });
+    }
+    const removed = await env.DB.prepare(
+      "DELETE FROM plaza_likes WHERE post_id = ? AND user_id = ?",
+    )
+      .bind(postId, user.id)
+      .run();
+    if (removed.meta.changes === 1) {
       await env.DB.prepare(
         "UPDATE plaza_posts SET like_count = MAX(0, like_count - 1) WHERE id = ?",
       )
         .bind(postId)
         .run();
       return json({ liked: false });
-    } else {
-      // Like
-      await env.DB.prepare("INSERT INTO plaza_likes (post_id, user_id) VALUES (?, ?)")
-        .bind(postId, user.id)
-        .run();
-      await env.DB.prepare("UPDATE plaza_posts SET like_count = like_count + 1 WHERE id = ?")
-        .bind(postId)
-        .run();
-      return json({ liked: true });
     }
+    // 并发下另一请求刚完成翻转：幂等回落当前状态
+    return json({ liked: false });
   }
 
   // GET /api/plaza/posts/:id/comments — get comments
@@ -515,12 +560,10 @@ export async function plazaRoute(request: Request, env: Env): Promise<Response> 
       return json({ error: "post_not_found" }, 404);
 
     const raw = await request.text();
-    let body: Record<string, unknown>;
-    try {
-      body = JSON.parse(raw);
-    } catch {
-      return json({ error: "invalid_json" }, 400);
-    }
+    if (new TextEncoder().encode(raw).byteLength > MAX_REQUEST_BYTES)
+      return json({ error: "payload_too_large" }, 413);
+    const body = readBodyObject(raw);
+    if (!body) return json({ error: "invalid_json" }, 400);
 
     const content = cleanString(body.content, 500);
     if (!content)
@@ -528,6 +571,14 @@ export async function plazaRoute(request: Request, env: Env): Promise<Response> 
     const parentId = body.parent_id ? Number(body.parent_id) : null;
     if (parentId !== null && (!Number.isInteger(parentId) || parentId < 1))
       return json({ error: "invalid_parent_id" }, 400);
+    // 父评论必须存在且属于同一帖子：跨帖 parent_id 会把回复挂到别的帖子下（findings PLAZA-01）
+    if (parentId !== null) {
+      const parent = await env.DB.prepare("SELECT post_id FROM plaza_comments WHERE id = ?")
+        .bind(parentId)
+        .first<{ post_id: number }>();
+      if (!parent || parent.post_id !== postId)
+        return json({ error: "invalid_parent_id", msg: "回复目标不存在或不属于该帖子" }, 400);
+    }
 
     const result = await env.DB.prepare(
       "INSERT INTO plaza_comments (post_id, user_id, content, parent_id) VALUES (?, ?, ?, ?)",
@@ -556,14 +607,21 @@ export async function plazaRoute(request: Request, env: Env): Promise<Response> 
     if (!existing) return json({ error: "comment_not_found" }, 404);
     if (existing.user_id !== user.id) return json({ error: "forbidden" }, 403);
 
-    await env.DB.prepare("DELETE FROM plaza_comments WHERE id = ?").bind(commentId).run();
-    await env.DB.prepare(
-      "UPDATE plaza_posts SET comment_count = MAX(0, comment_count - 1) WHERE id = ?",
-    )
-      .bind(existing.post_id)
-      .run();
+    // 整棵子树删除（先删后代满足 parent_id 外键），计数按剩余行数重算——
+    // “删一行减一”的假设在有嵌套回复时必然漂移（findings PLAZA-01）。
+    const db = env.DB;
+    const subtree = await collectCommentSubtree(db, commentId);
+    await db.batch([
+      ...subtree
+        .slice()
+        .reverse()
+        .map((id) => db.prepare("DELETE FROM plaza_comments WHERE id = ?").bind(id)),
+      env.DB.prepare(
+        "UPDATE plaza_posts SET comment_count = (SELECT COUNT(*) FROM plaza_comments WHERE post_id = plaza_posts.id) WHERE id = ?",
+      ).bind(existing.post_id),
+    ]);
 
-    return json({ ok: true });
+    return json({ ok: true, removed: subtree.length });
   }
 
   return json({ error: "not_found" }, 404);
@@ -583,8 +641,8 @@ export async function adminPlazaRoute(request: Request, env: Env): Promise<Respo
 
   // GET /api/admin/plaza/posts — 全量帖子列表（含隐藏帖，可筛选/搜索/分页）
   if (path === "/api/admin/plaza/posts" && method === "GET") {
-    const page = Math.max(1, Number(url.searchParams.get("page") ?? "1") || 1);
-    const limit = Math.min(50, Math.max(1, Number(url.searchParams.get("limit") ?? "20") || 20));
+    const page = finiteIntParam(url.searchParams.get("page"), 1, 1, 1_000_000);
+    const limit = finiteIntParam(url.searchParams.get("limit"), 20, 1, 50);
     const kind = url.searchParams.get("kind")?.trim() || null;
     const q = url.searchParams.get("q")?.trim() || null;
     const offset = (page - 1) * limit;
@@ -712,23 +770,26 @@ export async function adminPlazaRoute(request: Request, env: Env): Promise<Respo
       .bind(commentId)
       .first<{ id: number; post_id: number; user_id: number; content: string }>();
     if (!existing) return json({ error: "comment_not_found" }, 404);
-    const replies = await env.DB.prepare("SELECT id FROM plaza_comments WHERE parent_id = ?")
-      .bind(commentId)
-      .all<{ id: number }>();
-    const replyIds = (replies.results ?? []).map((r) => r.id);
-    const removed = 1 + replyIds.length;
+    // 与用户删除同口径：递归整棵子树（只删直接回复会留下孙回复并触发外键失败），
+    // 计数按剩余行数重算（findings PLAZA-01）。
+    const subtree = await collectCommentSubtree(env.DB, commentId);
+    const removed = subtree.length;
     const db = env.DB;
     await db.batch([
-      ...replyIds.map((id) => db.prepare("DELETE FROM plaza_comments WHERE id = ?").bind(id)),
-      db.prepare("DELETE FROM plaza_comments WHERE id = ?").bind(commentId),
+      ...subtree
+        .slice()
+        .reverse()
+        .map((id) => db.prepare("DELETE FROM plaza_comments WHERE id = ?").bind(id)),
       db
-        .prepare("UPDATE plaza_posts SET comment_count = MAX(0, comment_count - ?) WHERE id = ?")
-        .bind(removed, existing.post_id),
+        .prepare(
+          "UPDATE plaza_posts SET comment_count = (SELECT COUNT(*) FROM plaza_comments WHERE post_id = plaza_posts.id) WHERE id = ?",
+        )
+        .bind(existing.post_id),
     ]);
     await recordAudit(
       env,
       "plaza:delete_comment",
-      `删除帖子 #${existing.post_id} 的评论 #${commentId}（含 ${replyIds.length} 条回复）`,
+      `删除帖子 #${existing.post_id} 的评论 #${commentId}（含 ${removed - 1} 条回复）`,
       request,
     );
     return json({ ok: true, removed });
