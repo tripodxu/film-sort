@@ -506,6 +506,19 @@ kbd{display:inline-flex;align-items:center;justify-content:center;min-width:22px
 .theme-menu{min-width:180px}
 .theme-menu button{position:relative}
 .theme-menu button.active{color:var(--accent)}
+/* ===== 设置下拉（齿轮）：分组 + chip 网格，避免纵向拖长 ===== */
+.settings-menu{min-width:272px;padding:8px;box-shadow:var(--ev-3,var(--ev-2));row-gap:2px}
+.settings-menu .rank-menu-sep{margin:6px 4px}
+.settings-menu .settings-group-label{padding:2px 6px 4px}
+.settings-chip-grid{display:grid;grid-template-columns:1fr 1fr;gap:4px;padding:0 2px}
+.settings-chip{display:inline-flex;align-items:center;justify-content:center;gap:6px;min-height:34px;padding:0 10px;border-radius:9px;border:1px solid var(--line);background:color-mix(in srgb,var(--text) 4%,transparent);color:var(--text-2);font-size:12px;text-align:center;transition:border-color .14s,color .14s,background .14s}
+.settings-chip:hover:not(:disabled){border-color:color-mix(in srgb,var(--accent) 45%,transparent);color:var(--accent)}
+.settings-chip.active{border-color:color-mix(in srgb,var(--accent) 65%,transparent);background:color-mix(in srgb,var(--accent) 12%,transparent);color:var(--accent)}
+.settings-chip.busy{color:var(--muted)}
+.settings-chip:disabled{opacity:.55;cursor:default}
+.settings-chip-spin{width:10px;height:10px;border-radius:50%;border:1.5px solid currentColor;border-top-color:transparent;animation:settings-spin .7s linear infinite}
+@keyframes settings-spin{to{transform:rotate(360deg)}}
+.settings-row .settings-badge{margin-left:auto;max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding:2px 8px;border-radius:999px;border:1px solid color-mix(in srgb,var(--accent) 35%,transparent);color:var(--accent);font-size:10px;font-family:var(--font-mono)}
 .theme-dot{width:14px;height:14px;border-radius:50%;flex-shrink:0;border:1px solid var(--border-2)}
 .theme-dot.theme-modern{--dot-a:#080a0a;--dot-b:#d8f86a;background:linear-gradient(135deg,var(--dot-a) 50%,var(--dot-b) 50%)}
 .theme-dot.theme-retro{--dot-a:#f4f2ec;--dot-b:#173c32;background:linear-gradient(135deg,var(--dot-a) 50%,var(--dot-b) 50%)}
