@@ -12,7 +12,6 @@ const encoder = new TextEncoder();
 import { pbkdf2Sync } from "node:crypto";
 import { sendVerificationCode, type MailerEnv } from "./mailer";
 import {
-  CODE_MAX_ATTEMPTS,
   consumeOAuthExchange,
   consumeVerificationCode,
   parseGoogleUser,
@@ -113,9 +112,6 @@ function isValidEmail(email: string): boolean {
 }
 
 // 邮箱统一规范化（小写）：SQLite `=` 大小写敏感，大小写不一致会"查无此码/查无此人"。
-function normalizeEmail(email: string): string {
-  return email.trim().toLowerCase();
-}
 
 function validateCollectionBody(body: Record<string, unknown> | null): {
   kind: "film" | "book" | "music" | "other";
