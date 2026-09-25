@@ -257,7 +257,7 @@ class HttpError extends Error {
   }
 }
 
-const DASHBOARD_HTML = `<!DOCTYPE html>
+export const DASHBOARD_HTML = `<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
 <meta charset="utf-8">
@@ -763,8 +763,8 @@ async function loadAiPrompts() {
         '<div class="mini-note" style="margin-bottom:4px">' + s[1] + (p.override ? ' · <span style="color:var(--yellow)">覆盖中</span>（响应 promptVersion=override）' : ' · 默认模块') + '</div>' +
         '<textarea id="ai-prompt-' + s[0] + '" style="width:100%;min-height:72px;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:12px;padding:8px" placeholder="留空使用默认提示词；仅覆盖指令部分，作品数据始终由服务端渲染">' + esc(p.value || '') + '</textarea>' +
         '<div style="display:flex;gap:6px;margin-top:4px">' +
-          '<button class="table-action" onclick="saveAiPrompt(\'' + s[0] + '\')">保存覆盖</button>' +
-          (p.override ? '<button class="table-action warn" onclick="clearAiPrompt(\'' + s[0] + '\')">恢复默认</button>' : '') +
+          '<button class="table-action" onclick="saveAiPrompt(\\'' + s[0] + '\\')">保存覆盖</button>' +
+          (p.override ? '<button class="table-action warn" onclick="clearAiPrompt(\\'' + s[0] + '\\')">恢复默认</button>' : '') +
         '</div></div>';
     }).join('');
   } catch(e) { el.classList.remove('loading'); el.textContent = '加载失败'; }
