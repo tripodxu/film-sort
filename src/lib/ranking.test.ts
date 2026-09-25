@@ -450,3 +450,26 @@ describe("precise undo 后 calibration 重放", () => {
     expect(undone.calibration.consistent).toBe(direct.calibration.consistent);
   });
 });
+
+describe("quick 快照与旧版估算兼容（DATA-01）", () => {
+  it("round-trips a quick snapshot after the first decision", () => {
+    const initial = createRankingState(ids(5), { seed, topN: 2, mode: "quick" });
+    const next = chooseSide(initial, "left");
+    const restored = deserializeRankingState(serializeRankingState(next));
+    expect(restored.sourceIds).toEqual(next.sourceIds);
+    expect(restored.estimatedTotalComparisons).toBe(next.estimatedTotalComparisons);
+  });
+
+  it("keeps the quick estimate integral at creation", () => {
+    const state = createRankingState(ids(17), { seed, topN: 3, mode: "quick" });
+    expect(Number.isInteger(state.estimatedTotalComparisons)).toBe(true);
+  });
+
+  it("normalizes a legacy finite fractional estimate instead of throwing", () => {
+    const state = createRankingState(ids(5), { seed, topN: 2 });
+    const raw = JSON.parse(serializeRankingState(state)) as Record<string, unknown>;
+    raw.estimatedTotalComparisons = 12.4; // 旧版本 quick 估算可能以小数落盘（*1.3）
+    const restored = deserializeRankingState(JSON.stringify(raw));
+    expect(restored.estimatedTotalComparisons).toBe(13);
+  });
+});

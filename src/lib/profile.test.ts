@@ -11,6 +11,7 @@ import {
   normalizeTitle,
   profileText,
   readProfile,
+  reorderRanking,
   toRankedItems,
   LIBRARY_KEY,
   RECOVERY_KEY,
@@ -717,5 +718,46 @@ describe("mergeDimensionRankings strategy", () => {
     expect(mergeDimensionRankings(rs)!.items[0].bestRank).toBe(
       mergeDimensionRankings(rs, "best")!.items[0].bestRank,
     );
+  });
+});
+
+describe("画像写入/重排不变量（DATA-02）", () => {
+  it("接受 shared/storedItem 口径内（≤200 字符）的作品 ID", () => {
+    const longId = "x".repeat(180);
+    const profile = parseProfile(
+      makeRanking({ items: [{ id: longId, title: "长ID作品", rank: 1 }] }),
+    );
+    expect(profile.rankings[0].items[0].id).toBe(longId);
+  });
+
+  it("写入端为重复的显式 ID 生成唯一 ID（不同作品撞同一显式 id）", () => {
+    const items = toRankedItems([
+      { id: "dup", title: "A", rank: 1 },
+      { id: "dup", title: "B", rank: 2 },
+    ]);
+    const ids = items.map((item) => item.id);
+    expect(new Set(ids).size).toBe(items.length);
+  });
+
+  it("reorderRanking 拒绝重复 / 缺失 / 外来 ID 集合", () => {
+    const base = parseProfile(makeRanking());
+    const ids = base.rankings[0].items.map((item) => item.id);
+    expect(reorderRanking(base, 0, [ids[0], ids[0], ids[1]])).toBe(base);
+    expect(reorderRanking(base, 0, [ids[0], ids[1]])).toBe(base);
+    expect(reorderRanking(base, 0, [ids[0], ids[1], ids[2], "foreign"])).toBe(base);
+    const ok = reorderRanking(base, 0, [ids[2], ids[0], ids[1]]);
+    expect(ok).not.toBe(base);
+    expect(ok.rankings[0].items.map((item) => item.id)).toEqual([ids[2], ids[0], ids[1]]);
+    expect(ok.rankings[0].items.map((item) => item.rank)).toEqual([1, 2, 3]);
+  });
+
+  it("mergeProfiles 结果不超过产品上限的 20 份榜单", () => {
+    let cloud = mergeRanking(null, makeRanking({ collectionTitle: "云0" }));
+    for (let i = 1; i < 20; i += 1)
+      cloud = mergeRanking(cloud, makeRanking({ collectionTitle: `云${i}` }));
+    expect(cloud.rankings).toHaveLength(20);
+    const local = mergeRanking(null, makeRanking({ kind: "book", collectionTitle: "本1" }));
+    const merged = mergeProfiles(cloud, local);
+    expect(merged.rankings).toHaveLength(20);
   });
 });

@@ -82,12 +82,16 @@ export function dedupeByTitle<T extends { title: string; year?: unknown; creator
  */
 export function toRankedItems(works: unknown): RankedArtwork[] {
   const kept = dedupeByTitle(toStoredWorks(works));
-  // 断言只是因为 RankedArtwork 把 id/rank 标成必填；两者在这里都已补齐。
-  return kept.map((work, index) => ({
-    ...work,
-    id: work.id ?? `auto-${index + 1}`,
-    rank: index + 1,
-  })) as RankedArtwork[];
+  const seenIds = new Set<string>();
+  // identity 去重之后还要保证 id 唯一：两个不同作品撞同一个显式 id 会让读取端
+  // 丢掉后一条（parseRanking 的 ids.has 检查）。保留首条显式 id，其余改走 auto 编号；
+  // auto 编号若与已有 id 相撞则追加序号，保证输出 id 两两不同。
+  return kept.map((work, index) => {
+    let id = work.id && !seenIds.has(work.id) ? work.id : `auto-${index + 1}`;
+    while (seenIds.has(id)) id = `auto-${index + 1}-${seenIds.size + 1}`;
+    seenIds.add(id);
+    return { ...work, id, rank: index + 1 };
+  }) as RankedArtwork[];
 }
 
 /**
@@ -121,7 +125,9 @@ function parseRanking(value: unknown): RankingExport {
     };
     if (
       !record(item) ||
-      !text(item.id) ||
+      // ID 上限与 shared/storedItem 的 MAX_ID=200 同口径：写侧放行、读侧拒绝
+      // 会让「保存成功、刷新丢条目」（findings DATA-02）。
+      !text(item.id, 200) ||
       !text(item.title) ||
       !Number.isInteger(item.rank) ||
       Number(item.rank) < 1 ||
@@ -318,15 +324,18 @@ export function reorderRanking(
 ): ArtisticProfile {
   const ranking = profile.rankings[rankingIdx];
   if (!ranking) return profile;
+  // 重排集合必须与原 ID 集合完全相等：重复 / 缺失 / 外来 ID 都会产生重复名次，
+  // 只检查输出长度挡不住「外来 ID + 缺失 ID」的同长度组合（findings DATA-02）。
+  const originalIds = ranking.items.map((item) => item.id);
+  const newSet = new Set(newOrder);
+  if (
+    newOrder.length !== originalIds.length ||
+    newSet.size !== newOrder.length ||
+    originalIds.some((id) => !newSet.has(id))
+  )
+    return profile;
   const byId = new Map(ranking.items.map((item) => [item.id, item]));
-  const reordered = newOrder
-    .map((id, index) => {
-      const item = byId.get(id);
-      if (!item) return null;
-      return { ...item, rank: index + 1 };
-    })
-    .filter(Boolean) as RankedArtwork[];
-  if (reordered.length !== ranking.items.length) return profile;
+  const reordered = newOrder.map((id, index) => ({ ...byId.get(id)!, rank: index + 1 }));
   const rankings = [...profile.rankings];
   rankings[rankingIdx] = { ...ranking, items: reordered };
   return { ...profile, rankings, updatedAt: new Date().toISOString() };
@@ -370,10 +379,16 @@ export function mergeProfiles(cloud: ArtisticProfile, local: ArtisticProfile): A
       existingTitles.add(ranking.collectionTitle);
     }
   }
+  const rankings = [...cloud.rankings, ...appended];
+  if (rankings.length > MAX_RANKINGS) {
+    // 产品上限（与 parseProfile 同口径）：云端已有榜单优先，本地新增按顺序补足。
+    console.warn(`[mergeProfiles] merged profile exceeds ${MAX_RANKINGS} rankings; truncating`);
+    rankings.length = MAX_RANKINGS;
+  }
   return {
     ...cloud,
     updatedAt: new Date().toISOString(),
-    rankings: [...cloud.rankings, ...appended],
+    rankings,
   };
 }
 

@@ -193,7 +193,9 @@ function estimateTotalComparisons(itemCount: number, topN: number, mode: Ranking
     let build = 0;
     for (let candidateIndex = 1; candidateIndex < Math.min(topN, itemCount); candidateIndex += 1)
       build += Math.ceil(Math.log2(candidateIndex + 1));
-    return build + Math.max(0, itemCount - topN) * 1.3;
+    // 取整：估算值会随状态序列化/反序列化（hasBaseShape 要求整数），
+    // 旧版本的 *1.3 小数会让 quick 模式撤销/草稿恢复直接抛错（findings DATA-01）。
+    return Math.ceil(build + Math.max(0, itemCount - topN) * 1.3);
   }
   let total = 0;
   for (let candidateIndex = 1; candidateIndex < itemCount; candidateIndex += 1)
@@ -1159,7 +1161,22 @@ function migrateLegacyState(legacy: LegacyRankingState): RankingState {
   };
 }
 export function deserializeRankingState(serialized: string): RankingState {
-  const parsed: unknown = JSON.parse(serialized);
+  let parsed: unknown = JSON.parse(serialized);
+  // 旧版本 quick 估算可能以小数落盘：有限小数在形状校验前归一为整数；
+  // 非有限值不在此处理，仍按损坏快照拒绝。
+  if (
+    typeof parsed === "object" &&
+    parsed !== null &&
+    typeof (parsed as { estimatedTotalComparisons?: unknown }).estimatedTotalComparisons ===
+      "number"
+  ) {
+    const estimate = (parsed as { estimatedTotalComparisons: number }).estimatedTotalComparisons;
+    if (Number.isFinite(estimate) && !Number.isInteger(estimate))
+      parsed = {
+        ...(parsed as Record<string, unknown>),
+        estimatedTotalComparisons: Math.ceil(estimate),
+      };
+  }
   const patch = (state: RankingState): RankingState => ({
     // 旧快照无 mode/calibration/stage：补默认值（classic / 零计数 / bisect）。
     ...state,
