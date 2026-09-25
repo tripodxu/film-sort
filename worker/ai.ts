@@ -10,6 +10,11 @@
  *    数据只进数据块，用户侧没有自由文本注入面；管理端可在线覆盖 system（§6.3）。
  */
 
+import { OutboundError, fetchBounded, readBoundedJson, type OutboundPolicy } from "./outbound";
+
+// 上游响应字节预算：模型列表/生成文本远小于此；防恶意 endpoint 返回超大 body 耗尽 Worker 内存。
+const MAX_AI_RESPONSE_BYTES = 1024 * 1024;
+
 export type AiScene = "ranking" | "profile" | "compare";
 export type AiLocale = "zh" | "en";
 export type AiLength = "brief" | "standard" | "deep";
@@ -424,11 +429,13 @@ export function resolveEndpoint(baseUrl: string, protocol: AiProtocol, model: st
     if (base.endsWith("/v1")) return `${base}/messages`;
     return `${base}/v1/messages`;
   }
-  // gemini：端点内嵌模型名
+  // gemini：端点内嵌模型名。模型名按单个 path segment 编码——MODEL_RE 允许 `/` 和 `:`，
+  // 不编码会被解析成路径层级，构造出意外 endpoint（findings SEC-02）。
   if (base.includes(":generateContent")) return base;
+  const encodedModel = encodeURIComponent(model);
   if (base.endsWith("/v1beta") || base.endsWith("/v1"))
-    return `${base}/models/${model}:generateContent`;
-  return `${base}/v1beta/models/${model}:generateContent`;
+    return `${base}/models/${encodedModel}:generateContent`;
+  return `${base}/v1beta/models/${encodedModel}:generateContent`;
 }
 
 function resolveModelsEndpoint(baseUrl: string, protocol: AiProtocol): string {
@@ -631,8 +638,10 @@ export async function callAi(
     throw new AiError("upstream_error", 502, `AI upstream returned ${response.status}`);
   let raw: unknown;
   try {
-    raw = await response.json();
-  } catch {
+    raw = await readBoundedJson(response, MAX_AI_RESPONSE_BYTES);
+  } catch (error) {
+    if (error instanceof OutboundError)
+      throw new AiError("upstream_error", 502, `AI upstream response rejected: ${error.code}`);
     throw new AiError("upstream_error", 502, "AI upstream returned malformed JSON");
   }
   const text = extractText(cfg.protocol, raw);
@@ -752,10 +761,30 @@ async function listModelsForProtocol(
   } else {
     headers.authorization = `Bearer ${cfg.apiKey}`;
   }
+  // 与生成请求同规则的出站策略：manual redirect 逐跳同 host 复核（key 不出白名单 host）、
+  // 15s 超时、响应字节上限。旧实现用默认 fetch 跟随 redirect 且无字节预算（findings SEC-02/OPS-01）。
+  const policy: OutboundPolicy = {
+    allowedHosts: [new URL(cfg.baseUrl).hostname.toLowerCase()],
+    maxBytes: MAX_AI_RESPONSE_BYTES,
+    timeoutMs: 15_000,
+    maxRedirects: 2,
+  };
   let response: Response;
   try {
-    response = await fetchImpl(url, { method: "GET", headers, signal: AbortSignal.timeout(15000) });
-  } catch {
+    response = await fetchBounded(
+      url,
+      { method: "GET", headers, redirect: "manual" },
+      policy,
+      fetchImpl,
+    );
+  } catch (error) {
+    if (
+      error instanceof OutboundError &&
+      (error.code === "timeout" || error.code === "network_error")
+    )
+      throw new AiError("upstream_error", 502, "AI upstream unreachable");
+    if (error instanceof OutboundError)
+      throw new AiError("upstream_error", 502, `AI upstream request rejected: ${error.code}`);
     throw new AiError("upstream_error", 502, "AI upstream unreachable");
   }
   if (response.status === 401 || response.status === 403)
@@ -768,8 +797,10 @@ async function listModelsForProtocol(
     throw new AiError("upstream_error", 502, `AI upstream returned ${response.status}`);
   let raw: unknown;
   try {
-    raw = await response.json();
-  } catch {
+    raw = await readBoundedJson(response, MAX_AI_RESPONSE_BYTES);
+  } catch (error) {
+    if (error instanceof OutboundError)
+      throw new AiError("upstream_error", 502, `AI upstream response rejected: ${error.code}`);
     throw new AiError("upstream_error", 502, "AI upstream returned malformed JSON");
   }
   const models = parseModels(protocol, raw);

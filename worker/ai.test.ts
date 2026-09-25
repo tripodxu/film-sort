@@ -95,6 +95,11 @@ describe("resolveEndpoint", () => {
       "https://generativelanguage.googleapis.com/v1beta/models/g:generateContent",
     );
   });
+  it("gemini：模型名按单个 path segment 编码（/ 与 : 不产生路径层级）", () => {
+    expect(resolveEndpoint("https://x.com/v1beta", "gemini", "evil/path:extra")).toBe(
+      "https://x.com/v1beta/models/evil%2Fpath%3Aextra:generateContent",
+    );
+  });
   it("gemini：base 已以 /v1beta 或 /v1 结尾时不重复版本前缀", () => {
     expect(resolveEndpoint("https://x.com/v1beta", "gemini", "g")).toBe(
       "https://x.com/v1beta/models/g:generateContent",
@@ -407,6 +412,37 @@ describe("提示词模块", () => {
 // ===== 模型列表 =====
 
 describe("listAiModels", () => {
+  it("模型列表 302 跳转同 host 时按 manual redirect 逐跳跟随并携带认证头", async () => {
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValueOnce(
+        new Response(null, {
+          status: 302,
+          headers: { location: "https://api.example.com/v1/models/" },
+        }),
+      )
+      .mockResolvedValueOnce(json({ data: [{ id: "gpt-4o-mini" }] }));
+    const result = await listAiModels(baseConfig(), fetchImpl as unknown as typeof fetch);
+    expect(result.models).toEqual(["gpt-4o-mini"]);
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
+    const secondInit = fetchImpl.mock.calls[1][1] as RequestInit;
+    expect((secondInit.headers as Record<string, string>).authorization).toBe(
+      "Bearer sk-test-123456",
+    );
+    expect(secondInit.redirect).toBe("manual");
+  });
+  it("模型列表 302 跳转到其它 host 时拒绝且不发第二次请求", async () => {
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValueOnce(
+        new Response(null, { status: 302, headers: { location: "https://evil.example/models" } }),
+      );
+    await expect(listAiModels(baseConfig(), fetchImpl as unknown as typeof fetch)).rejects.toThrow(
+      "upstream",
+    );
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+  });
+
   it("chat：GET {base}/models + Bearer；解析 data[].id", async () => {
     const fetchImpl = stubFetch((url, init) => {
       expect(url).toBe("https://api.example.com/v1/models");

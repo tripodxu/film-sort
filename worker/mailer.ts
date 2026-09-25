@@ -19,6 +19,8 @@ export interface MailerEnv {
   MAIL_SMTP_EMAIL?: string;
   MAIL_SMTP_CODE?: string;
   MAIL_SMTP_TYPE?: string;
+  /** 开发兜底开关：只有显式 development/test 才允许无通道时返回 ok，生产缺配置一律 fail-closed。 */
+  ENVIRONMENT?: "production" | "development" | "test";
 }
 
 export interface SendResult {
@@ -30,6 +32,20 @@ import { createElement } from "react";
 // 显式 browser 入口：react-dom/server 默认导出条件在 workerd 下解析到 Node 版（node:stream → 崩）。
 import { renderToStaticMarkup } from "react-dom/server.browser";
 import { VerificationCodeEmail } from "./VerificationCodeEmail";
+import { fetchBounded, readBoundedText, type OutboundPolicy } from "./outbound";
+
+// 发信上游响应很小（JSON ack）；64 KiB 预算 + manual redirect，防异常上游耗资源。
+const MAILER_RESPONSE_BYTES = 64 * 1024;
+const MAILER_TIMEOUT_MS = 15_000;
+
+function providerPolicy(...hosts: string[]): OutboundPolicy {
+  return {
+    allowedHosts: hosts,
+    maxBytes: MAILER_RESPONSE_BYTES,
+    timeoutMs: MAILER_TIMEOUT_MS,
+    maxRedirects: 2,
+  };
+}
 
 const RESEND_URL = "https://api.resend.com/emails";
 const LUCKYCOLA_URLS = [
@@ -53,15 +69,20 @@ async function sendViaResend(
   html: string,
 ): Promise<SendResult> {
   try {
-    const response = await fetch(RESEND_URL, {
-      method: "POST",
-      headers: {
-        authorization: `Bearer ${apiKey}`,
-        "content-type": "application/json",
+    const response = await fetchBounded(
+      RESEND_URL,
+      {
+        method: "POST",
+        headers: {
+          authorization: `Bearer ${apiKey}`,
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({ from, to: [to], subject, html }),
+        redirect: "manual",
       },
-      body: JSON.stringify({ from, to: [to], subject, html }),
-    });
-    const raw = await response.text();
+      providerPolicy("api.resend.com"),
+    );
+    const raw = await readBoundedText(response, MAILER_RESPONSE_BYTES);
     let body: { id?: string; name?: string; message?: string } = {};
     try {
       body = JSON.parse(raw) as typeof body;
@@ -103,12 +124,17 @@ async function sendViaLuckyCola(
   let lastReason = "luckycola_unknown";
   for (const apiUrl of LUCKYCOLA_URLS) {
     try {
-      const response = await fetch(apiUrl, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: payload,
-      });
-      const raw = await response.text();
+      const response = await fetchBounded(
+        apiUrl,
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: payload,
+          redirect: "manual",
+        },
+        providerPolicy("luckycola.com", "luckycola.com.cn"),
+      );
+      const raw = await readBoundedText(response, MAILER_RESPONSE_BYTES);
       let body: { code?: number; status?: number } = {};
       try {
         body = JSON.parse(raw) as { code?: number; status?: number };
@@ -170,8 +196,14 @@ export async function sendVerificationCode(
   const fallback = await sendViaLuckyCola(env, to, subject, html);
   if (fallback.ok) return fallback;
   if (fallback.reason === "luckycola_unconfigured") {
-    // 双通道全未配置：开发兜底，验证码仅写日志。
-    console.warn(`[mailer:dev] 发信通道未配置，验证码（${purpose} ${to}）：${code}`);
+    // 双通道全未配置：生产 fail-closed（防止静默绕过真实发信验证，findings SEC-04）；
+    // 仅显式 development/test 才允许开发兜底。兜底日志不得包含收件邮箱或验证码——
+    // 本地获取验证码走 /api/account/send-code 响应的 dev_code 字段（同样仅在 dev 兜底时返回）。
+    if (env.ENVIRONMENT !== "development" && env.ENVIRONMENT !== "test")
+      return { ok: false, reason: "mailer_unconfigured" };
+    console.warn(
+      "[mailer:dev] 发信通道未配置（development 兜底生效）：验证码未写入日志，请从 send-code 响应的 dev_code 获取。",
+    );
     return { ok: true, reason: "dev" };
   }
   return fallback;

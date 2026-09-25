@@ -331,7 +331,7 @@ async function issueVerificationCode(
   env: Env,
   email: string,
   purpose: "register" | "reset",
-): Promise<{ ok: true } | { error: string; msg: string; detail?: string }> {
+): Promise<{ ok: true; dev_code?: string } | { error: string; msg: string; detail?: string }> {
   const recent = await db
     .prepare(
       "SELECT id FROM verification_codes WHERE email = ? AND purpose = ? AND created_at > datetime('now','-60 seconds') LIMIT 1",
@@ -364,7 +364,9 @@ async function issueVerificationCode(
   }
   if (!sent.ok)
     return { error: "mail_failed", msg: "邮件发送失败，请稍后再试", detail: sent.reason };
-  return { ok: true };
+  // 开发兜底（mailer 仅在 ENVIRONMENT=development/test 时返回 "dev"）把验证码放进响应，
+  // 取代旧的"OTP 写日志"通道；生产 fail-closed 后该分支不可达。
+  return sent.reason === "dev" ? { ok: true, dev_code: code } : { ok: true };
 }
 
 async function consumeVerificationCode(
@@ -481,7 +483,7 @@ export async function accountRoute(request: Request, env: Env): Promise<Response
       const status = issued.error === "code_cooldown" ? 429 : 502;
       return json({ error: issued.error, msg: issued.msg, detail: issued.detail }, status);
     }
-    return json({ ok: true });
+    return json({ ok: true, ...(issued.dev_code ? { dev_code: issued.dev_code } : {}) });
   }
 
   // POST /api/account/change-password —— 修改密码（邮箱验证码核验身份，免旧密码；改密吊销全部旧会话）

@@ -1,5 +1,6 @@
 import curatedPosters from "./imdb-posters.json";
 import { gdPicUrl, gdSearch, pickTracks, type GdProxyEnv } from "./gdstudio";
+import { fetchBounded, parseAllowedUrl, readBoundedText, type OutboundPolicy } from "./outbound";
 
 export interface DoubanWork {
   id: string;
@@ -1899,6 +1900,24 @@ export interface MusicDetail {
   [key: string]: unknown;
 }
 
+// 详情页出站策略：精确 host 白名单 + 2 MiB 响应上限 + 15s 超时 + 手动逐跳 redirect 复核。
+// 豆瓣反爬会把详情页 302 到 sec.douban.com（不在白名单），fetchBounded 会在该跳前拒绝，
+// 抛出的 OutboundError 与旧实现抛 "Anti-bot redirect" 一样触发调用方的百科 fallback。
+const DETAIL_POLICY: OutboundPolicy = {
+  allowedHosts: ["book.douban.com", "movie.douban.com", "music.douban.com"],
+  maxBytes: 2 * 1024 * 1024,
+  timeoutMs: 15_000,
+  maxRedirects: 2,
+  allowedContentTypes: ["text/html", "application/xhtml+xml"],
+};
+
+/** 精确校验豆瓣 subject 详情 URL：host 完整匹配且路径为 /subject/<纯数字 id>[/]。 */
+function requireDoubanSubject(url: string, host: string): void {
+  const parsed = parseAllowedUrl(url, DETAIL_POLICY);
+  if (parsed.hostname !== host || !/^\/subject\/\d+\/?$/.test(parsed.pathname))
+    throw new Error(`Invalid ${host} URL`);
+}
+
 async function fetchDetailPage(
   url: string,
 ): Promise<{ html: string; debug: Record<string, unknown> }> {
@@ -1911,11 +1930,7 @@ async function fetchDetailPage(
   const headers = buildHeaders(url, false);
   steps.push(`headers built: UA=${headers["user-agent"]?.slice(0, 40)}...`);
 
-  const response = await fetch(url, {
-    headers,
-    signal: AbortSignal.timeout(15000),
-    redirect: "follow",
-  });
+  const response = await fetchBounded(url, { headers, redirect: "manual" }, DETAIL_POLICY);
 
   debug.http_status = response.status;
   debug.response_url = response.url;
@@ -1932,18 +1947,10 @@ async function fetchDetailPage(
     throw new Error(`HTTP ${response.status}`);
   }
 
-  const html = await response.text();
+  const html = await readBoundedText(response, DETAIL_POLICY.maxBytes);
   debug.html_length = html.length;
   debug.html_preview = html.slice(0, 300);
   steps.push(`html received: ${html.length} chars`);
-
-  // Check if we got redirected to anti-bot page — must throw so callers
-  // fall through to their catch block (enables Wikipedia/Baike fallback).
-  if (response.url?.includes("sec.douban.com")) {
-    steps.push("redirected to sec.douban.com (anti-bot)");
-    debug.blocked = true;
-    throw new Error("Anti-bot redirect to sec.douban.com");
-  }
 
   return { html, debug };
 }
@@ -1974,7 +1981,7 @@ export async function doubanBookDetail(
 ): Promise<{ status: boolean; msg: string; time: string; data: BookDetail | null }> {
   const t0 = Date.now();
   try {
-    if (!url.includes("book.douban.com/subject/")) throw new Error("Invalid book URL");
+    requireDoubanSubject(url, "book.douban.com");
     const bookCooldown = cooldownMap.get("book.douban.com") ?? 0;
     if (Date.now() < bookCooldown)
       return {
@@ -2059,7 +2066,7 @@ export async function doubanMovieDetail(url: string): Promise<{
 }> {
   const t0 = Date.now();
   try {
-    if (!url.includes("movie.douban.com/subject/")) throw new Error("Invalid movie URL");
+    requireDoubanSubject(url, "movie.douban.com");
     const movieCooldown = cooldownMap.get("movie.douban.com") ?? 0;
     if (Date.now() < movieCooldown)
       return {
@@ -2139,7 +2146,7 @@ export async function doubanMusicDetail(
 ): Promise<{ status: boolean; msg: string; time: string; data: MusicDetail | null }> {
   const t0 = Date.now();
   try {
-    if (!url.includes("music.douban.com/subject/")) throw new Error("Invalid music URL");
+    requireDoubanSubject(url, "music.douban.com");
     const musicCooldown = cooldownMap.get("music.douban.com") ?? 0;
     if (Date.now() < musicCooldown)
       return {
