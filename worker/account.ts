@@ -11,6 +11,13 @@ import {
 const encoder = new TextEncoder();
 import { pbkdf2Sync } from "node:crypto";
 import { sendVerificationCode, type MailerEnv } from "./mailer";
+import {
+  CODE_MAX_ATTEMPTS,
+  consumeOAuthExchange,
+  consumeVerificationCode,
+  parseGoogleUser,
+  sha256Hex,
+} from "./verification";
 const json = (data: unknown, status = 200) =>
   new Response(JSON.stringify(data), {
     status,
@@ -265,17 +272,7 @@ const oauthProviders: Record<string, OAuthProvider> = {
     scope: "openid email",
     clientId: (env) => env.GOOGLE_CLIENT_ID,
     clientSecret: (env) => env.GOOGLE_CLIENT_SECRET,
-    parseUser(data) {
-      const d = data as { id?: string; email?: string; email_verified?: boolean };
-      if (!d.id || !d.email) return null;
-      return {
-        id: d.id,
-        email: d.email,
-        // Google userinfo 的 email_verified 缺省视为已验证（该字段存在且为 true 才是官方语义，
-        // 这里对显式 false 保守拒绝）。
-        emailVerified: d.email_verified !== false,
-      };
-    },
+    parseUser: parseGoogleUser,
   },
   github: {
     name: "GitHub",
@@ -318,14 +315,6 @@ async function readJsonObject(
   }
 }
 
-// ===== 邮箱验证码（注册 / 修改密码）：SHA-256 存散列、10 分钟过期、5 次尝试上限、60s 重发冷却 =====
-const CODE_MAX_ATTEMPTS = 5;
-
-async function sha256Hex(value: string): Promise<string> {
-  const digest = await crypto.subtle.digest("SHA-256", encoder.encode(value));
-  return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, "0")).join("");
-}
-
 async function issueVerificationCode(
   db: D1Database,
   env: Env,
@@ -342,16 +331,17 @@ async function issueVerificationCode(
   const buf = new Uint32Array(1);
   crypto.getRandomValues(buf);
   const code = String(buf[0] % 1000000).padStart(6, "0");
-  await db
-    .prepare("DELETE FROM verification_codes WHERE email = ? AND purpose = ?")
-    .bind(email, purpose)
-    .run();
-  await db
-    .prepare(
-      "INSERT INTO verification_codes (email, purpose, code_hash, expires_at) VALUES (?, ?, ?, datetime('now','+10 minutes'))",
-    )
-    .bind(email, purpose, await sha256Hex(code))
-    .run();
+  // 删旧 + 写新放进同一个 batch：D1 batch 是事务性的，避免删完没写成功的空窗。
+  await db.batch([
+    db
+      .prepare("DELETE FROM verification_codes WHERE email = ? AND purpose = ?")
+      .bind(email, purpose),
+    db
+      .prepare(
+        "INSERT INTO verification_codes (email, purpose, code_hash, expires_at) VALUES (?, ?, ?, datetime('now','+10 minutes'))",
+      )
+      .bind(email, purpose, await sha256Hex(code)),
+  ]);
   let sent: { ok: boolean; reason?: string };
   try {
     sent = await sendVerificationCode(env as unknown as MailerEnv, email, code, purpose);
@@ -367,37 +357,6 @@ async function issueVerificationCode(
   // 开发兜底（mailer 仅在 ENVIRONMENT=development/test 时返回 "dev"）把验证码放进响应，
   // 取代旧的"OTP 写日志"通道；生产 fail-closed 后该分支不可达。
   return sent.reason === "dev" ? { ok: true, dev_code: code } : { ok: true };
-}
-
-async function consumeVerificationCode(
-  db: D1Database,
-  email: string,
-  purpose: "register" | "reset",
-  code: string,
-): Promise<{ ok: true } | { error: string; msg: string }> {
-  const normalizedEmail = normalizeEmail(email);
-  // 码值去空白：复制粘贴/字距产生的空白不再把对码打成错码。
-  const normalizedCode = code.replace(/\s+/g, "");
-  const row = await db
-    .prepare(
-      "SELECT id, code_hash, attempts, expires_at > datetime('now') AS alive FROM verification_codes WHERE email = ? AND purpose = ? ORDER BY id DESC LIMIT 1",
-    )
-    .bind(normalizedEmail, purpose)
-    .first<{ id: number; code_hash: string; attempts: number; alive: number }>();
-  if (!row) return { error: "code_not_requested", msg: "请先获取验证码" };
-  if (!row.alive) return { error: "code_expired", msg: "验证码已过期，请重新获取" };
-  if (row.attempts >= CODE_MAX_ATTEMPTS)
-    return { error: "code_locked", msg: "尝试次数过多，请重新获取验证码" };
-  if ((await sha256Hex(normalizedCode)) !== row.code_hash) {
-    await db
-      .prepare("UPDATE verification_codes SET attempts = attempts + 1 WHERE id = ?")
-      .bind(row.id)
-      .run();
-    const left = Math.max(0, CODE_MAX_ATTEMPTS - row.attempts - 1);
-    return { error: "invalid_code", msg: `验证码错误，还可尝试 ${left} 次` };
-  }
-  await db.prepare("DELETE FROM verification_codes WHERE id = ?").bind(row.id).run();
-  return { ok: true };
 }
 
 export async function accountRoute(request: Request, env: Env): Promise<Response> {
@@ -422,15 +381,24 @@ export async function accountRoute(request: Request, env: Env): Promise<Response
       .first();
     if (existing) return json({ error: "email_exists" }, 409);
     if (!code) return json({ error: "invalid_code", msg: "请输入邮箱验证码" }, 400);
-    const consumed = await consumeVerificationCode(env.DB, email, "register", code);
-    if ("error" in consumed) return json(consumed, 400);
+    // 先建号后消费验证码（消费本身是条件一次性语句）：用户表写入失败不再吞掉验证码；
+    // 消费失败则补偿删除刚建的账号，验证码保留可重试（findings DATA-05）。
     const hash = await hashPasswordStrong(password);
     const result = await env.DB.prepare(
       "INSERT INTO user_accounts (email, password_hash, nickname) VALUES (?, ?, ?)",
     )
       .bind(email, hash, nickname)
       .run();
-    const session = await createSession(env.DB, result.meta.last_row_id as number);
+    const userId = result.meta.last_row_id as number;
+    const consumed = await consumeVerificationCode(env.DB, email, "register", code);
+    if (!consumed.ok) {
+      await env.DB.prepare("DELETE FROM user_accounts WHERE id = ?")
+        .bind(userId)
+        .run()
+        .catch(() => undefined);
+      return json({ error: consumed.error, msg: consumed.msg }, 400);
+    }
+    const session = await createSession(env.DB, userId);
     return json({ ...session, email, nickname });
   }
 
@@ -496,16 +464,26 @@ export async function accountRoute(request: Request, env: Env): Promise<Response
     if (!password || password.length < 6)
       return json({ error: "invalid_password", msg: "密码至少6位" }, 400);
     if (!code) return json({ error: "invalid_code", msg: "请输入邮箱验证码" }, 400);
-    const user = await env.DB.prepare("SELECT id, disabled_at FROM user_accounts WHERE email = ?")
+    const user = await env.DB.prepare(
+      "SELECT id, password_hash, disabled_at FROM user_accounts WHERE email = ?",
+    )
       .bind(email)
-      .first<{ id: number; disabled_at: string | null }>();
+      .first<{ id: number; password_hash: string; disabled_at: string | null }>();
     if (!user) return json({ error: "email_notfound" }, 404);
     if (user.disabled_at) return json({ error: "account_disabled" }, 403);
-    const consumed = await consumeVerificationCode(env.DB, email, "reset", code);
-    if ("error" in consumed) return json(consumed, 400);
+    // 与注册同序：先改密后消费，消费失败补偿回滚旧口令，验证码可重试（findings DATA-05）。
+    const previousHash = user.password_hash;
     await env.DB.prepare("UPDATE user_accounts SET password_hash = ? WHERE id = ?")
       .bind(await hashPasswordStrong(password), user.id)
       .run();
+    const consumed = await consumeVerificationCode(env.DB, email, "reset", code);
+    if (!consumed.ok) {
+      await env.DB.prepare("UPDATE user_accounts SET password_hash = ? WHERE id = ?")
+        .bind(previousHash, user.id)
+        .run()
+        .catch(() => undefined);
+      return json({ error: consumed.error, msg: consumed.msg }, 400);
+    }
     await env.DB.prepare("DELETE FROM user_sessions WHERE user_id = ?").bind(user.id).run();
     return json({ ok: true });
   }
@@ -532,14 +510,15 @@ export async function accountRoute(request: Request, env: Env): Promise<Response
     const body = await readJsonObject(request);
     const exchangeCode = cleanString(body?.code, 80);
     if (!exchangeCode) return json({ error: "invalid_code" }, 400);
-    const row = await env.DB.prepare(
-      "SELECT token, email, nickname FROM oauth_exchanges WHERE code = ? AND expires_at > datetime('now')",
-    )
-      .bind(exchangeCode)
-      .first<{ token: string; email: string; nickname: string | null }>();
-    if (!row) return json({ error: "invalid_code" }, 404);
-    await env.DB.prepare("DELETE FROM oauth_exchanges WHERE code = ?").bind(exchangeCode).run();
-    return json({ token: row.token, email: row.email, nickname: row.nickname ?? undefined });
+    // 一次性消费：条件 DELETE 报告 changes===1 的调用方独占 token，
+    // 并发重放同一个 code 只有一个能拿到会话（findings DATA-05）。
+    const consumed = await consumeOAuthExchange(env.DB, exchangeCode);
+    if (!consumed.ok) return json({ error: "invalid_code" }, 404);
+    return json({
+      token: consumed.token,
+      email: consumed.email,
+      nickname: consumed.nickname ?? undefined,
+    });
   }
 
   // GET /api/account/oauth/callback — OAuth callback (must be before provider route)
@@ -625,7 +604,15 @@ export async function accountRoute(request: Request, env: Env): Promise<Response
           new Date(Date.now() + 5 * 60 * 1000).toISOString(),
         )
         .run();
-      return redirect(`/?oauth_code=${exchangeCode}`);
+      // 成功后清掉 oauth_state cookie（Path 与下发时一致），避免残留可重放的 state。
+      return new Response(null, {
+        status: 302,
+        headers: {
+          location: `/?oauth_code=${exchangeCode}`,
+          "set-cookie":
+            "oauth_state=; Path=/api/account; HttpOnly; Secure; SameSite=Lax; Max-Age=0",
+        },
+      });
     } catch (error) {
       console.error(`OAuth ${providerKey} failed:`, error);
       return redirect(
