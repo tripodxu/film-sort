@@ -218,10 +218,10 @@ export function AiConfigDialog({
                       zIndex: 40,
                       maxHeight: 220,
                       overflowY: "auto",
-                      background: "var(--surface, #141914)",
-                      border: "1px solid var(--border, #2a3a2a)",
-                      borderRadius: 8,
-                      boxShadow: "0 12px 28px rgba(0,0,0,.45)",
+                      background: "var(--surface-3)",
+                      border: "1px solid var(--border-2)",
+                      borderRadius: "var(--r-md, 8px)",
+                      boxShadow: "var(--ev-2)",
                       overflowX: "hidden",
                     }}
                   >
@@ -248,7 +248,7 @@ export function AiConfigDialog({
                           color: "var(--text)",
                           background:
                             name === model
-                              ? "var(--surface-3, rgba(216,248,106,.08))"
+                              ? "var(--surface-3, rgba(127,127,127,.16))"
                               : "transparent",
                         }}
                         onMouseEnter={(event) => {
@@ -257,7 +257,7 @@ export function AiConfigDialog({
                         onMouseLeave={(event) => {
                           event.currentTarget.style.background =
                             name === model
-                              ? "var(--surface-3, rgba(216,248,106,.08))"
+                              ? "var(--surface-3, rgba(127,127,127,.16))"
                               : "transparent";
                         }}
                       >
