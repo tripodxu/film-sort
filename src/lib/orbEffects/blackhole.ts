@@ -38,7 +38,6 @@ export function createBlackholeEffect(host: OrbHost, palette: OrbPalette): OrbIn
     depthWrite: false,
   });
   const photonRing = new Mesh(photonGeometry, photonMaterial);
-  photonRing.rotation.x = Math.PI / 2;
   group.add(photonRing);
 
   // 吸积盘：三层不同倾角/半径的轨道环 + 沿轨道运动的亮粒子
@@ -105,11 +104,13 @@ export function createBlackholeEffect(host: OrbHost, palette: OrbPalette): OrbIn
   const dust = new Points(dustGeometry, dustMaterial);
   group.add(dust);
 
+  let baseScale = 1;
+
   return {
     update(elapsed, pointer) {
       const t = host.reducedMotion ? 0.8 : elapsed;
       // 呼吸：±3.5% 慢正弦；中心恒定（不随时间/指针平移——防漂移）
-      const breathe = 1 + Math.sin(t * 0.55) * 0.035;
+      const breathe = baseScale * (1 + Math.sin(t * 0.55) * 0.05);
       group.scale.setScalar(breathe);
       group.rotation.y = 0.16 + pointer.x * 0.6;
       group.rotation.x = 0.1 + pointer.y * 0.4;
@@ -145,9 +146,8 @@ export function createBlackholeEffect(host: OrbHost, palette: OrbPalette): OrbIn
     },
     resize(width) {
       group.position.x = width > 700 ? 0.68 : 0;
-      group.scale.multiplyScalar(1); // 呼吸 scale 在 update 里管理，这里不动
-      const base = width > 700 ? 1 : 0.86;
-      group.scale.setScalar(base);
+      baseScale = width > 700 ? 1 : 0.86;
+      group.scale.setScalar(baseScale);
     },
     applyPalette(next) {
       photonMaterial.color.set(next.accent2);
