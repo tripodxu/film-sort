@@ -11,6 +11,7 @@
  */
 
 import { OutboundError, fetchBounded, readBoundedJson, type OutboundPolicy } from "./outbound";
+import { registerPurger } from "./cachePurge";
 
 // 上游响应字节预算：模型列表/生成文本远小于此；防恶意 endpoint 返回超大 body 耗尽 Worker 内存。
 const MAX_AI_RESPONSE_BYTES = 1024 * 1024;
@@ -657,6 +658,13 @@ const protocolCache = new Map<string, AiProtocol>();
 export function clearProtocolCache(): void {
   protocolCache.clear();
 }
+
+// 「其他」作用域：协议探测缓存随清缓存入口一并失效。
+registerPurger("misc", () => {
+  const count = protocolCache.size;
+  clearProtocolCache();
+  return count;
+});
 
 function rememberProtocol(baseUrl: string, protocol: AiProtocol): void {
   if (protocolCache.size >= PROTOCOL_CACHE_MAX) {

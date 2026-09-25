@@ -8,6 +8,8 @@
  * 用户连点几首就会撞上限流（12 次/10 分钟），却被告知"这首歌没有"，看起来就是功能坏了。
  */
 
+import { cacheEpoch } from "./cacheBust";
+
 export type GdFailure = "rate_limited" | "upstream_limited" | "not_found" | "unavailable";
 
 export interface GdErrorInfo {
@@ -38,6 +40,9 @@ async function jsonFetch(
   params: Record<string, string>,
 ): Promise<{ ok: true; data: Record<string, unknown> } | { ok: false; error: GdErrorInfo }> {
   const qs = new URLSearchParams(params);
+  // 用户清过缓存后会话里带代次：URL 变化同时绕过浏览器与边缘缓存
+  const epoch = cacheEpoch();
+  if (epoch) qs.set("_ce", epoch);
   try {
     const response = await fetch(`${path}?${qs}`, { signal: AbortSignal.timeout(20000) });
     const retryAfter = Number(response.headers.get("retry-after")) || 0;

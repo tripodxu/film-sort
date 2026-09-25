@@ -1,6 +1,7 @@
 import curatedPosters from "./imdb-posters.json";
 import { gdPicUrl, gdSearch, pickTracks, toSc, type GdProxyEnv } from "./gdstudio";
 import { fetchBounded, parseAllowedUrl, readBoundedText, type OutboundPolicy } from "./outbound";
+import { generationOf, registerPurger } from "./cachePurge";
 
 export interface DoubanWork {
   id: string;
@@ -1015,8 +1016,20 @@ const introCache = new Map<string, { intro: string; source: string; at: number }
 // 陈旧条目（如"童话"命中文学体裁词条的旧结果）会跨部署继续命中。
 const INTRO_CACHE_GENERATION = "v2";
 function introCacheKey(title: string, mediaType?: "movie" | "book" | "music"): string {
-  return `${mediaType ?? "*"}:${INTRO_CACHE_GENERATION}:${title.trim().toLowerCase()}`;
+  // 键同时带「静态代次」（简介逻辑修正时手动 bump）与「清除代次」（清缓存入口推进）
+  return `${mediaType ?? "*"}:${INTRO_CACHE_GENERATION}:${generationOf("intro")}:${title.trim().toLowerCase()}`;
 }
+
+registerPurger("intro", () => {
+  const count = introCache.size;
+  introCache.clear();
+  return count;
+});
+registerPurger("posters", () => {
+  const count = posterCache.size;
+  posterCache.clear();
+  return count;
+});
 
 export async function fetchContentIntro(
   title: string,
@@ -1488,7 +1501,8 @@ async function resolvePosterEntry(
   env?: GdProxyEnv,
   opts?: { retry?: boolean },
 ): Promise<PosterCacheEntry> {
-  const cacheKey = posterMediaKey(title, english, type, year);
+  // 键带「海报」代次：清缓存推进代次后，L1/L2（边缘摘要键）全部自然未命中
+  const cacheKey = `${generationOf("posters")}:${posterMediaKey(title, english, type, year)}`;
   const isolateHit = readIsolatePosterCache(cacheKey);
   const cached = isolateHit ?? (await readEdgePosterCache(cacheKey));
   if (cached && !(opts?.retry === true && cached.outcome === "throttled")) {

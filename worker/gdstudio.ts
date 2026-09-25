@@ -4,6 +4,8 @@
  * Worker 出口是 CF 共享 IP，最可能先撞上的是上游限额而非本站用户，
  * 故所有调用统一过本模块：isolate 全局令牌预算 + 结果缓存 + 超时。
  */
+import { registerPurger } from "./cachePurge";
+
 const API_BASE = "https://music-api.gdstudio.xyz/api.php";
 const SOURCE = "netease";
 const CACHE_MAX = 200;
@@ -71,12 +73,24 @@ function makeCache(ttlMs: number) {
       }
       store.set(key, { value, expires: Date.now() + ttlMs });
     },
+    clear() {
+      const count = store.size;
+      store.clear();
+      return count;
+    },
   };
 }
 const searchCache = makeCache(10 * 60 * 1000); // 搜索结果 10 分钟
 const playCache = makeCache(30 * 60 * 1000); // 签名播放链约 1 小时过期，缓存 30 分钟
 const picCache = makeCache(50 * 60 * 1000); // 签名封面链同理，留余量
 const lyricCache = makeCache(24 * 60 * 60 * 1000); // 歌词几乎不变
+
+// 「歌曲」作用域缓存清除（管理端/用户端清缓存入口）：播放链、封面、歌词、搜索全部失效。
+registerPurger("music", () => {
+  let count = 0;
+  for (const cache of [searchCache, playCache, picCache, lyricCache]) count += cache.clear();
+  return count;
+});
 
 export interface GdTrack {
   id: string;

@@ -45,6 +45,14 @@ import {
 } from "./netease";
 import { consumeQrTransaction, getQrTransaction, registerQrTransaction } from "./qrTransactions";
 import {
+  generationOf,
+  isCacheScope,
+  purgeCaches,
+  PURGEABLE_SCOPES,
+  refreshGenerations,
+  type CacheScope,
+} from "./cachePurge";
+import {
   doubanQrIssue,
   doubanQrPoll,
   extractDoubanLoginCookie,
@@ -192,7 +200,8 @@ async function allowUpstreamRequest(
     | "posters"
     | "other"
     | "events"
-    | "challenge",
+    | "challenge"
+    | "cache",
   limit: number,
 ): Promise<boolean> {
   const client = request.headers.get("cf-connecting-ip") ?? "anonymous";
@@ -352,11 +361,29 @@ tr:last-child td{border-bottom:none}
   <button class="dash-tab" data-tab="users" onclick="switchTab('users')">用户</button>
   <button class="dash-tab" data-tab="plaza" onclick="switchTab('plaza')">广场</button>
   <button class="dash-tab" data-tab="data" onclick="switchTab('data')">数据</button>
+  <button class="dash-tab" data-tab="cache" onclick="switchTab('cache')">缓存</button>
 </div>
 <div id="tab-overview" class="tab-pane active"><div id="app" class="loading">加载中...</div></div>
 <div id="tab-users" class="tab-pane"><div id="users-app" class="loading">点击「用户」页签加载</div></div>
 <div id="tab-plaza" class="tab-pane"><div id="plaza-app" class="loading">点击「广场」页签加载</div></div>
 <div id="tab-data" class="tab-pane"><div id="data-app" class="loading">点击「数据」页签加载</div></div>
+<div id="tab-cache" class="tab-pane">
+  <div class="card" style="max-width:640px">
+    <h3 style="margin-bottom:8px">清除服务端缓存</h3>
+    <p style="color:var(--muted);font-size:13px;line-height:1.7;margin-bottom:12px">
+      立即失效对应类别的服务端缓存（本机即刻生效，其余节点 60 秒内跟进）。
+      浏览器侧的 HTTP 缓存由响应 max-age 控制（文字/详情类最长 1 小时）。
+    </p>
+    <div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px">
+      <button class="table-action" onclick="purgeCache('posters')">海报</button>
+      <button class="table-action" onclick="purgeCache('intro')">文字简介</button>
+      <button class="table-action" onclick="purgeCache('music')">歌曲</button>
+      <button class="table-action" onclick="purgeCache('misc')">其他</button>
+      <button class="table-action warn" onclick="purgeCache('all')">全部清除</button>
+    </div>
+    <div id="cache-purge-result" style="font-size:12px;color:var(--muted)"></div>
+  </div>
+</div>
 <div id="dash-modal-root"></div>
 </div>
 <script>
@@ -442,14 +469,42 @@ var plazaState = { page: 1, kind: '', q: '', total: 0, loaded: false };
 
 function switchTab(name) {
   CURRENT_TAB = name;
-  ['overview','users','plaza','data'].forEach(function(t){
+  ['overview','users','plaza','data','cache'].forEach(function(t){
     var pane = document.getElementById('tab-'+t);
     if (pane) pane.classList.toggle('active', t === name);
   });
   var tabButtons = document.querySelectorAll('.dash-tab');
   for (var i = 0; i < tabButtons.length; i++) tabButtons[i].classList.toggle('active', tabButtons[i].getAttribute('data-tab') === name);
   if (name === 'plaza' && !plazaState.loaded) loadPlaza();
+  if (name === 'cache' && !CACHE_STATE.loaded) purgeCache(null);
   if (name === 'data') { loadAudit(); loadAiPrompts(); }
+}
+var CACHE_STATE = { loaded: false, generation: null };
+async function purgeCache(scope) {
+  var out = document.getElementById('cache-purge-result');
+  if (scope) {
+    out.textContent = '清除中…';
+    try {
+      var r = await fetch('/api/admin/cache/clear', { method: 'POST', headers: { 'Authorization': 'Bearer ' + getToken(), 'Content-Type': 'application/json' }, body: JSON.stringify({ scope: scope }) });
+      var d = await r.json();
+      if (!r.ok) { out.textContent = '清除失败: ' + (d.error || r.status); return; }
+      CACHE_STATE.loaded = true;
+      CACHE_STATE.generation = d.generation;
+      renderCacheStatus();
+      if (scope !== 'all') return;
+    } catch (e) { out.textContent = '清除失败: ' + e.message; return; }
+  }
+  try {
+    var r2 = await fetch('/api/admin/cache/status', { headers: { 'Authorization': 'Bearer ' + getToken() } });
+    if (r2.ok) { var d2 = await r2.json(); CACHE_STATE.generation = d2.generation; CACHE_STATE.loaded = true; renderCacheStatus(); }
+  } catch (e) { /* 状态展示失败不影响操作 */ }
+}
+function renderCacheStatus() {
+  var out = document.getElementById('cache-purge-result');
+  var g = CACHE_STATE.generation || {};
+  var parts = [];
+  for (var k in g) parts.push(k + ': ' + g[k]);
+  if (out && parts.length) out.textContent = '当前缓存代次 — ' + parts.join(' · ');
 }
 function refreshCurrent(){ if (CURRENT_TAB === 'plaza') loadPlaza(); else load(); }
 
@@ -1706,6 +1761,25 @@ async function route(request: Request, env: Env): Promise<Response> {
     if (!(await adminAuth(request, env))) return json({ error: "auth_required" }, 401);
     return getDashboard(env);
   }
+  // GET /api/admin/cache/status —— 各作用域当前缓存代次
+  if (url.pathname === "/api/admin/cache/status" && request.method === "GET") {
+    if (!env.DB || !(await adminAuth(request, env))) return json({ error: "auth_required" }, 401);
+    await refreshGenerations(env.DB);
+    const generation: Record<string, string> = {};
+    for (const s of PURGEABLE_SCOPES) generation[s] = generationOf(s);
+    return json({ ok: true, generation });
+  }
+  // POST /api/admin/cache/clear —— 管理员清除缓存（scope 可为 all）
+  if (url.pathname === "/api/admin/cache/clear" && request.method === "POST") {
+    if (!env.DB || !(await adminAuth(request, env))) return json({ error: "auth_required" }, 401);
+    const body = await readJson(request);
+    const rawScope: unknown = body.scope;
+    if (rawScope !== "all" && !isCacheScope(rawScope)) return json({ error: "invalid_scope" }, 400);
+    const scope: CacheScope = rawScope;
+    await refreshGenerations(env.DB);
+    const result = await purgeCaches(env.DB, scope);
+    return json({ ok: true, scope, ...result });
+  }
   if (url.pathname === "/api/admin/login" && request.method === "POST") {
     return handleAdminLogin(request, env);
   }
@@ -2615,6 +2689,20 @@ async function route(request: Request, env: Env): Promise<Response> {
     }
   }
 
+  // POST /api/cache/clear —— 同源用户清除服务端缓存（海报/文字/歌曲/其他）
+  if (url.pathname === "/api/cache/clear" && request.method === "POST") {
+    if (!env.DB) return json({ error: "database_unavailable" }, 503);
+    assertSameOrigin(request);
+    if (!(await allowUpstreamRequest(request, "cache", 5)))
+      return json({ error: "rate_limited", msg: "操作太频繁，请稍后再试" }, 429, {
+        "retry-after": "600",
+      });
+    const body = await readJson(request);
+    if (!isCacheScope(body.scope)) return json({ error: "invalid_scope" }, 400);
+    await refreshGenerations(env.DB);
+    const result = await purgeCaches(env.DB, body.scope);
+    return json({ ok: true, scope: body.scope, ...result });
+  }
   if (url.pathname === "/api/auth/config") return json({ enabled: Boolean(env.DB) });
   // 网易云扫码登录（weapi 协议）与连接状态管理
   if (url.pathname.startsWith("/api/netease/")) {
@@ -2956,9 +3044,15 @@ export default {
       const cacheable =
         request.method === "GET" &&
         ["/api/douban/top250", "/api/douban/suggest", "/api/posters", "/api/image"].includes(path);
-      if (cacheable) {
+      // 键带「其他」代次：清缓存推进代次后，旧边缘条目自然孤儿化
+      const edgeKey = cacheable
+        ? new Request(
+            `https://route-cache.art-rank.internal/${generationOf("misc")}${url.pathname}${url.search}`,
+          )
+        : null;
+      if (cacheable && edgeKey) {
         const edgeCache = (caches as unknown as { default: Cache }).default;
-        const hit = await edgeCache.match(request);
+        const hit = await edgeCache.match(edgeKey);
         if (hit) {
           if (isApi)
             ctx.waitUntil(
@@ -2968,9 +3062,9 @@ export default {
         }
       }
       response = await route(request, env);
-      if (cacheable && response.ok)
+      if (cacheable && edgeKey && response.ok)
         ctx.waitUntil(
-          (caches as unknown as { default: Cache }).default.put(request, response.clone()),
+          (caches as unknown as { default: Cache }).default.put(edgeKey, response.clone()),
         );
     } catch (err) {
       if (err instanceof HttpError) {

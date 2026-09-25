@@ -38,6 +38,7 @@ import { ErrorBoundary } from "./components/ErrorBoundary";
 import { AiConfigDialog } from "./components/AiConfigDialog";
 import { readNotes, writeNotes, setNote } from "./lib/notes";
 import { buildProfileSyncBody } from "./lib/profileSync";
+import { epochQuery } from "./lib/cacheBust";
 import { Poster } from "./components/Poster";
 import { RankingDetail } from "./components/RankingDetail";
 import { ArtworkDetail, type ArtworkDetailInfo } from "./components/ArtworkDetail";
@@ -648,9 +649,10 @@ export default function App() {
     setDetailWork({ work, kind: detailKind, data: null, loading: true });
     try {
       if (detailKind === "other") {
-        const response = await fetch(`/api/other/detail?name=${encodeURIComponent(work.title)}`, {
-          signal: AbortSignal.timeout(20000),
-        });
+        const response = await fetch(
+          `/api/other/detail?name=${encodeURIComponent(work.title)}${epochQuery("&")}`,
+          { signal: AbortSignal.timeout(20000) },
+        );
         const payload = (await response.json()) as {
           data?: (Record<string, unknown> & { poster_url?: string }) | null;
         };
@@ -669,7 +671,7 @@ export default function App() {
       if (work.creator) extra.set("creator", work.creator.split("/")[0].trim());
       const qs = extra.size ? `&${extra}` : "";
       const response = await fetch(
-        `/api/${apiType}/detail?name=${encodeURIComponent(work.title)}${qs}`,
+        `/api/${apiType}/detail?name=${encodeURIComponent(work.title)}${qs}${epochQuery("&")}`,
         { signal: AbortSignal.timeout(20000) },
       );
       const payload = (await response.json()) as { data?: Record<string, unknown> | null };
@@ -1383,7 +1385,12 @@ export default function App() {
           )}
         </nav>
         <div className="header-tools">
-          <SettingsMenu zh={locale === "zh"} cap={importCap} onCap={setImportCap} />
+          <SettingsMenu
+            zh={locale === "zh"}
+            cap={importCap}
+            onCap={setImportCap}
+            onNotice={setNotice}
+          />
           <ThemeSwitcher zh={locale === "zh"} />
           <IconButton title={t("使用说明", "Guide")} onClick={() => setShowGuide(true)}>
             ?
