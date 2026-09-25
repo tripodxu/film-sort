@@ -63,7 +63,7 @@ npx wrangler d1 migrations apply film-sort --remote
 
 ## 账号体系（现行）
 
-邮箱密码（PBKDF2-SHA256 60 万次迭代；存量 10 万次 / 无盐 SHA-256 登录时透明升级）+ Google/GitHub OAuth（state 存 HttpOnly Cookie 防 CSRF；回调换取一次性 `oauth_exchanges` code，前端 `POST /api/account/oauth/exchange` 换 token，**会话 token 不进 URL**）。30 天会话存 `user_sessions`。画像与云端清单各 ≤512KB；登录态下画像防抖自动云同步，切后台/断网/关页用 `keepalive` 补发；同步失败不覆盖本地。
+邮箱密码（PBKDF2-SHA256 10 万次迭代——workd 平台上限，见 worker/account.ts；存量无盐 SHA-256 登录时透明升级）+ Google/GitHub OAuth（state 存 HttpOnly Cookie 防 CSRF；回调换取一次性 `oauth_exchanges` code，前端 `POST /api/account/oauth/exchange` 换 token，**会话 token 不进 URL**）。30 天会话存 `user_sessions`。画像与云端清单各 ≤512KB；登录态下画像防抖自动云同步，切后台/断网/关页用 `keepalive` 补发；同步失败不覆盖本地。
 
 > 旧版 Cloudflare Access JWT 账号同步方案（`ACCESS_TEAM_DOMAIN`/`ACCESS_AUD`）已废弃，Env 中仅存类型声明、无消费代码。
 

@@ -372,7 +372,7 @@ Worker 模块划分：
 
 ### 5.2 数据库 Schema
 
-**权威定义在 `migrations/*.sql`**（共 23 个文件，编号 0001–0022，其中 0008 有两支）；下表只做索引，不复制 DDL。
+**权威定义在 `migrations/*.sql`**（共 25 个文件，编号 0001–0025，其中 0008 有两支）；下表只做索引，不复制 DDL。
 
 | 表 | 用途 | 迁移 |
 |----|------|------|
@@ -396,6 +396,8 @@ Worker 模块划分：
 | `plaza_post_edits` | 广场编辑历史（有外键，删帖须先删此表） | 0019 |
 | `user_cookie_vault` | 外部平台 Cookie 保险库（AES-GCM 密文，密钥存 `admin_config`） | 0020 |
 | `poster_urls` | 海报地址侧表（`media_key` = `type\|title\|english\|year`，`urls` JSON） | 0022 |
+| `verification_codes` | 邮箱验证码（SHA-256 散列、10 分钟过期、5 次上限） | 0023 |
+| `qr_transactions` | 扫码登录事务：provider+key → 发起账户绑定与 TTL（凭证只写入 owner 的 vault） | 0024 |
 
 **索引**：`0018_plaza_perf.sql` 为广场补 `(kind, created_at DESC)` 与 `like_count DESC`，其余索引随建表语句创建。
 

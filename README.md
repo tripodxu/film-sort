@@ -196,7 +196,7 @@ ART/RANK 把"从看过、读过、听过的作品里排出自己的 Top N"拆成
 
 ### 环境要求
 
-- Node.js >= 18
+- Node.js >= 22（Wrangler 4 要求；CI 同步使用 Node 22）
 - npm >= 9
 
 ### 本地开发
