@@ -185,7 +185,7 @@ ART/RANK 把"从看过、读过、听过的作品里排出自己的 Top N"拆成
 
 ## 界面设计
 
-「夜间档案馆 / Nocturne Archive」（2026-09 全站焕新，详见 `CHANGELOG.md` 与 `docs/PLAN-ui-refresh.md`）：
+「夜间档案馆 / Nocturne Archive」（2026-09 全站焕新，详见 `CHANGELOG.md` 与 `docs/archive/PLAN-ui-refresh.md`）：
 
 - **六主题人格**（非色彩差异 ≥2/主题）：现代·夜间档案馆 / 复古·旧式印刷所（直角+宋体主导+信纸纹）/ 极简·瑞士网格 / 简约·亲和蓝 / 古典·文学博物馆（双线框+印章红）/ 赛博·终端 HUD（mono+发光）；
 - **可选布局模式**（顶栏「主题」菜单内切换，与主题正交）：`archive` 档案（默认，逐像素不变）/ `journey` 胶片盘（横滚卷轴）/ `bento` 档案格（非均匀网格）——用户自由开关，唯一功能新增；
@@ -243,7 +243,7 @@ npx wrangler login
 npx wrangler d1 create film-sort
 # 记下 database_id，填入 wrangler.jsonc
 
-# 应用数据库迁移（共 24 个，最新 0023_verification_codes 邮箱验证码）
+# 应用数据库迁移（共 25 个，最新 0025_runtime_indexes 运行时索引）
 npx wrangler d1 migrations apply film-sort --remote
 
 # 部署
@@ -333,12 +333,14 @@ film-sort3/
 
 | 文档 | 用途 |
 |------|------|
-| [`docs/PLAN-ui-refresh.md`](docs/PLAN-ui-refresh.md) | **UI 焕新总记录**（§10 执行盘点 / 运维预案 / 遗留清单） |
+| [`docs/archive/PLAN-ui-refresh.md`](docs/archive/PLAN-ui-refresh.md) | UI 焕新总记录（已收官归档：§10 执行盘点 / 运维预案 / 遗留清单） |
 | [`docs/FEATURES.md`](docs/FEATURES.md) | **已实现功能全量清单与回归走查基线**——改完 UI 逐条走查 |
 | [`docs/USAGE.md`](docs/USAGE.md) | 面向用户的操作指南 |
 | [`docs/API.md`](docs/API.md) | 后端 API 参考 |
 | [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | 技术架构与数据流 |
 | [`docs/CLOUDFLARE.md`](docs/CLOUDFLARE.md) | 部署方式与绑定配置 |
+| [`docs/THEME-PACKS.md`](docs/THEME-PACKS.md) | **主题包规范**——创建/导入自定义主题（含 AI agent 生成模板） |
+| [`docs/ORB-EFFECTS.md`](docs/ORB-EFFECTS.md) | **开场特效开发指南**——新增光球特效的接口契约与验收清单 |
 | [`docs/DOUBAN_API.md`](docs/DOUBAN_API.md) | 豆瓣数据抓取细节 |
 | [`docs/archive/`](docs/archive/) | **已过时归档**（历史计划 / 审查记录 / 优化路线图）——仅作追溯，**请勿据此操作** |
 

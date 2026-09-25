@@ -92,8 +92,21 @@ src/
     ├── useSorting.ts      # 排序域状态与动作（集合/草稿/导入/排序机）
     ├── useAuth.ts         # 账号与云同步状态、动作
     ├── useRouter.ts       # History API 路由（View ↔ 路径映射）
+    ├── themeRegistry.ts   # 插拔主题包：解析/白名单校验（重建式注入）/存储/恢复
+    ├── cacheBust.ts       # 清缓存后的会话代次（请求带 _ce 绕过浏览器缓存）
     └── utils.ts           # 会话 ID、埋点、文件下载、旧分享链接解码
 ```
+
+#### 2.2.1 插件式子系统（2026-09-25）
+
+| 子系统 | 入口 | 结构 |
+|---|---|---|
+| 出站请求策略 | `worker/outbound.ts` | 精确 host 白名单 + manual redirect 逐跳复核 + 字节上限；media/ai/mailer/douban 全部接入 |
+| 插拔主题包 | `src/lib/themeRegistry.ts` + `docs/THEME-PACKS.md` | 重建式安全注入；内置 7 主题与用户导入包共用 data-theme 管道 |
+| 开场光球特效 | `src/lib/orbEffects/` + `docs/ORB-EFFECTS.md` | OrbEffect 接口 + 注册表；OrbScene 为宿主（renderer/camera 归宿主，切换不重建 WebGL）；特效调色随主题 |
+| 缓存分代清除 | `worker/cachePurge.ts` | posters/intro/music/misc 四作用域，D1 代次 + 本地 purger 注册；用户端 `/api/cache/clear`、管理端 `/api/admin/cache/*` |
+| 验证码/OAuth 原子消费 | `worker/verification.ts` | 条件 DELETE 消费（hash/attempts/expiry 进 WHERE，meta.changes 判定）；Google 强制 email_verified |
+| QR 事务所有权 | `worker/qrTransactions.ts` | migration 0024 `qr_transactions`；签发登记/轮询验 owner/终态一次性消费 |
 
 前后端共用的纯函数放在 `shared/`：`shared/storedItem.ts` 定义画像/榜单的**可落库白名单投影**（`MAX_PAYLOAD_BYTES` = 512 KB、`encodeStoredProfile()`、`healStoredProfile()`），前端写入、Worker 写入与读取自愈共用同一份实现。
 
@@ -398,6 +411,7 @@ Worker 模块划分：
 | `poster_urls` | 海报地址侧表（`media_key` = `type\|title\|english\|year`，`urls` JSON） | 0022 |
 | `verification_codes` | 邮箱验证码（SHA-256 散列、10 分钟过期、5 次上限） | 0023 |
 | `qr_transactions` | 扫码登录事务：provider+key → 发起账户绑定与 TTL（凭证只写入 owner 的 vault） | 0024 |
+| （0025） | 运行时索引：user_sessions/user_oauth/verification_codes/plaza 用户查询 | 0025 |
 
 **索引**：`0018_plaza_perf.sql` 为广场补 `(kind, created_at DESC)` 与 `like_count DESC`，其余索引随建表语句创建。
 

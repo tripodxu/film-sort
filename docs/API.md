@@ -984,6 +984,12 @@ OAuth 回调。校验 `state` 与 `oauth_state` Cookie 一致（CSRF），自动
 
 ## 管理接口
 
+### POST /api/cache/clear
+
+同源用户清除服务端缓存（分代失效：本机即刻生效，其余节点 60s 内跟进）。体 `{ scope: "posters"|"intro"|"music"|"misc" }`。限流 5 次/10 分钟。响应 `{ ok, scope, purged, generation }`。用户侧入口：设置菜单「清除服务端缓存」。管理员另有 `POST /api/admin/cache/clear`（scope 可为 `all`）与 `GET /api/admin/cache/status`。
+
+## 管理端点
+
 所有管理接口需要 Bearer Token（通过 `/api/admin/login` 获取）。
 
 ### POST /api/admin/login

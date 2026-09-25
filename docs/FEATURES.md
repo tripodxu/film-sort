@@ -143,6 +143,10 @@
 | 全量设计令牌（--bg/--text/--accent/--surface-*/--line…，color-mix 派生） | — | `styles.css :root` |
 | 选择持久化 + 首帧防闪烁 + theme-color 同步 | 自动 | `art-rank:theme`、`src/main.tsx` 首帧前置应用 |
 | PNG 导出跟随当前主题 | 导出 | `exportPng.samplePalette` |
+| **插拔式主题包导入**（2026-09-25 新增） | 主题菜单底部「导入主题包…」 | `lib/themeRegistry.ts`——重建式安全注入（变量白名单/字符白名单/必需集校验），包只存本浏览器 |
+| **纸上擂台主题**（第 7 内置主题） | 主题菜单 | 米黄纸底 + 朱砂 + 衬线，映射自纸上擂台 demo 配色 |
+| **开场特效选择**：等离子球(默认)/极光环场/呼吸黑洞 | 主题菜单「开场特效」组 | `lib/orbEffects/`（OrbEffect 接口 + 注册表，特效随主题调色） |
+| **分类清缓存**：海报/简介/歌曲/其他 | 设置菜单「清除服务端缓存」 | `lib/cachePurge.ts` 分代清除 + `POST /api/cache/clear` |
 
 ## 9. 管理看板（/admin，ADMIN_PASSWORD 或 DB hash 登录）
 
