@@ -41,12 +41,20 @@ export function AiConfigDialog({
   const [protocol, setProtocol] = useState<AiProtocol>(existing?.protocol ?? "auto");
   const [showKey, setShowKey] = useState(false);
   const [models, setModels] = useState<string[]>([]);
+  const [modelMenuOpen, setModelMenuOpen] = useState(false);
   const [testBusy, setTestBusy] = useState(false);
   const [listBusy, setListBusy] = useState(false);
   const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null);
 
-  const valid =
-    baseUrl.trim().startsWith("https://") && apiKey.trim().length >= 8 && model.trim().length > 0;
+  // 「获取模型列表」只依赖地址与密钥——取列表恰恰是因为还不知道 Model 该填什么；
+  // 测试连接/保存才会真正调用模型，需要三参齐备。
+  const canList = baseUrl.trim().startsWith("https://") && apiKey.trim().length >= 8;
+  const canSave = canList && model.trim().length > 0;
+
+  const filteredModels = models.filter((name) => {
+    const query = model.trim().toLowerCase();
+    return !query || name.toLowerCase().includes(query);
+  });
 
   const config = () => ({
     baseUrl: baseUrl.trim(),
@@ -59,7 +67,7 @@ export function AiConfigDialog({
     failure.msg ?? t("操作失败，请检查配置", "Request failed — check the configuration");
 
   async function runTest() {
-    if (!valid || testBusy) return;
+    if (!canSave || testBusy) return;
     setTestBusy(true);
     setMessage(null);
     const result = await testAiConfig(config());
@@ -76,13 +84,14 @@ export function AiConfigDialog({
   }
 
   async function runList() {
-    if (!valid || listBusy) return;
+    if (!canList || listBusy) return;
     setListBusy(true);
     setMessage(null);
     const result = await fetchAiModels(config());
     setListBusy(false);
     if (result.ok) {
       setModels(result.models);
+      setModelMenuOpen(true);
       if (!result.models.includes(model.trim())) setMessage(null);
       setMessage({
         ok: true,
@@ -96,7 +105,7 @@ export function AiConfigDialog({
   }
 
   function save() {
-    if (!valid) return;
+    if (!canSave) return;
     const stored = writeAiConfig(config());
     window.dispatchEvent(new CustomEvent("art-rank:ai-config-changed"));
     onSaved?.();
@@ -170,22 +179,94 @@ export function AiConfigDialog({
                 Model{" "}
                 {models.length > 0 && (
                   <span style={{ color: "var(--accent)" }}>
-                    · {t("可从列表选择或继续手输", "pick from the list or keep typing")}
+                    · {t("点击下方列表即可选择，也可继续手输", "pick from the list or keep typing")}
                   </span>
                 )}
               </div>
-              <input
-                value={model}
-                onChange={(event) => setModel(event.target.value)}
-                placeholder="gpt-4o-mini"
-                list="ai-model-options"
-                spellCheck={false}
-              />
-              <datalist id="ai-model-options">
-                {models.map((name) => (
-                  <option key={name} value={name} />
-                ))}
-              </datalist>
+              <div style={{ position: "relative" }}>
+                <input
+                  value={model}
+                  onChange={(event) => {
+                    setModel(event.target.value);
+                    if (models.length > 0) setModelMenuOpen(true);
+                  }}
+                  onFocus={() => {
+                    if (models.length > 0) setModelMenuOpen(true);
+                  }}
+                  onBlur={() => {
+                    // 延迟关闭：给下拉项的 mousedown（先于 blur 触发）留出选择窗口
+                    window.setTimeout(() => setModelMenuOpen(false), 150);
+                  }}
+                  placeholder={
+                    models.length > 0 ? t("点开下拉或手输", "pick below or type") : "gpt-4o-mini"
+                  }
+                  spellCheck={false}
+                  autoComplete="off"
+                  role="combobox"
+                  aria-expanded={modelMenuOpen && filteredModels.length > 0}
+                  aria-controls="ai-model-options"
+                />
+                {modelMenuOpen && filteredModels.length > 0 && (
+                  <div
+                    id="ai-model-options"
+                    role="listbox"
+                    style={{
+                      position: "absolute",
+                      top: "calc(100% + 4px)",
+                      left: 0,
+                      right: 0,
+                      zIndex: 40,
+                      maxHeight: 220,
+                      overflowY: "auto",
+                      background: "var(--surface, #141914)",
+                      border: "1px solid var(--border, #2a3a2a)",
+                      borderRadius: 8,
+                      boxShadow: "0 12px 28px rgba(0,0,0,.45)",
+                      overflowX: "hidden",
+                    }}
+                  >
+                    {filteredModels.map((name) => (
+                      <button
+                        key={name}
+                        type="button"
+                        role="option"
+                        aria-selected={name === model}
+                        onMouseDown={(event) => {
+                          // mousedown 抢在 input blur 之前完成选择
+                          event.preventDefault();
+                          setModel(name);
+                          setModelMenuOpen(false);
+                        }}
+                        style={{
+                          display: "block",
+                          width: "100%",
+                          textAlign: "left",
+                          padding: "8px 12px",
+                          fontSize: 12,
+                          border: 0,
+                          cursor: "pointer",
+                          color: "var(--text)",
+                          background:
+                            name === model
+                              ? "var(--surface-3, rgba(216,248,106,.08))"
+                              : "transparent",
+                        }}
+                        onMouseEnter={(event) => {
+                          event.currentTarget.style.background = "var(--surface-hover)";
+                        }}
+                        onMouseLeave={(event) => {
+                          event.currentTarget.style.background =
+                            name === model
+                              ? "var(--surface-3, rgba(216,248,106,.08))"
+                              : "transparent";
+                        }}
+                      >
+                        {name}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
             <div>
               <div style={label}>{t("协议（默认自动探测）", "Protocol (auto by default)")}</div>
@@ -217,7 +298,7 @@ export function AiConfigDialog({
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 12 }}>
             <button
               className="button secondary"
-              disabled={!valid || listBusy}
+              disabled={!canList || listBusy}
               onClick={() => void runList()}
             >
               <RefreshCw size={14} />
@@ -225,7 +306,7 @@ export function AiConfigDialog({
             </button>
             <button
               className="button secondary"
-              disabled={!valid || testBusy}
+              disabled={!canSave || testBusy}
               onClick={() => void runTest()}
             >
               <Plug size={14} />
@@ -277,7 +358,7 @@ export function AiConfigDialog({
             <button className="button secondary" onClick={onClose}>
               {t("取消", "Cancel")}
             </button>
-            <button className="button primary" disabled={!valid} onClick={save}>
+            <button className="button primary" disabled={!canSave} onClick={save}>
               <Check size={15} />
               {t("保存", "Save")}
             </button>

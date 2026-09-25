@@ -2489,10 +2489,15 @@ async function route(request: Request, env: Env): Promise<Response> {
         "retry-after": "600",
       });
     const body = await readJson(request);
-    const config = validateUserConfig(body.config);
+    // 模型列表不依赖 model：留空时补占位符，让「先取列表、再填 Model」的顺序可行
+    const raw = (body.config ?? {}) as Record<string, unknown>;
+    const config = validateUserConfig({
+      ...raw,
+      model: typeof raw.model === "string" && raw.model.trim() ? raw.model.trim() : "list",
+    });
     if (!config)
       return json(
-        { ok: false, error: "invalid_config", msg: "API 配置不合法（检查地址/密钥/模型名）" },
+        { ok: false, error: "invalid_config", msg: "API 配置不合法（检查地址/密钥）" },
         400,
       );
     try {
