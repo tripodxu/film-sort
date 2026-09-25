@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { parseProfile, LIBRARY_KEY, mergeProfiles, type ArtisticProfile } from "./profile";
 import { readNotes, writeNotes } from "./notes";
+import { buildProfileSyncBody, isCurrentGeneration } from "./profileSync";
 import { stored } from "./utils";
 
 const PEER_KEY = "art-rank:peer:v2";
@@ -57,13 +58,23 @@ export function useAuth(deps: Omit<AuthDeps, "setDraft"> & { setDraft?: (d: unkn
   const [editingNickname, setEditingNickname] = useState(false);
   const [editNicknameValue, setEditNicknameValue] = useState("");
   const [syncStatus, setSyncStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
-  const [cloudConflict, setCloudConflict] = useState<ArtisticProfile | null>(null);
+  /** 冲突携带云端画像 + 云端批注：「使用云端数据」时两者原子替换本地状态（DATA-04）。 */
+  const [cloudConflict, setCloudConflict] = useState<{
+    profile: ArtisticProfile;
+    notes: Record<string, string>;
+  } | null>(null);
   const [busy, setBusy] = useState(false);
+  /** 会话水合门：云端恢复完成前禁止自动 PUT，防止本地旧画像覆盖云端（DATA-04）。 */
+  const [cloudHydrated, setCloudHydrated] = useState(false);
 
   const syncTimer = useRef<number | null>(null);
   const syncing = useRef(false);
   const syncPending = useRef(false);
   const syncKeepalivePending = useRef(false);
+  /** 会话代际：登录/登出/手动加载都会自增；在途响应只有代际匹配才允许落地。 */
+  const sessionGeneration = useRef(0);
+  const activeSync = useRef<AbortController | null>(null);
+  const activeHydration = useRef<AbortController | null>(null);
 
   const syncProfile = useCallback(async (keepalive: boolean) => {
     const d = depsRef.current;
@@ -77,31 +88,35 @@ export function useAuth(deps: Omit<AuthDeps, "setDraft"> & { setDraft?: (d: unkn
     }
     syncing.current = true;
     setSyncStatus("saving");
+    const controller = new AbortController();
+    activeSync.current = controller;
     try {
       do {
+        if (controller.signal.aborted) break;
         syncPending.current = false;
         const currentKeepalive = syncKeepalivePending.current || keepalive;
         syncKeepalivePending.current = false;
         const next = d.namedProfile();
         if (!next) break;
-        const hasAnyNotes = Object.keys(d.getNotes()).length > 0;
+        // 批注随每次同步显式携带（含空对象）：清空批注后自动同步才能把清空落到云端
+        //（旧代码按 hasAnyNotes 省略字段，云端永远保留旧批注，findings DATA-03）。
         const ok = (
           await fetch("/api/account/profile", {
             method: "PUT",
             headers: { "content-type": "application/json", authorization: `Bearer ${token}` },
-            body: JSON.stringify({
-              profile: next,
-              ...(hasAnyNotes ? { notes: d.getNotes() } : {}),
-            }),
+            body: JSON.stringify(buildProfileSyncBody(next, d.getNotes(), true)),
             keepalive: currentKeepalive,
+            signal: controller.signal,
           })
         ).ok;
         setSyncStatus(ok ? "saved" : "error");
         if (!ok) break;
       } while (syncPending.current);
     } catch {
-      setSyncStatus("error");
+      // 登出触发的中止不是错误；其余失败保留 error 状态。
+      if (!controller.signal.aborted) setSyncStatus("error");
     } finally {
+      if (activeSync.current === controller) activeSync.current = null;
       syncing.current = false;
     }
   }, []);
@@ -110,10 +125,15 @@ export function useAuth(deps: Omit<AuthDeps, "setDraft"> & { setDraft?: (d: unkn
     const d = depsRef.current;
     const token = stored("art-rank:account-token") ?? "";
     if (!token) return;
+    const generation = ++sessionGeneration.current;
+    activeHydration.current?.abort();
+    const controller = new AbortController();
+    activeHydration.current = controller;
     setBusy(true);
     try {
       const response = await fetch("/api/account/profile", {
         headers: { authorization: `Bearer ${token}` },
+        signal: controller.signal,
       });
       if (!response.ok) throw new Error();
       const data = (await response.json()) as {
@@ -122,6 +142,8 @@ export function useAuth(deps: Omit<AuthDeps, "setDraft"> & { setDraft?: (d: unkn
         profile: unknown;
         notes?: Record<string, string>;
       };
+      // 代际失配：期间发生了登录/登出/更新的加载，旧响应不得落地（DATA-04）。
+      if (!isCurrentGeneration(sessionGeneration.current, generation)) return;
       if (data.email) setAccountEmail(data.email);
       if (data.nickname) setAccountNickname(data.nickname);
       if (data.profile) {
@@ -140,7 +162,7 @@ export function useAuth(deps: Omit<AuthDeps, "setDraft"> & { setDraft?: (d: unkn
         writeNotes(merged);
       }
     } catch {
-      if (!autoApply)
+      if (!autoApply && !controller.signal.aborted)
         d.setNotice(d.t("读取失败，请重新登录。", "Failed to load. Please sign in again."));
     } finally {
       setBusy(false);
@@ -158,11 +180,11 @@ export function useAuth(deps: Omit<AuthDeps, "setDraft"> & { setDraft?: (d: unkn
     if (!next) return;
     setBusy(true);
     try {
-      const hasAnyNotes = Object.keys(d.getNotes()).length > 0;
+      // 显式保存表达完整的本地状态：批注始终携带（含空对象=清空云端批注）。
       const response = await fetch("/api/account/profile", {
         method: "PUT",
         headers: { "content-type": "application/json", authorization: `Bearer ${token}` },
-        body: JSON.stringify({ profile: next, ...(hasAnyNotes ? { notes: d.getNotes() } : {}) }),
+        body: JSON.stringify(buildProfileSyncBody(next, d.getNotes(), true)),
       });
       if (!response.ok) throw new Error();
       d.persist(next);
@@ -279,38 +301,8 @@ export function useAuth(deps: Omit<AuthDeps, "setDraft"> & { setDraft?: (d: unkn
           localStorage.setItem("art-rank:account-token", data.token);
         } catch {}
         d.setNotice(d.t("登录成功！", "Signed in!"));
-        const freshToken = data.token;
-        setTimeout(async () => {
-          try {
-            const r = await fetch("/api/account/profile", {
-              headers: { authorization: `Bearer ${freshToken}` },
-            });
-            if (!r.ok) return;
-            const dr = (await r.json()) as {
-              nickname?: string;
-              profile: unknown;
-              notes?: Record<string, string>;
-            };
-            if (dr.nickname) setAccountNickname(dr.nickname);
-            if (dr.notes && typeof dr.notes === "object") {
-              const localNotes = readNotes();
-              const merged = { ...localNotes, ...dr.notes };
-              d.setNotes(merged);
-              writeNotes(merged);
-            }
-            if (dr.profile) {
-              const cloudParsed = parseProfile(dr.profile);
-              if (d.getProfile()) {
-                setCloudConflict(cloudParsed);
-              } else {
-                d.persist(cloudParsed);
-                d.setNotice(
-                  d.t("已从云端恢复画像和批注。", "Profile and notes restored from cloud."),
-                );
-              }
-            }
-          } catch {}
-        }, 100);
+        // 云端画像/批注的水合由 accountToken 驱动的 effect 统一处理：
+        // 登录、OAuth 回调与刷新恢复共用同一条带代际与中止的路径。
       } catch {
         setAuthError(d.t("网络错误", "Network error"));
       } finally {
@@ -349,20 +341,26 @@ export function useAuth(deps: Omit<AuthDeps, "setDraft"> & { setDraft?: (d: unkn
   const accountLogout = useCallback(async () => {
     const d = depsRef.current;
     const token = stored("art-rank:account-token") ?? "";
+    // 先终结当前会话的所有在途请求与定时器，再做最终保存与本地清理，
+    // 避免旧会话响应在登出后落地（DATA-04）。
+    sessionGeneration.current += 1;
+    if (syncTimer.current !== null) {
+      window.clearTimeout(syncTimer.current);
+      syncTimer.current = null;
+    }
+    activeSync.current?.abort();
+    activeHydration.current?.abort();
+    setCloudHydrated(false);
     if (token) {
       const next = d.namedProfile();
       if (next) {
         try {
-          const hasAnyNotes = Object.keys(d.getNotes()).length > 0;
           // Await the save so the server records the final profile while the session
           // is still valid; the logout request below would otherwise race it.
           await fetch("/api/account/profile", {
             method: "PUT",
             headers: { "content-type": "application/json", authorization: `Bearer ${token}` },
-            body: JSON.stringify({
-              profile: next,
-              ...(hasAnyNotes ? { notes: d.getNotes() } : {}),
-            }),
+            body: JSON.stringify(buildProfileSyncBody(next, d.getNotes(), true)),
             keepalive: true,
           });
         } catch {
@@ -396,8 +394,9 @@ export function useAuth(deps: Omit<AuthDeps, "setDraft"> & { setDraft?: (d: unkn
 
   // Auto-sync debounced (900ms) — re-arms only when profile or token changes; a deps-less
   // effect would re-arm on every render (incl. its own syncStatus updates) and PUT forever.
+  // 水合门：云端恢复完成前绝不自动 PUT（DATA-04）。
   useEffect(() => {
-    if (!accountToken || !profile) return;
+    if (!accountToken || !profile || !cloudHydrated) return;
     if (syncTimer.current !== null) window.clearTimeout(syncTimer.current);
     syncTimer.current = window.setTimeout(() => {
       void syncProfile(false);
@@ -405,7 +404,7 @@ export function useAuth(deps: Omit<AuthDeps, "setDraft"> & { setDraft?: (d: unkn
     return () => {
       if (syncTimer.current !== null) window.clearTimeout(syncTimer.current);
     };
-  }, [profile, accountToken, syncProfile]);
+  }, [profile, accountToken, cloudHydrated, syncProfile]);
 
   // Sync on pagehide / visibilitychange / online
   useEffect(() => {
@@ -428,11 +427,24 @@ export function useAuth(deps: Omit<AuthDeps, "setDraft"> & { setDraft?: (d: unkn
     };
   }, [syncProfile]);
 
-  // Restore session on mount
+  // Session hydration, driven by accountToken so login, OAuth restore and page reload
+  // share one path. Cloud profile/notes are fetched and reconciled BEFORE the auto-sync
+  // effect may PUT (setCloudHydrated) — restoring blindly or syncing first is what let a
+  // stale local profile overwrite cloud data (DATA-04). Different local+cloud profiles
+  // raise the conflict dialog instead of silently overwriting either side.
   useEffect(() => {
-    const token = stored("art-rank:account-token") ?? "";
-    if (!token) return;
-    void fetch("/api/account/profile", { headers: { authorization: `Bearer ${token}` } })
+    if (!accountToken) {
+      setCloudHydrated(false);
+      return;
+    }
+    const generation = ++sessionGeneration.current;
+    activeHydration.current?.abort();
+    const controller = new AbortController();
+    activeHydration.current = controller;
+    void fetch("/api/account/profile", {
+      headers: { authorization: `Bearer ${accountToken}` },
+      signal: controller.signal,
+    })
       .then((r) => (r.ok ? r.json() : null))
       .then(
         (
@@ -443,14 +455,28 @@ export function useAuth(deps: Omit<AuthDeps, "setDraft"> & { setDraft?: (d: unkn
             notes?: Record<string, string>;
           } | null,
         ) => {
+          if (!isCurrentGeneration(sessionGeneration.current, generation)) return;
           if (data?.email) {
+            const d = depsRef.current;
             setAccountEmail(data.email);
             setAccountNickname(data.nickname ?? data.email.split("@")[0]);
+            const cloudNotes = data.notes && typeof data.notes === "object" ? data.notes : {};
             if (data.notes && typeof data.notes === "object") {
-              const localNotes = readNotes();
-              const merged = { ...localNotes, ...data.notes };
-              depsRef.current.setNotes(merged);
+              const merged = { ...readNotes(), ...cloudNotes };
+              d.setNotes(merged);
               writeNotes(merged);
+            }
+            if (data.profile) {
+              const cloudParsed = parseProfile(data.profile);
+              const local = d.getProfile();
+              if (!local) {
+                d.persist(cloudParsed);
+                d.setNotice(
+                  d.t("已从云端恢复画像和批注。", "Profile and notes restored from cloud."),
+                );
+              } else if (JSON.stringify(local) !== JSON.stringify(cloudParsed)) {
+                setCloudConflict({ profile: cloudParsed, notes: cloudNotes });
+              }
             }
           } else {
             setAccountToken("");
@@ -458,10 +484,15 @@ export function useAuth(deps: Omit<AuthDeps, "setDraft"> & { setDraft?: (d: unkn
               localStorage.removeItem("art-rank:account-token");
             } catch {}
           }
+          setCloudHydrated(true);
         },
       )
-      .catch(() => {});
-  }, []);
+      .catch(() => {
+        // 网络失败也放行水合门：自动同步自身会失败并呈现 error，不阻塞用户操作。
+        if (isCurrentGeneration(sessionGeneration.current, generation)) setCloudHydrated(true);
+      });
+    return () => controller.abort();
+  }, [accountToken]);
 
   return {
     // State

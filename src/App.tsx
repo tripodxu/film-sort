@@ -37,6 +37,7 @@ import { FocusTrap } from "./components/FocusTrap";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { AiConfigDialog } from "./components/AiConfigDialog";
 import { readNotes, writeNotes, setNote } from "./lib/notes";
+import { buildProfileSyncBody } from "./lib/profileSync";
 import { Poster } from "./components/Poster";
 import { RankingDetail } from "./components/RankingDetail";
 import { ArtworkDetail, type ArtworkDetailInfo } from "./components/ArtworkDetail";
@@ -1507,16 +1508,18 @@ export default function App() {
                 className="button primary"
                 onClick={() => {
                   if (profile && cloudConflict) {
-                    const merged = mergeProfiles(cloudConflict, profile);
+                    const merged = mergeProfiles(cloudConflict.profile, profile);
                     persist(merged);
                     setSyncStatus("saving");
+                    // 增量合并必须同时提交合并后的批注映射，否则另一侧刚删除的批注
+                    // 会在下次同步时复活（DATA-03）。
                     fetch("/api/account/profile", {
                       method: "PUT",
                       headers: {
                         "content-type": "application/json",
                         authorization: `Bearer ${accountToken}`,
                       },
-                      body: JSON.stringify({ profile: merged }),
+                      body: JSON.stringify(buildProfileSyncBody(merged, notes, true)),
                     })
                       .then((r) => {
                         setSyncStatus(r.ok ? "saved" : "error");
@@ -1533,7 +1536,10 @@ export default function App() {
               <button
                 className="button secondary"
                 onClick={() => {
-                  persist(cloudConflict);
+                  persist(cloudConflict.profile);
+                  // 「使用云端数据」以云端为准：画像与批注一起原子替换（DATA-04）。
+                  setNotes({ ...cloudConflict.notes });
+                  writeNotes({ ...cloudConflict.notes });
                   setCloudConflict(null);
                   setNotice(t("已使用云端数据。", "Cloud data applied."));
                 }}

@@ -708,11 +708,16 @@ export async function accountRoute(request: Request, env: Env): Promise<Response
     if (encoder.encode(raw).byteLength > MAX_PAYLOAD_BYTES)
       return json({ error: "payload_too_large" }, 413);
     let profile: unknown;
-    let notes: unknown;
+    let notesProvided = false;
+    let notes: unknown = null;
     try {
       const body = JSON.parse(raw);
       profile = body.profile;
-      notes = body.notes;
+      // 「未提供」与「显式空」是两种语义（findings DATA-03）：
+      //   缺失        → 保留云端旧批注（旧客户端/不改批注的路径）
+      //   存在（含 {}）→ 整体替换，{} 即清空
+      notesProvided = Object.hasOwn(body, "notes");
+      notes = notesProvided ? body.notes : null;
     } catch {
       return json({ error: "invalid_json" }, 400);
     }
@@ -727,15 +732,21 @@ export async function accountRoute(request: Request, env: Env): Promise<Response
         ? json({ error: "profile_too_large", msg: "画像数据过大，请减少作品数量。" }, 413)
         : json({ error: "invalid_profile" }, 400);
     }
-    // 批注走唯一白名单编码出口（与 share/plaza 同口径），禁止任意 JSON 整包入库；
-    // 空/全非法批注 → null → SQL COALESCE 保留原值（既有语义）。
-    const notesEncoded = encodeStoredNotes(notes);
-    if (!notesEncoded.ok) return json({ error: "notes_too_large" }, 413);
-    const notesJson = notesEncoded.json;
-    await env.DB.prepare(
-      "INSERT INTO user_profiles_v2 (user_id, profile, notes) VALUES (?, ?, ?) ON CONFLICT(user_id) DO UPDATE SET profile = excluded.profile, notes = COALESCE(excluded.notes, user_profiles_v2.notes), updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')",
-    )
-      .bind(user.id, encoded.json, notesJson)
+    let notesJson: string | null = null;
+    if (notesProvided) {
+      if (notes === null || typeof notes !== "object" || Array.isArray(notes))
+        return json({ error: "invalid_notes" }, 400);
+      // 批注走唯一白名单编码出口（与 share/plaza 同口径），禁止任意 JSON 整包入库。
+      // 空对象在这里编码为 null（列写入 NULL = 清空），与「字段缺失=保留」区分开。
+      const notesEncoded = encodeStoredNotes(notes);
+      if (!notesEncoded.ok) return json({ error: "notes_too_large" }, 413);
+      notesJson = notesEncoded.json;
+    }
+    const sql = notesProvided
+      ? "INSERT INTO user_profiles_v2 (user_id, profile, notes) VALUES (?, ?, ?) ON CONFLICT(user_id) DO UPDATE SET profile = excluded.profile, notes = excluded.notes, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')"
+      : "INSERT INTO user_profiles_v2 (user_id, profile, notes) VALUES (?, ?, NULL) ON CONFLICT(user_id) DO UPDATE SET profile = excluded.profile, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')";
+    await env.DB.prepare(sql)
+      .bind(...(notesProvided ? [user.id, encoded.json, notesJson] : [user.id, encoded.json]))
       .run();
     return json({ stored: true });
   }
