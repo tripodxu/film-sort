@@ -2,8 +2,13 @@ import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import App from "./App";
 import { readTheme } from "./lib/theme";
+import { restoreCustomThemes } from "./lib/themeRegistry";
 import { readLayout } from "./lib/layout";
 import "./styles.css";
+
+// Restore imported custom themes before React mounts (their <style> must exist
+// before the first frame reads the theme).
+restoreCustomThemes();
 
 // Apply the saved theme before React mounts to avoid a first-frame flash.
 try {

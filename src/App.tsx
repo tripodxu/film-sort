@@ -1391,7 +1391,7 @@ export default function App() {
             onCap={setImportCap}
             onNotice={setNotice}
           />
-          <ThemeSwitcher zh={locale === "zh"} />
+          <ThemeSwitcher zh={locale === "zh"} onNotice={setNotice} />
           <IconButton title={t("使用说明", "Guide")} onClick={() => setShowGuide(true)}>
             ?
             <span className="tooltip" role="tooltip">
