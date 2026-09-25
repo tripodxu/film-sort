@@ -3,12 +3,14 @@
 import type { OrbEffect } from "./types";
 import { createPlasmaEffect } from "./plasma";
 import { createHaloEffect } from "./halo";
+import { createBlackholeEffect } from "./blackhole";
 
 export const ORB_EFFECT_KEY = "art-rank:orb-effect";
 
 const EFFECTS: OrbEffect[] = [
   { id: "plasma", name: { zh: "等离子球", en: "Plasma" }, create: createPlasmaEffect },
   { id: "halo", name: { zh: "极光环场", en: "Halo" }, create: createHaloEffect },
+  { id: "blackhole", name: { zh: "呼吸黑洞", en: "Black Hole" }, create: createBlackholeEffect },
 ];
 
 export function listOrbEffects(): Array<{ id: string; name: { zh: string; en: string } }> {
