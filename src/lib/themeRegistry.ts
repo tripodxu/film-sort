@@ -365,7 +365,8 @@ export function importThemePackage(
   const parsed = parseThemePackage(source);
   if (!parsed.ok) return parsed;
   const entries = readStore().filter((entry) => entry.id !== parsed.theme.id);
-  entries.push({ id: parsed.theme.id, meta: parsed.theme, source });
+  const { id, name, dot } = parsed.theme;
+  entries.push({ id, meta: { id, name, dot }, source });
   if (!writeStore(entries)) return fail("quota_exceeded");
   injectCustomTheme(parsed.theme);
   return { ok: true, theme: parsed.theme };
