@@ -49,4 +49,6 @@ export function applyTheme(id: string) {
   // theme-color meta 跟随 --bg 实际渲染色
   const probe = getComputedStyle(document.documentElement).getPropertyValue("--bg").trim();
   if (probe) document.querySelector('meta[name="theme-color"]')?.setAttribute("content", probe);
+  // 通知订阅者（如开场光球 applyPalette）；同步派发，DOM 属性已就位
+  window.dispatchEvent(new CustomEvent("art-rank:theme-changed"));
 }

@@ -3,6 +3,12 @@ import { Check, Palette, Plus, Trash2 } from "lucide-react";
 import { THEMES, applyTheme, readTheme } from "../lib/theme";
 import { LAYOUTS, applyLayout, readLayout, type LayoutId } from "../lib/layout";
 import { deleteCustomTheme, listCustomThemes, type CustomThemeMeta } from "../lib/themeRegistry";
+import {
+  listOrbEffects,
+  readOrbEffectId,
+  writeOrbEffectId,
+  notifyOrbEffectChanged,
+} from "../lib/orbEffects/registry";
 import { ThemeImportDialog } from "./ThemeImportDialog";
 
 // 顶栏主题切换器：调色板按钮 + 下拉菜单，复用 .rank-menu 玻璃面板样式
@@ -14,6 +20,7 @@ export function ThemeSwitcher({ zh, onNotice }: { zh: boolean; onNotice?: (m: st
   const [theme, setTheme] = useState<string>(() => readTheme());
   const [layout, setLayout] = useState<LayoutId>(() => readLayout());
   const [customs, setCustoms] = useState<CustomThemeMeta[]>(() => listCustomThemes());
+  const [orbEffect, setOrbEffect] = useState<string>(() => readOrbEffectId());
   const [importOpen, setImportOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
