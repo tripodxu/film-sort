@@ -1195,3 +1195,30 @@ body[data-theme=classic]{
   display:flex;align-items:center;gap:16px
 }
 .ranking-list.reorder-list .reorder-handle{align-self:stretch;display:flex;align-items:center}
+
+/* ===== P7 移动端顶栏收纳 + 下拉菜单锚定护栏（2026-09-28）================
+   病灶（线上实测）：顶栏内容（报头 + 4 导航 + 5 图标）在任何手机宽度都横向
+   溢出约 120px（docScrollW 恒 440 vs 视口 320-390）——「登录/同步」图标整枚
+   出屏、English 半截，页面可横向滚动；浏览器恢复滚动位时打开设置菜单即现
+   「最前端截断」。zh 导航（我的文化索引）比 en 更宽，两语溢出量不同 = 格式
+   误差。修法：
+   ① ≤540px 全面收纳（报头 13px / 导航 10.5px / 图标 28px / 间距收紧），
+     并让 topbar 自身 overflow-x:auto 兜底极窄机型——页面级横向滚动归零；
+   ② 设置/主题下拉改锚 topbar（right:10px），菜单任意宽度完整在屏；
+   ③ 菜单加 max-width 护栏，en 长标签自动换行不出屏。 */
+@media(max-width:540px){
+  .topbar,.main,footer{width:calc(100% - 20px)}
+  .topbar{gap:10px;overflow-x:auto;scrollbar-width:none}
+  .topbar::-webkit-scrollbar{display:none}
+  .topbar>*{flex-shrink:0}
+  .wordmark{font-size:13px}
+  .topbar nav{gap:10px}
+  .topbar nav button{font-size:10.5px;padding:0}
+  .header-tools{gap:2px}
+  .header-tools .icon-button{width:28px;height:28px}
+  /* 下拉锚定改挂 topbar：按钮壳 static 化后，absolute 菜单以 topbar 为
+     定位基准——right:10 使菜单恒在屏内，不再被溢出的按钮位置带出屏。 */
+  .topbar .theme-switcher{position:static}
+  .topbar .rank-menu{right:10px}
+  .settings-menu{max-width:calc(100vw - 24px)}
+}
