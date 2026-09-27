@@ -1015,9 +1015,15 @@ const introCache = new Map<string, { intro: string; source: string; at: number }
 // 简介逻辑/数据源每次修正都要 bump：键里没有代次的话，旧 isolate 里最长 24h 的
 // 陈旧条目（如"童话"命中文学体裁词条的旧结果）会跨部署继续命中。
 const INTRO_CACHE_GENERATION = "v2";
-function introCacheKey(title: string, mediaType?: "movie" | "book" | "music"): string {
-  // 键同时带「静态代次」（简介逻辑修正时手动 bump）与「清除代次」（清缓存入口推进）
-  return `${mediaType ?? "*"}:${INTRO_CACHE_GENERATION}:${generationOf("intro")}:${title.trim().toLowerCase()}`;
+function introCacheKey(
+  title: string,
+  mediaType?: "movie" | "book" | "music",
+  creator?: string,
+): string {
+  // 键带三个代次维度：静态代次（简介逻辑修正时 bump）、清除代次（清缓存推进）、
+  // creator（复审 #6：有无歌手走不同的泛义防线，缓存必须分开，否则 artwork 路由
+  // 的无 creator 结果会污染 music/detail 的带歌手结果）
+  return `${mediaType ?? "*"}:${INTRO_CACHE_GENERATION}:${generationOf("intro")}:${(creator ?? "").trim().toLowerCase()}:${title.trim().toLowerCase()}`;
 }
 
 registerPurger("intro", () => {
@@ -1038,7 +1044,7 @@ export async function fetchContentIntro(
   yearRaw?: unknown,
   env?: { ANYSEARCH_API_KEY?: string },
 ): Promise<{ intro: string; source: string } | null> {
-  const key = introCacheKey(title, mediaType);
+  const key = introCacheKey(title, mediaType, creator);
   const cached = introCache.get(key);
   if (cached && Date.now() - cached.at < INTRO_TTL_MS) {
     return { intro: cached.intro, source: cached.source };

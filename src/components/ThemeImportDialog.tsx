@@ -93,7 +93,12 @@ export function ThemeImportDialog({
       );
       return;
     }
-    runImport(await file.text());
+    try {
+      runImport(await file.text());
+    } catch {
+      setError(t("文件读取失败，请重试。", "Could not read the file. Try again."));
+      setBusy(false);
+    }
   }
 
   const label = { fontSize: 12, color: "var(--muted)", marginBottom: 4 };

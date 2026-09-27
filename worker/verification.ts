@@ -10,6 +10,52 @@ export async function sha256Hex(value: string): Promise<string> {
   return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, "0")).join("");
 }
 
+export type CodeConsumptionFailure = {
+  ok: false;
+  error: "code_not_requested" | "code_expired" | "code_locked" | "invalid_code";
+  msg: string;
+};
+
+/**
+ * 验证码 EXISTS 守卫片段：把它放进变更语句的 WHERE 子句，「验证码有效」与
+ * 「数据变更」就成为**同一条 SQL 语句**（语句级原子）——不存在先变更、后消费
+ * 的窗口（findings 复审 #1/#2：先改密/先建号后消费的顺序有接管/未验证账号风险）。
+ * 绑定顺序：email, purpose, codeHash, CODE_MAX_ATTEMPTS。
+ */
+export function buildCodeGuardSql(): string {
+  return "EXISTS (SELECT 1 FROM verification_codes WHERE email = ? AND purpose = ? AND code_hash = ? AND attempts < ? AND expires_at > datetime('now'))";
+}
+
+/** 消费/守卫失败时的错误归类（错码递增计数）。email 须已规范化。 */
+export async function classifyCodeFailure(
+  db: D1Database,
+  email: string,
+  purpose: "register" | "reset",
+  codeHash: string,
+): Promise<CodeConsumptionFailure> {
+  const normalizedEmail = email.trim().toLowerCase();
+  const row = await db
+    .prepare(
+      "SELECT id, code_hash, attempts, expires_at > datetime('now') AS alive FROM verification_codes WHERE email = ? AND purpose = ? ORDER BY id DESC LIMIT 1",
+    )
+    .bind(normalizedEmail, purpose)
+    .first<{ id: number; code_hash: string; attempts: number; alive: number }>();
+  if (!row) return { ok: false, error: "code_not_requested", msg: "请先获取验证码" };
+  if (!row.alive) return { ok: false, error: "code_expired", msg: "验证码已过期，请重新获取" };
+  if (row.attempts >= CODE_MAX_ATTEMPTS)
+    return { ok: false, error: "code_locked", msg: "尝试次数过多，请重新获取验证码" };
+  if (codeHash !== row.code_hash) {
+    await db
+      .prepare("UPDATE verification_codes SET attempts = attempts + 1 WHERE id = ?")
+      .bind(row.id)
+      .run();
+    const left = Math.max(0, CODE_MAX_ATTEMPTS - row.attempts - 1);
+    return { ok: false, error: "invalid_code", msg: `验证码错误，还可尝试 ${left} 次` };
+  }
+  // 对码、行存活、守卫却未生效：并发消费窗口的保守归类
+  return { ok: false, error: "code_locked", msg: "验证码状态已变化，请重新获取" };
+}
+
 export type CodeConsumption =
   | { ok: true }
   | {

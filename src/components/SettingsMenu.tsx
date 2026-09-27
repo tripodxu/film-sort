@@ -40,7 +40,8 @@ export function SettingsMenu({
   const aiConfig = readAiConfig();
 
   useEffect(() => {
-    if (open) return;
+    // 菜单打开期间才需要监听外部点击（此前写反成关闭期挂载=永不生效）
+    if (!open) return;
     const onDown = (e: MouseEvent) => {
       if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
     };

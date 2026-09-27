@@ -76,14 +76,15 @@ function statefulDb(state: {
                 likes.delete(key);
                 return { success: true, meta: { changes: 1 } };
               }
-              if (/like_count = like_count \+ 1/.test(sql)) {
+              if (
+                /like_count = \(SELECT COUNT\(\*\) FROM plaza_likes/.test(sql) &&
+                /WHERE id = \?$/.test(sql.trim())
+              ) {
                 const post = posts.get(args[0] as number);
-                if (post) post.like_count = (post.like_count as number) + 1;
-                return { success: true, meta: { changes: post ? 1 : 0 } };
-              }
-              if (/like_count = MAX\(0, like_count - 1\)/.test(sql)) {
-                const post = posts.get(args[0] as number);
-                if (post) post.like_count = Math.max(0, (post.like_count as number) - 1);
+                if (post)
+                  post.like_count = [...likes].filter((key) =>
+                    key.startsWith(`${args[0] as number}:`),
+                  ).length;
                 return { success: true, meta: { changes: post ? 1 : 0 } };
               }
               if (/INSERT INTO plaza_comments/.test(sql)) {

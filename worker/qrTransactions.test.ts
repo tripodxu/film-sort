@@ -86,13 +86,14 @@ describe("qr owner binding", () => {
     });
   });
 
-  it("re-issuing the same provider key rebinds the owner (INSERT OR REPLACE)", async () => {
+  it("same key from a different owner is rejected (fail-closed rebind)", async () => {
     const { d1: db } = d1FromSqlite();
     await registerQrTransaction(db, "netease", "key-b", 10, 120_000);
+    // 第三方拿到他人 key 重复登记：不改绑，原 owner 保持（复审 低危 #3）
     await registerQrTransaction(db, "netease", "key-b", 11, 120_000);
-    await expect(getQrTransaction(db, "netease", "key-b", 10)).resolves.toBeNull();
-    await expect(getQrTransaction(db, "netease", "key-b", 11)).resolves.toMatchObject({
-      user_id: 11,
+    await expect(getQrTransaction(db, "netease", "key-b", 11)).resolves.toBeNull();
+    await expect(getQrTransaction(db, "netease", "key-b", 10)).resolves.toMatchObject({
+      user_id: 10,
     });
   });
 });

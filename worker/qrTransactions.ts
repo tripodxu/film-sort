@@ -30,9 +30,11 @@ export async function registerQrTransaction(
   ttlMs: number,
 ): Promise<void> {
   const ttlSeconds = Math.max(1, Math.ceil(ttlMs / 1000));
+  // 他人持有同 key 时 fail-closed（拒绝改绑）：正常重发会得到新 key，
+  // 同 key 重签的唯一现实场景是第三方拿到了别人的 key（复审 低危 #3）。
   await db
     .prepare(
-      "INSERT OR REPLACE INTO qr_transactions (provider, transaction_key, user_id, expires_at) VALUES (?, ?, ?, datetime('now', '+' || ? || ' seconds'))",
+      "INSERT INTO qr_transactions (provider, transaction_key, user_id, expires_at) VALUES (?, ?, ?, datetime('now', '+' || ? || ' seconds')) ON CONFLICT(provider, transaction_key) DO UPDATE SET user_id = excluded.user_id, expires_at = excluded.expires_at WHERE user_id = excluded.user_id",
     )
     .bind(provider, key, userId, ttlSeconds)
     .run();

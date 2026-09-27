@@ -2394,7 +2394,14 @@ async function route(request: Request, env: Env): Promise<Response> {
           if (track.album) data.album = track.album;
         }
       } catch {}
-      const intro = await fetchContentIntro(title, "music", undefined, undefined, env);
+      // creator 透传（复审 #6）：启用泛义词条防线，且缓存键与 music/detail 分开
+      const intro = await fetchContentIntro(
+        title,
+        "music",
+        data.artist as string | undefined,
+        undefined,
+        env,
+      );
       if (intro) {
         data.content_intro = intro.intro;
         data.content_source = intro.source;
@@ -3041,6 +3048,11 @@ export default {
     const url = new URL(request.url);
     const path = url.pathname;
     const isApi = path.startsWith("/api/") && !path.startsWith("/api/admin/");
+    // 每分钟每 isolate 刷新一次缓存代次（refreshGenerations 自带 60s 节流）：
+    // 否则服务型 isolate 的 generationOf 恒为旧值，清缓存的跨节点失效是空话（复审 #4）
+    if (env.DB && request.method === "GET") {
+      ctx.waitUntil(refreshGenerations(env.DB).catch(() => undefined));
+    }
     const t0 = Date.now();
     let response: Response;
     let error: string | undefined;

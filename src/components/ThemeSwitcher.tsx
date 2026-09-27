@@ -25,7 +25,8 @@ export function ThemeSwitcher({ zh, onNotice }: { zh: boolean; onNotice?: (m: st
   const ref = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    if (open) return;
+    // 菜单打开期间才需要监听外部点击（此前写反成关闭期挂载=永不生效）
+    if (!open) return;
     const onDown = (e: MouseEvent) => {
       if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
     };
@@ -129,12 +130,20 @@ export function ThemeSwitcher({ zh, onNotice }: { zh: boolean; onNotice?: (m: st
               {theme === item.id && <Check size={14} className="theme-check" />}
               <span
                 role="button"
+                tabIndex={0}
                 aria-label={t(`删除主题 ${item.name.zh}`, `Remove theme ${item.name.en}`)}
                 title={t("删除此主题", "Remove this theme")}
                 className="custom-theme-delete"
                 onClick={(event) => {
                   event.stopPropagation();
                   removeCustom(item.id);
+                }}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter" || event.key === " ") {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    removeCustom(item.id);
+                  }
                 }}
               >
                 <Trash2 size={13} />

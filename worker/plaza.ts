@@ -497,30 +497,35 @@ export async function plazaRoute(request: Request, env: Env): Promise<Response> 
       .first();
     if (!post) return json({ error: "post_not_found" }, 404);
 
-    // 条件写入（findings PLAZA-01）：先 INSERT OR IGNORE / 条件 DELETE，用 meta.changes
-    // 判定行是否真的变更，只有变更才动计数——并发双击不再撞 UNIQUE 500 或让计数漂移。
-    const claimed = await env.DB.prepare(
-      "INSERT OR IGNORE INTO plaza_likes (post_id, user_id) VALUES (?, ?)",
-    )
+    // 条件写入 + 计数重算同 batch（复审 #5）：行变更与计数同生共死，
+    // 计数按剩余行数重算而非 ±1——中途失败不再产生永久漂移。
+    const db = env.DB;
+    const claimed = await db
+      .prepare("INSERT OR IGNORE INTO plaza_likes (post_id, user_id) VALUES (?, ?)")
       .bind(postId, user.id)
       .run();
     if (claimed.meta.changes === 1) {
-      await env.DB.prepare("UPDATE plaza_posts SET like_count = like_count + 1 WHERE id = ?")
-        .bind(postId)
-        .run();
+      await db.batch([
+        db
+          .prepare(
+            "UPDATE plaza_posts SET like_count = (SELECT COUNT(*) FROM plaza_likes WHERE post_id = plaza_posts.id) WHERE id = ?",
+          )
+          .bind(postId),
+      ]);
       return json({ liked: true });
     }
-    const removed = await env.DB.prepare(
-      "DELETE FROM plaza_likes WHERE post_id = ? AND user_id = ?",
-    )
+    const removed = await db
+      .prepare("DELETE FROM plaza_likes WHERE post_id = ? AND user_id = ?")
       .bind(postId, user.id)
       .run();
     if (removed.meta.changes === 1) {
-      await env.DB.prepare(
-        "UPDATE plaza_posts SET like_count = MAX(0, like_count - 1) WHERE id = ?",
-      )
-        .bind(postId)
-        .run();
+      await db.batch([
+        db
+          .prepare(
+            "UPDATE plaza_posts SET like_count = (SELECT COUNT(*) FROM plaza_likes WHERE post_id = plaza_posts.id) WHERE id = ?",
+          )
+          .bind(postId),
+      ]);
       return json({ liked: false });
     }
     // 并发下另一请求刚完成翻转：幂等回落当前状态
@@ -580,16 +585,18 @@ export async function plazaRoute(request: Request, env: Env): Promise<Response> 
         return json({ error: "invalid_parent_id", msg: "回复目标不存在或不属于该帖子" }, 400);
     }
 
-    const result = await env.DB.prepare(
+    // 插入与计数重算同 batch（复审 #5）
+    let newId: number | undefined;
+    const insertStatement = env.DB.prepare(
       "INSERT INTO plaza_comments (post_id, user_id, content, parent_id) VALUES (?, ?, ?, ?)",
-    )
-      .bind(postId, user.id, content, parentId)
-      .run();
-    await env.DB.prepare("UPDATE plaza_posts SET comment_count = comment_count + 1 WHERE id = ?")
-      .bind(postId)
-      .run();
+    ).bind(postId, user.id, content, parentId);
+    const countingStatement = env.DB.prepare(
+      "UPDATE plaza_posts SET comment_count = (SELECT COUNT(*) FROM plaza_comments WHERE post_id = plaza_posts.id) WHERE id = ?",
+    ).bind(postId);
+    const batchResults = await env.DB.batch([insertStatement, countingStatement]);
+    newId = (batchResults[0] as { meta?: { last_row_id?: number } })?.meta?.last_row_id;
 
-    return json({ id: result.meta.last_row_id, stored: true }, 201);
+    return json({ id: newId, stored: true }, 201);
   }
 
   // DELETE /api/comments/:id — delete own comment

@@ -3,6 +3,8 @@ import { createRequire } from "node:module";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import {
+  buildCodeGuardSql,
+  classifyCodeFailure,
   CODE_MAX_ATTEMPTS,
   consumeOAuthExchange,
   consumeVerificationCode,
@@ -174,6 +176,54 @@ describe("consumeOAuthExchange（一次性并发语义，DATA-05）", () => {
       )
       .run("code-2", "token-2", "a@example.com");
     await expect(consumeOAuthExchange(d1, "code-2")).resolves.toMatchObject({ ok: false });
+  });
+});
+
+describe("buildCodeGuardSql（原子门，复审 #1/#2）", () => {
+  it("守卫 SQL 在真实数据变更语句中生效：密码 UPDATE 只在对码且未过期时生效", async () => {
+    const { d1, raw } = d1FromSqlite();
+    raw
+      .prepare("CREATE TABLE user_accounts (id INTEGER PRIMARY KEY, password_hash TEXT NOT NULL)")
+      .run();
+    raw.prepare("INSERT INTO user_accounts (id, password_hash) VALUES (7, 'old-hash')").run();
+    await issueCode(raw, "a@example.com", "reset", "654321");
+    // 对码 UPDATE：changes=1
+    const okUpdate = await d1
+      .prepare(`UPDATE user_accounts SET password_hash = ? WHERE id = ? AND ${buildCodeGuardSql()}`)
+      .bind("new-hash", 7, "a@example.com", "reset", await sha256Hex("654321"), CODE_MAX_ATTEMPTS)
+      .run();
+    expect(okUpdate.meta.changes).toBe(1);
+    // 错码 UPDATE：changes=0，密码不被改
+    const badUpdate = await d1
+      .prepare(`UPDATE user_accounts SET password_hash = ? WHERE id = ? AND ${buildCodeGuardSql()}`)
+      .bind("evil-hash", 7, "a@example.com", "reset", await sha256Hex("000000"), CODE_MAX_ATTEMPTS)
+      .run();
+    expect(badUpdate.meta.changes).toBe(0);
+    const pw = raw.prepare("SELECT password_hash FROM user_accounts WHERE id = 7").get() as {
+      password_hash: string;
+    };
+    expect(pw.password_hash).toBe("new-hash");
+  });
+
+  it("classifyCodeFailure：对码但守卫未生效归为 code_locked；错码递增计数", async () => {
+    const { d1, raw } = d1FromSqlite();
+    await issueCode(raw, "b@example.com", "register", "111222");
+    const hash = await sha256Hex("111222");
+    // 对码、行存活——守卫未生效（模拟并发消费竞态）→ 保守 code_locked
+    const classified = await classifyCodeFailure(d1, "b@example.com", "register", hash);
+    expect(classified.error).toBe("code_locked");
+    // 错码 → invalid_code 且 attempts+1
+    const bad = await classifyCodeFailure(
+      d1,
+      "b@example.com",
+      "register",
+      await sha256Hex("999999"),
+    );
+    expect(bad.error).toBe("invalid_code");
+    const row = raw
+      .prepare("SELECT attempts FROM verification_codes WHERE email = ? AND purpose = ?")
+      .get("b@example.com", "register") as { attempts: number };
+    expect(row.attempts).toBe(1);
   });
 });
 

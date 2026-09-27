@@ -201,8 +201,9 @@ export function createPlasmaEffect(host: OrbHost, palette: OrbPalette): OrbInsta
       sphereMaterial.uniforms.uColorB.value = hexToVector3(next.film);
       sphereMaterial.uniforms.uColorC.value = hexToVector3(next.book);
       shellMaterial.color.set(next.accent);
-      ringMaterial.color.set(next.music);
-      rings[1].material = ringMaterial;
+      // 两个环各自着色：clone 材质保留独立实例，避免重指向造成旧材质泄漏
+      (rings[0].material as MeshBasicMaterial).color.set(next.music);
+      (rings[1].material as MeshBasicMaterial).color.set(next.music);
       const fresh = [next.accent, next.music, next.book, next.other].map((hex) => new Color(hex));
       const attr = particleGeometry.getAttribute("color") as BufferAttribute;
       const seeded = seededRandom(23841);
@@ -217,6 +218,7 @@ export function createPlasmaEffect(host: OrbHost, palette: OrbPalette): OrbInsta
       scene.remove(particles);
       scene.remove(glow);
       sphereGeometry.dispose();
+      scene.remove(orb);
       sphereMaterial.dispose();
       shellGeometry.dispose();
       shellMaterial.dispose();
@@ -224,6 +226,7 @@ export function createPlasmaEffect(host: OrbHost, palette: OrbPalette): OrbInsta
         ring.geometry.dispose();
         (ring.material as MeshBasicMaterial).dispose();
       });
+      ringMaterial.dispose();
       particleGeometry.dispose();
       particleMaterial.dispose();
       glowMaterial.map?.dispose();

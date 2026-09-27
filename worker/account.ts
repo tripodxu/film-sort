@@ -12,10 +12,13 @@ const encoder = new TextEncoder();
 import { pbkdf2Sync } from "node:crypto";
 import { sendVerificationCode, type MailerEnv } from "./mailer";
 import {
+  buildCodeGuardSql,
+  classifyCodeFailure,
   consumeOAuthExchange,
   consumeVerificationCode,
   parseGoogleUser,
   sha256Hex,
+  CODE_MAX_ATTEMPTS,
 } from "./verification";
 const json = (data: unknown, status = 200) =>
   new Response(JSON.stringify(data), {
@@ -377,24 +380,34 @@ export async function accountRoute(request: Request, env: Env): Promise<Response
       .first();
     if (existing) return json({ error: "email_exists" }, 409);
     if (!code) return json({ error: "invalid_code", msg: "请输入邮箱验证码" }, 400);
-    // 先建号后消费验证码（消费本身是条件一次性语句）：用户表写入失败不再吞掉验证码；
-    // 消费失败则补偿删除刚建的账号，验证码保留可重试（findings DATA-05）。
+    // 原子门：单条 INSERT 同时校验验证码（有效才建号，语句级原子）——
+    // 未验证账号与「先建号后消费」的 FK 补偿失败面彻底消失（findings 复审 #2）。
     const hash = await hashPasswordStrong(password);
-    const result = await env.DB.prepare(
-      "INSERT INTO user_accounts (email, password_hash, nickname) VALUES (?, ?, ?)",
-    )
-      .bind(email, hash, nickname)
-      .run();
-    const userId = result.meta.last_row_id as number;
-    const consumed = await consumeVerificationCode(env.DB, email, "register", code);
-    if (!consumed.ok) {
-      await env.DB.prepare("DELETE FROM user_accounts WHERE id = ?")
-        .bind(userId)
-        .run()
-        .catch(() => undefined);
-      return json({ error: consumed.error, msg: consumed.msg }, 400);
+    const codeHash = await sha256Hex(code.replace(/\s+/g, ""));
+    let created;
+    try {
+      created = await env.DB.prepare(
+        `INSERT INTO user_accounts (email, password_hash, nickname)
+         SELECT ?, ?, ? WHERE ${buildCodeGuardSql()}`,
+      )
+        .bind(email, hash, nickname, email, "register", codeHash, CODE_MAX_ATTEMPTS)
+        .run();
+    } catch {
+      // 并发同邮箱注册撞 UNIQUE(email)
+      return json({ error: "email_exists", msg: "该邮箱已注册" }, 409);
     }
+    if (created.meta.changes !== 1) {
+      const classification = await classifyCodeFailure(env.DB, email, "register", codeHash);
+      return json({ error: classification.error, msg: classification.msg }, 400);
+    }
+    const userId = created.meta.last_row_id as number;
     const session = await createSession(env.DB, userId);
+    // 建号成功后消费验证码（清理；同码并发请求已被 UNIQUE(email) 挡下）
+    await env.DB.prepare(
+      "DELETE FROM verification_codes WHERE email = ? AND purpose = ? AND code_hash = ?",
+    )
+      .bind(email, "register", codeHash)
+      .run();
     return json({ ...session, email, nickname });
   }
 
@@ -467,18 +480,24 @@ export async function accountRoute(request: Request, env: Env): Promise<Response
       .first<{ id: number; password_hash: string; disabled_at: string | null }>();
     if (!user) return json({ error: "email_notfound" }, 404);
     if (user.disabled_at) return json({ error: "account_disabled" }, 403);
-    // 与注册同序：先改密后消费，消费失败补偿回滚旧口令，验证码可重试（findings DATA-05）。
-    const previousHash = user.password_hash;
-    await env.DB.prepare("UPDATE user_accounts SET password_hash = ? WHERE id = ?")
-      .bind(await hashPasswordStrong(password), user.id)
+    // 原子门：单条 UPDATE 同时校验验证码（有效才改密，语句级原子）——
+    // 「密码已改、验证码未消费」的接管窗口不复存在（findings 复审 #1）。
+    const codeHash = await sha256Hex(code.replace(/\s+/g, ""));
+    const updated = await env.DB.prepare(
+      `UPDATE user_accounts SET password_hash = ? WHERE id = ? AND ${buildCodeGuardSql()}`,
+    )
+      .bind(
+        await hashPasswordStrong(password),
+        user.id,
+        email,
+        "reset",
+        codeHash,
+        CODE_MAX_ATTEMPTS,
+      )
       .run();
-    const consumed = await consumeVerificationCode(env.DB, email, "reset", code);
-    if (!consumed.ok) {
-      await env.DB.prepare("UPDATE user_accounts SET password_hash = ? WHERE id = ?")
-        .bind(previousHash, user.id)
-        .run()
-        .catch(() => undefined);
-      return json({ error: consumed.error, msg: consumed.msg }, 400);
+    if (updated.meta.changes !== 1) {
+      const classification = await classifyCodeFailure(env.DB, email, "reset", codeHash);
+      return json({ error: classification.error, msg: classification.msg }, 400);
     }
     await env.DB.prepare("DELETE FROM user_sessions WHERE user_id = ?").bind(user.id).run();
     return json({ ok: true });
