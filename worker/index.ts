@@ -2501,7 +2501,10 @@ async function route(request: Request, env: Env): Promise<Response> {
     const body = await readJson(request);
     const config = validateJevConfig(body.config);
     if (!config)
-      return json({ ok: false, error: "invalid_config", msg: "TypeSafe API Key 不合法（长度 8-256）" }, 400);
+      return json(
+        { ok: false, error: "invalid_config", msg: "TypeSafe API Key 不合法（长度 8-256）" },
+        400,
+      );
     try {
       return json(await testJevConnection(config));
     } catch (error) {
@@ -2517,7 +2520,10 @@ async function route(request: Request, env: Env): Promise<Response> {
     const body = await readJson(request);
     const config = validateJevConfig(body.config);
     if (!config)
-      return json({ ok: false, error: "invalid_config", msg: "TypeSafe API Key 不合法（长度 8-256）" }, 400);
+      return json(
+        { ok: false, error: "invalid_config", msg: "TypeSafe API Key 不合法（长度 8-256）" },
+        400,
+      );
     const parsed = parseJevRankBody(body);
     if (!parsed) return json({ ok: false, error: "invalid_data", msg: "作品数据不合法" }, 400);
     try {

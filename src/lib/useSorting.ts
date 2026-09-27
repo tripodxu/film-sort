@@ -27,7 +27,12 @@ import {
   type ArtisticProfile,
   type RankingExport,
 } from "./profile";
-import { buildTasteContext, jevFailureText, readTypesafeConfig, requestJevRanking } from "./typesafe";
+import {
+  buildTasteContext,
+  jevFailureText,
+  readTypesafeConfig,
+  requestJevRanking,
+} from "./typesafe";
 import { track, type Locale } from "./utils";
 
 const DRAFT_KEY = "art-rank:draft:v2";

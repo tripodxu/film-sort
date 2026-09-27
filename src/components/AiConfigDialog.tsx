@@ -11,7 +11,12 @@ import {
   type AiInsightFailure,
   type AiProtocol,
 } from "../lib/aiInsight";
-import { jevFailureText, readTypesafeConfig, testJevConfig, writeTypesafeConfig } from "../lib/typesafe";
+import {
+  jevFailureText,
+  readTypesafeConfig,
+  testJevConfig,
+  writeTypesafeConfig,
+} from "../lib/typesafe";
 
 const PROTOCOL_OPTIONS: Array<{ value: AiProtocol; zh: string; en: string }> = [
   { value: "auto", zh: "自动探测", en: "Auto-detect" },
@@ -358,13 +363,15 @@ export function AiConfigDialog({
           <div className="section-heading" style={{ marginBottom: 10 }}>
             <div>
               <span className="eyebrow">Jev</span>
-              <h2 style={{ fontSize: 17 }}>{t("Jev 快排（TypeSafe）", "Jev quick rank (TypeSafe)")}</h2>
+              <h2 style={{ fontSize: 17 }}>
+                {t("Jev 快排（TypeSafe）", "Jev quick rank (TypeSafe)")}
+              </h2>
             </div>
           </div>
           <p style={{ fontSize: 13, color: "var(--muted)", lineHeight: 1.7, marginBottom: 10 }}>
             {t(
               "用于准备页的「AI 快排」：决策模型依据你的历史取舍预测整份榜单顺序。只需 API Key，在 console.typesafe.ai 申请；Key 仅保存在本浏览器。",
-              "Powers \"AI quick rank\" on the prepare page: a decision model predicts the whole ranking from your history. Key only — get one at console.typesafe.ai; stored in this browser only.",
+              'Powers "AI quick rank" on the prepare page: a decision model predicts the whole ranking from your history. Key only — get one at console.typesafe.ai; stored in this browser only.',
             )}
           </p>
           <div style={{ display: "flex", gap: 6, marginBottom: 8 }}>
