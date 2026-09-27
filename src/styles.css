@@ -1208,12 +1208,12 @@ body[data-theme=classic]{
    ③ 菜单加 max-width 护栏，en 长标签自动换行不出屏。 */
 @media(max-width:540px){
   .topbar,.main,footer{width:calc(100% - 20px)}
-  .topbar{gap:8px;overflow-x:auto;scrollbar-width:none}
+  .topbar{gap:7px;overflow-x:auto;scrollbar-width:none}
   .topbar::-webkit-scrollbar{display:none}
   .topbar>*{flex-shrink:0}
   .wordmark{font-size:13px}
-  .topbar nav{gap:7px}
-  .topbar nav button{font-size:10.5px;padding:0}
+  .topbar nav{gap:6px}
+  .topbar nav button{font-size:10px;padding:0;letter-spacing:0}
   .header-tools{gap:0}
   .header-tools .icon-button{width:27px;height:27px}
   /* 下拉锚定改挂 topbar：按钮壳 static 化后，absolute 菜单以 topbar 为
