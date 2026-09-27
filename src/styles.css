@@ -1230,3 +1230,19 @@ body[data-theme=classic]{
   .topbar nav button{font-size:9.5px}
   .header-tools .icon-button{width:25px;height:25px}
 }
+
+/* ===== P8 hero 按钮排布 + 触屏 tooltip 根治（2026-09-28）====================
+   ① 草稿存在时 hero 第三颗「继续上次进度」原为无边框裸文本（.button.quiet），
+      挂在两颗 chip 下面像游离链接，按钮行节奏散掉（用户报「首页排列与最初
+      不一样」）。收编为与相邻按钮一致的 chip：同边框、自动宽度。
+   ② 触屏（hover:none）上 tap 图标后 :hover 粘滞，tooltip 名称常驻不消失
+      （用户报「设置的名称一直还在」）。tooltip 本就是悬停装置，触屏一律隐藏；
+      图标按钮的 title 属性仍向读屏提供名称，无障碍不受影响。 */
+.orb-hero .home-actions .button.quiet{
+  width:auto;
+  border:1px solid color-mix(in srgb,var(--text) 24%,transparent);
+  color:var(--text-2);
+}
+@media(hover:none){
+  .icon-button .tooltip{display:none!important}
+}
