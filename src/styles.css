@@ -1215,7 +1215,9 @@ body[data-theme=classic]{
   .wordmark{font-size:13px}
   .topbar nav{gap:6px}
   .topbar nav button{font-size:10px;padding:0;letter-spacing:0}
-  .topbar nav button:last-child{display:none}
+  /* 只隐藏「我的文化索引」(登录后才渲染的第 4 项)。不能用 :last-child:
+     未登录时它不存在,last-child 会误伤「广场」。 */
+  .topbar nav button:nth-child(4){display:none}
   .header-tools{gap:0}
   .header-tools .icon-button{width:27px;height:27px}
   /* 下拉锚定改挂 topbar：按钮壳 static 化后，absolute 菜单以 topbar 为
