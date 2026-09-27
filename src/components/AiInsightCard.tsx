@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { RefreshCw, Settings2, Sparkles } from "lucide-react";
+import { PenLine, RefreshCw, Settings2, Sparkles } from "lucide-react";
 import {
   cacheKeyOf,
   peekInsight,
@@ -194,8 +194,12 @@ export function AiInsightCard({
                   : t(`内置 · ${result.model || "model"}`, `Built-in · ${result.model || "model"}`)}
               </span>
               {result.promptVersion === "override" && (
-                <span title={t("提示词为管理员覆盖版本", "Administrator-overridden prompt")}>
-                  ✏️ override
+                <span
+                  title={t("提示词为管理员覆盖版本", "Administrator-overridden prompt")}
+                  style={{ display: "inline-flex", alignItems: "center", gap: 4 }}
+                >
+                  <PenLine size={11} />
+                  override
                 </span>
               )}
               <button

@@ -311,6 +311,18 @@ export function CompareView({
                               ranking: entry,
                             });
                           }}
+                          role="button"
+                          tabIndex={0}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter" || e.key === " ") {
+                              e.preventDefault();
+                              setCompareRankDetail({
+                                side: profile?.rankings.includes(entry) ? "own" : "peer",
+                                collectionTitle: entry.collectionTitle,
+                                ranking: entry,
+                              });
+                            }
+                          }}
                         >
                           {entry.items.slice(0, 3).map((item, i) => (
                             <div className="ranking-card-top3-item" key={item.id}>
@@ -431,6 +443,18 @@ export function CompareView({
                               collectionTitle: entry.collectionTitle,
                               ranking: entry,
                             });
+                          }}
+                          role="button"
+                          tabIndex={0}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter" || e.key === " ") {
+                              e.preventDefault();
+                              setCompareRankDetail({
+                                side: profile?.rankings.includes(entry) ? "own" : "peer",
+                                collectionTitle: entry.collectionTitle,
+                                ranking: entry,
+                              });
+                            }
                           }}
                         >
                           {entry.items.slice(0, 3).map((item, i) => (

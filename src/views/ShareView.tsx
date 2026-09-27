@@ -1,4 +1,5 @@
-import { ArrowLeft, Play, Share2 } from "lucide-react";
+import { useState } from "react";
+import { ArrowLeft, Check, Play, Share2 } from "lucide-react";
 import { RankingDetail } from "../components/RankingDetail";
 import { ExpandableNote } from "../components/ExpandableNote";
 import { heading } from "./helpers";
@@ -20,6 +21,7 @@ export function ShareView({
   // 对方分享的批注：优先 peerNotes（由 /share/:code 拉取写入），兼容旧的 notes 传参
   const viewNotes = peerNotes && Object.keys(peerNotes).length > 0 ? peerNotes : (notes ?? {});
   const multiRanking = peer.rankings.length > 1;
+  const [copied, setCopied] = useState(false);
   return (
     <>
       {heading(
@@ -42,6 +44,7 @@ export function ShareView({
                 items={entry.items}
                 notes={viewNotes}
                 kindLabel={label}
+                t={t}
                 onNoteView={openNoteView}
                 onArtworkClick={openArtworkDetail}
                 headerExtra={
@@ -147,11 +150,13 @@ export function ShareView({
             } catch {
               /* selection fallback below */
             }
+            setCopied(true);
+            window.setTimeout(() => setCopied(false), 2000);
           }}
           title={t("复制当前分享链接，方便转发给其他人", "Copy this share link to forward it")}
         >
-          <Share2 size={15} />
-          {t("复制分享链接", "Copy share link")}
+          {copied ? <Check size={15} /> : <Share2 size={15} />}
+          {copied ? t("已复制", "Copied") : t("复制分享链接", "Copy share link")}
         </button>
       </div>
 

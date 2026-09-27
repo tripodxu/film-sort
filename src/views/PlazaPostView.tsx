@@ -557,8 +557,9 @@ export function PlazaPostView({
             alignItems: "center",
           }}
         >
-          <span>
-            ✏️ {t("最后编辑于", "Last edited")}{" "}
+          <span style={{ display: "inline-flex", alignItems: "center", gap: 5 }}>
+            <PenLine size={12} />
+            {t("最后编辑于", "Last edited")}{" "}
             {post.last_edited_at ? new Date(post.last_edited_at).toLocaleString() : "-"}（
             {post.edit_count ?? 0} {t("次", "times")}）
           </span>
@@ -821,6 +822,7 @@ export function PlazaPostView({
                 items={entry.items}
                 notes={parsedNotes}
                 kindLabel={label}
+                t={t}
                 onNoteView={openNoteView}
                 onArtworkClick={openArtworkDetail}
                 headerExtra={
@@ -852,6 +854,7 @@ export function PlazaPostView({
             items={displayItems}
             notes={parsedNotes}
             kindLabel={label}
+            t={t}
             onNoteView={openNoteView}
             onArtworkClick={openArtworkDetail}
           />

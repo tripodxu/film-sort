@@ -26,6 +26,7 @@ export function RankingDetail({
   onArtworkClick,
   highlightId,
   showRankingNote = true,
+  t,
 }: {
   kind: MediaKind;
   collectionTitle: string;
@@ -43,6 +44,8 @@ export function RankingDetail({
   /** 高亮某个作品行（比较界面跳转定位用） */
   highlightId?: string;
   showRankingNote?: boolean;
+  /** 双语函数；缺省时按钮保持中文文案 */
+  t?: (zh: string, en: string) => string;
 }) {
   const rankingNote = notes[`ranking:${kind}:${collectionTitle}`]?.trim();
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
@@ -166,7 +169,12 @@ export function RankingDetail({
       {hasMore && (
         <div ref={sentinelRef} style={{ textAlign: "center", marginTop: 16 }}>
           <button className="button secondary" onClick={() => setVisibleCount(items.length)}>
-            显示剩余 {items.length - visibleEnd} 件作品
+            {t
+              ? t(
+                  `显示剩余 ${items.length - visibleEnd} 件作品`,
+                  `Show remaining ${items.length - visibleEnd} works`,
+                )
+              : `显示剩余 ${items.length - visibleEnd} 件作品`}
           </button>
         </div>
       )}

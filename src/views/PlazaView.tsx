@@ -211,13 +211,13 @@ export function PlazaView({
               onKeyDown={(event) => {
                 if (event.key === "Enter") applySearch();
               }}
-              style={{ minHeight: 30, padding: "4px 8px", fontSize: 12 }}
+              style={{ minHeight: 36, padding: "4px 8px", fontSize: 12 }}
             />
             {search && (
               <button
                 className="text-button"
                 onClick={applySearch}
-                style={{ minHeight: 24, fontSize: 11, padding: "0 4px" }}
+                style={{ minHeight: 32, fontSize: 11, padding: "0 4px" }}
               >
                 {t("搜索", "Search")}
               </button>
@@ -230,6 +230,8 @@ export function PlazaView({
               key={n}
               className={`plaza-toolbar-btn ${colCount === n ? "active" : ""}`}
               onClick={() => changeCols(n)}
+              aria-label={t(`${n} 列`, `${n} columns`)}
+              aria-pressed={colCount === n}
             >
               {n}
             </button>
