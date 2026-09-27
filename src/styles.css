@@ -1199,21 +1199,23 @@ body[data-theme=classic]{
 /* ===== P7 移动端顶栏收纳 + 下拉菜单锚定护栏（2026-09-28）================
    病灶（线上实测）：顶栏内容（报头 + 4 导航 + 5 图标）在任何手机宽度都横向
    溢出约 120px（docScrollW 恒 440 vs 视口 320-390）——「登录/同步」图标整枚
-   出屏、English 半截，页面可横向滚动；浏览器恢复滚动位时打开设置菜单即现
-   「最前端截断」。zh 导航（我的文化索引）比 en 更宽，两语溢出量不同 = 格式
-   误差。修法：
-   ① ≤540px 全面收纳（报头 13px / 导航 10.5px / 图标 28px / 间距收紧），
-     并让 topbar 自身 overflow-x:auto 兜底极窄机型——页面级横向滚动归零；
+   出屏，浏览器恢复横向滚动位时打开设置菜单即现「最前端截断」；zh 导航
+   （我的文化索引）比 en 更宽，两语溢出量不同 = 格式误差。
+   修法（第二版，第一版的 overflow-x:auto 已回退——overflow 非 visible 会把
+   overflow-y 隐式转 auto，下拉菜单被 64px 顶栏整块裁掉，「点击设置什么都
+   看不见」）：
+   ① ≤540px 真收纳：导航第 4 项（我的文化索引/My Index）不占顶栏——画像在
+     首页「品味年轮」区仍有同名入口，功能不损失；报头 13px / 导航 10px /
+     图标 27px / 间距收紧后，双语在 320px 都放得下，页面零横向滚动；
    ② 设置/主题下拉改锚 topbar（right:10px），菜单任意宽度完整在屏；
    ③ 菜单加 max-width 护栏，en 长标签自动换行不出屏。 */
 @media(max-width:540px){
   .topbar,.main,footer{width:calc(100% - 20px)}
-  .topbar{gap:7px;overflow-x:auto;scrollbar-width:none}
-  .topbar::-webkit-scrollbar{display:none}
-  .topbar>*{flex-shrink:0}
+  .topbar{gap:7px}
   .wordmark{font-size:13px}
   .topbar nav{gap:6px}
   .topbar nav button{font-size:10px;padding:0;letter-spacing:0}
+  .topbar nav button:last-child{display:none}
   .header-tools{gap:0}
   .header-tools .icon-button{width:27px;height:27px}
   /* 下拉锚定改挂 topbar：按钮壳 static 化后，absolute 菜单以 topbar 为
