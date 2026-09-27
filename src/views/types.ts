@@ -87,6 +87,8 @@ export interface SetupViewProps {
   setCollection: (collection: MediaCollection) => void;
   startRanking: () => void;
   saveWithoutSorting: () => void;
+  startJevRanking: () => void;
+  jevBusy: boolean;
 }
 
 export interface SortingViewProps {

@@ -313,6 +313,8 @@ export default function App() {
     act,
     resume,
     saveWithoutSorting,
+    startJevRanking,
+    jevBusy,
   } = sorting;
   const busy = sortingBusy;
 
@@ -1156,6 +1158,8 @@ export default function App() {
         setCollection={setCollection}
         startRanking={startRanking}
         saveWithoutSorting={saveWithoutSorting}
+        startJevRanking={startJevRanking}
+        jevBusy={jevBusy}
       />
     );
   else if (view === "sorting" && collection && ranking && comparison && progress)

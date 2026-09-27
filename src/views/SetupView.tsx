@@ -1,4 +1,4 @@
-import { Play, Save } from "lucide-react";
+import { Play, Save, Sparkles } from "lucide-react";
 import { Poster } from "../components/Poster";
 import { heading } from "./helpers";
 import type { SetupViewProps } from "./types";
@@ -52,6 +52,8 @@ export function SetupView({
   setCollection,
   startRanking,
   saveWithoutSorting,
+  startJevRanking,
+  jevBusy,
 }: SetupViewProps) {
   const rankMode =
     (typeof window !== "undefined" && window.localStorage.getItem("art-rank:rank-mode")) ||
@@ -151,6 +153,14 @@ export function SetupView({
           >
             <Save size={16} />
             {t("仅保存不排序", "Save without sorting")}
+          </button>
+          <button
+            className="button secondary"
+            disabled={selected.length < 2 || !collection.title.trim() || jevBusy}
+            onClick={startJevRanking}
+          >
+            <Sparkles size={16} />
+            {jevBusy ? t("排序中…", "Ranking…") : t("AI 快排", "AI quick rank")}
           </button>
         </section>
         <section className="candidate-list">

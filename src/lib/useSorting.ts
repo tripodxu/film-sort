@@ -27,6 +27,7 @@ import {
   type ArtisticProfile,
   type RankingExport,
 } from "./profile";
+import { buildTasteContext, jevFailureText, readTypesafeConfig, requestJevRanking } from "./typesafe";
 import { track, type Locale } from "./utils";
 
 const DRAFT_KEY = "art-rank:draft:v2";
@@ -95,6 +96,7 @@ export function useSorting(deps: SortingDeps) {
   const [draft, setDraft] = useState(loadDraft);
   const [topN, setTopN] = useState(10);
   const [seed, setSeed] = useState("");
+  const [jevBusy, setJevBusy] = useState(false);
   const [customText, setCustomText] = useState("");
   const [customItem, setCustomItem] = useState("");
   const [customWorks, setCustomWorks] = useState<Artwork[]>([]);
@@ -336,6 +338,83 @@ export function useSorting(deps: SortingDeps) {
           ),
     );
     d.navigateTo("profile");
+  }
+
+  /** AI 快排(Jev):把选中作品交给决策模型预测完整顺序,直接成榜。
+   *  落库路径与 saveWithoutSortingFn 完全一致,只是顺序来自 Jev 预测。 */
+  async function startJevRanking() {
+    const d = depsRef.current;
+    if (!collection || selected.length < 2 || jevBusy) return;
+    const config = readTypesafeConfig();
+    if (!config) {
+      d.setNotice(
+        d.t(
+          "先在「设置 → AI 服务」里配置 TypeSafe API Key,再使用 AI 快排。",
+          "Configure a TypeSafe API key under Settings → AI services first.",
+        ),
+      );
+      return;
+    }
+    const kept = collection.works.filter((work) => selected.includes(work.id));
+    setJevBusy(true);
+    track("jev_rank_started", { mode: kind, item_count: kept.length });
+    try {
+      const profile = d.getProfile();
+      const result = await requestJevRanking(
+        {
+          kind: collection.kind,
+          collectionTitle: collection.title,
+          works: kept.map((work) => ({
+            id: work.id,
+            title: work.title,
+            ...(work.creator ? { creator: work.creator } : {}),
+            ...(work.year ? { year: work.year } : {}),
+          })),
+          ...(profile ? { profileContext: buildTasteContext(profile.rankings) } : {}),
+          locale: d.locale === "en" ? "en" : "zh",
+        },
+        config,
+      );
+      if (!result.ok) {
+        d.setNotice(jevFailureText(result, d.t));
+        return;
+      }
+      // order 是 works 数组下标(Jev 侧只回传数字,规避标题注入与 id 字符集问题)。
+      const byIndex = new Map(kept.map((work, index) => [index, work]));
+      const ordered = result.order
+        .map((index) => byIndex.get(index))
+        .filter((work): work is (typeof kept)[number] => Boolean(work));
+      // 唯一可落库形状 + identity 去重,与 saveWithoutSortingFn 同口径。
+      const items = toRankedItems(ordered.map((work, i) => ({ ...work, rank: i + 1 })));
+      const ranking: RankingExport = {
+        version: 1,
+        profileId: d.getProfile()?.profileId ?? crypto.randomUUID(),
+        profileName: d.profileName.trim() || d.t("我的艺术人格", "My artistic profile"),
+        kind: collection.kind,
+        collectionTitle: collection.title,
+        createdAt: new Date().toISOString(),
+        items,
+      };
+      d.persist(mergeRanking(d.getProfile(), ranking));
+      d.setActiveKind(collection.kind);
+      d.setNotice(
+        d.t(
+          `AI 快排完成:Jev 依据你的历史取舍预测了 ${items.length} 件作品的顺序(模型 ${result.model});可在榜单页「手动调整」。`,
+          `AI quick rank done: Jev predicted the order of ${items.length} works from your history (model ${result.model}); "Reorder" anytime.`,
+        ),
+      );
+      d.navigateTo("profile");
+      track("jev_rank_completed", {
+        mode: kind,
+        item_count: items.length,
+        model: result.model,
+        input_tokens: result.inputTokens,
+      });
+    } catch {
+      d.setNotice(d.t("AI 快排暂时不可用,请稍后再试。", "AI quick rank is unavailable right now."));
+    } finally {
+      setJevBusy(false);
+    }
   }
 
   function applyImportedWorks(
@@ -821,5 +900,7 @@ export function useSorting(deps: SortingDeps) {
     act,
     resume,
     saveWithoutSorting: saveWithoutSortingFn,
+    startJevRanking,
+    jevBusy,
   };
 }
