@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Check, Plug, RefreshCw, X } from "lucide-react";
+import { Check, Plug, RefreshCw, Sparkles, X } from "lucide-react";
 import { IconButton } from "../views/IconButton";
 import { FocusTrap } from "./FocusTrap";
 import {
@@ -11,6 +11,7 @@ import {
   type AiInsightFailure,
   type AiProtocol,
 } from "../lib/aiInsight";
+import { jevFailureText, readTypesafeConfig, testJevConfig, writeTypesafeConfig } from "../lib/typesafe";
 
 const PROTOCOL_OPTIONS: Array<{ value: AiProtocol; zh: string; en: string }> = [
   { value: "auto", zh: "自动探测", en: "Auto-detect" },
@@ -45,6 +46,10 @@ export function AiConfigDialog({
   const [testBusy, setTestBusy] = useState(false);
   const [listBusy, setListBusy] = useState(false);
   const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null);
+  const [jevKey, setJevKey] = useState(readTypesafeConfig()?.apiKey ?? "");
+  const [jevTestBusy, setJevTestBusy] = useState(false);
+  const [jevMessage, setJevMessage] = useState<{ ok: boolean; text: string } | null>(null);
+  const canSaveJev = jevKey.trim().length >= 8;
 
   // 「获取模型列表」只依赖地址与密钥——取列表恰恰是因为还不知道 Model 该填什么；
   // 测试连接/保存才会真正调用模型，需要三参齐备。
@@ -114,6 +119,36 @@ export function AiConfigDialog({
       // 写不进存储（隐私模式）：仍然关闭弹窗，但本次配置不会跨刷新保留。
       console.warn("[ai] localStorage unavailable; config will not persist");
     }
+  }
+
+  async function runJevTest() {
+    if (!canSaveJev || jevTestBusy) return;
+    setJevTestBusy(true);
+    setJevMessage(null);
+    const result = await testJevConfig({ apiKey: jevKey.trim() });
+    setJevTestBusy(false);
+    setJevMessage(
+      result.ok
+        ? {
+            ok: true,
+            text: t(`连接成功（模型：${result.model}）`, `Connected (model: ${result.model})`),
+          }
+        : { ok: false, text: jevFailureText(result, t) },
+    );
+  }
+
+  function saveJev() {
+    if (!canSaveJev) return;
+    const stored = writeTypesafeConfig({ apiKey: jevKey.trim() });
+    setJevMessage({
+      ok: stored,
+      text: stored
+        ? t("Jev Key 已保存到本浏览器", "Jev key saved to this browser")
+        : t(
+            "浏览器存储不可用（隐私模式）：本次会话有效，刷新后需重填",
+            "Storage unavailable (private mode): valid for this session only",
+          ),
+    });
   }
 
   const label = { fontSize: 12, color: "var(--muted)", marginBottom: 4 };
@@ -319,6 +354,61 @@ export function AiConfigDialog({
               "The key stays in this browser only; AI commentary sends ranking titles to your configured service. On 404, check that the Base URL and protocol match.",
             )}
           </p>
+          <div className="rank-menu-sep" style={{ margin: "16px 0" }} />
+          <div className="section-heading" style={{ marginBottom: 10 }}>
+            <div>
+              <span className="eyebrow">Jev</span>
+              <h2 style={{ fontSize: 17 }}>{t("Jev 快排（TypeSafe）", "Jev quick rank (TypeSafe)")}</h2>
+            </div>
+          </div>
+          <p style={{ fontSize: 13, color: "var(--muted)", lineHeight: 1.7, marginBottom: 10 }}>
+            {t(
+              "用于准备页的「AI 快排」：决策模型依据你的历史取舍预测整份榜单顺序。只需 API Key，在 console.typesafe.ai 申请；Key 仅保存在本浏览器。",
+              "Powers \"AI quick rank\" on the prepare page: a decision model predicts the whole ranking from your history. Key only — get one at console.typesafe.ai; stored in this browser only.",
+            )}
+          </p>
+          <div style={{ display: "flex", gap: 6, marginBottom: 8 }}>
+            <input
+              type={showKey ? "text" : "password"}
+              value={jevKey}
+              onChange={(event) => setJevKey(event.target.value)}
+              placeholder="apikey_…"
+              spellCheck={false}
+              style={{ flex: 1 }}
+              aria-label={t("TypeSafe API Key", "TypeSafe API key")}
+            />
+            <button
+              className="button secondary"
+              disabled={!canSaveJev || jevTestBusy}
+              onClick={() => void runJevTest()}
+              style={{ minHeight: 36, paddingInline: 10, fontSize: 12 }}
+            >
+              <Sparkles size={14} />
+              {jevTestBusy ? t("测试中…", "Testing…") : t("测试", "Test")}
+            </button>
+            <button
+              className="button secondary"
+              disabled={!canSaveJev}
+              onClick={saveJev}
+              style={{ minHeight: 36, paddingInline: 10, fontSize: 12 }}
+            >
+              <Check size={14} />
+              {t("保存 Key", "Save key")}
+            </button>
+          </div>
+          {jevMessage && (
+            <p
+              style={{
+                fontSize: 12,
+                margin: "0 0 4px",
+                color: jevMessage.ok ? "var(--green)" : "var(--red)",
+                lineHeight: 1.6,
+                overflowWrap: "anywhere",
+              }}
+            >
+              {jevMessage.text}
+            </p>
+          )}
           <div className="guide-modal-footer">
             {existing && (
               <button
