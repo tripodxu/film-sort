@@ -1224,3 +1224,9 @@ body[data-theme=classic]{
   .topbar .rank-menu{right:10px}
   .settings-menu{max-width:calc(100vw - 24px)}
 }
+/* 极窄机型（≤360px）再收一档：en 长标签下 320px 也零溢出 */
+@media(max-width:360px){
+  .wordmark{font-size:12px}
+  .topbar nav button{font-size:9.5px}
+  .header-tools .icon-button{width:25px;height:25px}
+}
