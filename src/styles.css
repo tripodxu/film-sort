@@ -1246,3 +1246,8 @@ body[data-theme=classic]{
 @media(hover:none){
   .icon-button .tooltip{display:none!important}
 }
+/* 换行后的「继续上次进度」与「开始准备」左对齐：v1 残留的
+   justify-content:flex-end 会把第二行 chip 推向右缘。 */
+@media(max-width:540px){
+  .home-actions.home-actions{justify-content:flex-start}
+}
