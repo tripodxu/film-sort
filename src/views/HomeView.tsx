@@ -1,5 +1,18 @@
 import { useMemo } from "react";
-import { ArrowRight, BookOpen, Film, Library, Music2, Play, UserRound, Users } from "lucide-react";
+import {
+  ArrowRight,
+  BookOpen,
+  Check,
+  Columns3,
+  Film,
+  Library,
+  Music2,
+  Play,
+  Rows3,
+  Trash2,
+  UserRound,
+  Users,
+} from "lucide-react";
 import { getCollectionsByKind, mediaLabels, type Artwork, type MediaKind } from "../data/media";
 import { DeferredOrb } from "../components/DeferredOrb";
 import { Poster } from "../components/Poster";
@@ -176,9 +189,18 @@ export function HomeView({
             )}
             {profile && (
               <div style={{ display: "flex", gap: 4 }}>
-                {["row", "col"].map((m) => (
+                {(
+                  [
+                    ["row", Rows3],
+                    ["col", Columns3],
+                  ] as const
+                ).map(([m, Icon]) => (
                   <button
                     key={m}
+                    aria-label={
+                      m === "row" ? t("行式布局", "Row layout") : t("列式布局", "Column layout")
+                    }
+                    aria-pressed={ringsLayout === m}
                     onClick={() => {
                       setRingsLayout(m as "row" | "col");
                       try {
@@ -186,8 +208,8 @@ export function HomeView({
                       } catch {}
                     }}
                     style={{
-                      width: 24,
-                      height: 24,
+                      width: 28,
+                      height: 28,
                       borderRadius: 6,
                       border:
                         ringsLayout === m ? "1px solid var(--accent)" : "1px solid var(--line)",
@@ -196,15 +218,13 @@ export function HomeView({
                           ? "color-mix(in srgb,var(--accent) 10%,transparent)"
                           : "transparent",
                       color: ringsLayout === m ? "var(--accent)" : "var(--muted)",
-                      fontSize: 10,
-                      fontWeight: 600,
                       cursor: "pointer",
                       display: "flex",
                       alignItems: "center",
                       justifyContent: "center",
                     }}
                   >
-                    {m === "row" ? "≡" : "≡"}
+                    <Icon size={14} />
                   </button>
                 ))}
               </div>
@@ -219,9 +239,13 @@ export function HomeView({
                   borderRadius: 8,
                   border: "1px solid var(--line)",
                   color: "var(--muted)",
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: 6,
                 }}
               >
-                🗑 {t("清除数据", "Clear")}
+                <Trash2 size={13} />
+                {t("清除数据", "Clear")}
               </button>
             )}
           </div>
@@ -284,10 +308,10 @@ export function HomeView({
                             <div
                               style={{
                                 display: "flex",
-                                gap: 5,
+                                gap: 2,
                                 position: "absolute",
-                                top: 5,
-                                right: 5,
+                                top: 0,
+                                right: 0,
                                 zIndex: 2,
                               }}
                             >
@@ -298,34 +322,62 @@ export function HomeView({
                                   setEditingRankTitle(entry.collectionTitle);
                                 }}
                                 title={t("重命名", "Rename")}
+                                aria-label={t("重命名", "Rename")}
                                 style={{
-                                  width: 10,
-                                  height: 10,
-                                  borderRadius: "50%",
-                                  background: "var(--status-warn)",
-                                  border:
-                                    "1px solid color-mix(in srgb,var(--status-warn) 70%,black)",
+                                  width: 22,
+                                  height: 22,
+                                  display: "flex",
+                                  alignItems: "center",
+                                  justifyContent: "center",
                                   cursor: "pointer",
                                   padding: 0,
+                                  background: "none",
+                                  border: "none",
                                 }}
-                              />
+                              >
+                                <span
+                                  style={{
+                                    width: 10,
+                                    height: 10,
+                                    borderRadius: "50%",
+                                    background: "var(--status-warn)",
+                                    border:
+                                      "1px solid color-mix(in srgb,var(--status-warn) 70%,black)",
+                                    display: "block",
+                                  }}
+                                />
+                              </button>
                               <button
                                 onClick={(e) => {
                                   e.stopPropagation();
                                   deleteRank(idx);
                                 }}
                                 title={t("删除", "Delete")}
+                                aria-label={t("删除", "Delete")}
                                 style={{
-                                  width: 10,
-                                  height: 10,
-                                  borderRadius: "50%",
-                                  background: "var(--status-danger)",
-                                  border:
-                                    "1px solid color-mix(in srgb,var(--status-danger) 75%,black)",
+                                  width: 22,
+                                  height: 22,
+                                  display: "flex",
+                                  alignItems: "center",
+                                  justifyContent: "center",
                                   cursor: "pointer",
                                   padding: 0,
+                                  background: "none",
+                                  border: "none",
                                 }}
-                              />
+                              >
+                                <span
+                                  style={{
+                                    width: 10,
+                                    height: 10,
+                                    borderRadius: "50%",
+                                    background: "var(--status-danger)",
+                                    border:
+                                      "1px solid color-mix(in srgb,var(--status-danger) 75%,black)",
+                                    display: "block",
+                                  }}
+                                />
+                              </button>
                             </div>
                             <button
                               onClick={() => {
@@ -371,13 +423,13 @@ export function HomeView({
                                         e.stopPropagation();
                                         renameRank(idx);
                                       }}
+                                      aria-label={t("确认重命名", "Confirm rename")}
                                       style={{
                                         color: "var(--accent)",
-                                        fontSize: 11,
                                         padding: "0 4px",
                                       }}
                                     >
-                                      ✓
+                                      <Check size={14} />
                                     </button>
                                   </div>
                                 ) : (

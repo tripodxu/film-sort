@@ -1,5 +1,6 @@
 import {
   CalendarDays,
+  Check,
   Download,
   Globe,
   GripVertical,
@@ -292,9 +293,10 @@ export function ProfileView({
                 <button
                   className="text-button"
                   onClick={() => renameRank(profileRankIdx)}
-                  style={{ color: "var(--accent)", fontSize: 14 }}
+                  aria-label={t("确认重命名", "Confirm rename")}
+                  style={{ color: "var(--accent)", padding: "0 4px" }}
                 >
-                  ✓
+                  <Check size={16} />
                 </button>
               </div>
             ) : (
@@ -391,10 +393,10 @@ export function ProfileView({
                       {Array.from({ length: 12 }).map((_, i) => {
                         const colors = [
                           "var(--accent)",
-                          "#4ade80",
-                          "#818cf8",
-                          "#f472b6",
-                          "#facc15",
+                          "var(--ok)",
+                          "var(--indigo)",
+                          "var(--pink)",
+                          "var(--warn)",
                         ];
                         return (
                           <span

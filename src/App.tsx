@@ -1,6 +1,7 @@
 import { useEffect, useState, type ReactNode } from "react";
 import {
   ArrowLeft,
+  Check,
   CloudDownload,
   CloudUpload,
   Github,
@@ -1910,9 +1911,10 @@ export default function App() {
                       <button
                         className="text-button"
                         onClick={() => void saveNickname()}
-                        style={{ color: "var(--accent)", fontSize: 13, padding: "4px 8px" }}
+                        aria-label={t("确认修改昵称", "Confirm nickname")}
+                        style={{ color: "var(--accent)", padding: "4px 8px" }}
                       >
-                        ✓
+                        <Check size={15} />
                       </button>
                     </div>
                   ) : (

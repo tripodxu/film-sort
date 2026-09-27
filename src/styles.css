@@ -59,7 +59,7 @@ body{background:var(--bg);color:var(--text)}.app-shell{min-height:100svh;backgro
 .collection-row>div{padding:4px 5px!important;line-height:1.3}
 .collection-row h3{font-size:13px!important}
 .collection-row small{font-size:10px!important;margin-top:0!important}
-.collection-row .row-number{position:absolute!important;top:3px;left:3px;z-index:2;background:rgba(0,0,0,.5);backdrop-filter:blur(6px);color:var(--text-hi);font-size:10px;font-weight:600;width:18px;height:18px;display:flex;align-items:center;justify-content:center;border-radius:50%}
+.collection-row .row-number{position:absolute!important;top:3px;left:3px;z-index:2;background:rgba(0,0,0,.5);backdrop-filter:blur(6px);color:var(--text-hi);font-size:10px;font-weight:600;width:18px;height:18px;padding:0;margin:0;display:flex;align-items:center;justify-content:center;white-space:nowrap;border-radius:50%}
 .collection-row svg:last-child{display:none!important}
 /* Jelly poster effect */
 .poster{transition:box-shadow .2s ease}
@@ -312,7 +312,7 @@ html{scroll-behavior:smooth}
 .text-button:hover{opacity:.85}
 
 /* ===== Better Focus States ===== */
-:focus-visible{outline:2px solid var(--accent);outline-offset:3px;border-radius:6px}
+:focus-visible{outline:2px solid var(--accent);outline-offset:3px}
 .button:focus-visible{outline-offset:4px}
 
 /* ===== Improved Contrast ===== */
@@ -1151,4 +1151,29 @@ body[data-theme=classic]{
   opacity:.18;
   -webkit-mask-image:linear-gradient(to bottom,transparent 0,black 100%);
   mask-image:linear-gradient(to bottom,transparent 0,black 100%)
+}
+
+/* ===== P6 打磨批（2026-09-27）：移动端 Hero 修复 + 光球衬纸 ====================
+   ① identity 胶囊在 v2 网格里常驻 col2，≤800px 时把报头挤到 ~130px，导致
+      ART/RANK 断行成 RA/NK、竖排书脊压住眉标——小屏改回绝对定位右上，退出网格流。
+   ② ≤540px 竖排书脊（writing-mode:vertical-rl）转横排：印刷书脊是桌面装置，
+      窄屏上与眉标重叠，横排小字承接同一语义。
+   ③ 光球直压正文：hero 加一层「衬纸」——同色底渐变（非玻璃），桌面左缘、
+      移动端上下缘，保证 masthead 与正文的读感不受球体亮度影响。 */
+.orb-hero::before{
+  content:"";position:absolute;inset:0;z-index:0;pointer-events:none;
+  background:linear-gradient(90deg,color-mix(in srgb,var(--bg) 58%,transparent) 0%,color-mix(in srgb,var(--bg) 22%,transparent) 44%,transparent 66%)
+}
+@media(max-width:800px){
+  .orb-hero .identity.glass-capsule{position:absolute;top:14px;right:0;z-index:2;margin:0}
+}
+@media(max-width:540px){
+  .orb-hero::before{
+    background:linear-gradient(180deg,color-mix(in srgb,var(--bg) 34%,transparent) 0%,transparent 26%,color-mix(in srgb,var(--bg) 26%,transparent) 62%,color-mix(in srgb,var(--bg) 60%,transparent) 100%)
+  }
+  .home-heading h1>small{
+    position:static;writing-mode:horizontal-tb;margin:12px 0 0;
+    font-size:11px;letter-spacing:.42em
+  }
+  .orb-hero-inner{padding-top:84px}
 }

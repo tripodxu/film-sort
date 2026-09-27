@@ -8,6 +8,7 @@ import {
   Play,
   Search,
   Send,
+  StickyNote,
 } from "lucide-react";
 import { Poster } from "../components/Poster";
 import type { PlazaViewProps, PlazaPost } from "./types";
@@ -310,8 +311,18 @@ export function PlazaView({
               <div className="plaza-sticker-info">
                 <h3 className="plaza-sticker-title">{post.collection_title}</h3>
                 {(post.note_count ?? 0) > 0 && (
-                  <span style={{ fontSize: 10, color: "var(--accent)", opacity: 0.7 }}>
-                    📝 {post.note_count}
+                  <span
+                    style={{
+                      fontSize: 10,
+                      color: "var(--accent)",
+                      opacity: 0.7,
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: 4,
+                    }}
+                  >
+                    <StickyNote size={11} />
+                    {post.note_count}
                     {t("条批注", " notes")}
                   </span>
                 )}
