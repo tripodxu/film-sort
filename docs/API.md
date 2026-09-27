@@ -37,6 +37,8 @@ ART/RANK 后端 API 完整参考。所有接口由 Cloudflare Worker 处理，�
 | `ai_custom` | `POST /api/insights`（自定义通道） | 15 | 600 |
 | `ai_test` | `POST /api/ai/test` | 5 | 600 |
 | `ai_models` | `POST /api/ai/models` | 10 | 600 |
+| `ai_jev_test` | `POST /api/ai/jev/test` | 5 | 600 |
+| `ai_jev` | `POST /api/ai/jev-rank` | 10 | 600 |
 | `music_play` | `GET /api/music/play` | 12 | 600 |
 | `music_lyric` | `GET /api/music/lyric` | 12 | 600 |
 | `netease` | `/api/netease/*` | 120 | 60 |
@@ -581,6 +583,32 @@ ART/RANK 后端 API 完整参考。所有接口由 Cloudflare Worker 处理，�
 **请求体：** `{ "config": { 同上 } }`
 **响应：** `{ "ok": true, "protocol": "chat", "models": ["gpt-4o-mini", …], "truncated": false }`（上限 100 条，超出 `truncated: true`）。
 **限流：** 桶 `ai_models` 10 次/10 分钟。
+
+### POST /api/ai/jev/test
+
+TypeSafe（Jev）连接测试：向固定上游 `https://api.typesafe.ai/v1/systemone` 发一次单问题 Noul 探活。Key 由前端透传（存于用户浏览器 localStorage），服务端不存储。
+
+**请求体：** `{ "config": { "apiKey": "…（8-256 字符）" } }`
+**响应：** `{ "ok": true, "model": "jev-1.13.0" }` 或 `{ "ok": false, "error": "…", "msg": "…" }`。
+**限流：** 桶 `ai_jev_test` 5 次/10 分钟。
+
+### POST /api/ai/jev-rank
+
+AI 快排：一次 systemone 调用（state = 用户品味档案 + 清单全文；questions = 每件作品一个 Noul 问题，并行评估）对**最多 255 件**作品打 0–1 分，按分降序返回。`order` 为 `works` 数组下标，同分按原序稳定。
+
+**请求体：**
+```json
+{
+  "kind": "film",
+  "collectionTitle": "豆瓣高分片单",
+  "works": [{ "id": "w1", "title": "…", "creator": "…", "year": 2010 }],
+  "profileContext": "（可选，≤4096 字符的既有榜单摘要）",
+  "locale": "zh",
+  "config": { "apiKey": "…" }
+}
+```
+**响应：** `{ "ok": true, "model": "jev-1.13.0", "order": [2, 0, 1], "scores": [0.72, 0.68, 0.59], "inputTokens": 567 }`；错误沿用 AI 错误码（`invalid_config` / `invalid_data` / `rate_limited` / `upstream_auth_failed` / `upstream_rate_limited` / `upstream_error`）。
+**限流：** 桶 `ai_jev` 10 次/10 分钟。
 
 ---
 

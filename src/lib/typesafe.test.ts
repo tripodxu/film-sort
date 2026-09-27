@@ -49,7 +49,9 @@ describe("buildTasteContext", () => {
 describe("jevFailureText", () => {
   it("优先透出服务端 msg,否则按错误码给双语默认", () => {
     const t = (zh: string) => zh;
-    expect(jevFailureText({ ok: false, error: "upstream_error", msg: "上游炸了" }, t)).toBe("上游炸了");
+    expect(jevFailureText({ ok: false, error: "upstream_error", msg: "上游炸了" }, t)).toBe(
+      "上游炸了",
+    );
     expect(jevFailureText({ ok: false, error: "upstream_auth_failed" }, t)).toContain("Key");
   });
 });

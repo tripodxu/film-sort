@@ -55,11 +55,12 @@ export function buildTasteContext(
   rankings: Array<{ kind: string; collectionTitle: string; items: Array<{ title: string }> }>,
   max = 4096,
 ): string {
-  const lines = rankings.map((ranking) =>
-    `[${ranking.kind}] ${ranking.collectionTitle}: ${ranking.items
-      .slice(0, 20)
-      .map((item) => item.title)
-      .join(" > ")}`,
+  const lines = rankings.map(
+    (ranking) =>
+      `[${ranking.kind}] ${ranking.collectionTitle}: ${ranking.items
+        .slice(0, 20)
+        .map((item) => item.title)
+        .join(" > ")}`,
   );
   return lines.join("\n").slice(0, max);
 }
@@ -125,7 +126,12 @@ export async function requestJevRanking(
       signal: AbortSignal.timeout(40000),
     });
     const body = (await response.json().catch(() => null)) as Record<string, unknown> | null;
-    if (response.ok && body?.ok === true && Array.isArray(body.order) && Array.isArray(body.scores)) {
+    if (
+      response.ok &&
+      body?.ok === true &&
+      Array.isArray(body.order) &&
+      Array.isArray(body.scores)
+    ) {
       return {
         ok: true,
         model: typeof body.model === "string" ? body.model : "jev",

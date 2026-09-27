@@ -132,12 +132,24 @@ describe("jevRank", () => {
 
 describe("parseJevRankBody", () => {
   it("合法 body 全量通过;非法 kind/works/超长 profileContext 返回 null", () => {
-    expect(parseJevRankBody({ kind: "film", collectionTitle: "片单", works: [{ title: "A" }] })?.works.length).toBe(1);
-    expect(parseJevRankBody({ kind: "spam", collectionTitle: "片单", works: [{ title: "A" }] })).toBeNull();
-    expect(parseJevRankBody({ kind: "film", collectionTitle: "", works: [{ title: "A" }] })).toBeNull();
+    expect(
+      parseJevRankBody({ kind: "film", collectionTitle: "片单", works: [{ title: "A" }] })?.works
+        .length,
+    ).toBe(1);
+    expect(
+      parseJevRankBody({ kind: "spam", collectionTitle: "片单", works: [{ title: "A" }] }),
+    ).toBeNull();
+    expect(
+      parseJevRankBody({ kind: "film", collectionTitle: "", works: [{ title: "A" }] }),
+    ).toBeNull();
     expect(parseJevRankBody({ kind: "film", collectionTitle: "片单", works: "nope" })).toBeNull();
     expect(
-      parseJevRankBody({ kind: "film", collectionTitle: "片单", works: [{ title: "A" }], profileContext: "x".repeat(4097) }),
+      parseJevRankBody({
+        kind: "film",
+        collectionTitle: "片单",
+        works: [{ title: "A" }],
+        profileContext: "x".repeat(4097),
+      }),
     ).toBeNull();
   });
 });
@@ -151,7 +163,9 @@ describe("testJevConnection", () => {
     });
   });
   it("响应畸形报 upstream_error", async () => {
-    const fetchImpl = stubFetch(() => new Response(JSON.stringify({ answers: {} }), { status: 200 }));
+    const fetchImpl = stubFetch(
+      () => new Response(JSON.stringify({ answers: {} }), { status: 200 }),
+    );
     await expect(testJevConnection({ apiKey: "ts_key12345" }, fetchImpl)).rejects.toMatchObject({
       code: "upstream_error",
     });

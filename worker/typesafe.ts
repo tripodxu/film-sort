@@ -66,7 +66,11 @@ export function buildJevState(input: JevRankInput): string {
     const title = clean(work.title, 160);
     const meta = [
       work.year ? String(work.year) : "",
-      work.creator ? (zh ? `创作者:${clean(work.creator, 120)}` : `by ${clean(work.creator, 120)}`) : "",
+      work.creator
+        ? zh
+          ? `创作者:${clean(work.creator, 120)}`
+          : `by ${clean(work.creator, 120)}`
+        : "",
     ]
       .filter(Boolean)
       .join(zh ? "," : ", ");
@@ -86,10 +90,7 @@ export function buildJevQuestions(
   const questions: Record<string, { type: "noul"; instructions: string }> = {};
   input.works.forEach((work, index) => {
     const title = clean(work.title, 160);
-    const meta = [
-      work.year ? String(work.year) : "",
-      work.creator ? clean(work.creator, 120) : "",
-    ]
+    const meta = [work.year ? String(work.year) : "", work.creator ? clean(work.creator, 120) : ""]
       .filter(Boolean)
       .join(", ");
     questions[`w${index}`] = {
@@ -123,7 +124,12 @@ async function callSystemOne(
         body: JSON.stringify(payload),
       },
       // 上游域名固定、非用户可控:精确白名单 + 30s 超时 + 1MB 响应上限。
-      { allowedHosts: ["api.typesafe.ai"], maxBytes: MAX_RESPONSE_BYTES, timeoutMs: 30_000, maxRedirects: 2 },
+      {
+        allowedHosts: ["api.typesafe.ai"],
+        maxBytes: MAX_RESPONSE_BYTES,
+        timeoutMs: 30_000,
+        maxRedirects: 2,
+      },
       fetchImpl,
     );
   } catch (error) {
@@ -133,7 +139,8 @@ async function callSystemOne(
   }
   if (response.status === 401 || response.status === 403)
     throw new AiError("upstream_auth_failed", 502, "TypeSafe API key rejected");
-  if (response.status === 429) throw new AiError("upstream_rate_limited", 502, "TypeSafe rate limited");
+  if (response.status === 429)
+    throw new AiError("upstream_rate_limited", 502, "TypeSafe rate limited");
   if (!response.ok) throw new AiError("upstream_error", 502, `Jev upstream ${response.status}`);
   return (await readBoundedJson(response, MAX_RESPONSE_BYTES)) as SystemOneResponse;
 }
@@ -198,7 +205,8 @@ export function parseJevRankBody(body: Record<string, unknown>): JevRankInput | 
   for (const raw of body.works) {
     if (typeof raw !== "object" || raw === null) return null;
     const work = raw as Record<string, unknown>;
-    if (typeof work.title !== "string" || !work.title.trim() || work.title.length > 200) return null;
+    if (typeof work.title !== "string" || !work.title.trim() || work.title.length > 200)
+      return null;
     works.push({
       title: work.title,
       ...(typeof work.creator === "string" && work.creator
