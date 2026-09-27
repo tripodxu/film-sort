@@ -448,7 +448,10 @@ kbd{display:inline-flex;align-items:center;justify-content:center;min-width:22px
 .help-steps strong{display:block;color:var(--accent);font-weight:500;margin-bottom:4px}
 
 /* ===== 榜单行对齐 / 大量榜单横向滚动 / 导入已添加海报卡片 ===== */
-.ranking-list .row-number{width:36px;min-width:36px;display:inline-flex;align-items:center;justify-content:center;font-size:17px}
+/* 名次徽章不再自带宽度：P0.7 的 .row-number 用 padding-inline 撑出墨块，
+   这里的 36px 定宽会把内容盒挤到 4px，「01」被迫竖排换行（线上实测）。
+   display 对齐保留，宽度/字号交给 .row-number 本体与各视图网格轨道。 */
+.ranking-list .row-number{display:inline-flex;align-items:center;justify-content:center}
 .profile-dimensions{display:flex;gap:8px;overflow-x:auto;padding-bottom:8px;scrollbar-width:thin}
 .import-form{max-width:920px}
 .custom-added-grid{grid-template-columns:repeat(auto-fill,minmax(128px,1fr));gap:12px}
