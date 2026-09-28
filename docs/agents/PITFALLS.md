@@ -78,6 +78,8 @@
 - **4.11 通用选择器误伤** —— `.custom-suggestion > div { flex: 1 }` 拉伸了海报（海报也是 div）→ 加 `:not(.poster)`。
 - **4.12 `display: grid` 必须显式声明**（`display:block` base 会空化 `grid-template-columns`）。
 - **4.13 `setPointerCapture` 要守卫** —— 非活跃 pointer 事件会打断滑动链。
+- **4.18 媒体查询不加特异性** —— `@media` 内的 `.x{...}`（0,1,0）压不过媒体查询外的 `.x:nth-child(N){...}`（0,2,0），与代码顺序无关。editorial 移动端轮播曾因此泄漏桌面绝对定位（倾斜/推右 127px 巨间隙/错位）→ 用「后代前缀 + `:nth-child(n)`」抬到 (0,3,0)，hover 扩散覆写抬到 (0,4,0) 同分后来者胜。
+- **4.19 后置的同名基座规则会吞掉前置覆写** —— 基座 `.orb-hero-inner` 的 `grid-template-columns` 写在移动端媒体查询**之后**（L846），同名类 (0,1,0) 后来者胜，`.ed-hero-inner` 的单列覆写整个成死代码（实测 mobile 跑双轨 + 48px column-gap，轮播容器 438 = 486−48）。媒体查询内的结构覆写要么双类 `.a.a{}` 抬到 (0,2,0)，要么加后代前缀。**症状是「覆写在但没生效」，dump 盒模型（`getBoundingClientRect` + `scrollWidth`）一比就见分晓**。
 
 **可访问性 / 交互类**：
 
