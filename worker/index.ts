@@ -14,7 +14,13 @@ import {
   posterMediaKey,
   type PosterBatchRequest,
 } from "./media";
-import { loadPosterUrls, normalizePosterItem, saveResolvedPosters } from "./posterStore";
+import {
+  loadPosterUrls,
+  normalizePosterItem,
+  resolveStoredPosterUrls,
+  saveResolvedPosters,
+} from "./posterStore";
+import { buildOgMeta, buildPlazaTags, buildShareTags, injectOg, type OgTags } from "./og";
 import { RATE_WINDOW_MS, consumeIsolateWindow, type RateWindow } from "./rateWindow";
 import {
   MAX_PAYLOAD_BYTES,
@@ -1714,6 +1720,91 @@ async function serveAssets(request: Request, env: Env): Promise<Response> {
   return withSecurityHeaders(response);
 }
 
+/**
+ * 分享页(/share/:code)与广场帖(/plaza/:id)的 OG 卡片:爬虫不发 JS,给
+ * HTML 请求注入 og:/twitter: 元数据,聊天预览从裸链接变卡片。任何 DB/解析
+ * 异常都降级为无 OG 的普通 SPA——OG 是增强,永不阻塞页面本身。
+ */
+async function serveOgHtml(request: Request, env: Env): Promise<Response | null> {
+  if (!env.DB || request.method !== "GET") return null;
+  const url = new URL(request.url);
+  const shareMatch = url.pathname.match(/^\/share\/([A-Za-z0-9]{1,20})$/);
+  const plazaMatch = url.pathname.match(/^\/plaza\/(\d+)$/);
+  if (!shareMatch && !plazaMatch) return null;
+  let tags: OgTags | null = null;
+  try {
+    if (shareMatch) {
+      const row = await env.DB.prepare(
+        "SELECT profile FROM shared_links WHERE code = ? AND expires_at > datetime('now')",
+      )
+        .bind(shareMatch[1])
+        .first<{ profile: string }>();
+      if (row) tags = buildShareTags(row.profile, url.toString());
+    } else if (plazaMatch) {
+      const row = await env.DB.prepare(
+        `SELECT p.collection_title, p.kind, p.item_count, p.post_type, p.items, u.nickname
+         FROM plaza_posts p LEFT JOIN user_accounts u ON p.user_id = u.id
+         WHERE p.id = ? AND p.is_public = 1`,
+      )
+        .bind(Number(plazaMatch[1]))
+        .first<{
+          collection_title: string;
+          kind: string;
+          item_count: number;
+          post_type: string;
+          items: string;
+          nickname: string | null;
+        }>();
+      if (row) {
+        // 首位作品:ranking 帖 items[0] 即作品;profile 帖 items[0] 是榜单,取其 items[0]
+        let topWork: { title?: unknown; subtitle?: unknown; year?: unknown } | null = null;
+        try {
+          const parsed = JSON.parse(row.items) as unknown;
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            const first = parsed[0] as Record<string, unknown>;
+            topWork =
+              row.post_type === "profile" && Array.isArray(first.items)
+                ? ((first.items as Array<Record<string, unknown>>)[0] ?? null)
+                : first;
+          }
+        } catch {
+          /* items 畸形 → 无海报降级 */
+        }
+        let topPosterUrl: string | null = null;
+        if (topWork) {
+          try {
+            const resolved = await resolveStoredPosterUrls(env.DB, row.kind, [topWork]);
+            topPosterUrl = resolved[0]?.[0] ?? null;
+          } catch {
+            /* 海报解析失败只影响图片 */
+          }
+        }
+        tags = buildPlazaTags({ ...row, topPosterUrl }, url.toString(), url.origin);
+      }
+    }
+  } catch {
+    return null;
+  }
+  if (!tags) return null;
+  tags.url = url.toString();
+  let page: Response;
+  try {
+    page = await env.ASSETS.fetch(new Request(new URL("/", request.url), request));
+    if (!page.ok) return null;
+  } catch {
+    return null;
+  }
+  const html = injectOg(await page.text(), buildOgMeta(tags));
+  return withSecurityHeaders(
+    new Response(html, {
+      headers: {
+        "content-type": "text/html; charset=utf-8",
+        "cache-control": "public, max-age=300",
+      },
+    }),
+  );
+}
+
 async function route(request: Request, env: Env): Promise<Response> {
   const url = new URL(request.url);
 
@@ -3084,6 +3175,8 @@ async function route(request: Request, env: Env): Promise<Response> {
   if (request.method !== "GET" && request.method !== "HEAD") {
     return json({ error: "method_not_allowed" }, 405);
   }
+  const ogResponse = await serveOgHtml(request, env);
+  if (ogResponse) return ogResponse;
   return serveAssets(request, env);
 }
 
