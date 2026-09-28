@@ -1,5 +1,15 @@
 # Changelog
 
+## 2026-09-28 · 优化冲刺 Phase 6 · 相遇页「预测分歧」洞察（Jev）
+
+比较页新增「预测分歧 · JEV」卡——「对方最出乎你意料的作品」：
+
+- **语义**：用「我的」品味档案让 Jev 预测「我」会怎么排对方的榜单，与对方真实排名求偏差——偏差最大 Top 3 即对方的意外之爱（+N，对方排得比按我品味的预测更高）与冷遇（−N，更低）
+- **零 Worker 改动**：既有 `/api/ai/jev-rank` 本身就是「profileContext=谁的品味 → 预测 works 偏好序」，predict 模式即「我的档案 × 对方合并榜单」的调用语义（计划写「加 predict 模式」，实际为纯复用，无新端点、`docs/API.md` 不变）
+- **新增**：`lib/jevDivergence.ts` 偏差 Top3 纯函数（×7 单测：位置换算/越界过滤/零偏差剔除/同分按对方名次）；`JevDivergenceCard`（对齐 AiInsightCard 交互：点击才请求不预取、失败按原因分类带「去配置」入口、数据签名变化即旧结果作废防张冠李戴、榜单 <4 件提示无参考价值）；CompareView 接入（对方合并榜单与比较结果同一 merge 口径，自动/指定/三档深度全兼容）
+- **验证**：五道门禁绿（481 passed·9 skipped）；本地 stub smoke 实锤（倒序 stub → 偏差 +9/−9/+7 数学正确、同分排序正确、失败路径正确显示）；真实 TypeSafe key 端到端留用户日常复核（台账依赖项）
+- **备注**：`npm run worker:dev` 本地起不来系历史遗留（`DASHBOARD_HTML` 字符串导出被本地 workerd 拒绝，线上部署不受影响），smoke 改走 .tmp 静态服务 + stub
+
 ## 2026-09-28 · UI 现代化 P4 · 收尾（本地部分完成，线上验证待推送）
 
 `docs/PLAN-ui-modernization.md` P4 的本地可完成项：

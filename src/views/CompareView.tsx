@@ -2,7 +2,9 @@ import { useEffect, useMemo, useState, type CSSProperties } from "react";
 import { ArrowLeftRight, ArrowRight, Link, Play, Plus, Share2, X } from "lucide-react";
 import { Poster } from "../components/Poster";
 import { AiInsightCard } from "../components/AiInsightCard";
+import { JevDivergenceCard } from "../components/JevDivergenceCard";
 import { buildCompareData } from "../lib/aiInsight";
+import { buildTasteContext } from "../lib/typesafe";
 import { heading, fileInput } from "./helpers";
 import type { CompareViewProps } from "./types";
 
@@ -142,6 +144,17 @@ export function CompareView({
   const crossProfile = useMemo(
     () => (profile && peer ? compareProfiles(profile, peer) : null),
     [profile, peer, compareProfiles],
+  );
+  // Jev 预测分歧（Phase 6）：对方合并榜单（与 result 同一合并口径）+ 我的品味档案概要。
+  const mergeStrategy = compareLevel === "precise" ? ("median" as const) : ("best" as const);
+  const peerMergedForJev = useMemo(
+    () =>
+      mergeDimensionRankings(compareMode === "manual" ? selectedPeer : peerRankings, mergeStrategy),
+    [compareMode, selectedPeer, peerRankings, mergeStrategy, mergeDimensionRankings],
+  );
+  const myTasteContext = useMemo(
+    () => (profile ? buildTasteContext(profile.rankings) : ""),
+    [profile],
   );
   // AI 比较解读的数据：当前维度指标 + 跨媒介共识（§6.5 compare 规格）。
   const aiLocale = locale === "en" ? ("en" as const) : ("zh" as const);
@@ -685,6 +698,18 @@ export function CompareView({
             onOpenConfig={openAiConfig}
             t={t}
           />
+          {peerMergedForJev && peerMergedForJev.items.length > 0 && (
+            <JevDivergenceCard
+              kind={compareKind}
+              collectionTitle={peerMergedForJev.sourceRankings.join(" + ")}
+              works={peerMergedForJev.items.map((item) => item.representative)}
+              profileContext={myTasteContext}
+              openArtworkDetail={openArtworkDetail}
+              openAiConfig={openAiConfig}
+              locale={aiLocale}
+              t={t}
+            />
+          )}
           <div className="consensus-hero">
             <div
               className="consensus-dial"

@@ -54,11 +54,13 @@
 
 **验证**:单测预测管线;线上真实 key 跑一份榜单,核对代判比例与撤销正确性。
 
-## Phase 6 ⬜ 相遇页「预测分歧」洞察(Jev)
+## Phase 6 ✅ 相遇页「预测分歧」洞察(Jev)(2026-09-28)
 
 **目标**:比较页新增「对方最出乎你意料的作品」——Jev 基于我的榜单预测对方排名,与真实排名求偏差 Top3。
 
 **文件**:复用 `/api/ai/jev-rank` 加 predict 模式 + `CompareView.tsx` 洞察区。
+
+**落地**:零 Worker 改动——既有 jev-rank 本身就是「profileContext=谁的品味 → 预测偏好序」,predict 模式即「我的档案 × 对方榜单」的调用语义。新增 `lib/jevDivergence.ts`(偏差 Top3 纯函数 ×7 单测)+ `JevDivergenceCard.tsx`(对齐 AiInsightCard 交互:点击才请求/失败分类/数据签名过期守卫)+ CompareView 接入(对方合并榜单同比较口径)。**验证**:五道门禁绿(481 passed);本地 stub smoke 实锤(倒序 stub → 偏差 +9/−9/+7 数学正确、失败路径带「去配置」按钮);真实 key 端到端留用户日常使用复核。
 
 ## Phase 7 ⬜ 文化年度报告(Wrapped)
 

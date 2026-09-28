@@ -73,6 +73,7 @@
 | 共同作品表（来源榜单徽章、名次可点进榜单详情、排序切换） | 比较页 | `RankingDetail` 弹窗 |
 | 最大分歧表 / 共同偏好 / 分歧轴 | 比较页 | `disagreements/commonPreference/divergence` |
 | AI 比较解读（基于比较指标的跨媒介侧写） | 「AI 观察」卡 | `/api/insights(scene=compare)`，`buildCompareData` |
+| Jev 预测分歧（「对方最出乎你意料的作品」偏差 Top3：我的档案预测对方排名 vs 真实排名） | 「预测分歧 · JEV」卡 | 复用 `/api/ai/jev-rank`（我的 profileContext × 对方合并榜单）+ `lib/jevDivergence.ts` 纯函数 ×7 单测 |
 | 三档比较深度：简易(共识圆环+三主指标)/经典(全指标,默认)/精确(+median 聚合+共识构成条+全量分歧表) | 「比较深度」segmented，localStorage 记忆 | `mergeDimensionRankings(strategy)` + CompareView 分档渲染 |
 | 用对方作品重新排序（选对方榜单） | 底部动作 | `createFromPeer` + PeerRankPick |
 
@@ -191,6 +192,7 @@
 |---|---|---|
 | AI 快排（≤255 件单次打分直接成榜；第三种成榜方式） | 准备页「AI 快排」 | `POST /api/ai/jev-rank` + `lib/typesafe.ts requestJevRanking` |
 | 连接测试 / Key 用户自配（localStorage，服务端不落盘） | 「AI 服务」Jev 区 | `POST /api/ai/jev/test` + `AiConfigDialog` Jev 小节 |
+| 预测分歧洞察（比较页：用我的品味预测对方排名，偏差 Top3 = 对方最出乎我意料的作品） | 相遇页「预测分歧 · JEV」卡 | 复用 `/api/ai/jev-rank` + `JevDivergenceCard`（数据签名过期守卫；失败分类带「去配置」入口） |
 | 分享/广场 OG 卡片（爬虫可取，豆瓣图走代理） | worker HTML 注入 | `worker/og.ts` + `/share/:code`、`/plaza/:id` 路由 |
 | 广场品味相似度（卡片「重合 N/3」、详情「重合 NN%」） | PlazaView / PlazaPostView | `lib/similarity.ts rankingSimilarity`（workIdentity 口径） |
 
