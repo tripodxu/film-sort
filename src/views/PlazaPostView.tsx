@@ -13,8 +13,10 @@ import {
   Plus,
   Trash2,
   Send,
+  Users,
 } from "lucide-react";
 import { Poster } from "../components/Poster";
+import { rankingSimilarity } from "../lib/similarity";
 import { RankingDetail } from "../components/RankingDetail";
 import { ExpandableNote } from "../components/ExpandableNote";
 import { heading } from "./helpers";
@@ -294,6 +296,31 @@ export function PlazaPostView({
   // 服务端按 token 判定作者身份（详情请求已带鉴权头）
   const isAuthor = !!(accountToken && post.is_author);
 
+  // 品味相似度:与我的同媒介榜单比(全量 items,workIdentity 匹配)。
+  // 共同不足 3 件时不展示——样本太小只会输出噪声。
+  const matchBadge = (() => {
+    if (!profile || !post) return null;
+    const mine = profile.rankings.filter((r) => r.kind === post.kind);
+    if (mine.length === 0 || displayItems.length === 0) return null;
+    const sim = rankingSimilarity(
+      mine.flatMap((r) => r.items),
+      displayItems,
+    );
+    if (sim.score === null || sim.sharedCount < 3) return null;
+    return (
+      <p
+        className="mini-note"
+        style={{ margin: "-6px 0 14px", display: "flex", alignItems: "center", gap: 6 }}
+      >
+        <Users size={12} style={{ color: "var(--accent)" }} />
+        {t(
+          `与你的品味重合 ${sim.score}%（共同 ${sim.sharedCount} 件）`,
+          `${sim.score}% taste overlap with yours (${sim.sharedCount} shared)`,
+        )}
+      </p>
+    );
+  })();
+
   function openCollectionFromRanking(
     kind: MediaKind,
     title: string,
@@ -515,6 +542,7 @@ export function PlazaPostView({
         post.collection_title,
         `${post.nickname || t("匿名用户", "Anonymous")} / ${isProfilePost ? t("画像", "Profile") : label(post.kind as MediaKind)} / ${post.item_count} ${t("件作品", "works")}`,
       )}
+      {matchBadge}
       {post.description && (
         <p style={{ fontSize: 14, color: "var(--muted)", marginBottom: 16, lineHeight: 1.7 }}>
           {post.description}

@@ -1265,3 +1265,12 @@ body[data-theme=classic]{
   .keyboard-hint .kb-only{display:none}
   .keyboard-hint .touch-hint{display:inline}
 }
+
+/* ===== P10 广场品味相似度徽章（2026-09-28,优化冲刺 Phase 3）================ */
+.plaza-sticker-match{
+  display:inline-flex;align-items:center;gap:4px;
+  padding:2px 8px;border-radius:999px;
+  background:color-mix(in srgb,var(--accent) 10%,transparent);
+  color:var(--accent);
+  font-family:var(--font-mono);font-size:10px;font-weight:600;letter-spacing:.04em
+}

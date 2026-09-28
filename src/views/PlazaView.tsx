@@ -11,6 +11,7 @@ import {
   StickyNote,
 } from "lucide-react";
 import { Poster } from "../components/Poster";
+import { rankingSimilarity } from "../lib/similarity";
 import type { PlazaViewProps, PlazaPost } from "./types";
 import type { MediaKind } from "../data/media";
 
@@ -350,6 +351,28 @@ export function PlazaView({
                 </div>
                 {post.description && <p className="plaza-sticker-desc">{post.description}</p>}
                 <div className="plaza-sticker-stats">
+                  {(() => {
+                    // 卡片徽章:对方前三名与我的同媒介榜单的重合件数
+                    // (列表接口只给 top_items,全量计算在详情页)
+                    if (!profile) return null;
+                    const mine = profile.rankings.filter((r) => r.kind === post.kind);
+                    if (mine.length === 0) return null;
+                    const top = (post.top_items ?? post.items ?? []).slice(0, 3);
+                    if (top.length === 0) return null;
+                    const sim = rankingSimilarity(
+                      mine.flatMap((r) => r.items),
+                      top,
+                    );
+                    if (sim.sharedCount < 1) return null;
+                    return (
+                      <span className="plaza-sticker-match">
+                        {t(
+                          `重合 ${sim.sharedCount}/${top.length}`,
+                          `Match ${sim.sharedCount}/${top.length}`,
+                        )}
+                      </span>
+                    );
+                  })()}
                   <span>
                     <Heart size={12} /> {post.like_count}
                   </span>
