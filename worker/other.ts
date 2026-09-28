@@ -172,5 +172,5 @@ export async function otherDetail(name: string): Promise<OtherWork | null> {
         .map((p) => toWork(p, "en"))
         .find(Boolean)
     : null;
-  return enWork;
+  return enWork ?? null;
 }
