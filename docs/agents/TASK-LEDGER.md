@@ -10,6 +10,16 @@
 
 ## 进行中 / 最近
 
+### T-20260928-03 · UI 现代化 P2 · aurora 极光主题
+- **状态**：👀 待审（P2 本地全绿；**线上验证留 P4**）｜ **负责人**：本 agent
+- **任务类型**：§2.3（视觉/主题）+ §2.2（前端视图）
+- **最小上下文**：`docs/PLAN-ui-modernization.md` §2.2/P2 + `src/styles.css`（aurora 块）+ `src/lib/orbEffects/ribbon.ts` + `docs/agents/PITFALLS.md` 4.20
+- **改了什么**：`theme.ts` 注册 aurora（第 10 个内置主题）；`src/lib/orbEffects/ribbon.ts` 新特效（柔光基座 + 4 绸带 + 600 粒子）+ registry `RECOMMENDED_BY_THEME`（aurora→ribbon，持久化优先逻辑不动）；OrbScene 主题变更按推荐重挂；ThemeSwitcher 勾选跟随；styles.css aurora 块（变量 21 token + `--ev-*` 仅块内定义 + 玻璃 2.0/胶囊导航/duel 辉光脉冲/conic 描边按钮/弹窗景深/进度流光 7 组件）；App.tsx topbar scrolled class；测试：`orbEffects/registry.test.ts` 10 例 + ui-fixes 9 绊线；工具：ui-contrast/ui-shots-themes 加 aurora（20 条）
+- **为什么**：PLAN v3 四组新主题的第二组；aurora 是唯一带新 orb 特效的主题，验证链路从截图扩展到 CDP 探针
+- **验证状态**：五道门禁 ✅（456 passed·9 skipped）｜ 旧 7 主题 14 张 + editorial 系 4 张 zero-diff ✅（stash 基线法 tol=0）｜ aurora 首页桌面/移动 + duel 双卡 + 辉光脉冲（按住中段截图）肉眼签收 ✅ ｜ **§6 验收六项全过**（CDP 探针：切换 4 轮无 contextlost / palette 色相跟随 / reduced-motion 双截图逐字节一致 / 跨 700px 桌面 0.68 右偏·移动居中 / 持久化 / 移动 0.88）｜ **线上 ⬜**
+- **遗留风险**：① `--ev-*` 全局缺失（见 PITFALLS 4.20）——只补了 aurora 块内，旧主题「补齐并重立基线」留 P4；② CDP 探针脚本在 `.tmp/`（一次性工具，未入库）；③ macOS 衬线段未测（沿袭 P1）
+- **下一步（给接手者）**：P3 gallery（§2.3 八差异组件，画像页 Bento L3 重构）｜ P4 收尾：全主题回归 + 差异矩阵逐格核对 + README/FEATURES/USAGE「7→11」文档 + `--ev-*` 全局补齐重立基线 + sort.logicc.top 线上验证
+
 ### T-20260928-02 · UI 现代化（多主题增量，PLAN-ui-modernization v3）
 - **状态**：👀 待审（P1 editorial 双主题本地全绿；**线上验证留 P4**）｜ **负责人**：本 agent
 - **任务类型**：§2.3（视觉/主题）+ §2.2（前端视图）

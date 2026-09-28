@@ -27,7 +27,7 @@
 
 | 字段 | 类型 | 约束 |
 |---|---|---|
-| `id` | string | `/^[a-z][a-z0-9-]{1,20}$/`；**不得与内置主题重名**（modern/retro/minimal/simple/classic/cyber/paper/editorial/editorial-dark） |
+| `id` | string | `/^[a-z][a-z0-9-]{1,20}$/`；**不得与内置主题重名**（modern/retro/minimal/simple/classic/cyber/paper/editorial/editorial-dark/aurora） |
 | `name.zh` / `name.en` | string | ≤20 / ≤30 字符，显示在主题菜单 |
 | `dot` | `[hex, hex]` | 菜单预览圆点的双色渐变（建议 `[背景色, 强调色]`） |
 
@@ -107,5 +107,7 @@
   「纸上擂台」的撕线印章这类**结构性差异**不在变量包表达能力内（它们是内置结构主题）；
   `editorial` / `editorial-dark`（刊物画廊）同属内置结构主题：除变量外还含 L2 结构覆写与
   L3 条件渲染（hero 海报轮播、duel 回合水印），变量包无法复现，也不得重名占用其 id；
+  `aurora`（极光）亦为内置结构主题：含默认 orb 特效（极光绸带）、胶囊导航、玻璃 2.0 三层表面
+  与 conic 描边按钮等 L2 覆写，同样不得重名占用其 id；
 - 自定义主题不自动关闭玻璃 backdrop（变量层面无法表达）；如需方角/无玻璃，
   使用 `--r-*` 圆角代币即可获得 90% 的观感。

@@ -118,14 +118,24 @@ export function useTheme(): string {
 **验证状态**：五道门禁绿 ｜ 旧 7 主题 14 张 zero-diff ｜ editorial 8 张截图肉眼 + 盒模型 dump 签收 ｜ **线上 ⬜（P4）**。
 > 测试数波动说明：本环境 vitest 偶发漏收集 `worker/ai.test.ts`（44 例）与 `src/content-intro.test.ts`（9 例，live-API 门控默认跳过）——单独跑均通过，判定为 WorkBuddy fs 代理的 glob 竞态，非代码回归。
 
-### P2 · aurora（1.5 天）
+### P2 · aurora（1.5 天）—— 本地完成 ⏸，线上验证留 P4
 
 按 §2.2 矩阵落地 7 个差异组件。
 
-- [ ] 变量块 + 玻璃 2.0 三层表面（阴影 token 化，不落裸值）
-- [ ] `src/lib/orbEffects/ribbon.ts` 极光绸带（遵守 ORB-EFFECTS §4 契约 + §6 验收清单全过）
-- [ ] 胶囊导航注意 PITFALLS 4.7（overflow 裁切）与 4.8（nth-child）
-- [ ] aurora 主题默认 orb = ribbon（注册表支持按主题推荐默认，不动既有持久化逻辑）
+- [x] 变量块 + 玻璃 2.0 三层表面（阴影 token 化，不落裸值）
+- [x] `src/lib/orbEffects/ribbon.ts` 极光绸带（遵守 ORB-EFFECTS §4 契约 + §6 验收清单全过）
+- [x] 胶囊导航注意 PITFALLS 4.7（overflow 裁切）与 4.8（nth-child）
+- [x] aurora 主题默认 orb = ribbon（注册表支持按主题推荐默认，不动既有持久化逻辑）
+
+**落地明细**（对应 §2.2 七组件）：① 首页 orb = ribbon（柔光基座 + 4 绸带 + 600 粒子，`RECOMMENDED_BY_THEME={aurora:"ribbon"}`，持久化优先逻辑不变）；② 玻璃 2.0 三层（ev 投影 + accent-2 内高光 + accent 外柔光）；③ topbar 悬浮胶囊（sticky + 滚动加深 + active 胶囊底，≤540px 降级纯文字链接）；④ duel 胜出辉光脉冲（`:active` 触发 `au-win-pulse`，reduced-motion 全局禁令兜底）+ 卡角 `--r-lg`；⑤ 按钮 conic 渐变描边（`@property --au-angle` 注册后 keyframes 可动画）+ primary 柔光投影；⑥ 弹窗/菜单 `--ev-*` 重写 + scrim blur(14px)；⑦ 进度/维度条流光填充（`au-flow` 扫光，reduced-motion 退化纯色）。
+
+**执行偏差记录**：
+1. **`--ev-1/2/3` 全局缺失**：三 token 自 `7fb1d5c`（P1b-3）起被 ~20 处引用但从未在任何地方定义（全部解析为 `box-shadow:none`；P1 zero-diff 基线即在此状态产出）。全局补定义会点亮全部旧主题阴影、破坏 zero-diff，故**只在 aurora 块内补定义**（本主题正需更深景深），并用绊线 `--ev-2:` 全文仅 1 处定义看守。旧主题补齐须另立基线，留 P4。
+2. **`.medium-item` 不入玻璃 2.0**：P0.7 起它是透明扁平目录行，加投影会变成悬浮矩形板、与设计意图相悖，故玻璃 2.0 只覆写 identity/home-actions/segmented。
+3. **移动端胶囊降级**：≤540px 时 nav 去底板仅留文字链接（PITFALLS 4.7 overflow 裁切规避），桌面 999px 胶囊不受影响。
+
+**验证状态**：五道门禁绿（check/lint/format:check/test 456 passed·9 skipped/build）｜ 旧 7 主题 14 张 + editorial 系 4 张 **zero-diff**（stash 基线法，tol=0）｜ aurora 截图肉眼签收（首页桌面/移动、duel 双卡 + 进度流光、辉光脉冲按住中段实锤）｜ **§6 验收六项全过**（CDP 探针脚本化：切换 4 轮 canvases 恒 1 无 contextlost；retro/minimal/paper  palette 色相跟随；reduced-motion 双截图逐字节一致且画面不消失；跨 700px 断点桌面右偏 0.68/移动居中；localStorage 持久化；移动 0.88 缩放）｜ ui-contrast aurora 全对 ≥4.5（最差 7.8:1）｜ **线上 ⬜（P4）**。
+> 头无 WebGL 说明：`ui-shot.mjs` 显式 `--disable-webgl`，工具链截图无 orb 是环境限制（modern 基线同样无）；ribbon 实渲染由 CDP 探针（SwiftShader 软渲 WebGL）+ 截图双重确认。
 
 ### P3 · gallery（2 天）
 

@@ -1,5 +1,22 @@
 # Changelog
 
+## 2026-09-28 · UI 现代化 P2 · aurora 极光主题（本地验证完成，线上留 P4）
+
+新增内置主题「极光」（`docs/PLAN-ui-modernization.md` §2.2，7 个差异组件，L1 变量 + L2 结构覆写）：
+
+- **首页 orb 新特效「极光绸带」**（`src/lib/orbEffects/ribbon.ts`）：柔光基座（双层 additive 球）+ 4 条 CatmullRomCurve3 绸带（各挂一个维度色）+ 600 上升粒子；遵守 ORB-EFFECTS §4 契约（四成员齐全 / 粒子 ≤1200 / additive depthWrite:false / 不监听 window / reduced-motion 冻结）；注册表新增 `RECOMMENDED_BY_THEME`（aurora→ribbon，无持久化选择时生效，既有持久化逻辑不变）
+- **表面体系 玻璃 2.0**：identity/home-actions/segmented 改「ev 投影 + accent-2 内高光 + accent 外柔光」三层；`.medium-item` 保持透明扁平（设计意图）
+- **topbar 悬浮胶囊导航**：sticky 脱离子页面顶线 + 玻璃胶囊 + 滚动加深 + active 胶囊底；≤540px 降级纯文字链接（规避 4.7 overflow 裁切）
+- **duel 卡**：胜出辉光脉冲（`:active` 触发，reduced-motion 跳过）+ 卡角加大到 `--r-lg`
+- **按钮**：conic 渐变描边 hover 流转（`@property --au-angle` 注册角度后可动画）+ primary 柔光投影
+- **弹窗/菜单**：`--ev-1/2` 重写 + scrim blur(14px) 更深景深
+- **进度/维度条**：渐变流光填充 + 微光头部（reduced-motion 退化纯色）
+- **回归实证**：旧 7 主题 14 张 + editorial 系 4 张截图 stash 基线法 tol=0 zero-diff；aurora 首页（桌面/移动）、duel 双卡 + 辉光脉冲（按住中段截图）、进度流光肉眼签收
+- **§6 验收六项全过**（CDP 探针脚本化）：plasma↔ribbon 切换 4 轮 canvases 恒 1 无 contextlost；retro/minimal/paper 下 palette 色相跟随；reduced-motion 双截图逐字节一致且画面不消失；跨 700px 断点桌面右偏 0.68 / 移动居中；localStorage 持久化；移动端 0.88 缩放
+- **偏差记录**：① `--ev-1/2/3` 自 `7fb1d5c` 起被引用但从未定义（旧主题阴影实际为 none，P1 基线即此状态）——只在 aurora 块内补定义守 zero-diff，全局补齐另立基线留 P4；② 工具链截图无 orb 系 `ui-shot.mjs` 显式 `--disable-webgl` 的环境限制（modern 基线同样无），ribbon 实渲染由 CDP 探针软渲 WebGL 确认
+- **工具链**：`ui-contrast.mjs`/`ui-shots-themes.json` 加 aurora（现 20 条）；aurora 对比度全对 ≥4.5（最差 7.8:1）
+- **遗留**：sort.logicc.top 线上实机验证按计划留 P4
+
 ## 2026-09-28 · UI 现代化 P1 · editorial / editorial-dark 双主题（本地验证完成，线上留 P4）
 
 新增两组内置主题「刊物 / 刊物暗色」（`docs/PLAN-ui-modernization.md` §2.1，9 个差异组件，L1 变量 + L2 结构覆写 + L3 条件渲染三层机制）：
