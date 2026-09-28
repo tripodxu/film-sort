@@ -10,6 +10,16 @@
 
 ## 进行中 / 最近
 
+### T-20260928-02 · UI 现代化（多主题增量，PLAN-ui-modernization v3）
+- **状态**：🔄 进行中（P0 本地完成，待随 P1 上线验证；P1 未开始）｜ **负责人**：本 agent
+- **任务类型**：§2.3（视觉/主题）+ §2.2（前端视图）
+- **最小上下文**：`docs/PLAN-ui-modernization.md` + `src/styles.css` + `src/lib/theme.ts` + `docs/agents/CONVENTIONS.md` §6
+- **改了什么**：（P0）`src/lib/useTheme.ts`（L3 条件渲染 + themeFamily 分类）+ `src/lib/auraColor.ts`（海报取色，含 margin 守卫）+ `--ease-settle`/`--dur-stagger` 代币；各配单测（4+7 例）
+- **为什么**：用户拍板三方向全做、增量多主题、不改老 UI、组件级差异
+- **验证状态**：单测 ✅（398 passed）｜ 五道门禁 ✅ ｜ 线上 ⬜（无视觉变化，随 P1 一并验证）
+- **遗留风险**：L3 条件渲染是新机制，默认路径必须 = 现有 DOM；`cubic-bezier(.34,1.56,.64,1)` 有绊线测试看守，禁用
+- **下一步（给接手者）**：P1 editorial 主题（矩阵 §2.1，9 个差异组件）；开工前先跑 `scripts/ui-shot.mjs` 确认基线可信
+
 ### T-20260928-01 · 文档体系重建（记忆 + 多 agent 协同文档）
 - **状态**：✅ 完成 ｜ **负责人**：文档 agent
 - **任务类型**：文档（不涉业务代码）
