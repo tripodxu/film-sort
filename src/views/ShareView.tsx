@@ -2,6 +2,8 @@ import { useState } from "react";
 import { ArrowLeft, Check, Play, Share2 } from "lucide-react";
 import { RankingDetail } from "../components/RankingDetail";
 import { ExpandableNote } from "../components/ExpandableNote";
+import { GalleryBento } from "../components/GalleryBento";
+import { useThemeFamily } from "../lib/useTheme";
 import { heading } from "./helpers";
 import type { ShareViewProps } from "./types";
 
@@ -22,12 +24,26 @@ export function ShareView({
   const viewNotes = peerNotes && Object.keys(peerNotes).length > 0 ? peerNotes : (notes ?? {});
   const multiRanking = peer.rankings.length > 1;
   const [copied, setCopied] = useState(false);
+  // L3（PLAN-ui-modernization P3）：gallery 家族在榜单区之上渲染「Bento 缩略」
+  // 分享卡（Top1 + 雷达 + 年代 + 坐标，无榜单切换）；classic 路径不渲染。
+  const isGallery = useThemeFamily() === "gallery";
   return (
     <>
       {heading(
         t("分享榜单", "SHARED RANKING"),
         peer.profileName,
         `${peer.rankings.length} ${t("个领域", "media")} / ${peer.rankings.reduce((c, e) => c + e.items.length, 0)} ${t("件作品", "works")}`,
+      )}
+
+      {isGallery && peer.rankings[0] && (
+        <GalleryBento
+          profile={peer}
+          activeRanking={peer.rankings[0]}
+          label={label}
+          t={t}
+          openArtworkDetail={openArtworkDetail}
+          entries={false}
+        />
       )}
 
       {peer.rankings.map((entry, idx) => (

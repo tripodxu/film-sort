@@ -10,6 +10,16 @@
 
 ## 进行中 / 最近
 
+### T-20260928-04 · UI 现代化 P3 · gallery 数据画廊
+- **状态**：👀 待审（P3 本地全绿；**线上验证留 P4**）｜ **负责人**：本 agent
+- **任务类型**：§2.3（视觉/主题）+ §2.2（前端视图）
+- **最小上下文**：`docs/PLAN-ui-modernization.md` §2.3/P3 + `src/components/GalleryBento.tsx` + `src/components/GalleryWall.tsx` + `src/lib/galleryStats.ts` + `src/styles.css`（gallery 块，文件末尾）
+- **改了什么**：`theme.ts` 注册 gallery（第 11 个内置主题）；`galleryStats.ts` 画像聚合纯函数（×9 单测，只读 profile 零数据层改动）；`GalleryBento.tsx`（Top1 大卡 2×2+2-5 名跟进 / 手写 SVG 雷达 / 年代堆叠条 / 口味坐标 / 榜单索引，grid-areas 编排，≤800px 单列）；`GalleryWall.tsx`（海报正面/批注背面 3D 翻转卡片墙，hover 包 media(hover:hover)，触屏点按翻面，focus-within 可达）；ProfileView/ShareView L3 分支（classic 路径 DOM 不变）；styles.css gallery 块（变量 21 token + `--shadow-tint` 显式阴影 + 弹窗大圆角/报刊亭 topbar/拍立得贴纸/行式榜单 hairline + gl-* 支撑样式 + 重排行 flex 守卫）；测试：ui-fixes 新增 P3 绊线 8 条；工具：ui-contrast/ui-shots-themes 加 gallery（22 条），`docs/ui-contrast.json` 重生成
+- **为什么**：PLAN v3 四组新主题的第三组；画像页 Bento 是本计划最重的 DOM 改动，验证 L3 机制在复杂视图上的零回归能力
+- **验证状态**：五道门禁 ✅（check/lint 0 error/format/test 473 passed·9 skipped/build）｜ 旧主题 **20 张截图 stash 基线法 zero-diff**（tol=0，含 editorial 系与 aurora）｜ gallery 截图肉眼签收 ✅（首页 / 画像桌面+540 移动 / 排序 / 广场）｜ 卡片墙 3D 翻转 CDP 探针实锤 ✅（hover→matrix3d rotateY(180°)、preserve-3d、perspective 1100px；reduced-motion→transform none 平铺；topbar grid/bento grid/拍立得 rotate 同探针验证）｜ ui-contrast 全对 ≥4.5（gallery 最差 6.45:1）｜ **线上 ⬜**
+- **遗留风险**：① ShareView 分享卡与侧栏 QR 展签格需真实分享链接，线上验证；② 广场贴纸拍立得经 fetch 桩探针验证（探针 `.tmp/gl-flip-probe.mjs` 未入库），线上需肉眼复核真数据下的换行/旋转；③ 矩阵「来源分布」无逐作品数据未做（PLAN P3 偏差 1）；④ PNG 导出「bento」版式未做（偏差 2）
+- **下一步（给接手者）**：P4 收尾——全主题（7 旧 + 4 新）× 全路由截图回归 + §2 差异矩阵逐格核对 + 主题菜单分组（经典/新系列）+ README/FEATURES/USAGE/THEME-PACKS「7→11」文档收口 + `--ev-*` 全局补齐重立基线 + macOS 衬线段 + sort.logicc.top 线上验证（P1/P2/P3 三批一起）
+
 ### T-20260928-03 · UI 现代化 P2 · aurora 极光主题
 - **状态**：👀 待审（P2 本地全绿；**线上验证留 P4**）｜ **负责人**：本 agent
 - **任务类型**：§2.3（视觉/主题）+ §2.2（前端视图）

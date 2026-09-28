@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-09-28T12:07:35.172Z",
+  "generatedAt": "2026-09-28T13:38:56.206Z",
   "formulas": {
     "surface": 7,
     "surface3": 13,
@@ -340,6 +340,43 @@
         190,
         204
       ]
+    },
+    "gallery": {
+      "bg": [
+        247,
+        247,
+        244
+      ],
+      "surface": [
+        231,
+        231,
+        229
+      ],
+      "surface3": [
+        218,
+        218,
+        216
+      ],
+      "surfaceHover": [
+        220,
+        220,
+        218
+      ],
+      "text": [
+        23,
+        24,
+        26
+      ],
+      "text2": [
+        50,
+        51,
+        52
+      ],
+      "text3": [
+        72,
+        73,
+        74
+      ]
     }
   },
   "matrix": [
@@ -665,6 +702,42 @@
       "theme": "aurora",
       "pair": "text on bg",
       "ratio": 17.31,
+      "need": "正文 → 需 4.5"
+    },
+    {
+      "theme": "gallery",
+      "pair": "text3 on bg",
+      "ratio": 8.41,
+      "need": "meta 11/12px → 需 4.5"
+    },
+    {
+      "theme": "gallery",
+      "pair": "text3 on surface",
+      "ratio": 7.29,
+      "need": "meta 11/12px → 需 4.5"
+    },
+    {
+      "theme": "gallery",
+      "pair": "text3 on surface3",
+      "ratio": 6.45,
+      "need": "meta 11/12px → 需 4.5"
+    },
+    {
+      "theme": "gallery",
+      "pair": "text3 on surfaceHover",
+      "ratio": 6.57,
+      "need": "meta 11/12px → 需 4.5"
+    },
+    {
+      "theme": "gallery",
+      "pair": "text2 on surface3",
+      "ratio": 9.04,
+      "need": "small 13px → 需 4.5"
+    },
+    {
+      "theme": "gallery",
+      "pair": "text on bg",
+      "ratio": 16.55,
       "need": "正文 → 需 4.5"
     }
   ],

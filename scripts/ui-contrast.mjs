@@ -18,8 +18,9 @@ const THEMES = [
   "editorial",
   "editorial-dark",
   "aurora",
+  "gallery",
 ];
-const LIGHT = ["retro", "minimal", "simple", "classic", "editorial"];
+const LIGHT = ["retro", "minimal", "simple", "classic", "editorial", "gallery"];
 
 function blockAfter(anchor) {
   const i = css.indexOf(anchor);

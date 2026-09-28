@@ -1,5 +1,22 @@
 # Changelog
 
+## 2026-09-28 · UI 现代化 P3 · gallery 画廊主题（本地验证完成，线上留 P4）
+
+新增内置主题「画廊」（`docs/PLAN-ui-modernization.md` §2.3，8 个差异组件，L1 变量 + L2 结构覆写 + L3 条件渲染）：
+
+- **画像页 Bento 网格（L3）**：`src/components/GalleryBento.tsx`——Top1 大卡（2×2，含 2-5 名跟进行）+ 手写 SVG 维度雷达（四媒介固定轴，值=各媒介作品数占比）+ 年代堆叠条（按维度分行、段色随年代由浅入深、右端跨度刻度）+ 口味坐标（作品/创作者/榜单/年代跨度）+ 榜单索引（承接维度页签切换职能）；`grid-template-areas` 编排，≤800px 单列堆叠；数据全部由 `src/lib/galleryStats.ts` 纯函数现场聚合（×9 单测），零数据层改动
+- **榜单卡片墙（L3）**：`src/components/GalleryWall.tsx`——海报正面（名次徽章 + 渐变字幕）/ 批注背面（摘录 + 批注/详情入口），hover（桌面，`media(hover:hover)` 包裹防触屏粘滞）或点按（触屏）3D 翻转；CDP 探针实证 hover 时 transform=rotateY(180°)、`preserve-3d`/`perspective:1100px` 在位；reduced-motion 降级为正反面文档流平铺（探针实证 hover 后 transform 仍 none）
+- **分享卡（L3）**：ShareView 在 gallery 家族渲染「Bento 缩略」分享卡（Top1+雷达+年代+坐标，无切换语义）于榜单区之上；画像页侧栏 `.share-output` 由 L2 改为「二维码与链接并排的展签格」
+- **topbar 对称报刊亭（L2）**：`display:grid` 三列——Logo 居中、导航居左、工具居右（PITFALLS 4.12 显式声明纪律）
+- **弹窗/菜单（L2）**：大圆角（`--r-lg=24`）+ 无边框纯阴影（`--shadow-tint` 显式 color-mix），与 editorial 直角两极
+- **广场贴纸拍立得化（L2）**：白框 + 纵排 + 居中斜体衬线标题区 + 交替微旋转（±1.15°）+ hover 立起；CDP 探针实证 column/rotate/shadow；纯 CSS，DOM 不变
+- **行式榜单配套 L2**：编辑器/重排/详情弹窗/分享页仍在用的 `.ranking-list` 收编为 hairline + mono 蓝名次（去 P0.7 墨块名次牌）；**重排行 flex 守卫**：gallery 的 (0,2,1) grid 声明位于文件后部，必须以 (0,3,1) 把 P6 的 flex 覆盖要回来（PITFALLS 4.19 同源纪律，有绊线）
+- **铁律遵守**：`--ev-*` 不定义（PITFALLS 4.20 基线不破坏，阴影全部显式书写）；hex 只进变量块；旧 7 主题 14 张 + editorial 系 4 张 + aurora 2 张共 **20 张截图 stash 基线法 tol=0 zero-diff**
+- **验证**：五道门禁绿（test 473 passed·9 skipped）；`ui-contrast` 全对 ≥4.5（gallery 最差 6.45:1），`docs/ui-contrast.json` 已重生成；gallery 截图肉眼签收（首页/画像桌面+移动/排序/广场，卡片墙翻转由探针截图实锤）+ 新增绊线 8 条（`src/ui-fixes.test.ts` P3 describe）
+- **偏差记录**：① 矩阵「年代/来源分布」的「来源」无逐作品数据（Artwork 无 source 字段），落地为「年代分布（按维度分行）+ 跨度刻度」，来源分布不做；② PNG 导出未加「bento」版式（exportPng 为 canvas 绘制域，与本主题视觉域正交），「分享卡片重设计」以 ShareView Bento 缩略 + 侧栏 QR 入网格兑现；③ 广场贴纸的拍立得形态经 fetch 桩探针验证（广场需后端数据，静态截图无帖）
+- **工具链**：`ui-contrast.mjs`/`ui-shots-themes.json` 加 gallery（现 22 条）；一次性探针 `.tmp/gl-flip-probe.mjs` 未入库（同 P2 先例）
+- **遗留**：sort.logicc.top 线上实机验证按计划留 P4；ShareView 分享卡需真实分享链接在线上验证
+
 ## 2026-09-28 · UI 现代化 P2 · aurora 极光主题（本地验证完成，线上留 P4）
 
 新增内置主题「极光」（`docs/PLAN-ui-modernization.md` §2.2，7 个差异组件，L1 变量 + L2 结构覆写）：

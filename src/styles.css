@@ -1552,3 +1552,185 @@ body[data-theme=classic]{
   color:var(--accent);font-family:var(--font-mono);font-size:11px;letter-spacing:.05em
 }
 .assist-marker svg{flex-shrink:0}
+
+/* ===== 主题：画廊（PLAN-ui-modernization P3 · 组件级差异 8 项） =====
+   冷白展厅 + 克莱因蓝。数据画廊语言：Bento 网格画像页（L3）+ 手写雷达图 +
+   年代堆叠条 + 卡片墙翻转（L3）+ 对称报刊亭 topbar + 拍立得广场贴纸 + 大圆角弹窗。
+   注意：--ev-1/2/3 全站处于「被引用但从未定义 = none」的基线状态（PITFALLS 4.20，
+   旧主题 zero-diff 基线依赖它）——本主题**不定义 --ev-\***，阴影一律显式书写
+   color-mix(var(--shadow-tint))，形同 aurora 的 --shadow-tint 先例。 */
+[data-theme=gallery]{
+  --bg:#F7F7F4;--text:#17181A;--text-2:#3A3C40;--text-3:#55585E;--muted:#666A72;
+  --accent:#1D4ED8;--accent-2:#E8590C;--accent-ink:#FFFFFF;
+  --line:#D8D8D2;--border-2:#C6C6BF;
+  --surface:#FFFFFF;--surface-2:#F2F2EF;--surface-3:#EAEAE6;--surface-4:#E2E2DD;--surface-hover:#EFEFEB;--surface-glow:#EDF1FC;
+  --ok:#15803D;--warn:#B45309;--danger:#DC2626;--danger-2:#B91C1C;--indigo:#4F46E5;--pink:#BE185D;
+  --film:#1D4ED8;--book:#B45309;--music:#0F766E;--other:#6D28D9;
+  --scrim:rgba(18,20,24,.5);--toast-bg:#17181A;--toast-bg-2:#232529;--toast-ink:#F7F7F4;--toast-border:#17181A;
+  --reader-dim:.92;--reader-poster-opacity:.18;
+  --status-ok:#15803D;--status-warn:#B45309;--status-danger:#DC2626;
+  --shadow-tint:#101215;
+  --r-xs:8px;--r-sm:12px;--r-md:16px;--r-lg:24px;
+}
+.theme-dot.theme-gallery{--dot-a:#F7F7F4;--dot-b:#1D4ED8;background:linear-gradient(135deg,var(--dot-a) 50%,var(--dot-b) 50%)}
+/* 画廊是干净展厅：玻璃关闭（浅色纸感统一纪律，独立成条避免动旧主题长选择器） */
+[data-theme=gallery] :is(.topbar,.glass-capsule,.segmented,.medium-item,.account-dialog,.artwork-main,.toast,.dim-chip,.rank-pill,.rank-menu,.settings-menu,.guide-help-btn,.plaza-header,.scroll-top,.custom-suggestions,.detail-dialog,.rank-detail-dialog,.theme-menu){backdrop-filter:none;-webkit-backdrop-filter:none}
+/* 差异 · 弹窗/菜单/浮层：大圆角（--r-lg=24）+ 无边框纯阴影——与 editorial 直角两极 */
+[data-theme=gallery] :is(.account-dialog,.detail-dialog,.rank-detail-dialog,.settings-menu,.rank-menu,.theme-menu,.toast,.guide-modal,.tech-modal){
+  border:0;border-radius:var(--r-lg);
+  box-shadow:0 28px 80px color-mix(in srgb,var(--shadow-tint) 26%,transparent),0 4px 14px color-mix(in srgb,var(--shadow-tint) 12%,transparent)
+}
+/* 差异 · topbar：对称报刊亭——Logo 居中，导航居左、工具居右（display:grid 显式声明，
+   PITFALLS 4.12：基座是 flex，不显式改 grid 则网格轨道全部失效） */
+[data-theme=gallery] .topbar{display:grid;grid-template-columns:minmax(0,1fr) auto minmax(0,1fr);align-items:center;gap:24px}
+[data-theme=gallery] .topbar .wordmark{justify-self:center}
+[data-theme=gallery] .topbar nav{justify-self:start}
+[data-theme=gallery] .topbar .header-tools{margin-left:0;justify-self:end}
+/* 差异 · 榜单行（编辑器/重排/详情弹窗/分享页仍在用的行式列表）：hairline + mono 名次，
+   去 P0.7 的墨块名次牌语言；画廊主榜单本体走卡片墙（L3），行式列表只做配套降级 */
+[data-theme=gallery] .ranking-list{border-top:1px solid var(--line)}
+[data-theme=gallery] .ranking-list>li{gap:16px;border-bottom:1px solid var(--line);background:none;box-shadow:none;border-radius:var(--r-sm)}
+[data-theme=gallery] .ranking-list>li:hover{background:color-mix(in srgb,var(--text) 3.5%,transparent)}
+[data-theme=gallery] .row-number{align-self:auto;background:none;padding-inline:0;margin-inline:0;font-size:15px;color:var(--accent)}
+[data-theme=gallery] .ranking-list>li:nth-child(-n+3) .row-number{background:none;color:var(--accent);font-weight:600}
+[data-theme=gallery] .ranking-list>li strong{font-size:15px;font-weight:600}
+/* 手动重排行守卫：本块 (0,2,1) 的 grid 声明在文件后部会压过 P6 的 flex 覆盖（同分后来者胜），
+   必须以更高特异性把 flex 重新要回来（PITFALLS 4.19 同源纪律），否则第 5 个子元素折行 */
+[data-theme=gallery] .ranking-list.reorder-list>li{display:flex;gap:16px}
+[data-theme=gallery] .ranking-list.reorder-list .reorder-handle{align-self:stretch;display:flex;align-items:center}
+/* 差异 · 广场贴纸：拍立得形态——白框、底部手写感标题区、微旋转、hover 立起（纯 L2） */
+[data-theme=gallery] .plaza-sticker{
+  position:relative;flex-direction:column;align-items:stretch;gap:0;
+  padding:10px 10px 14px;border:0;border-radius:4px;
+  background:color-mix(in srgb,var(--surface) 88%,var(--bg));
+  box-shadow:0 14px 34px color-mix(in srgb,var(--shadow-tint) 18%,transparent),0 2px 6px color-mix(in srgb,var(--shadow-tint) 10%,transparent);
+  transform:rotate(-1.15deg)
+}
+[data-theme=gallery] .plaza-sticker:nth-child(even){transform:rotate(1.2deg)}
+[data-theme=gallery] .plaza-sticker:hover{
+  transform:rotate(0deg) translateY(-4px);
+  box-shadow:0 24px 52px color-mix(in srgb,var(--shadow-tint) 26%,transparent),0 4px 12px color-mix(in srgb,var(--shadow-tint) 14%,transparent)
+}
+[data-theme=gallery] .plaza-sticker-posters{justify-content:center;gap:6px;padding:4px 2px 10px}
+[data-theme=gallery] .plaza-sticker-info{padding:10px 2px 0;gap:6px}
+[data-theme=gallery] .plaza-sticker-title{text-align:center;font-family:var(--font-serif);font-style:italic;font-size:14px;white-space:normal;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
+[data-theme=gallery] .plaza-sticker-meta{justify-content:center}
+[data-theme=gallery] .plaza-sticker-desc{border-left:0;padding-left:0;text-align:center}
+[data-theme=gallery] .plaza-sticker-stats{justify-content:center}
+[data-theme=gallery] .plaza-sticker-actions{position:absolute;top:14px;right:12px}
+[data-theme=gallery] .plaza-sticker-arrow{display:none}
+[data-theme=gallery] .plaza-sticker-compact{padding:8px 8px 10px}
+[data-theme=gallery] .plaza-sticker-compact .plaza-sticker-title{font-size:12px}
+/* 差异 · 分享卡：二维码融入网格（与链接并排的展签格），不再孤悬贴角 */
+[data-theme=gallery] .share-output{display:grid;grid-template-columns:auto minmax(0,1fr);gap:12px;align-items:center;padding:12px;border:1px solid var(--line);border-radius:var(--r-md);background:var(--surface)}
+[data-theme=gallery] .share-output img{width:96px;margin:0}
+
+/* ===== gallery L3 支撑样式（DOM 仅 gallery 家族渲染，类名 gl-* 全新命名空间，
+   不与基座同名——旧主题 selectors 永远命中不到） ===== */
+/* Bento 网格：显式 display:grid（PITFALLS 4.12）+ grid-area 编排；
+   Top1 大卡占 2×2，雷达/坐标居右，年代条与榜单索引压底 */
+.gl-bento{
+  display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin:0 0 28px;
+  grid-template-areas:
+    "hero hero radar"
+    "hero hero coords"
+    "decades decades entries"
+}
+.gl-bento--share{
+  grid-template-areas:
+    "hero hero radar"
+    "hero hero coords"
+    "decades decades decades"
+}
+.gl-cell{min-width:0;display:flex;flex-direction:column;gap:10px;padding:16px;border:1px solid var(--line);border-radius:var(--r-md);background:var(--surface)}
+.gl-cell-label{font-family:var(--font-mono);font-size:var(--t-meta);letter-spacing:var(--ls-wide);text-transform:uppercase;color:var(--text-3)}
+.gl-cell-hero{grid-area:hero}
+.gl-cell-radar{grid-area:radar}
+.gl-cell-decades{grid-area:decades}
+.gl-cell-coords{grid-area:coords}
+.gl-cell-entries{grid-area:entries}
+.gl-empty{font-size:13px;color:var(--muted)}
+/* Top1 大卡：大幅海报 + 巨号名次 + 2-5 名跟进行。
+   海报走文档流 + aspect-ratio（不能绝对定位撑满按钮——Bento 格高由雷达/坐标行
+   决定，绝对填充会把跟进行挤出格底、被后续格子盖住）。 */
+.gl-hero{display:flex;gap:16px;align-items:flex-start;flex:1;min-height:0;padding:0;border:0;background:none;text-align:left;cursor:pointer}
+.gl-hero-poster{flex:0 0 auto;width:min(44%,176px);aspect-ratio:2/3;border-radius:var(--r-sm);overflow:hidden;background:var(--surface-2)}
+.gl-hero-poster .poster{display:block;width:100%;height:100%}
+.gl-hero-poster .poster img{width:100%;height:100%;object-fit:cover}
+.gl-hero-info{display:flex;flex-direction:column;justify-content:flex-start;gap:8px;min-width:0;padding-top:6px}
+.gl-hero-rank{font-family:var(--font-mono);font-size:44px;font-weight:600;line-height:.9;color:var(--accent);font-variant-numeric:tabular-nums}
+.gl-hero-info strong{font-size:20px;font-weight:600;line-height:1.35}
+.gl-hero-info small{font-family:var(--font-mono);font-size:var(--t-meta);color:var(--text-3)}
+.gl-hero-next{list-style:none;margin:2px 0 0;padding:0;display:grid;gap:4px}
+.gl-hero-next li button{display:flex;align-items:center;gap:10px;width:100%;min-height:44px;padding:4px 6px;border:0;border-radius:var(--r-xs);background:none;text-align:left;cursor:pointer;min-width:0}
+.gl-hero-next li button:hover{background:var(--surface-hover)}
+.gl-hero-next-rank{width:22px;flex-shrink:0;font-family:var(--font-mono);font-size:13px;color:var(--text-3);font-variant-numeric:tabular-nums}
+.gl-hero-next .poster{width:26px;height:38px;border-radius:3px;flex-shrink:0}
+.gl-hero-next-title{flex:1;min-width:0;font-size:13px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+/* 雷达图（手写 SVG） */
+.gl-radar{width:100%;height:auto;max-height:240px;margin-top:auto}
+.gl-radar-label{font-family:var(--font-body);font-size:11px;fill:var(--text-2)}
+.gl-radar-count{font-family:var(--font-mono);font-weight:600}
+/* 年代堆叠条：按维度分行，段色随年代由浅入深；跨度刻度在右 */
+.gl-decade-row{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:10px;align-items:center}
+.gl-decade-kind{font-size:11px;font-weight:600;white-space:nowrap}
+.gl-decade-bar{display:flex;gap:2px;height:14px;border-radius:3px;overflow:hidden;background:color-mix(in srgb,var(--text) 5%,transparent)}
+.gl-decade-bar>span{display:block;min-width:3px;height:100%}
+.gl-decade-span{font-family:var(--font-mono);font-size:10px;color:var(--muted);white-space:nowrap}
+/* 口味坐标：2×2 关键数格 */
+.gl-stats{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px 16px;flex:1;align-content:center}
+.gl-stat strong{display:block;font-family:var(--font-mono);font-size:24px;font-weight:600;line-height:1.1;color:var(--text);font-variant-numeric:tabular-nums}
+.gl-stat span{font-size:11px;color:var(--muted)}
+/* 榜单索引（承接维度页签的切换职能） */
+.gl-entries{display:grid;gap:2px;max-height:300px;overflow-y:auto}
+.gl-entry{display:flex;align-items:center;gap:10px;min-height:44px;min-width:0;padding:4px 8px;border:0;border-radius:var(--r-xs);background:none;text-align:left;cursor:pointer}
+.gl-entry:hover{background:var(--surface-hover)}
+.gl-entry.active{background:color-mix(in srgb,var(--accent) 8%,transparent)}
+.gl-entry-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+.gl-entry-poster .poster{width:26px;height:38px;border-radius:3px;flex-shrink:0}
+.gl-entry-title{flex:1;min-width:0;font-size:13px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.gl-entry.active .gl-entry-title{color:var(--accent)}
+.gl-entry-count{font-family:var(--font-mono);font-size:11px;color:var(--muted);flex-shrink:0}
+/* 卡片墙：海报正面 / 批注背面，hover（桌面）或 .flipped（触屏点按）3D 翻转；
+   focus-within 翻面保证键盘可读背面。通用选择器只作用于 .gl-* 命名空间（PITFALLS 4.11）。 */
+.gl-wall{list-style:none;margin:4px 0 0;padding:0;display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:14px}
+.gl-card{position:relative;aspect-ratio:2/3;perspective:1100px;min-width:0}
+.gl-card-inner{position:relative;width:100%;height:100%;transform-style:preserve-3d;transition:transform var(--dur-3) var(--ease-out);cursor:pointer;border-radius:var(--r-sm);outline-offset:4px}
+@media(hover:hover){.gl-card:hover .gl-card-inner{transform:rotateY(180deg)}}
+.gl-card.flipped .gl-card-inner,.gl-card:focus-within .gl-card-inner{transform:rotateY(180deg)}
+.gl-card-face{position:absolute;inset:0;backface-visibility:hidden;-webkit-backface-visibility:hidden;display:flex;flex-direction:column;border:1px solid var(--line);border-radius:var(--r-sm);overflow:hidden;background:var(--surface)}
+.gl-card-front .poster{width:100%;height:100%}
+.gl-card-front .poster img{width:100%;height:100%;object-fit:cover}
+.gl-card-rank{position:absolute;top:8px;left:8px;z-index:2;padding:2px 7px;border-radius:var(--r-xs);background:var(--accent);color:var(--accent-ink);font-family:var(--font-mono);font-size:11px;font-weight:600;font-variant-numeric:tabular-nums}
+.gl-card-caption{position:absolute;left:0;right:0;bottom:0;z-index:1;padding:26px 10px 8px;font-size:12px;font-weight:500;line-height:1.4;color:var(--bg);background:linear-gradient(transparent,color-mix(in srgb,var(--shadow-tint) 76%,transparent));display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.gl-card-back{transform:rotateY(180deg);padding:12px;gap:6px}
+.gl-card-back .gl-card-rank{left:auto;right:8px}
+.gl-card-back strong{font-size:14px;font-weight:600;line-height:1.4;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.gl-card-back small{font-family:var(--font-mono);font-size:10px;color:var(--text-3)}
+.gl-card-note{flex:1;min-height:0;margin:0;font-size:11px;line-height:1.6;color:var(--text-2);overflow:hidden;display:-webkit-box;-webkit-line-clamp:5;-webkit-box-orient:vertical}
+.gl-card-actions{display:flex;gap:6px}
+.gl-card-actions .rank-pill{min-height:26px;padding:0 8px;font-size:10px}
+/* reduced-motion 平铺展开：弃 3D 变换，正反面改为文档流上下铺开（PITFALLS 4.16） */
+@media(prefers-reduced-motion:reduce){
+  .gl-card{aspect-ratio:auto}
+  .gl-card-inner{height:auto;transform:none!important}
+  .gl-card-face{position:relative;inset:auto;transform:none;backface-visibility:visible}
+  .gl-card-front{border-radius:var(--r-sm) var(--r-sm) 0 0}
+  .gl-card-front .poster{height:auto;aspect-ratio:2/3}
+  .gl-card-back{border-top:0;border-radius:0 0 var(--r-sm) var(--r-sm)}
+}
+/* Bento 移动端：单列堆叠（grid-template-areas 逐格重排，保持显式声明纪律） */
+@media(max-width:800px){
+  .gl-bento{grid-template-columns:minmax(0,1fr);grid-template-areas:"hero" "radar" "decades" "coords" "entries"}
+  .gl-bento--share{grid-template-areas:"hero" "radar" "decades" "coords"}
+}
+@media(max-width:540px){
+  .gl-cell{padding:12px}
+  .gl-hero-poster{width:132px}
+  .gl-hero-rank{font-size:34px}
+  .gl-hero-info strong{font-size:16px}
+  .gl-stats strong{font-size:20px}
+  .gl-wall{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+  .gl-card-actions .rank-pill{min-height:24px;padding:0 6px}
+  [data-theme=gallery] .topbar{gap:8px}
+}

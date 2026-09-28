@@ -289,3 +289,67 @@ describe("P5c 布局模式绊线", () => {
     expect((home.match(/aria-label=\{t\("向(左|右)滚动"/g) ?? []).length).toBe(2);
   });
 });
+
+describe("P3 gallery 画廊主题绊线（PLAN-ui-modernization）", () => {
+  const galleryStart = css.indexOf("[data-theme=gallery]{");
+  const galleryBlock = css.slice(galleryStart, css.indexOf("}", galleryStart));
+  it("变量块在位：冷白展厅 + 克莱因蓝 + 大圆角档（对比度 AA 由 ui-contrast 验收）", () => {
+    expect(css).toMatch(/\[data-theme=gallery\]\{\s*--bg:#F7F7F4/);
+    expect(galleryBlock).toContain("--accent:#1D4ED8");
+    expect(galleryBlock).toContain("--accent-ink:#FFFFFF");
+    expect(galleryBlock).toContain("--r-lg:24px");
+  });
+  it("不定义 --ev-*（PITFALLS 4.20：全站「被引用未定义=none」基线不可破坏；阴影显式书写）", () => {
+    expect(galleryBlock).not.toContain("--ev-");
+    // 阴影确实存在（用 --shadow-tint 显式 color-mix，而非 var(--ev-2)）
+    expect(css).toMatch(
+      /\[data-theme=gallery\] :is\(\.account-dialog[^{]*\{\s*border:0;border-radius:var\(--r-lg\)/,
+    );
+    expect(css).toContain("color-mix(in srgb,var(--shadow-tint) 26%,transparent)");
+  });
+  it("L3 Bento：显式 display:grid + grid-area 编排 + Top1 占 2×2 + 移动端单列重排", () => {
+    expect(css).toMatch(
+      /\.gl-bento\{\s*display:grid;grid-template-columns:repeat\(3,minmax\(0,1fr\)\)/,
+    );
+    expect(css).toMatch(/\.gl-cell-hero\{grid-area:hero\}/);
+    expect(css).toMatch(/\.gl-bento\{[^}]*"hero hero radar"/);
+    expect(css).toMatch(
+      /@media\(max-width:800px\)\{\s*\.gl-bento\{grid-template-columns:minmax\(0,1fr\)/,
+    );
+  });
+  it("L3 卡片墙：preserve-3d 翻转 + hover 用 media(hover:hover) 包裹（触屏粘滞）+ reduced-motion 平铺", () => {
+    expect(css).toMatch(/\.gl-card-inner\{[^}]*transform-style:preserve-3d/);
+    expect(css).toContain(
+      "@media(hover:hover){.gl-card:hover .gl-card-inner{transform:rotateY(180deg)}}",
+    );
+    expect(css).toMatch(
+      /@media\(prefers-reduced-motion:reduce\)\{[^@]*\.gl-card-inner\{height:auto;transform:none!important/,
+    );
+  });
+  it("重排行守卫：gallery 的行式 grid 声明必须把 P6 的 flex 覆盖要回来（PITFALLS 4.19）", () => {
+    expect(css).toContain(
+      "[data-theme=gallery] .ranking-list.reorder-list>li{display:flex;gap:16px}",
+    );
+  });
+  it("L3 分支：ProfileView/ShareView 仅 gallery 家族渲染 Bento 与卡片墙，classic 路径 DOM 不变", () => {
+    const profile = readFileSync("src/views/ProfileView.tsx", "utf8");
+    expect(profile).toContain('useThemeFamily() === "gallery"');
+    expect(profile).toContain("<GalleryBento");
+    expect(profile).toContain("<GalleryWall");
+    // 铁律：classic 默认路径的维度页签行与行式榜单仍在
+    expect(profile).toContain('className="profile-dimensions"');
+    expect(profile).toContain('<ol className="ranking-list">');
+    const share = readFileSync("src/views/ShareView.tsx", "utf8");
+    expect(share).toContain('useThemeFamily() === "gallery"');
+    expect(share).toContain("<GalleryBento");
+  });
+  it("数据侧：galleryStats 只读 profile 聚合（雷达/年代/坐标零数据层改动）", () => {
+    const stats = readFileSync("src/lib/galleryStats.ts", "utf8");
+    expect(stats).not.toMatch(/localStorage|fetch\(|sessionStorage/);
+  });
+  it("主题菜单 dot 与 THEMES 注册（id 一经发布不改）", () => {
+    expect(css).toContain(".theme-dot.theme-gallery{");
+    const theme = readFileSync("src/lib/theme.ts", "utf8");
+    expect(theme).toContain('{ id: "gallery", zh: "画廊", en: "Gallery" }');
+  });
+});

@@ -137,15 +137,27 @@ export function useTheme(): string {
 **验证状态**：五道门禁绿（check/lint/format:check/test 456 passed·9 skipped/build）｜ 旧 7 主题 14 张 + editorial 系 4 张 **zero-diff**（stash 基线法，tol=0）｜ aurora 截图肉眼签收（首页桌面/移动、duel 双卡 + 进度流光、辉光脉冲按住中段实锤）｜ **§6 验收六项全过**（CDP 探针脚本化：切换 4 轮 canvases 恒 1 无 contextlost；retro/minimal/paper  palette 色相跟随；reduced-motion 双截图逐字节一致且画面不消失；跨 700px 断点桌面右偏 0.68/移动居中；localStorage 持久化；移动 0.88 缩放）｜ ui-contrast aurora 全对 ≥4.5（最差 7.8:1）｜ **线上 ⬜（P4）**。
 > 头无 WebGL 说明：`ui-shot.mjs` 显式 `--disable-webgl`，工具链截图无 orb 是环境限制（modern 基线同样无）；ribbon 实渲染由 CDP 探针（SwiftShader 软渲 WebGL）+ 截图双重确认。
 
-### P3 · gallery（2 天）
+### P3 · gallery（2 天）—— 本地完成 ⏸，线上验证留 P4
 
 按 §2.3 矩阵落地 8 个差异组件，重点是画像页 Bento 重构。
 
-- [ ] `ProfileView` L3 分支：Bento 网格 + 雷达图 SVG + 分布条
-- [ ] 榜单卡片墙翻转（transform-style: preserve-3d；注意 4.11 通用选择器误伤 poster）
-- [ ] 分享卡片/导出图重设计（ShareView 分支，二维码入网格）
-- [ ] 广场 sticker 拍立得化（L2 即可）
-- [ ] Bento 网格必须显式 `display:grid`（PITFALLS 4.12）
+- [x] `ProfileView` L3 分支：Bento 网格 + 雷达图 SVG + 分布条
+- [x] 榜单卡片墙翻转（transform-style: preserve-3d；注意 4.11 通用选择器误伤 poster）
+- [x] 分享卡片/导出图重设计（ShareView 分支，二维码入网格）
+- [x] 广场 sticker 拍立得化（L2 即可）
+- [x] Bento 网格必须显式 `display:grid`（PITFALLS 4.12）
+
+**落地明细**（对应 §2.3 八组件）：① 画像页 Bento（`GalleryBento.tsx`：Top1 大卡 2×2 + 2-5 名跟进行 / 雷达 / 年代条 / 口味坐标 / 榜单索引，`grid-template-areas` 编排，≤800px 单列）；② 雷达图（手写 SVG 四媒介固定轴，值=作品数占比，数据由 `galleryStats.ts` ×9 单测现场聚合）；③ 年代分布（按维度分行堆叠条 + 段色随年代渐深 + 跨度刻度）；④ 卡片墙（`GalleryWall.tsx`：海报正面/批注背面翻转，hover 用 `media(hover:hover)` 包裹防触屏粘滞，focus-within 可达背面）；⑤ 分享卡（ShareView gallery 分支渲染 Bento 缩略 + 侧栏 `.share-output` L2 二维码入展签格）；⑥ 广场 sticker 拍立得（纯 L2：白框/纵排/斜体居中标题/±1.15° 微旋转/hover 立起）；⑦ topbar 对称报刊亭（grid 三列，Logo 居中）；⑧ 弹窗大圆角 24 + 无边框纯阴影（`--shadow-tint` 显式书写，不定义 `--ev-*`）。
+
+**执行偏差记录**（均有截图/探针证据）：
+
+1. **「年代/来源分布」只做了年代**：`Artwork` 无逐作品 source 字段（来源挂在 collection 上），「来源分布」无数据可挂——落地为年代分布（按维度分行）+ 跨度刻度，来源分布不做。
+2. **PNG 导出未加「bento」版式**：exportPng 是 canvas 绘制域，与主题视觉域正交；「分享卡片重设计」以 ShareView Bento 缩略 + 侧栏 QR 入网格兑现。如需导出 bento 版式留独立批次。
+3. **重排行 flex 守卫（新踩坑预防）**：gallery 的 `[data-theme=gallery] .ranking-list>li{display:grid}`（0,2,1）位于文件后部，同分会压过 P6 的 `.ranking-list.reorder-list>li{display:flex}`（0,2,1）——手动重排的第 5 个子元素会折进 92px 名次列。已用 `[data-theme=gallery] .ranking-list.reorder-list>li{display:flex}`（0,3,1）要回，绊线看守。
+4. **hero 海报不可绝对填充**：Bento 格高由雷达/坐标行决定，海报 absolute 撑满会把 2-5 名跟进行挤出格底、被后续格子盖住（实测）——改文档流 + aspect-ratio。
+5. **广场贴纸经 fetch 桩探针验证**：广场需后端数据，静态截图无帖；`.tmp/gl-flip-probe.mjs` 伪造 `/api/plaza/posts` 实证 column/rotate/shadow（探针未入库，同 P2 先例）。
+
+**验证状态**：五道门禁绿（test 473 passed·9 skipped）｜ 旧主题 20 张截图 stash 基线法 **zero-diff**（tol=0）｜ gallery 首页/画像桌面+移动/排序/广场截图肉眼签收 ｜ 卡片墙 3D 翻转 CDP 探针实锤（hover→rotateY(180°)；reduced-motion→transform none 平铺）｜ ui-contrast 全对 ≥4.5（最差 6.45:1）｜ 绊线 +8 条 ｜ **线上 ⬜（P4）**。
 
 ### P4 · 收尾与回归（0.5 天）
 
@@ -188,6 +200,7 @@ export function useTheme(): string {
 
 ## 7. 变更记录
 
+- **v3.3（2026-09-28，P3 执行完毕）**：落地 gallery 画廊主题（§2.3 八差异组件全做，矩阵「来源分布」因无逐作品 source 数据收敛为年代分布）；画像页 Bento L3 重构（GalleryBento + GalleryWall + galleryStats ×9 单测）；卡片墙翻转/reduced-motion 平铺由 CDP 探针实锤；踩到并预防「gallery 行式 grid 声明压过 P6 重排 flex 覆写」的特异性坑（0,3,1 要回 + 绊线）；旧主题 20 张 zero-diff 实证；`--ev-*` 不定义守 4.20 基线。线上验证按计划留 P4。
 - **v3.2（2026-09-28，P1 执行完毕）**：落地 editorial/editorial-dark 双主题（§2.1 九差异组件全做）；实测踩到两处 CSS 特异性陷阱并修复（移动端 ed-stack 桌面定位泄漏、单列网格覆写被基座后来者胜），各配绊线测试；旧 7 主题 14 张截图 zero-diff 实证 L3 默认路径零回归；记录三处执行偏差（弹窗直角走显式 radius:0 而非 `--r-*` 归零、macOS 衬线段未测、移动端轮播差异范围）。线上验证按计划留 P4。
 - **v3.1（2026-09-28，P0 执行中修正）**：`--ease-spring` 改名 `--ease-settle`（1.2 过冲）——`cubic-bezier(.34,1.56,.64,1)` 是 2026-09-22 焕新定死的「玩具感元凶」，有绊线测试看守（`src/ui-fixes.test.ts`）；auraColor 增加「胜出桶须甩开第二名 1.5×」margin 守卫，避免双色海报掷硬币。
 - **v3（2026-09-28）**：用户拍板「不是简单换色，要组件级可感知差异」→ 新增三层差异化机制（L3 useTheme 条件渲染）、§2 组件级差异矩阵（12 组件 × 4 主题，每主题 ≥6 差异组件）、「肉眼可辨」纳入验收。

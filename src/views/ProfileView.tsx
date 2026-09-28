@@ -22,6 +22,9 @@ import {
   X,
 } from "lucide-react";
 import { Poster } from "../components/Poster";
+import { GalleryBento } from "../components/GalleryBento";
+import { GalleryWall } from "../components/GalleryWall";
+import { useThemeFamily } from "../lib/useTheme";
 import { IconButton } from "./IconButton";
 import { heading } from "./helpers";
 import { undoLastAction } from "../lib/ranking";
@@ -99,6 +102,9 @@ export function ProfileView({
   const [profileInsightOpen, setProfileInsightOpen] = useState(false);
   const [rankingInsightOpen, setRankingInsightOpen] = useState(false);
   const aiLocale = locale === "en" ? ("en" as const) : ("zh" as const);
+  // L3 条件渲染（PLAN-ui-modernization P3）：gallery 家族换 Bento 画像 + 卡片墙，
+  // classic（旧主题与自定义包）走下方既有 DOM，一字节不变。
+  const isGallery = useThemeFamily() === "gallery";
   const profileInsightData = useMemo(() => buildProfileData(profile), [profile]);
   const rankingInsightData = useMemo(
     () => buildRankingData(activeRanking, profile.profileName),
@@ -243,31 +249,48 @@ export function ProfileView({
           </div>
         </div>
       )}
-      <div className="profile-dimensions" role="tablist" aria-label={t("榜单切换", "Switch list")}>
-        {profile.rankings.map((entry, idx) => {
-          const key = `${entry.kind}-${idx}`;
-          const active = activeRanking === entry;
-          return (
-            <button
-              className={`dim-chip medium-${entry.kind} ${active ? "active" : ""}`}
-              key={key}
-              role="tab"
-              aria-selected={active}
-              onClick={() => setActiveKind(key)}
-            >
-              <Poster work={entry.items[0]} kind={entry.kind} />
-              <div className="dim-chip-text">
-                <span className="dim-chip-meta">
-                  {label(entry.kind)}
-                  <i>·</i>
-                  {entry.items.length} {t("件", "works")}
-                </span>
-                <strong>{entry.collectionTitle}</strong>
-              </div>
-            </button>
-          );
-        })}
-      </div>
+      {isGallery ? (
+        /* gallery（L3）：Bento 网格取代维度页签行——Top1 大卡 + 雷达 + 年代条 +
+           口味坐标 + 榜单索引（索引承接页签的切换职能）。 */
+        <GalleryBento
+          profile={profile}
+          activeRanking={activeRanking}
+          label={label}
+          t={t}
+          openArtworkDetail={openArtworkDetail}
+          onOpenEntry={setActiveKind}
+        />
+      ) : (
+        <div
+          className="profile-dimensions"
+          role="tablist"
+          aria-label={t("榜单切换", "Switch list")}
+        >
+          {profile.rankings.map((entry, idx) => {
+            const key = `${entry.kind}-${idx}`;
+            const active = activeRanking === entry;
+            return (
+              <button
+                className={`dim-chip medium-${entry.kind} ${active ? "active" : ""}`}
+                key={key}
+                role="tab"
+                aria-selected={active}
+                onClick={() => setActiveKind(key)}
+              >
+                <Poster work={entry.items[0]} kind={entry.kind} />
+                <div className="dim-chip-text">
+                  <span className="dim-chip-meta">
+                    {label(entry.kind)}
+                    <i>·</i>
+                    {entry.items.length} {t("件", "works")}
+                  </span>
+                  <strong>{entry.collectionTitle}</strong>
+                </div>
+              </button>
+            );
+          })}
+        </div>
+      )}
       <div className="profile-layout">
         <section>
           <div className="section-heading">
@@ -625,6 +648,16 @@ export function ProfileView({
               notes={notes}
               openNoteModal={openNoteModal}
             />
+          ) : isGallery ? (
+            /* gallery（L3）：卡片墙取代行式榜单——海报正面/批注背面翻转。 */
+            <GalleryWall
+              items={activeRanking.items}
+              kind={activeRanking.kind}
+              t={t}
+              notes={notes}
+              openNoteModal={openNoteModal}
+              openArtworkDetail={openArtworkDetail}
+            />
           ) : (
             <ol className="ranking-list">
               {activeRanking.items.map((work) => (
@@ -682,7 +715,6 @@ export function ProfileView({
             </ol>
           )}
         </section>
-
         <aside className="export-tools">
           <label htmlFor="profile-name">{t("画像名称", "Profile name")}</label>
           <input

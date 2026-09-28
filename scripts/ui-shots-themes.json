@@ -156,5 +156,21 @@
     "height": 900,
     "fixture": "demo-profile",
     "theme": "aurora"
+  },
+  {
+    "name": "th-gallery-home",
+    "path": "/",
+    "width": 1300,
+    "height": 900,
+    "fixture": "demo-profile",
+    "theme": "gallery"
+  },
+  {
+    "name": "th-gallery-profile",
+    "path": "/myself",
+    "width": 1300,
+    "height": 900,
+    "fixture": "demo-profile",
+    "theme": "gallery"
   }
 ]
