@@ -47,7 +47,12 @@ export function SortingView({
     if (Math.abs(dx) < 12 || Math.abs(dx) <= Math.abs(dy)) return;
     if (!drag.active) {
       drag.active = true;
-      event.currentTarget.setPointerCapture(drag.pointerId);
+      // 指针可能已被系统接管(如浏览器手势),捕获失败不影响判定链路
+      try {
+        event.currentTarget.setPointerCapture(drag.pointerId);
+      } catch {
+        /* ignore */
+      }
     }
     if (!reducedMotion) {
       const nudge = Math.max(-24, Math.min(24, dx * 0.12));
