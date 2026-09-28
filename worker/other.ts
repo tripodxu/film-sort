@@ -143,14 +143,21 @@ export async function wikiEnTitle(title: string): Promise<string | null> {
 
 /** 条目主图直取（含非自由封面）：pageimages API 对非自由文件恒空（政策），
  *  但文件本身托管在本地 wiki 且 imageinfo 能给出 URL——游戏/书籍封面的
- *  唯一免费来源。取文件列表的首个位图，跳过图标/标志类杂件。 */
+ *  唯一免费来源。取文件列表的首个位图，跳过图标/标志类杂件。
+ *  标题变体：用户数据常见「底特律 变人」而条目名是「底特律：变人」
+ *  （空格/全角冒号差异不是重定向），变体一并发给 titles 一起解析。 */
 export async function wikiPageImageAny(
   lang: "zh" | "en",
   title: string,
 ): Promise<string | null> {
+  const base = title.trim().slice(0, 120);
+  if (!base) return null;
+  const variants = [
+    ...new Set([base, base.replace(/\s+/g, "："), base.replace(/\s+/g, "")]),
+  ].slice(0, 3);
   const list = new URLSearchParams({
     action: "query",
-    titles: title.trim().slice(0, 120),
+    titles: variants.join("|"),
     prop: "images",
     imlimit: "8",
     redirects: "1",
@@ -159,7 +166,16 @@ export async function wikiPageImageAny(
   });
   const pages = await wikiJson(lang, list, 8000);
   if (!pages) return null;
-  const page = Object.values(pages)[0];
+  const compactBase = base.replace(/\s+/g, "").toLowerCase();
+  const candidates = Object.values(pages).filter(
+    (page) => !page.missing && (page.title ?? "").trim(),
+  );
+  // 优先选「页标题含原题全部字词」的条目（游戏条目而非同名城市/概念）
+  const page =
+    candidates.find((page) =>
+      (page.title ?? "").replace(/\s+/g, "").toLowerCase().includes(compactBase),
+    ) ?? candidates[0];
+  if (!page) return null;
   const images = (page as WikiPage & { images?: Array<{ title?: string }> }).images ?? [];
   const SKIP = /icon|logo|edit|commons|symbol|flag|question|placeholder|disambig/i;
   const file = images
