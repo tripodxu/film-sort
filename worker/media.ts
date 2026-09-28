@@ -2,6 +2,7 @@ import curatedPosters from "./imdb-posters.json";
 import { gdPicUrl, gdSearch, pickTracks, toSc, type GdProxyEnv } from "./gdstudio";
 import { fetchBounded, parseAllowedUrl, readBoundedText, type OutboundPolicy } from "./outbound";
 import { generationOf, registerPurger } from "./cachePurge";
+import { otherDetail } from "./other";
 
 export interface DoubanWork {
   id: string;
@@ -1596,7 +1597,12 @@ async function computePosters(
     // movie/book/music 会因 declared !== "other" 把正确条目全部误杀（-1）；
     // undefined 走纯标题匹配，恰好是该维度应有的语义。
     const wiki = await searchWikiPoster(title, english, undefined, year);
-    return { urls: wiki, outcome: wiki.length ? "found" : throttled ? "throttled" : "absent" };
+    if (wiki.length) return { urls: wiki, outcome: "found" };
+    // 二段兜底：otherDetail 不做标题评分（zh wiki 的简繁变体条目会被上面的
+    // 严格匹配漏掉），且自带百度百科图；外链图域均已在 allowedImage/CSP 放行。
+    const fallback = await otherDetail(title).catch(() => null);
+    const urls = fallback?.poster_url ? [fallback.poster_url] : [];
+    return { urls, outcome: urls.length ? "found" : throttled ? "throttled" : "absent" };
   } else {
     const [suggestion, imdb, search] = await Promise.allSettled([
       doubanSuggest(title),
