@@ -56,10 +56,7 @@ export function rankingSimilarity(
     for (let i = 0; i < shared.length; i++) {
       for (let j = i + 1; j < shared.length; j++) {
         pairs++;
-        if (
-          (shared[i].mine - shared[j].mine) * (shared[i].theirs - shared[j].theirs) >
-          0
-        )
+        if ((shared[i].mine - shared[j].mine) * (shared[i].theirs - shared[j].theirs) > 0)
           agreements++;
       }
     }

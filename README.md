@@ -8,6 +8,24 @@ ART/RANK 把"从看过、读过、听过的作品里排出自己的 Top N"拆成
 
 ---
 
+## 文档导航（分层）
+
+本仓库文档按「读多少」分层，**按需取用，不要全量阅读**。
+
+| 层 | 内容 | 什么时候读 |
+|----|------|-----------|
+| **入口** | [`AGENTS.md`](AGENTS.md)（Agent 唯一入口）、[`MEMORY.md`](MEMORY.md)（项目长期记忆） | 任何时候开工前 |
+| **功能文档** | 本文（功能全貌）、`docs/API.md`（接口）、`docs/ARCHITECTURE.md`（架构与 Schema）、`docs/FEATURES.md`（回归基线）、`docs/USAGE.md`（用户指南）、`CHANGELOG.md` | 做具体改动时 |
+| **运维 / 扩展** | `docs/CLOUDFLARE.md`、`docs/DOUBAN_API.md`、`docs/THEME-PACKS.md`、`docs/ORB-EFFECTS.md` | 部署 / 接外部平台 / 加主题与特效时 |
+| **计划** | `docs/ROADMAP.md`、`docs/PLAN-*.md` | 需要了解在办与未来工作时 |
+| **历史记忆** | `docs/memory/TIMELINE.md`（演化时间线）、`DECISIONS.md`（为什么这么做）、`EPISODES.md`（战役复盘） | 需要背景与理由时 |
+| **Agent 协同** | `docs/agents/MAP.md`（任务→文件路由）、`HANDOFF.md`（接力协议）、`CONVENTIONS.md`、`PITFALLS.md`、`ROLES.md`、`TASK-LEDGER.md` | 多 agent 协作 / 接力时 |
+| **归档** | `docs/archive/**` | **已过时**，只读不引用 |
+
+> 记忆类文档（TIMELINE / DECISIONS / EPISODES / TASK-LEDGER）统一采用**最新在最上面**的倒序格式。
+
+---
+
 ## 功能概览
 
 ### 排序引擎
@@ -498,6 +516,31 @@ film-sort3/
 - `music.douban.com` 无 suggest API，音乐封面依赖 Top250 索引和搜索。
 - 豆瓣可能随时调整反爬策略，需要持续监控。
 - 画像大小限制 512 KB，单榜单最多 1000 件作品；广场帖子仍限制最多 300 件。
+
+---
+
+## Agent 协作文档
+
+面向多 agent 协同与接力，让每个 agent **只读取与任务相关的文件**（全仓约 39,600 行代码 / 515 条 commit，不应全量阅读）：
+
+| 文件 | 作用 |
+|------|------|
+| [`AGENTS.md`](AGENTS.md) | **唯一入口**：项目一句话、五道门禁、分层阅读路由、八条硬规则、交付自检 |
+| [`docs/agents/MAP.md`](docs/agents/MAP.md) | **任务 → 文件路由表**（核心）：按任务类型给出该读哪些文件 + 文档索引 + 反模式 |
+| [`docs/agents/HANDOFF.md`](docs/agents/HANDOFF.md) | 接力协议：交接四件套、台账条目格式、上下文预算、冲突仲裁、验收清单 |
+| [`docs/agents/CONVENTIONS.md`](docs/agents/CONVENTIONS.md) | 编码 / 提交 / 测试 / 文档同步 / 视觉改动流程约定 |
+| [`docs/agents/PITFALLS.md`](docs/agents/PITFALLS.md) | 踩坑档案：平台 / 网络 / 数据 / 视觉四类 + 故障排查顺序 + 常见误判对照 |
+| [`docs/agents/ROLES.md`](docs/agents/ROLES.md) | 五种角色的分工与最小上下文包 |
+| [`docs/agents/TASK-LEDGER.md`](docs/agents/TASK-LEDGER.md) | 活的任务台账（进行中 / 待办 / 已归档），接力状态源 |
+
+**记忆文档**（均为倒序，最新在最上面）：
+
+| 文件 | 作用 |
+|------|------|
+| [`MEMORY.md`](MEMORY.md) | 项目长期记忆（git 追踪，跨 agent 共享）：身份、硬约束、协作约定、待办焦点 |
+| `docs/memory/TIMELINE.md` | 515 条 commit 按日倒序的演化时间线 |
+| `docs/memory/DECISIONS.md` | ADR 风格关键决策与理由（推翻旧决策保留推理链） |
+| `docs/memory/EPISODES.md` | 战役复盘 + 9 条跨战役通用教训 |
 
 ---
 
