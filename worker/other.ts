@@ -170,10 +170,15 @@ export async function wikiPageImageAny(
   const candidates = Object.values(pages).filter(
     (page) => !page.missing && (page.title ?? "").trim(),
   );
-  // 优先选「页标题含原题全部字词」的条目（游戏条目而非同名城市/概念）
+  // 优先选「页标题含原题全部字词」的条目（游戏条目而非同名城市/概念）。
+  // 比较时把页标题里的分隔符（空格/全角冒号/中点）一并剥掉——否则
+  // 「底特律：变人」永远不 includes「底特律变人」。
   const page =
     candidates.find((page) =>
-      (page.title ?? "").replace(/\s+/g, "").toLowerCase().includes(compactBase),
+      (page.title ?? "")
+        .replace(/[\s：:·・]/g, "")
+        .toLowerCase()
+        .includes(compactBase),
     ) ?? candidates[0];
   if (!page) return null;
   const images = (page as WikiPage & { images?: Array<{ title?: string }> }).images ?? [];
