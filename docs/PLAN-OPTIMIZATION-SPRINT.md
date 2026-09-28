@@ -6,7 +6,7 @@
 
 ---
 
-## Phase 1 ⬜ 移动端滑动选择(核心交互)
+## Phase 1 ✅ 移动端滑动选择(核心交互)
 
 **目标**:对战页(duel-grid)支持触摸滑动——**往哪边甩就选哪边**(与键盘 ←/A = 左的语义一致):dx < -56px 选左卡,dx > +56px 选右卡;拖动中两卡轻微跟随位移给反馈,松手不足阈值回弹;`navigator.vibrate(10)` 触感确认。
 
@@ -20,7 +20,7 @@
 
 **验证**:单测(水平阈值/垂直否决/方向映射)→ 线上 390px 实滑选卡、artwork-info 内滚不受扰、桌面无变化。
 
-## Phase 2 ⬜ 分享/广场 OG 卡片(传播漏斗)
+## Phase 2 ✅ 分享/广场 OG 卡片(传播漏斗)
 
 **目标**:GET `/share/:code` 与 `/plaza/:id` 返回注入了 OG 元数据的 HTML——`og:title`(「XX 的艺术人格 / 榜单名」)、`og:description`(N 件作品 Top N)、`og:image`(第一名海报,走 `/api/image` 代理补 referer,否则爬虫抓不到豆瓣图)。
 
@@ -30,7 +30,7 @@
 
 **验证**:单测注入结果;线上 curl 带 UA 查看含 og: 标签;Telegram/Discord 调试器人工复核(可选)。
 
-## Phase 3 ⬜ 广场品味相似度(社交增长)
+## Phase 3 ✅ 广场品味相似度(社交增长)
 
 **目标**:广场帖子卡与详情页显示「与你的品味重合 NN%」徽章——客户端用已有 Kendall τ(`ranking.ts`)对同媒介榜单求相似度;未登录/无同媒介榜单则不显示。
 
@@ -38,7 +38,7 @@
 
 **验证**:单测;线上登录态看广场徽章数值与比较页 τ 口径一致。
 
-## Phase 4 ⬜ 按路由拆包(首屏性能)
+## Phase 4 ✅ 按路由拆包(首屏性能)
 
 **目标**:SourceView / PlazaPostView / CompareView 改 `React.lazy` + Suspense(DeferredOrb 同款模式),首屏 JS 预计降 30–40%。
 
