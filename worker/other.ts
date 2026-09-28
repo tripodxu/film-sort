@@ -118,6 +118,27 @@ export async function otherSearch(query: string): Promise<OtherWork[]> {
     : [];
 }
 
+/** 百度百科词条图（bkimg.cdn.bcebos.com，已在 allowedImage/CSP 白名单）。
+ *  游戏/书籍的封面因版权不上传维基共享，zh wiki 条目常命中却无 pageimages——
+ *  这恰恰是「其他」维度最需要封面的作品形态，故取图独立于 abstract 兜底。 */
+async function baikeImage(title: string): Promise<string | null> {
+  try {
+    const r = await fetch(
+      `https://baike.baidu.com/api/openapi/BaikeLemmaCardApi?scope=103&format=json&appid=379029&bk_key=${encodeURIComponent(title)}&bk_length=600`,
+      {
+        headers: { "user-agent": UA, accept: "application/json" },
+        signal: AbortSignal.timeout(8000),
+      },
+    );
+    if (!r.ok) return null;
+    const j = (await r.json()) as { image?: string };
+    // bkimg 有 http 形态：https 页面直接引用会 mixed-content 被浏览器拦掉
+    return j.image ? j.image.replace(/^http:/, "https:") : null;
+  } catch {
+    return null;
+  }
+}
+
 /** 其他类作品详情：精确标题直查（中/英），百度百科 abstract 兜底 */
 export async function otherDetail(name: string): Promise<OtherWork | null> {
   const title = name.trim().slice(0, 120);
@@ -140,14 +161,21 @@ export async function otherDetail(name: string): Promise<OtherWork | null> {
         .map((p) => toWork(p, "zh"))
         .find(Boolean)
     : null;
-  if (zhWork) return zhWork;
-  const enPages = await wikiJson("en", q, 7000);
+  const enPages = zhWork ? null : await wikiJson("en", q, 7000);
   const enWork = enPages
     ? Object.values(enPages)
         .map((p) => toWork(p, "en"))
         .find(Boolean)
     : null;
-  if (enWork) return enWork;
+  const work = zhWork ?? enWork;
+  if (work) {
+    // wiki 命中但无图（版权封面不在维基共享）：补百度百科词条图
+    if (!work.poster_url) {
+      const img = await baikeImage(title);
+      if (img) return { ...work, poster_url: img };
+    }
+    return work;
+  }
   // 百度百科兜底（仅简介）
   try {
     const r = await fetch(
@@ -165,7 +193,7 @@ export async function otherDetail(name: string): Promise<OtherWork | null> {
           title,
           content_intro: j.abstract,
           content_source: "baike",
-          ...(j.image ? { poster_url: j.image } : {}),
+          ...(j.image ? { poster_url: j.image.replace(/^http:/, "https:") } : {}),
         };
       }
     }
