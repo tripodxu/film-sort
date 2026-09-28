@@ -75,13 +75,15 @@ export function buildShareTags(rawProfile: string, url: string): OgTags | null {
   const first = rankings[0];
   if (!first || !Array.isArray(first.items) || first.items.length === 0) return null;
   const name = ogText(profile.profileName ?? "", 60) || "一位用户";
+  // 画像默认名就叫「我的艺术人格」,直接拼接会得到「我的艺术人格 的艺术人格」
+  const title = name.includes("艺术人格") ? name : `${name} 的艺术人格`;
   const listTitle = ogText(first.collectionTitle ?? "", 80);
   const count = first.items.length;
   const top = first.items[0]?.title ? ogText(first.items[0].title, 80) : "";
   const more =
     rankings.length > 1 ? `${rankings.length} 份榜单` : `${listTitle || "榜单"} · Top ${count}`;
   return {
-    title: `${name} 的艺术人格`,
+    title,
     description: top ? `${more} · No.1《${top}》` : more,
     url,
   };
