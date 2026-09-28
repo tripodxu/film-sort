@@ -1591,27 +1591,25 @@ async function computePosters(
     ];
     primary = [...new Set([...direct, ...proxied])];
   } else if (type === "other") {
-    // 「其他」维度（游戏/艺术/建筑等，豆瓣无条目）：直接维基 pageimages 取图，
-    // 不走豆瓣/网易云/imdb。type 必须以 undefined 参与评分（scoreWikiImage）——
-    // TYPE_WORDS 没有 other 词表，带着 "other" 时 declareType 从正文推断出的
-    // movie/book/music 会因 declared !== "other" 把正确条目全部误杀（-1）；
-    // undefined 走纯标题匹配，恰好是该维度应有的语义。
+    // 「其他」维度（游戏/艺术/建筑等，豆瓣无条目）。取图优先级：
+    // ① 条目主图直取（infobox 封面 = 作品本体；pageimages API 对非自由文件
+    //    政策性恒空，但 images→imageinfo 链能拿到本地托管文件）；
+    // ② langlinks 拿英文标题再直取（en wiki 覆盖面更广；zh 简繁变体也一并绕开）；
+    // ③ searchWikiPoster 评分匹配（自由图为主，艺术/摄影类在此命中；
+    //    type 必须以 undefined 参与评分——TYPE_WORDS 无 other 词表，带着 "other"
+    //    时 declareType 推断出的 movie/book/music 会把正确条目全部误杀）；
+    // ④ otherDetail 变体容错兜底。
+    const directZh = await wikiPageImageAny("zh", title);
+    if (directZh) return { urls: [directZh], outcome: "found" };
+    const enTitle = await wikiEnTitle(title);
+    const directEn = await wikiPageImageAny("en", enTitle ?? title);
+    if (directEn) return { urls: [directEn], outcome: "found" };
     const wiki = await searchWikiPoster(title, english, undefined, year);
     if (wiki.length) return { urls: wiki, outcome: "found" };
-    // 二段：langlinks 拿英文标题再查 en wiki（覆盖面不同；zh 简繁变体也会被
-    // 严格标题匹配漏掉）。en wiki 无结果则 title 为 null。
-    const enTitle = await wikiEnTitle(title);
     if (enTitle) {
       const enWiki = await searchWikiPoster(enTitle, enTitle, undefined, year);
       if (enWiki.length) return { urls: enWiki, outcome: "found" };
     }
-    // 三段：条目主图直取（pageimages 对非自由封面恒空，images→imageinfo 链
-    // 能拿到 en wiki 本地托管的封面文件——游戏/书籍的唯一天然免费来源）。
-    const directZh = await wikiPageImageAny("zh", title);
-    if (directZh) return { urls: [directZh], outcome: "found" };
-    const directEn = await wikiPageImageAny("en", enTitle ?? title);
-    if (directEn) return { urls: [directEn], outcome: "found" };
-    // 四段：otherDetail（无评分，含 redirects/converttitles 变体容错）
     const fallback = await otherDetail(title).catch(() => null);
     const urls = fallback?.poster_url ? [fallback.poster_url] : [];
     return { urls, outcome: urls.length ? "found" : throttled ? "throttled" : "absent" };
