@@ -141,6 +141,56 @@ export async function wikiEnTitle(title: string): Promise<string | null> {
   return null;
 }
 
+/** 条目主图直取（含非自由封面）：pageimages API 对非自由文件恒空（政策），
+ *  但文件本身托管在本地 wiki 且 imageinfo 能给出 URL——游戏/书籍封面的
+ *  唯一免费来源。取文件列表的首个位图，跳过图标/标志类杂件。 */
+export async function wikiPageImageAny(
+  lang: "zh" | "en",
+  title: string,
+): Promise<string | null> {
+  const list = new URLSearchParams({
+    action: "query",
+    titles: title.trim().slice(0, 120),
+    prop: "images",
+    imlimit: "8",
+    redirects: "1",
+    converttitles: "1",
+    format: "json",
+  });
+  const pages = await wikiJson(lang, list, 8000);
+  if (!pages) return null;
+  const page = Object.values(pages)[0];
+  const images = (page as WikiPage & { images?: Array<{ title?: string }> }).images ?? [];
+  const SKIP = /icon|logo|edit|commons|symbol|flag|question|placeholder|disambig/i;
+  const file = images
+    .map((image) => image.title ?? "")
+    .find(
+      (t) =>
+        t.startsWith("File:") &&
+        /\.(jpe?g|png)$/i.test(t) &&
+        !SKIP.test(t),
+    );
+  if (!file) return null;
+  const info = new URLSearchParams({
+    action: "query",
+    titles: file,
+    prop: "imageinfo",
+    iiprop: "url",
+    iiurlwidth: "600",
+    format: "json",
+  });
+  const infoPages = await wikiJson(lang, info, 8000);
+  if (!infoPages) return null;
+  for (const infoPage of Object.values(infoPages)) {
+    const infos = (infoPage as WikiPage & {
+      imageinfo?: Array<{ url?: string; thumburl?: string }>;
+    }).imageinfo;
+    const url = infos?.[0]?.thumburl ?? infos?.[0]?.url;
+    if (url) return url.replace(/^http:/, "https:");
+  }
+  return null;
+}
+
 /** 其他类作品详情：精确标题直查（中/英）。
  *  注：曾有百度百科 openapi 兜底，2026-09-28 实测已废弃（恒返回 errno 6），
  *  纯拖 8s 超时——已移除；简介与图均以维基为准。 */

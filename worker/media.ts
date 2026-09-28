@@ -2,7 +2,7 @@ import curatedPosters from "./imdb-posters.json";
 import { gdPicUrl, gdSearch, pickTracks, toSc, type GdProxyEnv } from "./gdstudio";
 import { fetchBounded, parseAllowedUrl, readBoundedText, type OutboundPolicy } from "./outbound";
 import { generationOf, registerPurger } from "./cachePurge";
-import { otherDetail, wikiEnTitle } from "./other";
+import { otherDetail, wikiEnTitle, wikiPageImageAny } from "./other";
 
 export interface DoubanWork {
   id: string;
@@ -1599,13 +1599,19 @@ async function computePosters(
     const wiki = await searchWikiPoster(title, english, undefined, year);
     if (wiki.length) return { urls: wiki, outcome: "found" };
     // 二段：langlinks 拿英文标题再查 en wiki（覆盖面不同；zh 简繁变体也会被
-    // 严格标题匹配漏掉，en 查询绕开）。en wiki 无结果则 title 为 null。
+    // 严格标题匹配漏掉）。en wiki 无结果则 title 为 null。
     const enTitle = await wikiEnTitle(title);
     if (enTitle) {
       const enWiki = await searchWikiPoster(enTitle, enTitle, undefined, year);
       if (enWiki.length) return { urls: enWiki, outcome: "found" };
     }
-    // 三段：otherDetail（无标题评分，含 redirects/converttitles 变体容错）
+    // 三段：条目主图直取（pageimages 对非自由封面恒空，images→imageinfo 链
+    // 能拿到 en wiki 本地托管的封面文件——游戏/书籍的唯一天然免费来源）。
+    const directZh = await wikiPageImageAny("zh", title);
+    if (directZh) return { urls: [directZh], outcome: "found" };
+    const directEn = await wikiPageImageAny("en", enTitle ?? title);
+    if (directEn) return { urls: [directEn], outcome: "found" };
+    // 四段：otherDetail（无评分，含 redirects/converttitles 变体容错）
     const fallback = await otherDetail(title).catch(() => null);
     const urls = fallback?.poster_url ? [fallback.poster_url] : [];
     return { urls, outcome: urls.length ? "found" : throttled ? "throttled" : "absent" };
