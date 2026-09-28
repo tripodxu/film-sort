@@ -1,6 +1,8 @@
+import { useRef } from "react";
 import { ArrowRight, Pause, SkipForward, Undo2 } from "lucide-react";
 import { Poster } from "../components/Poster";
 import { IconButton } from "./IconButton";
+import { decideSwipe } from "../lib/swipe";
 import type { SortingViewProps } from "./types";
 
 export function SortingView({
@@ -14,6 +16,61 @@ export function SortingView({
   worksById,
   act,
 }: SortingViewProps) {
+  // ===== 触屏滑动选择:往哪边甩就选哪边(与键盘 ←/A = 左同语义) =====
+  // 仅触摸/笔启用——鼠标拖拽会与正文文字选择冲突,且桌面已有点击+键盘。
+  // 拖动中的跟随位移直接写 transform(ref),不进 React state。
+  const dragRef = useRef<{
+    pointerId: number;
+    x: number;
+    y: number;
+    active: boolean;
+  } | null>(null);
+  const reducedMotion =
+    typeof window !== "undefined" &&
+    window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+
+  function onSwipeStart(event: React.PointerEvent<HTMLDivElement>) {
+    if (event.pointerType === "mouse") return;
+    dragRef.current = {
+      pointerId: event.pointerId,
+      x: event.clientX,
+      y: event.clientY,
+      active: false,
+    };
+  }
+
+  function onSwipeMove(event: React.PointerEvent<HTMLDivElement>) {
+    const drag = dragRef.current;
+    if (!drag || event.pointerId !== drag.pointerId) return;
+    const dx = event.clientX - drag.x;
+    const dy = event.clientY - drag.y;
+    if (Math.abs(dx) < 12 || Math.abs(dx) <= Math.abs(dy)) return;
+    if (!drag.active) {
+      drag.active = true;
+      event.currentTarget.setPointerCapture(drag.pointerId);
+    }
+    if (!reducedMotion) {
+      const nudge = Math.max(-24, Math.min(24, dx * 0.12));
+      event.currentTarget.style.transition = "none";
+      event.currentTarget.style.transform = `translateX(${nudge}px)`;
+    }
+  }
+
+  function onSwipeEnd(event: React.PointerEvent<HTMLDivElement>) {
+    const drag = dragRef.current;
+    if (!drag || event.pointerId !== drag.pointerId) return;
+    const dx = event.clientX - drag.x;
+    const dy = event.clientY - drag.y;
+    dragRef.current = null;
+    event.currentTarget.style.transform = "";
+    event.currentTarget.style.transition = "";
+    const decision = decideSwipe(dx, dy);
+    if (decision) {
+      navigator.vibrate?.(10);
+      act(decision);
+    }
+  }
+
   return (
     <>
       <div className="duel-heading">
@@ -95,6 +152,10 @@ export function SortingView({
         className="duel-grid"
         role="group"
         aria-label={t("选择更偏好的作品", "Choose the work you prefer")}
+        onPointerDown={onSwipeStart}
+        onPointerMove={onSwipeMove}
+        onPointerUp={onSwipeEnd}
+        onPointerCancel={onSwipeEnd}
       >
         {(["left", "right"] as const).map((side, index) => {
           const workId = side === "left" ? comparison.leftId : comparison.rightId;
@@ -159,8 +220,11 @@ export function SortingView({
           <Undo2 size={19} />
         </IconButton>
         <span className="keyboard-hint">
-          {t("点击卡片选择", "Click a card")} <kbd>A</kbd>/<kbd>D</kbd> <kbd>←</kbd>/<kbd>→</kbd>{" "}
-          <kbd>1</kbd>/<kbd>2</kbd>
+          <span className="kb-only">
+            {t("点击卡片选择", "Click a card")} <kbd>A</kbd>/<kbd>D</kbd> <kbd>←</kbd>/<kbd>→</kbd>{" "}
+            <kbd>1</kbd>/<kbd>2</kbd>
+          </span>
+          <span className="touch-hint">{t("左右滑动选择", "Swipe to choose")}</span>
         </span>
       </div>
     </>

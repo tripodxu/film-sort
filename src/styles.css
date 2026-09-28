@@ -1253,3 +1253,15 @@ body[data-theme=classic]{
 @media(max-width:540px){
   .home-actions.home-actions{justify-content:flex-start}
 }
+
+/* ===== P9 对战滑动手势（2026-09-28,优化冲刺 Phase 1）========================
+   触屏「往哪边甩就选哪边」（与键盘 ←/A = 左同语义）。touch-action:pan-y 把
+   水平手势留给 JS、垂直滚动留给浏览器；拖动中的跟随位移由 SortingView 直接
+   写 transform（reduced-motion 跳过）。提示语按输入方式切换。 */
+.duel-grid{touch-action:pan-y}
+.artwork-card{will-change:auto}
+.touch-hint{display:none}
+@media(hover:none){
+  .keyboard-hint .kb-only{display:none}
+  .keyboard-hint .touch-hint{display:inline}
+}
