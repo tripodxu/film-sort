@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useState, type ReactNode } from "react";
+import { lazy, Suspense, useEffect, useMemo, useState, type ReactNode } from "react";
 import {
   ArrowLeft,
   Check,
@@ -39,6 +39,7 @@ import { ErrorBoundary } from "./components/ErrorBoundary";
 import { AiConfigDialog } from "./components/AiConfigDialog";
 import { readNotes, writeNotes, setNote } from "./lib/notes";
 import { buildProfileSyncBody } from "./lib/profileSync";
+import { buildTasteContext } from "./lib/typesafe";
 import { epochQuery } from "./lib/cacheBust";
 import { Poster } from "./components/Poster";
 import { RankingDetail } from "./components/RankingDetail";
@@ -336,6 +337,11 @@ export default function App() {
     auth.updateSetDraft(setDraft as (d: unknown) => void);
   }, [setDraft]);
 
+  // Jev 辅助模式的品味上下文:画像变化时重建一次,排序中的每对预测共用
+  const tasteContext = useMemo(
+    () => (profile ? buildTasteContext(profile.rankings) : undefined),
+    [profile],
+  );
   const activeRanking =
     profile?.rankings.find((entry, idx) => `${entry.kind}-${idx}` === activeKind) ??
     profile?.rankings[0];
@@ -1184,6 +1190,8 @@ export default function App() {
         label={label}
         kind={kind}
         t={t}
+        locale={locale}
+        tasteContext={tasteContext}
         worksById={worksById}
         act={act}
       />

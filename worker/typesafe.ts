@@ -105,7 +105,16 @@ export function buildJevQuestions(
 
 interface SystemOneResponse {
   model?: string;
-  answers?: Record<string, { type?: string; noul?: number }>;
+  answers?: Record<
+    string,
+    {
+      type?: string;
+      noul?: number;
+      choice?: string;
+      confidence?: number;
+      probabilities?: Record<string, number>;
+    }
+  >;
   usage?: { input_tokens?: number };
 }
 
@@ -171,6 +180,130 @@ export async function jevRank(
     order: scored.map((entry) => entry.index),
     scores: scored.map((entry) => entry.score),
     inputTokens: typeof body.usage?.input_tokens === "number" ? body.usage.input_tokens : 0,
+  };
+}
+
+export interface JevPickInput {
+  kind: JevKind;
+  left: JevWorkInput;
+  right: JevWorkInput;
+  profileContext?: string;
+  locale?: "zh" | "en";
+}
+
+export interface JevPickResult {
+  model: string;
+  pick: "left" | "right";
+  confidence: number;
+  probabilities: { left: number; right: number };
+  inputTokens: number;
+}
+
+const cleanWork = (work: JevWorkInput): string => {
+  const meta = [work.year ? String(work.year) : "", work.creator ? clean(work.creator, 120) : ""]
+    .filter(Boolean)
+    .join(", ");
+  return `《${clean(work.title, 160)}》${meta ? `(${meta})` : ""}`;
+};
+
+/**
+ * 1v1 取舍预测(辅助模式的原子判定):Choice 二选一,返回校准置信度。
+ * 置信度由调用方设阈值——低于阈值不代判,交给用户。
+ */
+export async function jevPick(
+  input: JevPickInput,
+  config: { apiKey: string },
+  fetchImpl: typeof fetch = fetch,
+): Promise<JevPickResult> {
+  const zh = (input.locale ?? "zh") === "zh";
+  const kindLabel = KIND_LABELS[input.kind];
+  const lines: string[] = [];
+  if (input.profileContext) lines.push(`【用户品味档案】\n${clean(input.profileContext, 4096)}`);
+  lines.push(
+    zh
+      ? `【当前取舍】两件${kindLabel}之间,这位用户只会保留一件。`
+      : `【Decision】The user keeps only one of the two ${kindLabel}s.`,
+  );
+  const payload = {
+    model: "jev-latest",
+    state: lines.join("\n"),
+    questions: {
+      pick: {
+        type: "choice",
+        instructions: zh ? "这位用户会更想保留哪一件?" : "Which one would this user rather keep?",
+        criteria: {
+          left: cleanWork(input.left),
+          right: cleanWork(input.right),
+        },
+      },
+    },
+  };
+  const body = await callSystemOne(payload, config.apiKey, fetchImpl);
+  const answer = body.answers?.pick;
+  const pick = answer?.choice;
+  if (pick !== "left" && pick !== "right")
+    throw new AiError("upstream_error", 502, "Jev pick malformed");
+  const rawProbabilities = answer?.probabilities ?? {};
+  const probabilityOf = (side: "left" | "right") => {
+    const value = rawProbabilities[side];
+    return typeof value === "number" && value >= 0 && value <= 1 ? value : undefined;
+  };
+  const leftProbability = probabilityOf("left");
+  const rightProbability = probabilityOf("right");
+  // confidence 缺失时回退到「被选中一侧」的概率,而不是任意一侧
+  const chosenProbability = pick === "right" ? rightProbability : leftProbability;
+  const confidence =
+    typeof answer?.confidence === "number" && answer.confidence >= 0 && answer.confidence <= 1
+      ? answer.confidence
+      : (chosenProbability ?? leftProbability ?? rightProbability);
+  if (typeof confidence !== "number")
+    throw new AiError("upstream_error", 502, "Jev pick missing confidence");
+  return {
+    model: typeof body.model === "string" ? body.model : "jev",
+    pick,
+    confidence,
+    probabilities: {
+      left: leftProbability ?? (pick === "left" ? 1 : 0),
+      right: rightProbability ?? (pick === "right" ? 1 : 0),
+    },
+    inputTokens: typeof body.usage?.input_tokens === "number" ? body.usage.input_tokens : 0,
+  };
+}
+
+export function parseJevPickBody(body: Record<string, unknown>): JevPickInput | null {
+  if (typeof body.kind !== "string" || !(body.kind in KIND_LABELS)) return null;
+  const parseWork = (raw: unknown): JevWorkInput | null => {
+    if (typeof raw !== "object" || raw === null) return null;
+    const work = raw as Record<string, unknown>;
+    if (typeof work.title !== "string" || !work.title.trim() || work.title.length > 200)
+      return null;
+    return {
+      title: work.title,
+      ...(typeof work.creator === "string" && work.creator
+        ? { creator: work.creator.slice(0, 160) }
+        : {}),
+      ...(typeof work.year === "number" && Number.isFinite(work.year)
+        ? { year: Math.trunc(work.year) }
+        : {}),
+    };
+  };
+  const left = parseWork(body.left);
+  const right = parseWork(body.right);
+  if (!left || !right) return null;
+  if (
+    body.profileContext !== undefined &&
+    (typeof body.profileContext !== "string" || body.profileContext.length > 4096)
+  )
+    return null;
+  if (body.locale !== undefined && body.locale !== "zh" && body.locale !== "en") return null;
+  return {
+    kind: body.kind as JevKind,
+    left,
+    right,
+    ...(typeof body.profileContext === "string" && body.profileContext
+      ? { profileContext: body.profileContext }
+      : {}),
+    ...(body.locale === "en" ? { locale: "en" as const } : {}),
   };
 }
 

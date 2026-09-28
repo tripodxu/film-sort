@@ -107,6 +107,9 @@ export interface SortingViewProps {
   label: (kind: MediaKind) => string;
   kind: MediaKind;
   t: (zh: string, en: string) => string;
+  locale: "zh" | "en";
+  /** Jev 辅助模式的品味上下文(已有榜单摘要);无画像时缺省 */
+  tasteContext?: string;
   worksById: Map<string, import("../data/media").Artwork>;
   act: (
     action: "left" | "right" | "undo" | "skip-left" | "skip-right" | "defer-left" | "defer-right",

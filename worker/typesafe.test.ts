@@ -2,7 +2,9 @@ import { describe, expect, it, vi } from "vitest";
 import {
   buildJevQuestions,
   buildJevState,
+  jevPick,
   jevRank,
+  parseJevPickBody,
   parseJevRankBody,
   testJevConnection,
   validateJevConfig,
@@ -169,5 +171,87 @@ describe("testJevConnection", () => {
     await expect(testJevConnection({ apiKey: "ts_key12345" }, fetchImpl)).rejects.toMatchObject({
       code: "upstream_error",
     });
+  });
+});
+
+// ===== Phase 5:1v1 取舍预测 =====
+
+const pickResponse = (choice: string, confidence: number, probabilities: Record<string, number>) =>
+  new Response(
+    JSON.stringify({
+      model: "jev-1.13.0",
+      answers: {
+        pick: { type: "choice", choice, confidence, probabilities },
+      },
+      usage: { input_tokens: 120 },
+    }),
+    { status: 200 },
+  );
+
+describe("jevPick", () => {
+  const input = {
+    kind: "film" as const,
+    left: { title: "盗梦空间", year: 2010 },
+    right: { title: "霸王别姬", year: 1993 },
+    profileContext: "[film] 片单: A > B",
+  };
+
+  it("Choice 二选一:choice/confidence/probabilities 齐备", async () => {
+    const fetchImpl = stubFetch((_url, init) => {
+      const body = JSON.parse(String(init?.body));
+      expect(body.questions.pick.type).toBe("choice");
+      expect(body.questions.pick.criteria.left).toContain("盗梦空间");
+      expect(body.questions.pick.criteria.right).toContain("霸王别姬");
+      return pickResponse("left", 0.86, { left: 0.9, right: 0.1 });
+    });
+    const result = await jevPick(input, { apiKey: "ts_key12345" }, fetchImpl);
+    expect(result).toEqual({
+      model: "jev-1.13.0",
+      pick: "left",
+      confidence: 0.86,
+      probabilities: { left: 0.9, right: 0.1 },
+      inputTokens: 120,
+    });
+  });
+
+  it("confidence 缺失时回退概率;choice 非法报 upstream_error", async () => {
+    const fallback = stubFetch(
+      () =>
+        new Response(
+          JSON.stringify({
+            model: "jev",
+            answers: {
+              pick: { type: "choice", choice: "right", probabilities: { left: 0.2, right: 0.8 } },
+            },
+          }),
+          { status: 200 },
+        ),
+    );
+    const result = await jevPick(input, { apiKey: "ts_key12345" }, fallback);
+    expect(result.pick).toBe("right");
+    expect(result.confidence).toBe(0.8);
+    const bad = stubFetch(
+      () =>
+        new Response(JSON.stringify({ answers: { pick: { choice: "middle" } } }), { status: 200 }),
+    );
+    await expect(jevPick(input, { apiKey: "ts_key12345" }, bad)).rejects.toMatchObject({
+      code: "upstream_error",
+    });
+  });
+});
+
+describe("parseJevPickBody", () => {
+  it("合法 body 通过;非法 kind/作品/超长上下文 → null", () => {
+    const body = {
+      kind: "film",
+      left: { title: "A", year: 2001 },
+      right: { title: "B" },
+      profileContext: "x",
+      locale: "zh",
+    };
+    expect(parseJevPickBody(body)?.left.title).toBe("A");
+    expect(parseJevPickBody({ ...body, kind: "nope" })).toBeNull();
+    expect(parseJevPickBody({ ...body, right: { title: "" } })).toBeNull();
+    expect(parseJevPickBody({ ...body, profileContext: "x".repeat(4097) })).toBeNull();
   });
 });

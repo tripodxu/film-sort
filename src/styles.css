@@ -1277,3 +1277,10 @@ body[data-theme=classic]{
 
 /* 路由懒加载占位:与页面等高的最小骨架,脉冲节奏复用 plaza-pulse */
 .route-loading{min-height:60vh}
+
+/* AI 代判标注:mono 微字 + accent,置于 progress-meta 与对战区之间 */
+.assist-marker{
+  display:flex;align-items:center;gap:6px;margin:-6px 0 12px;
+  color:var(--accent);font-family:var(--font-mono);font-size:11px;letter-spacing:.05em
+}
+.assist-marker svg{flex-shrink:0}

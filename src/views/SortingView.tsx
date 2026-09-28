@@ -1,9 +1,14 @@
-import { useRef } from "react";
-import { ArrowRight, Pause, SkipForward, Undo2 } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { ArrowRight, Pause, SkipForward, Sparkles, Undo2 } from "lucide-react";
 import { Poster } from "../components/Poster";
 import { IconButton } from "./IconButton";
 import { decideSwipe } from "../lib/swipe";
+import { track } from "../lib/utils";
+import { readJevAssistEnabled, readTypesafeConfig, requestJevPick } from "../lib/typesafe";
 import type { SortingViewProps } from "./types";
+
+/** AI 代判的置信阈值:Jev 概率是校准过的,低于此值说明这对接近 toss-up,交给用户。 */
+const ASSIST_CONFIDENCE_THRESHOLD = 0.8;
 
 export function SortingView({
   collection,
@@ -13,6 +18,8 @@ export function SortingView({
   label,
   kind,
   t,
+  locale,
+  tasteContext,
   worksById,
   act,
 }: SortingViewProps) {
@@ -28,6 +35,86 @@ export function SortingView({
   const reducedMotion =
     typeof window !== "undefined" &&
     window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+
+  // ===== Jev 辅助模式(AI 代判,默认关)=====
+  // 每对作品先请求预测:置信 ≥ 0.8 自动落位(进决策日志,可撤销),低于阈值
+  // 或复测阶段交给用户——复测本来就是引擎挑出的接近 toss-up 的对。
+  // 键控防竞态:assistKeyRef 记录已处理的对,响应到达时若键已变(用户手动
+  // 操作过)则丢弃——绝不覆盖用户的真实选择。
+  const [assistMarker, setAssistMarker] = useState<string | null>(null);
+  const assistKeyRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    const key = `${comparison.leftId}|${comparison.rightId}|${comparison.phase}`;
+    if (assistKeyRef.current === key) return;
+    if (comparison.phase === "verification") {
+      setAssistMarker(null);
+      return;
+    }
+    if (!readJevAssistEnabled()) return;
+    const config = readTypesafeConfig();
+    if (!config) return;
+    const left = worksById.get(comparison.leftId);
+    const right = worksById.get(comparison.rightId);
+    if (!left || !right) return;
+    assistKeyRef.current = key;
+    let stale = false;
+    void (async () => {
+      const result = await requestJevPick(
+        {
+          kind,
+          left: {
+            title: left.title,
+            ...(left.creator ? { creator: left.creator } : {}),
+            ...(left.year ? { year: left.year } : {}),
+          },
+          right: {
+            title: right.title,
+            ...(right.creator ? { creator: right.creator } : {}),
+            ...(right.year ? { year: right.year } : {}),
+          },
+          ...(tasteContext ? { profileContext: tasteContext } : {}),
+          locale,
+        },
+        config,
+      );
+      if (stale || assistKeyRef.current !== key) return; // 用户已手动操作
+      if (!result.ok || result.confidence < ASSIST_CONFIDENCE_THRESHOLD) return; // 静默交还用户
+      const confidencePct = Math.round(result.confidence * 100);
+      setAssistMarker(
+        t(
+          `上一对由 Jev 代判 · 置信 ${confidencePct}%`,
+          `Last pair decided by Jev · ${confidencePct}% confidence`,
+        ),
+      );
+      track("jev_assist_pick", {
+        mode: kind,
+        confidence: result.confidence,
+        pick: result.pick,
+        input_tokens: result.inputTokens,
+      });
+      act(result.pick);
+    })();
+    return () => {
+      stale = true;
+    };
+  }, [
+    comparison.leftId,
+    comparison.rightId,
+    comparison.phase,
+    kind,
+    locale,
+    tasteContext,
+    t,
+    worksById,
+    act,
+  ]);
+
+  /** 手动提交:清除 AI 代判标注(键盘路径不清除——「上一对」本就是历史语义)。 */
+  function commitManually(side: "left" | "right") {
+    setAssistMarker(null);
+    act(side);
+  }
 
   function onSwipeStart(event: React.PointerEvent<HTMLDivElement>) {
     if (event.pointerType === "mouse") return;
@@ -153,6 +240,12 @@ export function SortingView({
           {t("预计剩余", "Estimated remaining")} {progress.estimatedRemaining}
         </span>
       </div>
+      {assistMarker && (
+        <p className="assist-marker" role="status">
+          <Sparkles size={12} />
+          {assistMarker}
+        </p>
+      )}
       <div
         className="duel-grid"
         role="group"
@@ -169,7 +262,7 @@ export function SortingView({
             <div key={side} className="artwork-card">
               <button
                 className="artwork-main"
-                onClick={() => act(side)}
+                onClick={() => commitManually(side)}
                 aria-label={`${t("选择", "Choose")} ${work.title}`}
               >
                 <div className="artwork-top">

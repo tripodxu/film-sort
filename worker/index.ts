@@ -95,7 +95,14 @@ import {
   type AiScene,
   type ResolvedAi,
 } from "./ai";
-import { jevRank, parseJevRankBody, testJevConnection, validateJevConfig } from "./typesafe";
+import {
+  jevPick,
+  jevRank,
+  parseJevPickBody,
+  parseJevRankBody,
+  testJevConnection,
+  validateJevConfig,
+} from "./typesafe";
 
 export interface Env {
   DB?: D1Database;
@@ -195,6 +202,7 @@ async function allowUpstreamRequest(
     | "ai_models"
     | "ai_jev"
     | "ai_jev_test"
+    | "ai_jev_pick"
     | "music"
     | "music_play"
     | "music_lyric"
@@ -2619,6 +2627,29 @@ async function route(request: Request, env: Env): Promise<Response> {
     if (!parsed) return json({ ok: false, error: "invalid_data", msg: "作品数据不合法" }, 400);
     try {
       const result = await jevRank(parsed, config);
+      return json({ ok: true, ...result }, 200, { "cache-control": "no-store" });
+    } catch (error) {
+      return json({ ok: false, ...aiErrorPayload(error) }, aiErrorStatus(error));
+    }
+  }
+  if (url.pathname === "/api/ai/jev-pick" && request.method === "POST") {
+    assertSameOrigin(request);
+    // 辅助模式每对作品一次预测,高频但单次极廉价(输入 token 为主);桶放宽到 60
+    if (!(await allowUpstreamRequest(request, "ai_jev_pick", 60)))
+      return json({ ok: false, error: "rate_limited", msg: "操作太频繁，请稍后再试" }, 429, {
+        "retry-after": "600",
+      });
+    const body = await readJson(request);
+    const config = validateJevConfig(body.config);
+    if (!config)
+      return json(
+        { ok: false, error: "invalid_config", msg: "TypeSafe API Key 不合法（长度 8-256）" },
+        400,
+      );
+    const parsed = parseJevPickBody(body);
+    if (!parsed) return json({ ok: false, error: "invalid_data", msg: "作品数据不合法" }, 400);
+    try {
+      const result = await jevPick(parsed, config);
       return json({ ok: true, ...result }, 200, { "cache-control": "no-store" });
     } catch (error) {
       return json({ ok: false, ...aiErrorPayload(error) }, aiErrorStatus(error));

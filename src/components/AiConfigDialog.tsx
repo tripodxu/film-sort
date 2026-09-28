@@ -13,8 +13,10 @@ import {
 } from "../lib/aiInsight";
 import {
   jevFailureText,
+  readJevAssistEnabled,
   readTypesafeConfig,
   testJevConfig,
+  writeJevAssistEnabled,
   writeTypesafeConfig,
 } from "../lib/typesafe";
 
@@ -52,6 +54,7 @@ export function AiConfigDialog({
   const [listBusy, setListBusy] = useState(false);
   const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null);
   const [jevKey, setJevKey] = useState(readTypesafeConfig()?.apiKey ?? "");
+  const [jevAssistOn, setJevAssistOn] = useState(readJevAssistEnabled());
   const [jevTestBusy, setJevTestBusy] = useState(false);
   const [jevMessage, setJevMessage] = useState<{ ok: boolean; text: string } | null>(null);
   const canSaveJev = jevKey.trim().length >= 8;
@@ -416,6 +419,24 @@ export function AiConfigDialog({
               {jevMessage.text}
             </p>
           )}
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
+            <button
+              className={`settings-chip${jevAssistOn ? " active" : ""}`}
+              aria-pressed={jevAssistOn}
+              onClick={() => {
+                const next = !jevAssistOn;
+                if (writeJevAssistEnabled(next)) setJevAssistOn(next);
+              }}
+            >
+              {t("排序时 AI 代判", "AI-assist while sorting")}
+            </button>
+            <span className="mini-note">
+              {t(
+                "置信 ≥80% 的取舍自动落位,可撤销;复测阶段仍由你判断。",
+                "Pairs with ≥80% confidence are auto-picked (undoable); verification stays yours.",
+              )}
+            </span>
+          </div>
           <div className="guide-modal-footer">
             {existing && (
               <button

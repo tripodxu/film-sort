@@ -167,3 +167,83 @@ export function jevFailureText(failure: JevFailure, t: (zh: string, en: string) 
   const [zh, en] = FAILURE_MESSAGES[failure.error] ?? FAILURE_MESSAGES.unavailable;
   return t(zh, en);
 }
+
+// ===== Jev 辅助模式(AI 代判)=====
+
+/** 开关存取:默认关(辅助模式永远 opt-in)。false = 浏览器存储不可用。 */
+export function readJevAssistEnabled(): boolean {
+  try {
+    return localStorage.getItem("art-rank:jev-assist") === "1";
+  } catch {
+    return false;
+  }
+}
+
+export function writeJevAssistEnabled(enabled: boolean): boolean {
+  try {
+    localStorage.setItem("art-rank:jev-assist", enabled ? "1" : "0");
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export interface JevPickInput {
+  kind: string;
+  left: { title: string; creator?: string; year?: number };
+  right: { title: string; creator?: string; year?: number };
+  profileContext?: string;
+  locale: "zh" | "en";
+}
+
+export interface JevPickSuccess {
+  ok: true;
+  pick: "left" | "right";
+  confidence: number;
+  probabilities: { left: number; right: number };
+  model: string;
+  inputTokens: number;
+}
+export type JevPickResult = JevPickSuccess | JevFailure;
+
+/** 1v1 取舍预测:置信度由调用方设阈值,低于阈值不代判。 */
+export async function requestJevPick(
+  input: JevPickInput,
+  config: JevUserConfig,
+): Promise<JevPickResult> {
+  try {
+    const response = await fetch("/api/ai/jev-pick", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ ...input, config }),
+      signal: AbortSignal.timeout(40000),
+    });
+    const body = (await response.json().catch(() => null)) as Record<string, unknown> | null;
+    if (
+      response.ok &&
+      body?.ok === true &&
+      (body.pick === "left" || body.pick === "right") &&
+      typeof body.confidence === "number"
+    ) {
+      return {
+        ok: true,
+        pick: body.pick,
+        confidence: body.confidence,
+        probabilities:
+          body.probabilities &&
+          typeof body.probabilities === "object" &&
+          typeof (body.probabilities as Record<string, unknown>).left === "number"
+            ? (body.probabilities as { left: number; right: number })
+            : {
+                left: body.pick === "left" ? 1 : 0,
+                right: body.pick === "right" ? 1 : 0,
+              },
+        model: typeof body.model === "string" ? body.model : "jev",
+        inputTokens: typeof body.inputTokens === "number" ? body.inputTokens : 0,
+      };
+    }
+    return failureFrom(response, body);
+  } catch {
+    return { ok: false, error: "unavailable" };
+  }
+}
