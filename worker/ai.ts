@@ -459,6 +459,13 @@ function resolveModelsEndpoint(baseUrl: string, protocol: AiProtocol): string {
 interface CallOptions {
   timeoutMs?: number;
   maxTokens?: number;
+  /**
+   * 输出字符兜底截断（默认 2000）。历史值拦腰斩断了 deep 档点评——500 字正文 +
+   * 三段序号结构轻松超 2000 字符，用户看到「超出一定字数就没了」。调用方按
+   * 档位放宽（insights: deep 9000 / standard 5000 / brief 2500）；上游响应本身
+   * 已有 MAX_AI_RESPONSE_BYTES 字节上限，此处只防异常超长。
+   */
+  maxOutputChars?: number;
   fetchImpl?: typeof fetch;
 }
 
@@ -647,7 +654,7 @@ export async function callAi(
   }
   const text = extractText(cfg.protocol, raw);
   if (!text) throw new AiError("upstream_error", 502, "AI upstream returned no text");
-  return text.slice(0, MAX_OUTPUT_CHARS);
+  return text.slice(0, opts.maxOutputChars ?? MAX_OUTPUT_CHARS);
 }
 
 // ===== 协议自动探测（仅 404/405 降档；结论按 baseUrl 缓存）=====

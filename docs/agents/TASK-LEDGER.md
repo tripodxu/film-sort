@@ -10,6 +10,16 @@
 
 ## 进行中 / 最近
 
+### T-20260928-07 · 修复两批：「其他」维度封面/详情 + AI 点评截断
+- **状态**：👀 待审（五道门禁绿；**线上验证随推送进行**）｜ **负责人**：本 agent
+- **任务类型**：§2.6（外部平台/海报管线）+ §2.7（AI）
+- **最小上下文**：`worker/media.ts`（computePosters other 分支）+ `worker/posterStore.ts`（mediaTypeForKind）+ `src/components/Poster.tsx`（TYPE_BY_KIND）+ `worker/ai.ts`（maxOutputChars）
+- **改了什么**：① 「其他」维度接入 wiki 海报管线：posterStore/media/index 三处 type 白名单放行 other，computePosters 新增 other 分支直走 searchWikiPoster（type=undefined 参与评分防 TYPE_WORDS 误杀），客户端 TYPE_BY_KIND.other="other" + resolve 放开 + prefetch 放开；② other 详情超时 20s→30s（维基兜底链冷缓存实测 >25s）；③ AI 点评截断：CallOptions.maxOutputChars（默认 2000 不变），/api/insights 按档位放宽（字符 2500/5000/9000 + maxTokens 2000/3500/6000）
+- **为什么**：用户报障两批；「其他」维度自上线起无封面（管线从未接入），详情慢查被 20s 掐断；AI 点评 deep 档撞 2000 字符硬顶
+- **验证状态**：五道门禁 ✅（484 passed·9 skipped，posterStore 语义翻转 +2、callAi 绊线 +2）｜ **线上 ⬜（推送后需真机验证：其他维度作品列表出封面、详情 30s 内可达、deep 档点评不截断）**
+- **遗留风险**：① other 海报首屏解析比豆瓣慢（维基多查询链），靠 isolate/edge/D1 三级缓存收敛，首次浏览一段榜单可能较慢；② scoreWikiImage 纯标题匹配对同名非作品条目可能取错图（无类型词表可依），错误可经海报失败上报观察
+- **下一步（给接手者）**：推送后线上验证三项；若 other 取图准确率差，考虑用 otherDetail 的 content_source/描述做二次过滤
+
 ### T-20260928-06 · 优化冲刺 Phase 6 · 相遇页「预测分歧」洞察（Jev）
 - **状态**：👀 待审（本地全绿 + stub smoke 实锤；**真实 key 端到端留用户复核，推送后线上可见**）｜ **负责人**：本 agent
 - **任务类型**：§2.1（排序/比较）+ §2.7（AI）

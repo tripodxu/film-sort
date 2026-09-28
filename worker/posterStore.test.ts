@@ -22,8 +22,8 @@ describe("mediaTypeForKind", () => {
     expect(mediaTypeForKind("music")).toBe("music");
   });
 
-  it("other / 未知媒介不解析海报", () => {
-    expect(mediaTypeForKind("other")).toBeNull();
+  it("other 走 wiki 取图管线（2026-09-28 起），未知媒介仍不解析", () => {
+    expect(mediaTypeForKind("other")).toBe("other");
     expect(mediaTypeForKind(undefined)).toBeNull();
     expect(mediaTypeForKind("tv")).toBeNull();
   });
@@ -65,6 +65,15 @@ describe("normalizePosterItem", () => {
         type: "music",
       }),
     ).toEqual({ title: "童话", english: "Fairy Tale", type: "music", year: 2005 });
+  });
+
+  it("other 维度条目合法（wiki 取图管线接入）", () => {
+    expect(normalizePosterItem({ title: " Journey ", type: "other" })).toEqual({
+      title: "Journey",
+      english: "",
+      type: "other",
+      year: undefined,
+    });
   });
 });
 

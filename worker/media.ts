@@ -1503,7 +1503,7 @@ async function resolvePosterEntry(
   title: string,
   english: string,
   year?: number,
-  type?: "movie" | "book" | "music",
+  type?: "movie" | "book" | "music" | "other",
   env?: GdProxyEnv,
   opts?: { retry?: boolean },
 ): Promise<PosterCacheEntry> {
@@ -1535,7 +1535,7 @@ async function computePosters(
   title: string,
   english: string,
   year?: number,
-  type?: "movie" | "book" | "music",
+  type?: "movie" | "book" | "music" | "other",
   env?: GdProxyEnv,
 ): Promise<PosterCacheEntry> {
   let primary: string[] = [];
@@ -1589,6 +1589,14 @@ async function computePosters(
         : []),
     ];
     primary = [...new Set([...direct, ...proxied])];
+  } else if (type === "other") {
+    // 「其他」维度（游戏/艺术/建筑等，豆瓣无条目）：直接维基 pageimages 取图，
+    // 不走豆瓣/网易云/imdb。type 必须以 undefined 参与评分（scoreWikiImage）——
+    // TYPE_WORDS 没有 other 词表，带着 "other" 时 declareType 从正文推断出的
+    // movie/book/music 会因 declared !== "other" 把正确条目全部误杀（-1）；
+    // undefined 走纯标题匹配，恰好是该维度应有的语义。
+    const wiki = await searchWikiPoster(title, english, undefined, year);
+    return { urls: wiki, outcome: wiki.length ? "found" : throttled ? "throttled" : "absent" };
   } else {
     const [suggestion, imdb, search] = await Promise.allSettled([
       doubanSuggest(title),
@@ -1641,7 +1649,7 @@ export interface PosterBatchRequest {
   title: string;
   english?: string;
   year?: number;
-  type?: "movie" | "book" | "music";
+  type?: "movie" | "book" | "music" | "other";
 }
 export interface PosterBatchResult {
   [cacheKey: string]: string[];

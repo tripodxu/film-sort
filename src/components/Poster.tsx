@@ -36,7 +36,9 @@ const TYPE_BY_KIND: Record<string, string> = {
   film: "movie",
   book: "book",
   music: "music",
-  other: "movie",
+  // 「其他」维度走服务端 wiki 取图管线（posterStore/media 的 type=other 分支），
+  // 与 worker 端 mediaTypeForKind 保持一致；维基图域已在 allowedImage/CSP 放行。
+  other: "other",
 };
 
 interface BatchEntry {
@@ -193,7 +195,8 @@ function resolve(work: Artwork, kind: MediaKind): Promise<string[]> {
 }
 export function prefetchPosters(items: Array<{ work: Artwork; kind: MediaKind }>): void {
   for (const { work, kind } of items) {
-    if (kind === "film" || kind === "book" || kind === "music") void resolve(work, kind);
+    if (kind === "film" || kind === "book" || kind === "music" || kind === "other")
+      void resolve(work, kind);
   }
 }
 
@@ -236,9 +239,12 @@ export function Poster({
   large?: boolean;
 }) {
   // 未知/空媒介（如画像帖整体卡）一律按 other 兜底：图标查表不会得到 undefined
-  const kind = rawKind === "film" || rawKind === "book" || rawKind === "music" ? rawKind : "other";
+  const kind =
+    rawKind === "film" || rawKind === "book" || rawKind === "music" || rawKind === "other"
+      ? rawKind
+      : "other";
   const [resolved, setResolved] = useState<string[]>(() => {
-    if (kind !== "film" && kind !== "book" && kind !== "music") return [];
+    if (kind !== "film" && kind !== "book" && kind !== "music" && kind !== "other") return [];
     return resolveSync(work, kind) ?? [...(work.posterUrls ?? [])];
   });
   const [failed, setFailed] = useState<Set<string>>(() => new Set());
@@ -249,7 +255,10 @@ export function Poster({
   const hasStoredPosters = (work.posterUrls?.length ?? 0) > 0;
   useEffect(() => {
     let active = true;
-    if (!hasStoredPosters && (kind === "film" || kind === "book" || kind === "music")) {
+    if (
+      !hasStoredPosters &&
+      (kind === "film" || kind === "book" || kind === "music" || kind === "other")
+    ) {
       void resolve(work, kind).then((urls) => {
         if (active && urls.length) setResolved(urls);
       });

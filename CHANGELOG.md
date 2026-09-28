@@ -1,5 +1,20 @@
 # Changelog
 
+## 2026-09-28 · 修复两批：「其他」维度封面/详情 + AI 点评截断
+
+用户报障两批，均已确诊修复：
+
+### ① 「其他」维度的作品没有封面和详情
+- **封面根因**：海报管线对 other 一直不解析（`TYPE_BY_KIND.other` 映射到 movie、`mediaTypeForKind("other")` 返回 null、`computePosters` 无 other 分支）——「其他」维度作品在所有界面只有图标兜底
+- **修复**：接入 wiki 取图管线——`PosterBatchRequest`/`computePosters`/`normalizePosterItem`/`mediaTypeForKind` 全部放行 type=other；`computePosters` 新增 other 分支直走 `searchWikiPoster`（**type 以 undefined 参与评分**：TYPE_WORDS 无 other 词表，带着 "other" 时 declareType 从正文推断的 movie/book/music 会把正确条目全部误杀）；维基图域本就在 allowedImage/CSP 白名单。广场 other 帖的 `resolveStoredPosterUrls` 查找随 mediaTypeForKind 放大自动生效
+- **详情根因**：`openArtworkDetail` 的 other 分支 20s 超时——维基 zh→en→百科兜底链冷缓存实测可超 25s，本可成功的详情被掐成「暂时没有更多资料」。放宽到 30s
+- **测试**：posterStore 语义翻转（other → "other"）+ normalizePosterItem other 合法条目，×2 更新/新增
+
+### ② AI 点评截断（超出一定字数不显示）
+- **根因**：`worker/ai.ts MAX_OUTPUT_CHARS=2000` 输出字符硬截断——deep 档 500 字 + 三段序号结构轻松超 2000 字符被拦腰斩（`maxTokens` 此前已按档位放宽，但字符顶没动）
+- **修复**：`CallOptions.maxOutputChars`（默认 2000 保持其他调用方不变）；`/api/insights` 按档位放宽——字符 brief 2500 / standard 5000 / deep 9000，maxTokens 同步 brief 2000 / standard 3500 / deep 6000（推理模型 reasoning 段与正文共享预算）
+- **测试**：`callAi` 默认 2000 + maxOutputChars 覆写生效，绊线 ×2
+
 ## 2026-09-28 · 优化冲刺 Phase 6 · 相遇页「预测分歧」洞察（Jev）
 
 比较页新增「预测分歧 · JEV」卡——「对方最出乎你意料的作品」：

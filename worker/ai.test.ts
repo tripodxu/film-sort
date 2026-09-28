@@ -520,3 +520,21 @@ describe("testAiConnection", () => {
     });
   });
 });
+
+describe("输出字符兜底截断（insight 截断修复绊线）", () => {
+  const longText = "评".repeat(3000);
+  const chatReply = () => json({ choices: [{ message: { content: longText } }] });
+  it("默认仍为 2000 字符（其他调用方行为不变）", async () => {
+    const fetchImpl = stubFetch(() => chatReply());
+    const result = await callAi(resolvedFor("chat"), spec(), { fetchImpl });
+    expect(result.length).toBe(2000);
+  });
+  it("maxOutputChars 覆写生效：insights 按档位放宽后 deep 档不再拦腰斩", async () => {
+    const fetchImpl = stubFetch(() => chatReply());
+    const result = await callAi(resolvedFor("chat"), spec(), {
+      fetchImpl,
+      maxOutputChars: 9000,
+    });
+    expect(result.length).toBe(3000);
+  });
+});

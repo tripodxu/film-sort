@@ -7,13 +7,14 @@ import { posterMediaKey } from "./media";
  * 而豆瓣对批量查询会回 418，结果大部分条目拿不到海报、只能显示占位图标。
  * 把解析结果按 `type|title|english|year` 落库后，同一榜单只有第一次需要回源。
  */
-export type PosterMediaType = "movie" | "book" | "music";
+export type PosterMediaType = "movie" | "book" | "music" | "other";
 
-/** 与前端 Poster.tsx 的 TYPE_BY_KIND 保持一致（other 不解析海报）。 */
+/** 与前端 Poster.tsx 的 TYPE_BY_KIND 保持一致（other=维基系，走 wiki 取图管线）。 */
 export function mediaTypeForKind(kind: unknown): PosterMediaType | null {
   if (kind === "film") return "movie";
   if (kind === "book") return "book";
   if (kind === "music") return "music";
+  if (kind === "other") return "other";
   return null;
 }
 
@@ -63,7 +64,9 @@ export function normalizePosterItem(raw: {
   const title = cleanText(raw.title, 160);
   if (!title) return null;
   const type =
-    raw.type === "book" || raw.type === "music" || raw.type === "movie" ? raw.type : null;
+    raw.type === "book" || raw.type === "music" || raw.type === "movie" || raw.type === "other"
+      ? raw.type
+      : null;
   if (!type) return null;
   return { title, english: cleanText(raw.english, 160) ?? "", type, year: normalizeYear(raw.year) };
 }

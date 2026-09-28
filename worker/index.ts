@@ -1085,7 +1085,10 @@ function sanitizePosterBatch(raw: readonly unknown[]): PosterBatchRequest[] {
     if (!isObject(entry)) continue;
     // 兼容未带 type 的旧客户端：缺省按 movie 处理，而不是丢弃整条。
     const type =
-      entry.type === "book" || entry.type === "music" || entry.type === "movie"
+      entry.type === "book" ||
+      entry.type === "music" ||
+      entry.type === "movie" ||
+      entry.type === "other"
         ? entry.type
         : "movie";
     const item = normalizePosterItem({
@@ -2692,10 +2695,11 @@ async function route(request: Request, env: Env): Promise<Response> {
       return json({ error: "data_too_large", msg: "数据过大" }, 413);
     const locale = body.locale === "en" ? "en" : "zh";
     const length = body.length === "brief" || body.length === "deep" ? body.length : "standard";
-    // 推理模型（mimo 等）的 reasoning 段与正文共享 max_tokens 预算：1000 会在长推理时
-    // 把 250 字正文拦腰截断（finish_reason=length）。按档位放宽，Worker 侧仍有 2000
-    // 字符的输出兜底截断。
-    const maxTokens = length === "deep" ? 4000 : length === "standard" ? 2500 : 1500;
+    // 推理模型（mimo 等）的 reasoning 段与正文共享 max_tokens 预算：max_tokens 过小
+    // 会在长推理时把正文拦腰截断（finish_reason=length）。按档位放宽；输出字符兜底
+    // 截断同步按档位放宽（历史 2000 字符硬顶会把 deep 档三段点评斩半）。
+    const maxTokens = length === "deep" ? 6000 : length === "standard" ? 3500 : 2000;
+    const maxOutputChars = length === "deep" ? 9000 : length === "standard" ? 5000 : 2500;
     // 通道选择：带合法 config 走自定义（独立限流），否则内置 env（未配置即 503）。
     const custom = body.config !== undefined ? validateUserConfig(body.config) : null;
     if (body.config !== undefined && !custom)
@@ -2760,7 +2764,7 @@ async function route(request: Request, env: Env): Promise<Response> {
       const outcome = resolved as ResolvedAi; // custom 为 null 时上面分支必然已赋值
       return json(
         {
-          insight: await callAi(outcome, spec, { maxTokens }),
+          insight: await callAi(outcome, spec, { maxTokens, maxOutputChars }),
           source,
           model: outcome.model,
           protocol: outcome.protocol,
