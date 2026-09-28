@@ -15,6 +15,16 @@ import { ThemeImportDialog } from "./ThemeImportDialog";
 // P5c：菜单内并入布局模式组（同款 menu-item，mono 方格缩略图标，§5.1）
 // 插拔主题：内置 THEMES 之外枚举 themeRegistry 导入的自定义主题（可删除），
 // 菜单底部提供「导入主题包」入口。
+// P4（PLAN-ui-modernization）：内置主题分「经典 / 新系列」两组展示（11 个平铺太长）。
+
+/** 新系列（组件级差异主题，PLAN-ui-modernization）；其余内置主题归经典组。 */
+const NEW_SERIES: ReadonlySet<string> = new Set([
+  "editorial",
+  "editorial-dark",
+  "aurora",
+  "gallery",
+]);
+
 export function ThemeSwitcher({ zh, onNotice }: { zh: boolean; onNotice?: (m: string) => void }) {
   const [open, setOpen] = useState(false);
   const [theme, setTheme] = useState<string>(() => readTheme());
@@ -106,7 +116,17 @@ export function ThemeSwitcher({ zh, onNotice }: { zh: boolean; onNotice?: (m: st
       </button>
       {open && (
         <div className="rank-menu theme-menu" role="menu">
-          {THEMES.map((item) =>
+          <div className="settings-group-label">{t("经典", "Classic")}</div>
+          {THEMES.filter((item) => !NEW_SERIES.has(item.id)).map((item) =>
+            themeButton(
+              item.id,
+              <span className={`theme-dot theme-${item.id}`} />,
+              zh ? item.zh : item.en,
+            ),
+          )}
+          <div className="rank-menu-sep" role="separator" />
+          <div className="settings-group-label">{t("新系列", "New Series")}</div>
+          {THEMES.filter((item) => NEW_SERIES.has(item.id)).map((item) =>
             themeButton(
               item.id,
               <span className={`theme-dot theme-${item.id}`} />,

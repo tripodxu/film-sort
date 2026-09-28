@@ -180,12 +180,15 @@ describe("P2 aurora 极光主题绊线（PLAN-ui-modernization）", () => {
     // 卡角加大到 --r-lg（20px）：duel 卡辉光脉冲的配套
     expect(auroraBlock).toContain("--r-lg:20px");
   });
-  it("--ev-1/2/3 仅在 aurora 定义（全站自 P1b-3 起被引用但 :root 从未定义；", () => {
-    // 全局补定义会一次性点亮约 20 处 box-shadow，改变所有旧主题像素——
-    // 旧主题 zero-diff 基线即在此状态下产出，全局补定义须另立基线，故只允许 aurora 内定义。
-    expect(auroraBlock).toContain("--ev-1:0 1px 0");
-    expect(auroraBlock).toContain("--ev-2:0 16px 45px");
-    expect(auroraBlock).toContain("--ev-3:0 28px 80px");
+  it("--ev-1/2/3 全局就位（P4 重立基线，PITFALLS 4.20 清偿）：:root 三级公式，主题只覆写 --shadow-tint", () => {
+    // 历史：2026-09-22 起 ~20 处引用但 :root 从未定义（=none），P1-P3 的 zero-diff
+    // 基线均产出于该状态；P4 按计划全局补定义并重立基线——旧主题自此带景深阴影，
+    // 此前各批 zero-diff 证据以各自 commit 为界。主题只许覆写 tint 色相，不改公式。
+    const root = css.slice(css.indexOf(":root{"), css.indexOf("}", css.indexOf(":root{")));
+    expect(root).toContain("--ev-1:0 1px 0");
+    expect(root).toContain("--ev-2:0 16px 45px");
+    expect(root).toContain("--ev-3:0 28px 80px");
+    expect(root).toContain("--shadow-tint:#000");
     expect(css.match(/--ev-1:/g)?.length).toBe(1);
     expect(css.match(/--ev-2:/g)?.length).toBe(1);
     expect(css.match(/--ev-3:/g)?.length).toBe(1);
@@ -351,5 +354,16 @@ describe("P3 gallery 画廊主题绊线（PLAN-ui-modernization）", () => {
     expect(css).toContain(".theme-dot.theme-gallery{");
     const theme = readFileSync("src/lib/theme.ts", "utf8");
     expect(theme).toContain('{ id: "gallery", zh: "画廊", en: "Gallery" }');
+  });
+});
+
+describe("P4 收尾绊线（PLAN-ui-modernization）", () => {
+  it("主题菜单分「经典 / 新系列」两组（11 个平铺太长）；内置主题共 11 套", () => {
+    const sw = readFileSync("src/components/ThemeSwitcher.tsx", "utf8");
+    expect(sw).toContain("NEW_SERIES: ReadonlySet<string>");
+    expect(sw).toContain('t("经典", "Classic")');
+    expect(sw).toContain('t("新系列", "New Series")');
+    const theme = readFileSync("src/lib/theme.ts", "utf8");
+    expect((theme.match(/id: "/g) ?? []).length).toBe(11);
   });
 });

@@ -1,6 +1,6 @@
 # PLAN-ui-modernization — 前端 UI 现代化方案（v3 组件级差异版）
 
-> 状态：**待评审 v3**（2026-09-28）。
+> 状态：**P0-P4 本地全部完成**（2026-09-28），仅剩线上实机验证（待推送部署）。
 > v2 → v3 关键变更（用户拍板）：**不是简单换色——每个新主题在组件形态与视觉上必须「一眼可辨地不同」**。
 > 本计划遵守 `docs/agents/CONVENTIONS.md` §6 视觉改动流程：token 化、截图基线、五道门禁、线上验证。
 
@@ -159,12 +159,13 @@ export function useTheme(): string {
 
 **验证状态**：五道门禁绿（test 473 passed·9 skipped）｜ 旧主题 20 张截图 stash 基线法 **zero-diff**（tol=0）｜ gallery 首页/画像桌面+移动/排序/广场截图肉眼签收 ｜ 卡片墙 3D 翻转 CDP 探针实锤（hover→rotateY(180°)；reduced-motion→transform none 平铺）｜ ui-contrast 全对 ≥4.5（最差 6.45:1）｜ 绊线 +8 条 ｜ **线上 ⬜（P4）**。
 
-### P4 · 收尾与回归（0.5 天）
+### P4 · 收尾与回归（0.5 天）—— 本地完成 ⏸，线上验证待推送
 
-- [ ] 全主题（7 旧 + 4 新）× 全路由截图回归；**差异矩阵逐格核对**（本计划 §2）
-- [ ] `ui-contrast.mjs` 过；主题菜单分组（经典 / 新系列）
-- [ ] 文档同步：README / FEATURES / USAGE / CHANGELOG / THEME-PACKS（7 → 11）
-- [ ] **sort.logicc.top 线上实机验证后才标 ✅**
+- [x] 全主题（7 旧 + 4 新）× 全路由截图回归（home+profile × 11 主题 = 22 张，`ui-shots-themes.json`）；**差异矩阵逐格核对**（§2——editorial 9 格 / aurora 7 格 / gallery 8 格，P1-P3 各批截图 + 探针逐格签收，dialog/compare 实机项归线上）
+- [x] `ui-contrast.mjs` 过（全主题 ≥4.5）；主题菜单分组（经典 / 新系列，绊线看守）
+- [x] `--ev-1/2/3` 全局补齐并**重立基线**（PITFALLS 4.20 清偿：:root 三级公式 + 主题只覆写 --shadow-tint；ui-audit 基线重生成；旧主题自此带景深，P1-P3 zero-diff 证据以各自 commit 为界）
+- [x] 文档同步：README / FEATURES / USAGE / CHANGELOG / THEME-PACKS（7 → 11）
+- [ ] **sort.logicc.top 线上实机验证后才标 ✅**（含 macOS 衬线段、ShareView 分享卡、弹窗/比较页实机走查）——待推送触发部署
 
 ---
 
@@ -200,6 +201,7 @@ export function useTheme(): string {
 
 ## 7. 变更记录
 
+- **v3.4（2026-09-28，P4 本地完成）**：主题菜单分组（经典/新系列）；`--ev-1/2/3` 全局补齐并重立基线（4.20 清偿，旧主题长出景深属计划内变更）；README/FEATURES/USAGE/THEME-PACKS 7→11 收口；全主题 22 张新基线截图。线上实机验证待推送部署后执行。
 - **v3.3（2026-09-28，P3 执行完毕）**：落地 gallery 画廊主题（§2.3 八差异组件全做，矩阵「来源分布」因无逐作品 source 数据收敛为年代分布）；画像页 Bento L3 重构（GalleryBento + GalleryWall + galleryStats ×9 单测）；卡片墙翻转/reduced-motion 平铺由 CDP 探针实锤；踩到并预防「gallery 行式 grid 声明压过 P6 重排 flex 覆写」的特异性坑（0,3,1 要回 + 绊线）；旧主题 20 张 zero-diff 实证；`--ev-*` 不定义守 4.20 基线。线上验证按计划留 P4。
 - **v3.2（2026-09-28，P1 执行完毕）**：落地 editorial/editorial-dark 双主题（§2.1 九差异组件全做）；实测踩到两处 CSS 特异性陷阱并修复（移动端 ed-stack 桌面定位泄漏、单列网格覆写被基座后来者胜），各配绊线测试；旧 7 主题 14 张截图 zero-diff 实证 L3 默认路径零回归；记录三处执行偏差（弹窗直角走显式 radius:0 而非 `--r-*` 归零、macOS 衬线段未测、移动端轮播差异范围）。线上验证按计划留 P4。
 - **v3.1（2026-09-28，P0 执行中修正）**：`--ease-spring` 改名 `--ease-settle`（1.2 过冲）——`cubic-bezier(.34,1.56,.64,1)` 是 2026-09-22 焕新定死的「玩具感元凶」，有绊线测试看守（`src/ui-fixes.test.ts`）；auraColor 增加「胜出桶须甩开第二名 1.5×」margin 守卫，避免双色海报掷硬币。

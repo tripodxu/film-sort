@@ -1,5 +1,15 @@
 # Changelog
 
+## 2026-09-28 · UI 现代化 P4 · 收尾（本地部分完成，线上验证待推送）
+
+`docs/PLAN-ui-modernization.md` P4 的本地可完成项：
+
+- **主题菜单分组**：调色板菜单分「经典（7）/ 新系列（4）」两组（`ThemeSwitcher.tsx` + `NEW_SERIES` 集合），11 个主题平铺不再拖长菜单；自定义主题与开场特效/布局模式组不变
+- **`--ev-1/2/3` 全局补齐（PITFALLS 4.20 清偿）**：`:root` 定义三级景深公式（`--shadow-tint:#000` + 1px 内高光 / 45px 卡片影 / 80px 弹层影），aurora 块内旧定义移除（只覆写 tint 色相），gallery 本就不定义——**旧主题自此长出阴影，属计划内重立基线**：`docs/ui-baseline.json`（ui-audit）已重生成；全主题 22 张截图重拍为新基线；P1-P3 各批 zero-diff 证据以各自 commit 为界；绊线改写为「:root 三级公式 + 全文唯一」语义
+- **文档收口（7→11）**：README（功能清单 + 界面设计）、FEATURES §8（主题表重写 + 回归清单）、USAGE（三处主题表述 + 开场特效补极光绸带）、THEME-PACKS §8（gallery 入内置结构主题清单，P3 已做）
+- **回归**：五道门禁绿（474 passed·9 skipped，绊线 +1：菜单分组/主题数）；全主题 22 张截图肉眼抽查（modern/retro 阴影柔和、无过重投影）
+- **待线上**：sort.logicc.top 实机验证（P1/P2/P3 三批一起标 ✅）+ macOS 衬线段（Songti SC/STSong）实测——需推送触发 Cloudflare 自动部署
+
 ## 2026-09-28 · UI 现代化 P3 · gallery 画廊主题（本地验证完成，线上留 P4）
 
 新增内置主题「画廊」（`docs/PLAN-ui-modernization.md` §2.3，8 个差异组件，L1 变量 + L2 结构覆写 + L3 条件渲染）：

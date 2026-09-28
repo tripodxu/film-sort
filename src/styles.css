@@ -6,6 +6,13 @@
   --scrim:rgba(0,0,0,.63);--toast-bg:#e0f7a9;--toast-bg-2:#d7fb9d;--toast-ink:#233113;--toast-border:#769052;   /* P1a：散落 hex 归零所升 token + L1/L2 设计 token（值取自 P0.7 两屏定案） */   --shade-soft:#0005;--shade-deep:#000b;--mask-opaque:#000;   --sp-1:4px;--sp-2:8px;--sp-3:12px;--sp-4:16px;--sp-5:24px;--sp-6:32px;--sp-7:48px;--sp-8:64px;   --r-xs:3px;--r-sm:6px;--r-md:12px;--r-lg:18px;--r-pill:999px;   --t-display:80px;--t-h1:29px;--t-h2:20px;--t-h3:17px;--t-body:15px;--t-small:13px;--t-meta:11px;--t-micro:10px;   --ls-wide:.22em;--ls-mid:.08em;   --ease-out:cubic-bezier(.22,.61,.36,1);--dur-1:150ms;--dur-2:220ms;--dur-3:320ms;--ease-settle:cubic-bezier(.2,.9,.3,1.2);--dur-stagger:60ms;
   --font-body:"Segoe UI","Microsoft YaHei",sans-serif;--font-display:Bahnschrift,"Segoe UI",sans-serif;
   --font-mono:Consolas,"Cascadia Mono",monospace;--font-serif:Georgia,"Microsoft YaHei",serif;
+  /* 景深三级（P4 重立基线，PITFALLS 4.20 清偿）：2026-09-22 焕新起被 ~20 处引用但从未定义
+     （解析为 box-shadow:none，旧主题基线即此状态）。全局补定义后旧主题长出阴影——
+     属计划内重立基线（PLAN-ui-modernization P4）。主题只覆写 --shadow-tint，不改三级公式。 */
+  --shadow-tint:#000;
+  --ev-1:0 1px 0 color-mix(in srgb,var(--text) 10%,transparent);
+  --ev-2:0 16px 45px color-mix(in srgb,var(--shadow-tint) 55%,transparent);
+  --ev-3:0 28px 80px color-mix(in srgb,var(--shadow-tint) 72%,transparent);
   /* derived tokens (color-mix, themes follow automatically) */
   --surface:color-mix(in srgb,var(--text) 7%,var(--bg));
   --surface-2:color-mix(in srgb,var(--text) 10%,var(--bg));
@@ -772,9 +779,8 @@ kbd{display:inline-flex;align-items:center;justify-content:center;min-width:22px
 /* ===== 主题：极光（PLAN-ui-modernization P2 · 组件级差异 7 项） =====
    深夜蓝底 + 极光薄荷青/紫罗兰；玻璃 2.0 三层表面 + 悬浮胶囊导航 +
    duel 胜出辉光脉冲 + conic 渐变描边按钮 + 深景深弹窗 + 流光进度条。
-   注意：--ev-1/2/3 在全站自 2026-09-22 起「被引用但从未定义」（:root 无定义，
-   box-shadow:var(--ev-2) 实际解析为 none）。旧主题 zero-diff 基线即在此状态下产出，
-   故只在 aurora 内补定义（本主题正需要更深景深）；全局补定义属独立改动，留待单独基线。 */
+   注意：--ev-1/2/3 已于 P4 全局定义（:root 三级公式），此处只覆写 --shadow-tint
+   色相（蓝黑），景深分级随全局公式走。 */
 [data-theme=aurora]{
   --bg:#070B16;--text:#E9F1FF;--text-2:#C9D6EF;--text-3:#9FB0D0;--muted:#9FB0D0;
   --accent:#45E3B0;--accent-2:#8B7CFF;--accent-ink:#04231B;
@@ -786,10 +792,6 @@ kbd{display:inline-flex;align-items:center;justify-content:center;min-width:22px
   --shadow-tint:#04060F;
   --status-ok:#3FD98A;--status-warn:#F5D06A;--status-danger:#FF7A8F;
   --r-xs:6px;--r-sm:10px;--r-md:14px;--r-lg:20px;
-  /* 景深分级（仅 aurora 定义，见上注） */
-  --ev-1:0 1px 0 color-mix(in srgb,var(--text) 10%,transparent);
-  --ev-2:0 16px 45px color-mix(in srgb,var(--shadow-tint) 60%,transparent);
-  --ev-3:0 28px 80px color-mix(in srgb,var(--shadow-tint) 72%,transparent);
 }
 .theme-dot.theme-aurora{--dot-a:#070B16;--dot-b:#45E3B0;background:linear-gradient(135deg,var(--dot-a) 50%,var(--dot-b) 50%)}
 /* 差异 1 · 玻璃 2.0：底（ev-2 深影）+ 1px 内高光 + 外柔光晕，三层叠加。

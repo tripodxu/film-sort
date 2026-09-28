@@ -10,6 +10,16 @@
 
 ## 进行中 / 最近
 
+### T-20260928-05 · UI 现代化 P4 · 收尾（本地部分）
+- **状态**：👀 待审（本地全绿；**线上验证待推送**）｜ **负责人**：本 agent
+- **任务类型**：§2.3（视觉/主题）+ 文档
+- **最小上下文**：`docs/PLAN-ui-modernization.md` P4 + `src/components/ThemeSwitcher.tsx` + `src/styles.css` :root 景深段 + PITFALLS 4.20
+- **改了什么**：① ThemeSwitcher 菜单分「经典(7)/新系列(4)」两组（`NEW_SERIES` 集合 + 绊线）；② `--ev-1/2/3` :root 全局定义（三级公式 + `--shadow-tint:#000`），aurora 块内定义移除（只覆写 tint），绊线改写为「:root 公式 + 全文唯一」；③ `docs/ui-baseline.json` 重生成（ui-audit）+ 全主题 22 张截图重拍为新基线；④ README/FEATURES/USAGE 主题 7→11 收口 + 开场特效补「极光绸带」；⑤ CHANGELOG/PLAN 勾选（v3.4）
+- **为什么**：P4 计划项；4.20 遗留（被引用未定义的 token）自 2026-09-22 悬置至今，P4 是计划好的清偿窗口
+- **验证状态**：五道门禁 ✅（474 passed·9 skipped）｜ 全主题 22 张截图肉眼抽查 ✅（旧主题阴影柔和，dim-chip/海报缩略/浮层获得景深，无过重投影）｜ ui-contrast ✅（≥4.5）｜ **线上 ⬜（推送后实机验证 P1/P2/P3 三批 + macOS 衬线段 + ShareView 分享卡）**
+- **遗留风险**：① 旧主题像素自本 commit 起带阴影（计划内重立基线）——如线上观感过重，调 :root 三级公式百分比即可全局收敛；② 线上验证覆盖弹窗/比较页实机走查（本地仅截图静态路径）
+- **下一步（给接手者）**：推送 → Cloudflare 自动部署 → sort.logicc.top 实机验证（11 主题切换 / 卡片墙翻转 / 弹窗圆角 / editorial 衬线 macOS 段 / ShareView 分享卡）→ PLAN 与台账标 ✅；若涉及主题包用户，公告「新系列四主题 + 菜单分组」
+
 ### T-20260928-04 · UI 现代化 P3 · gallery 数据画廊
 - **状态**：👀 待审（P3 本地全绿；**线上验证留 P4**）｜ **负责人**：本 agent
 - **任务类型**：§2.3（视觉/主题）+ §2.2（前端视图）
