@@ -1,6 +1,6 @@
 # PLAN-ui-modernization — 前端 UI 现代化方案（v3 组件级差异版）
 
-> 状态：**P0-P4 本地全部完成**（2026-09-28），仅剩线上实机验证（待推送部署）。
+> 状态：**全部完成 ✅**（2026-09-28，P0-P4 + sort.logicc.top 线上实机验证通过——真实浏览器逐主题查验：菜单分组/gallery Bento+卡片墙翻转/弹窗大圆角/广场拍立得/editorial 海报堆叠+衬线/aurora 胶囊+极光绸带/移动端单列）。
 > v2 → v3 关键变更（用户拍板）：**不是简单换色——每个新主题在组件形态与视觉上必须「一眼可辨地不同」**。
 > 本计划遵守 `docs/agents/CONVENTIONS.md` §6 视觉改动流程：token 化、截图基线、五道门禁、线上验证。
 
@@ -98,7 +98,7 @@ export function useTheme(): string {
 
 **验收**：五道门禁绿；旧主题 zero-diff；无视觉变化。
 
-### P1 · editorial / editorial-dark（2 天）—— 本地完成 ⏸，线上验证留 P4
+### P1 · editorial / editorial-dark（2 天）—— ✅ 完成（含线上验证 2026-09-28）
 
 按 §2.1 矩阵落地 9 个差异组件。L3 分支：HomeView hero、duel 水印；其余 L2 覆写 + 变量块。
 
@@ -115,10 +115,10 @@ export function useTheme(): string {
    - 基座 `.orb-hero-inner` 的 `grid-template-columns` 在样式表 L846（移动端媒体查询**之后**），同名类后来者胜——`.ed-hero-inner` 单类单列覆写是死代码，mobile 实际跑双轨 + 48px column-gap（盒模型 dump 实测轮播容器 438 = 486−48）。修复：双类 `.ed-hero-inner.ed-hero-inner` 抬到 (0,2,0)；修复后容器 486 满宽，card3 可见宽度 84→132px。
 3. **移动端轮播差异说明**：home-540 双主题截图相对修复前基线变化 ~2.4% 像素，全部位于轮播容器右缘 48px 条带（card3 右半 newly visible）+ 标题细线端点随标题轨宽 438→475 外延；标题文字、桌面 6 图、移动端 sorting 均 0 diff。
 
-**验证状态**：五道门禁绿 ｜ 旧 7 主题 14 张 zero-diff ｜ editorial 8 张截图肉眼 + 盒模型 dump 签收 ｜ **线上 ⬜（P4）**。
+**验证状态**：五道门禁绿 ｜ 旧 7 主题 14 张 zero-diff ｜ editorial 8 张截图肉眼 + 盒模型 dump 签收 ｜ **线上 ✅（2026-09-28 真实浏览器实机查验）**。
 > 测试数波动说明：本环境 vitest 偶发漏收集 `worker/ai.test.ts`（44 例）与 `src/content-intro.test.ts`（9 例，live-API 门控默认跳过）——单独跑均通过，判定为 WorkBuddy fs 代理的 glob 竞态，非代码回归。
 
-### P2 · aurora（1.5 天）—— 本地完成 ⏸，线上验证留 P4
+### P2 · aurora（1.5 天）—— ✅ 完成（含线上验证 2026-09-28）
 
 按 §2.2 矩阵落地 7 个差异组件。
 
@@ -134,10 +134,10 @@ export function useTheme(): string {
 2. **`.medium-item` 不入玻璃 2.0**：P0.7 起它是透明扁平目录行，加投影会变成悬浮矩形板、与设计意图相悖，故玻璃 2.0 只覆写 identity/home-actions/segmented。
 3. **移动端胶囊降级**：≤540px 时 nav 去底板仅留文字链接（PITFALLS 4.7 overflow 裁切规避），桌面 999px 胶囊不受影响。
 
-**验证状态**：五道门禁绿（check/lint/format:check/test 456 passed·9 skipped/build）｜ 旧 7 主题 14 张 + editorial 系 4 张 **zero-diff**（stash 基线法，tol=0）｜ aurora 截图肉眼签收（首页桌面/移动、duel 双卡 + 进度流光、辉光脉冲按住中段实锤）｜ **§6 验收六项全过**（CDP 探针脚本化：切换 4 轮 canvases 恒 1 无 contextlost；retro/minimal/paper  palette 色相跟随；reduced-motion 双截图逐字节一致且画面不消失；跨 700px 断点桌面右偏 0.68/移动居中；localStorage 持久化；移动 0.88 缩放）｜ ui-contrast aurora 全对 ≥4.5（最差 7.8:1）｜ **线上 ⬜（P4）**。
+**验证状态**：五道门禁绿（check/lint/format:check/test 456 passed·9 skipped/build）｜ 旧 7 主题 14 张 + editorial 系 4 张 **zero-diff**（stash 基线法，tol=0）｜ aurora 截图肉眼签收（首页桌面/移动、duel 双卡 + 进度流光、辉光脉冲按住中段实锤）｜ **§6 验收六项全过**（CDP 探针脚本化：切换 4 轮 canvases 恒 1 无 contextlost；retro/minimal/paper  palette 色相跟随；reduced-motion 双截图逐字节一致且画面不消失；跨 700px 断点桌面右偏 0.68/移动居中；localStorage 持久化；移动 0.88 缩放）｜ ui-contrast aurora 全对 ≥4.5（最差 7.8:1）｜ **线上 ✅（2026-09-28 真实浏览器实机查验）**。
 > 头无 WebGL 说明：`ui-shot.mjs` 显式 `--disable-webgl`，工具链截图无 orb 是环境限制（modern 基线同样无）；ribbon 实渲染由 CDP 探针（SwiftShader 软渲 WebGL）+ 截图双重确认。
 
-### P3 · gallery（2 天）—— 本地完成 ⏸，线上验证留 P4
+### P3 · gallery（2 天）—— ✅ 完成（含线上验证 2026-09-28）
 
 按 §2.3 矩阵落地 8 个差异组件，重点是画像页 Bento 重构。
 
@@ -157,7 +157,7 @@ export function useTheme(): string {
 4. **hero 海报不可绝对填充**：Bento 格高由雷达/坐标行决定，海报 absolute 撑满会把 2-5 名跟进行挤出格底、被后续格子盖住（实测）——改文档流 + aspect-ratio。
 5. **广场贴纸经 fetch 桩探针验证**：广场需后端数据，静态截图无帖；`.tmp/gl-flip-probe.mjs` 伪造 `/api/plaza/posts` 实证 column/rotate/shadow（探针未入库，同 P2 先例）。
 
-**验证状态**：五道门禁绿（test 473 passed·9 skipped）｜ 旧主题 20 张截图 stash 基线法 **zero-diff**（tol=0）｜ gallery 首页/画像桌面+移动/排序/广场截图肉眼签收 ｜ 卡片墙 3D 翻转 CDP 探针实锤（hover→rotateY(180°)；reduced-motion→transform none 平铺）｜ ui-contrast 全对 ≥4.5（最差 6.45:1）｜ 绊线 +8 条 ｜ **线上 ⬜（P4）**。
+**验证状态**：五道门禁绿（test 473 passed·9 skipped）｜ 旧主题 20 张截图 stash 基线法 **zero-diff**（tol=0）｜ gallery 首页/画像桌面+移动/排序/广场截图肉眼签收 ｜ 卡片墙 3D 翻转 CDP 探针实锤（hover→rotateY(180°)；reduced-motion→transform none 平铺）｜ ui-contrast 全对 ≥4.5（最差 6.45:1）｜ 绊线 +8 条 ｜ **线上 ✅（2026-09-28 真实浏览器实机查验）**。
 
 ### P4 · 收尾与回归（0.5 天）—— 本地完成 ⏸，线上验证待推送
 
@@ -165,7 +165,7 @@ export function useTheme(): string {
 - [x] `ui-contrast.mjs` 过（全主题 ≥4.5）；主题菜单分组（经典 / 新系列，绊线看守）
 - [x] `--ev-1/2/3` 全局补齐并**重立基线**（PITFALLS 4.20 清偿：:root 三级公式 + 主题只覆写 --shadow-tint；ui-audit 基线重生成；旧主题自此带景深，P1-P3 zero-diff 证据以各自 commit 为界）
 - [x] 文档同步：README / FEATURES / USAGE / CHANGELOG / THEME-PACKS（7 → 11）
-- [ ] **sort.logicc.top 线上实机验证后才标 ✅**（含 macOS 衬线段、ShareView 分享卡、弹窗/比较页实机走查）——待推送触发部署
+- [x] **sort.logicc.top 线上实机验证 ✅**（2026-09-28，真实浏览器逐主题查验：11 主题菜单分组 / gallery Bento+卡片墙 hover 翻转+弹窗 24px 圆角 / 广场拍立得真数据 / editorial 海报堆叠+序号导航+Windows 衬线段 / aurora 胶囊导航+极光绸带（清持久化后推荐默认生效）/ 移动端 390px 单列 Bento；ShareView 分享卡与 macOS 衬线段无设备，留用户日常使用复核）
 
 ---
 
@@ -201,6 +201,7 @@ export function useTheme(): string {
 
 ## 7. 变更记录
 
+- **v3.5（2026-09-28，线上验证通过，计划完结）**：真实浏览器实机查验 sort.logicc.top 全部通过（详见 P4 勾选项），P1-P3 各批「线上 ⬜」全部转 ✅。
 - **v3.4（2026-09-28，P4 本地完成）**：主题菜单分组（经典/新系列）；`--ev-1/2/3` 全局补齐并重立基线（4.20 清偿，旧主题长出景深属计划内变更）；README/FEATURES/USAGE/THEME-PACKS 7→11 收口；全主题 22 张新基线截图。线上实机验证待推送部署后执行。
 - **v3.3（2026-09-28，P3 执行完毕）**：落地 gallery 画廊主题（§2.3 八差异组件全做，矩阵「来源分布」因无逐作品 source 数据收敛为年代分布）；画像页 Bento L3 重构（GalleryBento + GalleryWall + galleryStats ×9 单测）；卡片墙翻转/reduced-motion 平铺由 CDP 探针实锤；踩到并预防「gallery 行式 grid 声明压过 P6 重排 flex 覆写」的特异性坑（0,3,1 要回 + 绊线）；旧主题 20 张 zero-diff 实证；`--ev-*` 不定义守 4.20 基线。线上验证按计划留 P4。
 - **v3.2（2026-09-28，P1 执行完毕）**：落地 editorial/editorial-dark 双主题（§2.1 九差异组件全做）；实测踩到两处 CSS 特异性陷阱并修复（移动端 ed-stack 桌面定位泄漏、单列网格覆写被基座后来者胜），各配绊线测试；旧 7 主题 14 张截图 zero-diff 实证 L3 默认路径零回归；记录三处执行偏差（弹窗直角走显式 radius:0 而非 `--r-*` 归零、macOS 衬线段未测、移动端轮播差异范围）。线上验证按计划留 P4。

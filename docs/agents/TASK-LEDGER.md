@@ -11,7 +11,7 @@
 ## 进行中 / 最近
 
 ### T-20260928-05 · UI 现代化 P4 · 收尾（本地部分）
-- **状态**：🔄 已推送部署（`ea886a1` → sort.logicc.top），线上资产级验证 ✅，**待用户实机签收后才整体标 ✅** ｜ **负责人**：本 agent
+- **状态**：✅ 完成（线上资产级验证 + 真实浏览器实机查验 2026-09-28 全过；任务受用户委托代验）｜ **负责人**：本 agent
 - **任务类型**：§2.3（视觉/主题）+ 文档
 - **最小上下文**：`docs/PLAN-ui-modernization.md` P4 + `src/components/ThemeSwitcher.tsx` + `src/styles.css` :root 景深段 + PITFALLS 4.20
 - **改了什么**：① ThemeSwitcher 菜单分「经典(7)/新系列(4)」两组（`NEW_SERIES` 集合 + 绊线）；② `--ev-1/2/3` :root 全局定义（三级公式 + `--shadow-tint:#000`），aurora 块内定义移除（只覆写 tint），绊线改写为「:root 公式 + 全文唯一」；③ `docs/ui-baseline.json` 重生成（ui-audit）+ 全主题 22 张截图重拍为新基线；④ README/FEATURES/USAGE 主题 7→11 收口 + 开场特效补「极光绸带」；⑤ CHANGELOG/PLAN 勾选（v3.4）
@@ -21,7 +21,7 @@
 - **下一步（给接手者）**：推送 → Cloudflare 自动部署 → sort.logicc.top 实机验证（11 主题切换 / 卡片墙翻转 / 弹窗圆角 / editorial 衬线 macOS 段 / ShareView 分享卡）→ PLAN 与台账标 ✅；若涉及主题包用户，公告「新系列四主题 + 菜单分组」
 
 ### T-20260928-04 · UI 现代化 P3 · gallery 数据画廊
-- **状态**：👀 待审（P3 本地全绿；**线上验证留 P4**）｜ **负责人**：本 agent
+- **状态**：✅ 完成（线上实机验证 2026-09-28：gallery Bento/卡片墙 hover 翻转/弹窗 24px 圆角/拍立得真数据/移动端 390px 单列）｜ **负责人**：本 agent
 - **任务类型**：§2.3（视觉/主题）+ §2.2（前端视图）
 - **最小上下文**：`docs/PLAN-ui-modernization.md` §2.3/P3 + `src/components/GalleryBento.tsx` + `src/components/GalleryWall.tsx` + `src/lib/galleryStats.ts` + `src/styles.css`（gallery 块，文件末尾）
 - **改了什么**：`theme.ts` 注册 gallery（第 11 个内置主题）；`galleryStats.ts` 画像聚合纯函数（×9 单测，只读 profile 零数据层改动）；`GalleryBento.tsx`（Top1 大卡 2×2+2-5 名跟进 / 手写 SVG 雷达 / 年代堆叠条 / 口味坐标 / 榜单索引，grid-areas 编排，≤800px 单列）；`GalleryWall.tsx`（海报正面/批注背面 3D 翻转卡片墙，hover 包 media(hover:hover)，触屏点按翻面，focus-within 可达）；ProfileView/ShareView L3 分支（classic 路径 DOM 不变）；styles.css gallery 块（变量 21 token + `--shadow-tint` 显式阴影 + 弹窗大圆角/报刊亭 topbar/拍立得贴纸/行式榜单 hairline + gl-* 支撑样式 + 重排行 flex 守卫）；测试：ui-fixes 新增 P3 绊线 8 条；工具：ui-contrast/ui-shots-themes 加 gallery（22 条），`docs/ui-contrast.json` 重生成
@@ -31,7 +31,7 @@
 - **下一步（给接手者）**：P4 收尾——全主题（7 旧 + 4 新）× 全路由截图回归 + §2 差异矩阵逐格核对 + 主题菜单分组（经典/新系列）+ README/FEATURES/USAGE/THEME-PACKS「7→11」文档收口 + `--ev-*` 全局补齐重立基线 + macOS 衬线段 + sort.logicc.top 线上验证（P1/P2/P3 三批一起）
 
 ### T-20260928-03 · UI 现代化 P2 · aurora 极光主题
-- **状态**：👀 待审（P2 本地全绿；**线上验证留 P4**）｜ **负责人**：本 agent
+- **状态**：✅ 完成（线上实机验证 2026-09-28：aurora 胶囊导航 + 极光绸带推荐默认 + plasma 持久化优先，真 WebGL 渲染确认）｜ **负责人**：本 agent
 - **任务类型**：§2.3（视觉/主题）+ §2.2（前端视图）
 - **最小上下文**：`docs/PLAN-ui-modernization.md` §2.2/P2 + `src/styles.css`（aurora 块）+ `src/lib/orbEffects/ribbon.ts` + `docs/agents/PITFALLS.md` 4.20
 - **改了什么**：`theme.ts` 注册 aurora（第 10 个内置主题）；`src/lib/orbEffects/ribbon.ts` 新特效（柔光基座 + 4 绸带 + 600 粒子）+ registry `RECOMMENDED_BY_THEME`（aurora→ribbon，持久化优先逻辑不动）；OrbScene 主题变更按推荐重挂；ThemeSwitcher 勾选跟随；styles.css aurora 块（变量 21 token + `--ev-*` 仅块内定义 + 玻璃 2.0/胶囊导航/duel 辉光脉冲/conic 描边按钮/弹窗景深/进度流光 7 组件）；App.tsx topbar scrolled class；测试：`orbEffects/registry.test.ts` 10 例 + ui-fixes 9 绊线；工具：ui-contrast/ui-shots-themes 加 aurora（20 条）
@@ -41,7 +41,7 @@
 - **下一步（给接手者）**：P3 gallery（§2.3 八差异组件，画像页 Bento L3 重构）｜ P4 收尾：全主题回归 + 差异矩阵逐格核对 + README/FEATURES/USAGE「7→11」文档 + `--ev-*` 全局补齐重立基线 + sort.logicc.top 线上验证
 
 ### T-20260928-02 · UI 现代化（多主题增量，PLAN-ui-modernization v3）
-- **状态**：👀 待审（P1 editorial 双主题本地全绿；**线上验证留 P4**）｜ **负责人**：本 agent
+- **状态**：✅ 完成（线上实机验证 2026-09-28：editorial 海报堆叠 hero + 序号导航 + Windows 衬线段 Georgia/SimSun 生效）｜ **负责人**：本 agent
 - **任务类型**：§2.3（视觉/主题）+ §2.2（前端视图）
 - **最小上下文**：`docs/PLAN-ui-modernization.md` + `src/styles.css` + `src/lib/theme.ts` + `docs/agents/CONVENTIONS.md` §6
 - **改了什么**：（P0 ✅ 已提交 `1357b12`）useTheme/auraColor/动效代币；（P1 本地待提交）editorial + editorial-dark 双主题：变量块 ×2、`theme.ts` 注册、HomeView hero L3 重构（海报堆叠 + 移动端 scroll-snap 轮播）、SortingView 回合水印 L3、topbar/按钮/弹窗/进度/榜单/维度条 L2 覆写；修复两处 CSS 特异性陷阱（各配绊线）；工具：`gen-editorial-shots.mjs`、themes manifest 补 3 主题、ui-contrast 支持 editorial
