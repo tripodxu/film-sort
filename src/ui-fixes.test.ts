@@ -167,6 +167,92 @@ describe("P5a 主题人格绊线（非色彩差异 ≥2/主题）", () => {
   });
 });
 
+describe("P2 aurora 极光主题绊线（PLAN-ui-modernization）", () => {
+  const auroraBlock = css.slice(
+    css.indexOf("[data-theme=aurora]{"),
+    css.indexOf("}", css.indexOf("[data-theme=aurora]{")),
+  );
+  it("变量块在位：深夜蓝底 + 极光薄荷青/紫罗兰（对比度 AA 已过 ui-contrast）", () => {
+    expect(css).toMatch(/\[data-theme=aurora\]\{\s*--bg:#070B16/);
+    expect(css).toMatch(/\[data-theme=aurora\][^{]*\{[^}]*--accent:#45E3B0/);
+    expect(auroraBlock).toContain("--accent-2:#8B7CFF");
+    expect(auroraBlock).toContain("--scrim:rgba(4,6,18,.82)");
+    // 卡角加大到 --r-lg（20px）：duel 卡辉光脉冲的配套
+    expect(auroraBlock).toContain("--r-lg:20px");
+  });
+  it("--ev-1/2/3 仅在 aurora 定义（全站自 P1b-3 起被引用但 :root 从未定义；", () => {
+    // 全局补定义会一次性点亮约 20 处 box-shadow，改变所有旧主题像素——
+    // 旧主题 zero-diff 基线即在此状态下产出，全局补定义须另立基线，故只允许 aurora 内定义。
+    expect(auroraBlock).toContain("--ev-1:0 1px 0");
+    expect(auroraBlock).toContain("--ev-2:0 16px 45px");
+    expect(auroraBlock).toContain("--ev-3:0 28px 80px");
+    expect(css.match(/--ev-1:/g)?.length).toBe(1);
+    expect(css.match(/--ev-2:/g)?.length).toBe(1);
+    expect(css.match(/--ev-3:/g)?.length).toBe(1);
+  });
+  it("玻璃 2.0 三层表面（ev 底 + 1px 内高光 + 外柔光晕）", () => {
+    expect(css).toMatch(
+      /\[data-theme=aurora\] \.identity\.glass-capsule,\s*\[data-theme=aurora\] \.home-actions\.glass-capsule,\s*\[data-theme=aurora\] \.segmented\{\s*box-shadow:var\(--ev-2\),inset 0 1px 0/,
+    );
+    // 弹窗/菜单 ev-3 更深景深
+    expect(css).toMatch(
+      /\[data-theme=aurora\] :is\(\.account-dialog[^{]*\{\s*box-shadow:var\(--ev-3\)/,
+    );
+  });
+  it("topbar 悬浮胶囊：sticky + 脱离子页面顶线 + 滚动态 class（App.tsx 挂监听）", () => {
+    expect(css).toMatch(/\[data-theme=aurora\] \.topbar\{\s*position:sticky;top:0/);
+    expect(css).toContain("[data-theme=aurora] .topbar.scrolled nav{");
+    expect(css).toContain("[data-theme=aurora] .topbar nav button.active:after{display:none}");
+    // 移动端降级：四导航项会胀破胶囊（PITFALLS 4.7），≤540px 去底板
+    expect(css).toMatch(
+      /@media\(max-width:540px\)\{[^@]*\[data-theme=aurora\] \.topbar nav\{[^}]*background:transparent/,
+    );
+    const app = readFileSync("src/App.tsx", "utf8");
+    expect(app).toContain('classList.toggle("scrolled", window.scrollY > 8)');
+  });
+  it("duel 卡：--r-lg 卡角 + 胜出辉光脉冲（reduced-motion 由全局 animation 禁令兜底）", () => {
+    expect(css).toContain("[data-theme=aurora] .artwork-main{border-radius:var(--r-lg)");
+    expect(css).toContain("@keyframes au-win-pulse");
+    expect(css).toContain(
+      "[data-theme=aurora] .artwork-card .artwork-main:active{animation:au-win-pulse",
+    );
+  });
+  it("按钮 conic 渐变描边：@property 注册角度 + hover 流转 + quiet 不参与", () => {
+    expect(css).toContain(
+      '@property --au-angle{syntax:"<angle>";inherits:false;initial-value:0deg}',
+    );
+    expect(css).toContain("@keyframes au-border-flow");
+    expect(css).toContain("conic-gradient(from var(--au-angle)");
+    expect(css).toContain("[data-theme=aurora] .button:not(.quiet){");
+    expect(css).toContain("[data-theme=aurora] .button.primary{");
+  });
+  it("进度条流光填充：渐变条 + 扫光头部 + reduced-motion 退化纯色", () => {
+    expect(css).toContain("@keyframes au-flow");
+    expect(css).toMatch(
+      /\[data-theme=aurora\] \.progress-track>span\{\s*position:relative;border-radius:999px;overflow:hidden/,
+    );
+    expect(css).toMatch(
+      /@media\(prefers-reduced-motion:reduce\)\{[^@]*\[data-theme=aurora\] \.progress-track>span\{background:var\(--accent\)/,
+    );
+  });
+  it("主题菜单 dot 与 THEMES 注册（id 一经发布不改）", () => {
+    expect(css).toContain(".theme-dot.theme-aurora{");
+    const theme = readFileSync("src/lib/theme.ts", "utf8");
+    expect(theme).toContain('{ id: "aurora", zh: "极光", en: "Aurora" }');
+  });
+  it("orb 推荐默认：无持久化时 aurora→ribbon（registry 单测覆盖），宿主按推荐重挂", () => {
+    const orbScene = readFileSync("src/components/OrbScene.tsx", "utf8");
+    expect(orbScene).toContain("if (next !== currentEffectId)");
+    const registry = readFileSync("src/lib/orbEffects/registry.ts", "utf8");
+    expect(registry).toContain(
+      'const RECOMMENDED_BY_THEME: Record<string, string> = { aurora: "ribbon" }',
+    );
+    const switcher = readFileSync("src/components/ThemeSwitcher.tsx", "utf8");
+    // 切主题后菜单勾选跟随推荐（否则打开菜单看到过期的勾）
+    expect(switcher).toContain("setOrbEffect(readOrbEffectId())");
+  });
+});
+
 describe("P5c 布局模式绊线", () => {
   it("layout.ts 机制在位：archive 移除属性（零 diff 由机制保证）", () => {
     const lt = readFileSync("src/lib/layout.ts", "utf8");

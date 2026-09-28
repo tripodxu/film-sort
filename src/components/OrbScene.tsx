@@ -54,6 +54,7 @@ export function OrbScene() {
     const mediaQuery = window.matchMedia("(prefers-reduced-motion: reduce)");
 
     let instance: OrbInstance | null = null;
+    let currentEffectId = "";
     let width = 0;
     let height = 0;
 
@@ -61,9 +62,10 @@ export function OrbScene() {
       instance?.dispose();
       instance = null;
       scene.clear();
+      currentEffectId = readOrbEffectId();
       const palette = readOrbPalette();
       instance = createOrbEffectById(
-        readOrbEffectId(),
+        currentEffectId,
         { scene, camera, renderer, host, reducedMotion: mediaQuery.matches },
         palette,
       );
@@ -75,8 +77,14 @@ export function OrbScene() {
     window.addEventListener("art-rank:orb-effect-changed", onEffectChanged);
 
     const onThemeChanged = () => {
-      const palette = readOrbPalette();
-      instance?.applyPalette(palette);
+      // 主题推荐默认（P2）：无持久化选择时，切到 aurora 等主题要按推荐换特效；
+      // 有持久化选择则只换色（不动用户的选择）。
+      const next = readOrbEffectId();
+      if (next !== currentEffectId) {
+        mountInstance();
+        return;
+      }
+      instance?.applyPalette(readOrbPalette());
     };
     window.addEventListener("art-rank:theme-changed", onThemeChanged);
 

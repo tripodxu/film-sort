@@ -769,6 +769,138 @@ kbd{display:inline-flex;align-items:center;justify-content:center;min-width:22px
   [data-theme=editorial] .topbar nav button:before,[data-theme=editorial-dark] .topbar nav button:before{margin-right:3px;font-size:10px}
 }
 
+/* ===== 主题：极光（PLAN-ui-modernization P2 · 组件级差异 7 项） =====
+   深夜蓝底 + 极光薄荷青/紫罗兰；玻璃 2.0 三层表面 + 悬浮胶囊导航 +
+   duel 胜出辉光脉冲 + conic 渐变描边按钮 + 深景深弹窗 + 流光进度条。
+   注意：--ev-1/2/3 在全站自 2026-09-22 起「被引用但从未定义」（:root 无定义，
+   box-shadow:var(--ev-2) 实际解析为 none）。旧主题 zero-diff 基线即在此状态下产出，
+   故只在 aurora 内补定义（本主题正需要更深景深）；全局补定义属独立改动，留待单独基线。 */
+[data-theme=aurora]{
+  --bg:#070B16;--text:#E9F1FF;--text-2:#C9D6EF;--text-3:#9FB0D0;--muted:#9FB0D0;
+  --accent:#45E3B0;--accent-2:#8B7CFF;--accent-ink:#04231B;
+  --line:#26335A;--border-2:#37457A;
+  --surface:#0D1526;--surface-2:#111A30;--surface-3:#16223C;--surface-4:#1B2A47;--surface-hover:#13203A;
+  --ok:#3FD98A;--warn:#F5D06A;--danger:#FF7A8F;--danger-2:#FFA3B3;--indigo:#8B7CFF;--pink:#F09CC8;
+  --film:#45E3B0;--book:#8B7CFF;--music:#5FC9F8;--other:#F09CC8;
+  --scrim:rgba(4,6,18,.82);--toast-bg:#0E1830;--toast-bg-2:#13203C;--toast-ink:#E9F1FF;--toast-border:#28406B;
+  --shadow-tint:#04060F;
+  --status-ok:#3FD98A;--status-warn:#F5D06A;--status-danger:#FF7A8F;
+  --r-xs:6px;--r-sm:10px;--r-md:14px;--r-lg:20px;
+  /* 景深分级（仅 aurora 定义，见上注） */
+  --ev-1:0 1px 0 color-mix(in srgb,var(--text) 10%,transparent);
+  --ev-2:0 16px 45px color-mix(in srgb,var(--shadow-tint) 60%,transparent);
+  --ev-3:0 28px 80px color-mix(in srgb,var(--shadow-tint) 72%,transparent);
+}
+.theme-dot.theme-aurora{--dot-a:#070B16;--dot-b:#45E3B0;background:linear-gradient(135deg,var(--dot-a) 50%,var(--dot-b) 50%)}
+/* 差异 1 · 玻璃 2.0：底（ev-2 深影）+ 1px 内高光 + 外柔光晕，三层叠加。
+   注意：.medium-item 在 P0.7 已是透明扁平目录行（无底板），加投影会形成悬浮
+   矩形板——不纳入本规则。 */
+[data-theme=aurora] .identity.glass-capsule,
+[data-theme=aurora] .home-actions.glass-capsule,
+[data-theme=aurora] .segmented{
+  box-shadow:var(--ev-2),inset 0 1px 0 color-mix(in srgb,var(--accent-2) 18%,transparent),0 0 26px color-mix(in srgb,var(--accent) 10%,transparent)
+}
+/* 弹窗/菜单：ev-3 更深景深 + 内高光 + 柔光晕；scrim 由变量块加重 */
+[data-theme=aurora] :is(.account-dialog,.detail-dialog,.rank-detail-dialog,.settings-menu,.rank-menu,.theme-menu,.toast,.guide-modal,.tech-modal){
+  box-shadow:var(--ev-3),inset 0 1px 0 color-mix(in srgb,var(--accent-2) 14%,transparent),0 0 36px color-mix(in srgb,var(--accent) 12%,transparent)
+}
+[data-theme=aurora] .modal-backdrop{backdrop-filter:blur(14px) saturate(120%);-webkit-backdrop-filter:blur(14px) saturate(120%)}
+/* 差异 2 · topbar 悬浮胶囊：脱离子页面顶线（去通栏底线与玻璃条），nav 成圆角胶囊；
+   滚动态 .scrolled 由 App.tsx 滚动监听切 class（仅 aurora 有对应 CSS）。
+   移动端 ≤540px 降级为无底板扁平组——四导航项 11px 字号会胀破胶囊（PITFALLS 4.7）。 */
+[data-theme=aurora] .topbar{
+  position:sticky;top:0;
+  background:transparent;backdrop-filter:none;-webkit-backdrop-filter:none;
+  border-bottom:0
+}
+[data-theme=aurora] .topbar nav{
+  gap:4px;height:44px;padding:5px;align-items:center;
+  border-radius:999px;
+  background:color-mix(in srgb,var(--surface-3) 55%,transparent);
+  border:1px solid color-mix(in srgb,var(--text) 16%,transparent);
+  box-shadow:var(--ev-1),0 10px 32px color-mix(in srgb,var(--shadow-tint) 45%,transparent);
+  backdrop-filter:blur(16px) saturate(1.3);-webkit-backdrop-filter:blur(16px) saturate(1.3);
+  transition:background var(--dur-2) var(--ease-out),box-shadow var(--dur-2) var(--ease-out)
+}
+[data-theme=aurora] .topbar.scrolled nav{
+  background:color-mix(in srgb,var(--surface-3) 82%,transparent);
+  box-shadow:var(--ev-2),0 12px 36px color-mix(in srgb,var(--shadow-tint) 58%,transparent)
+}
+[data-theme=aurora] .topbar nav button{border-radius:999px;padding:0 14px}
+[data-theme=aurora] .topbar nav button.active{background:color-mix(in srgb,var(--accent) 16%,transparent);color:var(--accent)}
+[data-theme=aurora] .topbar nav button.active:after{display:none}
+@media(max-width:540px){
+  [data-theme=aurora] .topbar nav{
+    background:transparent;border:0;box-shadow:none;padding:0;gap:6px;height:auto;
+    backdrop-filter:none;-webkit-backdrop-filter:none
+  }
+  [data-theme=aurora] .topbar nav button{padding:0 6px}
+}
+/* 差异 3 · duel 卡：卡角加大到 --r-lg（20px）；胜出瞬间（:active=落子）辉光脉冲，
+   reduced-motion 由全局 animation:none!important 兜底跳过 */
+[data-theme=aurora] .artwork-main{border-radius:var(--r-lg) var(--r-lg) 0 0}
+[data-theme=aurora] .artwork-card-tools{border-radius:0 0 var(--r-lg) var(--r-lg)}
+[data-theme=aurora] .artwork-card .artwork-main:hover{
+  border-color:color-mix(in srgb,var(--accent) 55%,transparent);
+  box-shadow:0 0 22px color-mix(in srgb,var(--accent) 18%,transparent)
+}
+[data-theme=aurora] .artwork-card .artwork-main:active{animation:au-win-pulse .55s var(--ease-out)}
+@keyframes au-win-pulse{
+  0%{box-shadow:0 0 0 0 color-mix(in srgb,var(--accent) 55%,transparent)}
+  70%{box-shadow:0 0 28px 8px color-mix(in srgb,var(--accent) 28%,transparent)}
+  100%{box-shadow:0 0 0 0 color-mix(in srgb,var(--accent) 0%,transparent)}
+}
+/* 差异 4 · 按钮：conic 渐变描边（@property 注册角度，hover 流转一周；
+   渐变全周期 360° 且周期性，收起时 360→0 跳变不可见）+ 内发光；primary 带柔光投影。
+   quiet 文字按钮不参与描边。home-actions 胶囊内按钮由既有守卫规则保持 pill 圆角。 */
+@property --au-angle{syntax:"<angle>";inherits:false;initial-value:0deg}
+@keyframes au-border-flow{from{--au-angle:0deg}to{--au-angle:360deg}}
+[data-theme=aurora] .button:not(.quiet){
+  --au-angle:0deg;
+  border-radius:var(--r-md);
+  border:1px solid transparent;
+  background:
+    linear-gradient(var(--surface-2),var(--surface-2)) padding-box,
+    conic-gradient(from var(--au-angle),var(--accent),var(--accent-2),var(--music),var(--other),var(--accent)) border-box;
+  box-shadow:inset 0 1px 0 color-mix(in srgb,var(--accent-2) 20%,transparent)
+}
+[data-theme=aurora] .button:not(.quiet):hover{
+  animation:au-border-flow var(--dur-3) linear;
+  box-shadow:inset 0 1px 0 color-mix(in srgb,var(--accent-2) 26%,transparent),0 0 18px color-mix(in srgb,var(--accent) 22%,transparent)
+}
+[data-theme=aurora] .button.primary{
+  background:
+    linear-gradient(var(--accent),var(--accent)) padding-box,
+    conic-gradient(from var(--au-angle),var(--accent-2),var(--music),var(--accent)) border-box;
+  box-shadow:0 6px 24px color-mix(in srgb,var(--accent) 32%,transparent),inset 0 1px 0 color-mix(in srgb,var(--accent-2) 30%,transparent)
+}
+[data-theme=aurora] .button.primary:hover{
+  box-shadow:0 8px 32px color-mix(in srgb,var(--accent) 45%,transparent),inset 0 1px 0 color-mix(in srgb,var(--accent-2) 36%,transparent)
+}
+/* 差异 5 · 进度条流光填充：渐变条 + 微光头部扫过；reduced-motion 退化为纯色 */
+[data-theme=aurora] .progress-track{height:6px;border-radius:999px;background:color-mix(in srgb,var(--text) 10%,transparent)}
+[data-theme=aurora] .progress-track>span{
+  position:relative;border-radius:999px;overflow:hidden;
+  background:linear-gradient(90deg,var(--accent),var(--accent-2));
+  box-shadow:0 0 12px color-mix(in srgb,var(--accent) 35%,transparent)
+}
+[data-theme=aurora] .progress-track>span::after{
+  content:"";position:absolute;inset:0;
+  background:linear-gradient(90deg,transparent,color-mix(in srgb,var(--accent-2) 70%,transparent),transparent);
+  transform:translateX(-100%);
+  animation:au-flow 1.8s var(--ease-out) infinite
+}
+@keyframes au-flow{to{transform:translateX(100%)}}
+@media(prefers-reduced-motion:reduce){
+  [data-theme=aurora] .progress-track>span{background:var(--accent);box-shadow:none}
+  [data-theme=aurora] .progress-track>span::after{display:none}
+}
+/* 维度页签（profile-dimension）：active 底部媒介色辉光，呼应流光语言 */
+[data-theme=aurora] .profile-dimension.active{
+  border-bottom-color:var(--medium-color);
+  box-shadow:inset 0 -2px 14px color-mix(in srgb,var(--medium-color) 26%,transparent)
+}
+
 /* ===== 比较指标：共识评分 hero + 悬浮解释 + 折叠明细 ===== */
 .consensus-hero{display:flex;align-items:center;gap:24px;margin:0 0 24px;padding:24px 24px;border:1px solid var(--line);border-radius:12px;background:color-mix(in srgb,var(--surface-3) 55%,transparent)}
 .consensus-dial{position:relative;width:96px;height:96px;flex-shrink:0;border-radius:50%;display:flex;flex-direction:column;align-items:center;justify-content:center}

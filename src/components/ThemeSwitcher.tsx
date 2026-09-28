@@ -43,6 +43,8 @@ export function ThemeSwitcher({ zh, onNotice }: { zh: boolean; onNotice?: (m: st
   function pick(id: string) {
     setTheme(id);
     applyTheme(id);
+    // 主题推荐默认（P2）：无持久化 orb 选择时勾选跟随主题推荐（aurora→极光绸带）
+    setOrbEffect(readOrbEffectId());
     setOpen(false);
   }
 

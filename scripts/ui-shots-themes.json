@@ -140,5 +140,21 @@
     "height": 900,
     "fixture": "demo-profile",
     "theme": "editorial-dark"
+  },
+  {
+    "name": "th-aurora-home",
+    "path": "/",
+    "width": 1300,
+    "height": 900,
+    "fixture": "demo-profile",
+    "theme": "aurora"
+  },
+  {
+    "name": "th-aurora-profile",
+    "path": "/myself",
+    "width": 1300,
+    "height": 900,
+    "fixture": "demo-profile",
+    "theme": "aurora"
   }
 ]

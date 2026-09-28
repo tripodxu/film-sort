@@ -1,0 +1,77 @@
+{
+  "collection": {
+    "kind": "film",
+    "works": [
+      {
+        "id": "douban-top50-the-shawshank-redemption",
+        "title": "肖申克的救赎",
+        "subtitle": "The Shawshank Redemption",
+        "year": 1994,
+        "posterUrls": ["https://image.tmdb.org/t/p/w500/q6y0Go1tsGEsmtFryDOJo3dEmqu.jpg"]
+      },
+      {
+        "id": "douban-top50-farewell-my-concubine",
+        "title": "霸王别姬",
+        "subtitle": "Farewell My Concubine",
+        "year": 1993
+      },
+      {
+        "id": "douban-top50-forrest-gump",
+        "title": "阿甘正传",
+        "subtitle": "Forrest Gump",
+        "year": 1994
+      },
+      {
+        "id": "douban-top50-leon-the-professional",
+        "title": "这个杀手不太冷",
+        "subtitle": "Leon: The Professional",
+        "year": 1994
+      },
+      { "id": "douban-top50-titanic", "title": "泰坦尼克号", "subtitle": "Titanic", "year": 1997 },
+      {
+        "id": "douban-top50-spirited-away",
+        "title": "千与千寻",
+        "subtitle": "Spirited Away",
+        "year": 2001
+      },
+      {
+        "id": "douban-top50-life-is-beautiful",
+        "title": "美丽人生",
+        "subtitle": "Life Is Beautiful",
+        "year": 1997
+      },
+      {
+        "id": "douban-top50-interstellar",
+        "title": "星际穿越",
+        "subtitle": "Interstellar",
+        "year": 2014
+      },
+      {
+        "id": "douban-top50-inception",
+        "title": "盗梦空间",
+        "subtitle": "Inception",
+        "year": 2010
+      },
+      {
+        "id": "douban-top50-schindler-s-list",
+        "title": "辛德勒的名单",
+        "subtitle": "Schindler's List",
+        "year": 1993
+      },
+      {
+        "id": "douban-top50-the-truman-show",
+        "title": "楚门的世界",
+        "subtitle": "The Truman Show",
+        "year": 1998
+      },
+      {
+        "id": "douban-top50-hachi-a-dog-s-tale",
+        "title": "忠犬八公的故事",
+        "subtitle": "Hachi: A Dog's Tale",
+        "year": 2009
+      }
+    ]
+  },
+  "ranking": "{\"version\":2,\"mode\":\"classic\",\"seed\":\"aurora-p2-shot\",\"topN\":8,\"sourceIds\":[\"douban-top50-the-shawshank-redemption\",\"douban-top50-farewell-my-concubine\",\"douban-top50-forrest-gump\",\"douban-top50-leon-the-professional\",\"douban-top50-titanic\",\"douban-top50-spirited-away\",\"douban-top50-life-is-beautiful\",\"douban-top50-interstellar\",\"douban-top50-inception\",\"douban-top50-schindler-s-list\",\"douban-top50-the-truman-show\",\"douban-top50-hachi-a-dog-s-tale\"],\"shuffledIds\":[\"douban-top50-forrest-gump\",\"douban-top50-farewell-my-concubine\",\"douban-top50-the-truman-show\",\"douban-top50-interstellar\",\"douban-top50-hachi-a-dog-s-tale\",\"douban-top50-spirited-away\",\"douban-top50-the-shawshank-redemption\",\"douban-top50-titanic\",\"douban-top50-schindler-s-list\",\"douban-top50-inception\",\"douban-top50-life-is-beautiful\",\"douban-top50-leon-the-professional\"],\"rankedIds\":[\"douban-top50-forrest-gump\",\"douban-top50-the-truman-show\",\"douban-top50-farewell-my-concubine\",\"douban-top50-interstellar\"],\"pendingIds\":[\"douban-top50-spirited-away\",\"douban-top50-the-shawshank-redemption\",\"douban-top50-titanic\",\"douban-top50-schindler-s-list\",\"douban-top50-inception\",\"douban-top50-life-is-beautiful\",\"douban-top50-leon-the-professional\"],\"deferredIds\":[],\"skippedIds\":[],\"outsideTopIds\":[],\"activeInsertion\":{\"candidateId\":\"douban-top50-hachi-a-dog-s-tale\",\"low\":0,\"high\":2,\"presentationIndex\":6,\"stage\":\"bisect\"},\"phase\":\"ranking\",\"verificationQueue\":[],\"activeVerification\":null,\"pairEvidence\":[{\"key\":\"douban-top50-farewell-my-concubine\\u0000douban-top50-forrest-gump\",\"leftId\":\"douban-top50-forrest-gump\",\"rightId\":\"douban-top50-farewell-my-concubine\",\"preferredId\":\"douban-top50-forrest-gump\",\"comparisonIndex\":1,\"phase\":\"ranking\"},{\"key\":\"douban-top50-farewell-my-concubine\\u0000douban-top50-the-truman-show\",\"leftId\":\"douban-top50-the-truman-show\",\"rightId\":\"douban-top50-farewell-my-concubine\",\"preferredId\":\"douban-top50-the-truman-show\",\"comparisonIndex\":2,\"phase\":\"ranking\"},{\"key\":\"douban-top50-forrest-gump\\u0000douban-top50-the-truman-show\",\"leftId\":\"douban-top50-forrest-gump\",\"rightId\":\"douban-top50-the-truman-show\",\"preferredId\":\"douban-top50-forrest-gump\",\"comparisonIndex\":3,\"phase\":\"ranking\"},{\"key\":\"douban-top50-interstellar\\u0000douban-top50-the-truman-show\",\"leftId\":\"douban-top50-the-truman-show\",\"rightId\":\"douban-top50-interstellar\",\"preferredId\":\"douban-top50-the-truman-show\",\"comparisonIndex\":4,\"phase\":\"ranking\"},{\"key\":\"douban-top50-farewell-my-concubine\\u0000douban-top50-interstellar\",\"leftId\":\"douban-top50-farewell-my-concubine\",\"rightId\":\"douban-top50-interstellar\",\"preferredId\":\"douban-top50-farewell-my-concubine\",\"comparisonIndex\":5,\"phase\":\"ranking\"},{\"key\":\"douban-top50-farewell-my-concubine\\u0000douban-top50-hachi-a-dog-s-tale\",\"leftId\":\"douban-top50-hachi-a-dog-s-tale\",\"rightId\":\"douban-top50-farewell-my-concubine\",\"preferredId\":\"douban-top50-hachi-a-dog-s-tale\",\"comparisonIndex\":6,\"phase\":\"ranking\"}],\"recentPairKeys\":[\"douban-top50-interstellar\\u0000douban-top50-the-truman-show\",\"douban-top50-farewell-my-concubine\\u0000douban-top50-interstellar\",\"douban-top50-farewell-my-concubine\\u0000douban-top50-hachi-a-dog-s-tale\"],\"preferenceEdges\":[{\"winnerId\":\"douban-top50-forrest-gump\",\"loserId\":\"douban-top50-farewell-my-concubine\",\"count\":1},{\"winnerId\":\"douban-top50-the-truman-show\",\"loserId\":\"douban-top50-farewell-my-concubine\",\"count\":1},{\"winnerId\":\"douban-top50-forrest-gump\",\"loserId\":\"douban-top50-the-truman-show\",\"count\":1},{\"winnerId\":\"douban-top50-the-truman-show\",\"loserId\":\"douban-top50-interstellar\",\"count\":1},{\"winnerId\":\"douban-top50-farewell-my-concubine\",\"loserId\":\"douban-top50-interstellar\",\"count\":1},{\"winnerId\":\"douban-top50-hachi-a-dog-s-tale\",\"loserId\":\"douban-top50-farewell-my-concubine\",\"count\":1}],\"cycleEvents\":[],\"cycleStatus\":\"none\",\"preferenceTension\":{\"level\":0,\"status\":\"none\",\"cycleCount\":0},\"comparisonCount\":6,\"estimatedTotalComparisons\":36,\"processedCount\":4,\"nextPresentationIndex\":7,\"completed\":false,\"calibration\":{\"checked\":0,\"consistent\":0},\"decisionLog\":[{\"kind\":\"choose\",\"candidateId\":\"douban-top50-farewell-my-concubine\",\"opponentId\":\"douban-top50-forrest-gump\",\"presentationIndex\":0,\"preferredId\":\"douban-top50-forrest-gump\",\"phase\":\"ranking\"},{\"kind\":\"choose\",\"candidateId\":\"douban-top50-the-truman-show\",\"opponentId\":\"douban-top50-farewell-my-concubine\",\"presentationIndex\":1,\"preferredId\":\"douban-top50-the-truman-show\",\"phase\":\"ranking\"},{\"kind\":\"choose\",\"candidateId\":\"douban-top50-the-truman-show\",\"opponentId\":\"douban-top50-forrest-gump\",\"presentationIndex\":2,\"preferredId\":\"douban-top50-forrest-gump\",\"phase\":\"ranking\"},{\"kind\":\"choose\",\"candidateId\":\"douban-top50-interstellar\",\"opponentId\":\"douban-top50-the-truman-show\",\"presentationIndex\":3,\"preferredId\":\"douban-top50-the-truman-show\",\"phase\":\"ranking\"},{\"kind\":\"choose\",\"candidateId\":\"douban-top50-interstellar\",\"opponentId\":\"douban-top50-farewell-my-concubine\",\"presentationIndex\":4,\"preferredId\":\"douban-top50-farewell-my-concubine\",\"phase\":\"ranking\"},{\"kind\":\"choose\",\"candidateId\":\"douban-top50-hachi-a-dog-s-tale\",\"opponentId\":\"douban-top50-farewell-my-concubine\",\"presentationIndex\":5,\"preferredId\":\"douban-top50-hachi-a-dog-s-tale\",\"phase\":\"ranking\"}]}",
+  "profileName": "极光验收"
+}

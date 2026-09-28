@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-09-22T13:30:41.042Z",
+  "generatedAt": "2026-09-28T12:07:35.172Z",
   "formulas": {
     "surface": 7,
     "surface3": 13,
@@ -229,6 +229,117 @@
         192,
         201
       ]
+    },
+    "editorial": {
+      "bg": [
+        244,
+        241,
+        234
+      ],
+      "surface": [
+        229,
+        226,
+        219
+      ],
+      "surface3": [
+        216,
+        213,
+        207
+      ],
+      "surfaceHover": [
+        218,
+        215,
+        209
+      ],
+      "text": [
+        26,
+        26,
+        24
+      ],
+      "text2": [
+        52,
+        52,
+        49
+      ],
+      "text3": [
+        74,
+        73,
+        70
+      ]
+    },
+    "editorial-dark": {
+      "bg": [
+        26,
+        26,
+        24
+      ],
+      "surface": [
+        41,
+        41,
+        38
+      ],
+      "surface3": [
+        54,
+        54,
+        51
+      ],
+      "surfaceHover": [
+        52,
+        52,
+        49
+      ],
+      "text": [
+        242,
+        239,
+        230
+      ],
+      "text2": [
+        216,
+        213,
+        205
+      ],
+      "text3": [
+        194,
+        192,
+        185
+      ]
+    },
+    "aurora": {
+      "bg": [
+        7,
+        11,
+        22
+      ],
+      "surface": [
+        23,
+        27,
+        38
+      ],
+      "surface3": [
+        36,
+        41,
+        52
+      ],
+      "surfaceHover": [
+        34,
+        39,
+        50
+      ],
+      "text": [
+        233,
+        241,
+        255
+      ],
+      "text2": [
+        206,
+        213,
+        227
+      ],
+      "text3": [
+        183,
+        190,
+        204
+      ]
     }
   },
   "matrix": [
@@ -446,6 +557,114 @@
       "theme": "cyber",
       "pair": "text on bg",
       "ratio": 17.74,
+      "need": "正文 → 需 4.5"
+    },
+    {
+      "theme": "editorial",
+      "pair": "text3 on bg",
+      "ratio": 7.98,
+      "need": "meta 11/12px → 需 4.5"
+    },
+    {
+      "theme": "editorial",
+      "pair": "text3 on surface",
+      "ratio": 6.96,
+      "need": "meta 11/12px → 需 4.5"
+    },
+    {
+      "theme": "editorial",
+      "pair": "text3 on surface3",
+      "ratio": 6.15,
+      "need": "meta 11/12px → 需 4.5"
+    },
+    {
+      "theme": "editorial",
+      "pair": "text3 on surfaceHover",
+      "ratio": 6.27,
+      "need": "meta 11/12px → 需 4.5"
+    },
+    {
+      "theme": "editorial",
+      "pair": "text2 on surface3",
+      "ratio": 8.53,
+      "need": "small 13px → 需 4.5"
+    },
+    {
+      "theme": "editorial",
+      "pair": "text on bg",
+      "ratio": 15.45,
+      "need": "正文 → 需 4.5"
+    },
+    {
+      "theme": "editorial-dark",
+      "pair": "text3 on bg",
+      "ratio": 9.57,
+      "need": "meta 11/12px → 需 4.5"
+    },
+    {
+      "theme": "editorial-dark",
+      "pair": "text3 on surface",
+      "ratio": 8.01,
+      "need": "meta 11/12px → 需 4.5"
+    },
+    {
+      "theme": "editorial-dark",
+      "pair": "text3 on surface3",
+      "ratio": 6.66,
+      "need": "meta 11/12px → 需 4.5"
+    },
+    {
+      "theme": "editorial-dark",
+      "pair": "text3 on surfaceHover",
+      "ratio": 6.86,
+      "need": "meta 11/12px → 需 4.5"
+    },
+    {
+      "theme": "editorial-dark",
+      "pair": "text2 on surface3",
+      "ratio": 8.27,
+      "need": "small 13px → 需 4.5"
+    },
+    {
+      "theme": "editorial-dark",
+      "pair": "text on bg",
+      "ratio": 15.16,
+      "need": "正文 → 需 4.5"
+    },
+    {
+      "theme": "aurora",
+      "pair": "text3 on bg",
+      "ratio": 10.53,
+      "need": "meta 11/12px → 需 4.5"
+    },
+    {
+      "theme": "aurora",
+      "pair": "text3 on surface",
+      "ratio": 9.21,
+      "need": "meta 11/12px → 需 4.5"
+    },
+    {
+      "theme": "aurora",
+      "pair": "text3 on surface3",
+      "ratio": 7.8,
+      "need": "meta 11/12px → 需 4.5"
+    },
+    {
+      "theme": "aurora",
+      "pair": "text3 on surfaceHover",
+      "ratio": 8.01,
+      "need": "meta 11/12px → 需 4.5"
+    },
+    {
+      "theme": "aurora",
+      "pair": "text2 on surface3",
+      "ratio": 9.88,
+      "need": "small 13px → 需 4.5"
+    },
+    {
+      "theme": "aurora",
+      "pair": "text on bg",
+      "ratio": 17.31,
       "need": "正文 → 需 4.5"
     }
   ],

@@ -16,6 +16,7 @@ export const THEMES = [
   { id: "paper", zh: "纸上擂台", en: "Paper Arena" },
   { id: "editorial", zh: "刊物", en: "Editorial" },
   { id: "editorial-dark", zh: "刊物暗色", en: "Editorial Dark" },
+  { id: "aurora", zh: "极光", en: "Aurora" },
 ] as const;
 
 export type ThemeId = (typeof THEMES)[number]["id"];

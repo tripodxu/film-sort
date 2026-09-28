@@ -17,6 +17,7 @@ const THEMES = [
   "cyber",
   "editorial",
   "editorial-dark",
+  "aurora",
 ];
 const LIGHT = ["retro", "minimal", "simple", "classic", "editorial"];
 

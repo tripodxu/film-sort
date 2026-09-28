@@ -532,7 +532,13 @@ export default function App() {
     applyTheme(readTheme());
   }, []);
   useEffect(() => {
-    const onScroll = () => setShowScrollTop(window.scrollY > 400);
+    // aurora 悬浮胶囊的滚动态（PLAN-ui-modernization P2）：仅切 class，
+    // 非 aurora 主题无对应 CSS——旧主题渲染不受影响（zero-diff 铁律）。
+    const topbar = document.querySelector<HTMLElement>(".topbar");
+    const onScroll = () => {
+      setShowScrollTop(window.scrollY > 400);
+      topbar?.classList.toggle("scrolled", window.scrollY > 8);
+    };
     window.addEventListener("scroll", onScroll, { passive: true });
     return () => window.removeEventListener("scroll", onScroll);
   }, []);
