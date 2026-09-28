@@ -5,6 +5,7 @@ import { IconButton } from "./IconButton";
 import { decideSwipe } from "../lib/swipe";
 import { track } from "../lib/utils";
 import { readJevAssistEnabled, readTypesafeConfig, requestJevPick } from "../lib/typesafe";
+import { useThemeFamily } from "../lib/useTheme";
 import type { SortingViewProps } from "./types";
 
 /** AI 代判的置信阈值:Jev 概率是校准过的,低于此值说明这对接近 toss-up,交给用户。 */
@@ -26,6 +27,8 @@ export function SortingView({
   // ===== 触屏滑动选择:往哪边甩就选哪边(与键盘 ←/A = 左同语义) =====
   // 仅触摸/笔启用——鼠标拖拽会与正文文字选择冲突,且桌面已有点击+键盘。
   // 拖动中的跟随位移直接写 transform(ref),不进 React state。
+  // L3（PLAN-ui-modernization）：刊物家族才渲染「第 N 回合」水印。
+  const isEditorial = useThemeFamily() === "editorial";
   const dragRef = useRef<{
     pointerId: number;
     x: number;
@@ -245,6 +248,16 @@ export function SortingView({
           <Sparkles size={12} />
           {assistMarker}
         </p>
+      )}
+      {/* L3（PLAN-ui-modernization）：刊物家族注入「第 N 回合」衬线水印；
+          classic 路径不渲染，DOM 与之前一致。样式在 styles.css 的 .ed-round-mark。 */}
+      {isEditorial && (
+        <div className="ed-round-mark" aria-hidden="true">
+          {t(
+            `第 ${String(progress.processed + 1).padStart(2, "0")} 回合`,
+            `ROUND ${String(progress.processed + 1).padStart(2, "0")}`,
+          )}
+        </div>
       )}
       <div
         className="duel-grid"

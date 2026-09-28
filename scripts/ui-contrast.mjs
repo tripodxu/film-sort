@@ -8,8 +8,17 @@ import { dirname, join, resolve } from "node:path";
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const css = readFileSync(join(ROOT, "src/styles.css"), "utf8");
 
-const THEMES = ["modern", "retro", "minimal", "simple", "classic", "cyber"];
-const LIGHT = ["retro", "minimal", "simple", "classic"];
+const THEMES = [
+  "modern",
+  "retro",
+  "minimal",
+  "simple",
+  "classic",
+  "cyber",
+  "editorial",
+  "editorial-dark",
+];
+const LIGHT = ["retro", "minimal", "simple", "classic", "editorial"];
 
 function blockAfter(anchor) {
   const i = css.indexOf(anchor);

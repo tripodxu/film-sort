@@ -11,14 +11,14 @@
 ## 进行中 / 最近
 
 ### T-20260928-02 · UI 现代化（多主题增量，PLAN-ui-modernization v3）
-- **状态**：⏸ 缓行（P0 已提交 `1357b12`；用户指示只跑 P0，P1 草稿存 `stash@{0}`）｜ **负责人**：本 agent
+- **状态**：👀 待审（P1 editorial 双主题本地全绿；**线上验证留 P4**）｜ **负责人**：本 agent
 - **任务类型**：§2.3（视觉/主题）+ §2.2（前端视图）
 - **最小上下文**：`docs/PLAN-ui-modernization.md` + `src/styles.css` + `src/lib/theme.ts` + `docs/agents/CONVENTIONS.md` §6
-- **改了什么**：（P0 ✅）`src/lib/useTheme.ts`（L3 条件渲染 + themeFamily）+ `src/lib/auraColor.ts`（海报取色，margin 守卫）+ `--ease-settle`/`--dur-stagger` 代币；各配单测（4+7 例）
-- **为什么**：用户拍板三方向全做、增量多主题、不改老 UI、组件级差异；后指示只做 P0
-- **验证状态**：单测 ✅（398 passed）｜ 五道门禁 ✅ ｜ 线上 ⬜（无视觉变化）
-- **遗留风险**：`stash@{0}` 的 P1 草稿含 TEMP-DEBUG 描边（styles.css 末尾 lime/red 规则），恢复时**先删调试残留**；移动端 ed-stack 定位问题未解决（详见 .workbuddy/memory/2026-09-28.md）
-- **下一步（给接手者）**：若重启 P1：`git stash pop` → 清调试残留 → 修移动端 ed-stack → 按矩阵 §2.1 验收
+- **改了什么**：（P0 ✅ 已提交 `1357b12`）useTheme/auraColor/动效代币；（P1 本地待提交）editorial + editorial-dark 双主题：变量块 ×2、`theme.ts` 注册、HomeView hero L3 重构（海报堆叠 + 移动端 scroll-snap 轮播）、SortingView 回合水印 L3、topbar/按钮/弹窗/进度/榜单/维度条 L2 覆写；修复两处 CSS 特异性陷阱（各配绊线）；工具：`gen-editorial-shots.mjs`、themes manifest 补 3 主题、ui-contrast 支持 editorial
+- **为什么**：用户拍板三方向全做、增量多主题、不改老 UI、组件级差异；P1 为四组新主题的第一组
+- **验证状态**：五道门禁 ✅（lint 0 error；test 偶发 glob 竞态漏收集 2 文件、单独跑均过）｜ 旧 7 主题 14 张 zero-diff ✅ ｜ editorial 8 张截图肉眼 + 盒模型 dump 签收 ✅ ｜ **线上 ⬜**
+- **遗留风险**：① macOS 衬线段（Songti SC/STSong）未测；② 本环境 vitest glob 竞态（WorkBuddy fs 代理）会偶发漏收集 `worker/ai.test.ts`(44) / `src/content-intro.test.ts`(9)，非代码回归；③ `--r-*` 未归零（弹窗显式 radius:0，见 PLAN §P1 偏差）
+- **下一步（给接手者）**：P2 aurora（§2.2 七差异组件，orb ribbon 特效）｜ P4 收尾时补 macOS 衬线段 + sort.logicc.top 线上验证 + README/FEATURES/USAGE 的「7→11 主题」文档同步
 
 ### T-20260928-01 · 文档体系重建（记忆 + 多 agent 协同文档）
 - **状态**：✅ 完成 ｜ **负责人**：文档 agent

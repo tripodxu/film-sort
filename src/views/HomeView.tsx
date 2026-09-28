@@ -16,6 +16,7 @@ import {
 import { getCollectionsByKind, mediaLabels, type Artwork, type MediaKind } from "../data/media";
 import { DeferredOrb } from "../components/DeferredOrb";
 import { Poster } from "../components/Poster";
+import { useThemeFamily } from "../lib/useTheme";
 import { fileInput } from "./helpers";
 import type { HomeViewProps } from "./types";
 
@@ -70,25 +71,60 @@ export function HomeView({
     return table;
   }, []);
 
+  // L3 条件渲染（PLAN-ui-modernization）：刊物家族换「杂志封面」hero，
+  // classic（旧主题与自定义包）走下方既有 DOM，一字节不变。
+  const family = useThemeFamily();
+  const isEditorial = family === "editorial";
+
   return (
     <>
-      <section className="orb-hero">
-        <DeferredOrb />
-        <div className="orb-hero-inner">
+      <section className={`orb-hero${isEditorial ? " ed-hero" : ""}`}>
+        {!isEditorial && <DeferredOrb />}
+        <div className={`orb-hero-inner${isEditorial ? " ed-hero-inner" : ""}`}>
           <div className="home-heading">
             <div>
-              <span className="eyebrow">YOUR PERSONAL CULTURE INDEX</span>
-              <h1>
-                ART<span>/</span>RANK<small>{t("我的艺术人格", "My Artistic Profile")}</small>
-              </h1>
+              <span className="eyebrow">
+                {isEditorial
+                  ? t("第一期 · 你的私人文化索引", "ISSUE 01 — YOUR PERSONAL CULTURE INDEX")
+                  : "YOUR PERSONAL CULTURE INDEX"}
+              </span>
+              {isEditorial ? (
+                <h1 className="ed-title">
+                  <span>{t("你的品味，值得", "Your taste deserves")}</span>
+                  <em>{t("一次郑重的排列。", "a deliberate arrangement.")}</em>
+                </h1>
+              ) : (
+                <h1>
+                  ART<span>/</span>RANK<small>{t("我的艺术人格", "My Artistic Profile")}</small>
+                </h1>
+              )}
               <p>
-                {t(
-                  "在两件作品之间，找到你真正想留下的那一个。",
-                  "Choose between two works and reveal what stays with you.",
-                )}
+                {isEditorial
+                  ? t(
+                      "连续 1v1 取舍，排出属于你的 Top N，生成一份可保存、可分享的艺术人格画像。",
+                      "Rank your Top N through 1v1 choices and get a shareable artistic profile.",
+                    )
+                  : t(
+                      "在两件作品之间，找到你真正想留下的那一个。",
+                      "Choose between two works and reveal what stays with you.",
+                    )}
               </p>
             </div>
           </div>
+          {isEditorial && (
+            <div className="ed-stack" aria-hidden="true">
+              {kinds.slice(0, 4).map((item) => {
+                // 槽位与维度一一对应：空维度由 CSS 占位色块补齐（ed-stack-blank），
+                // 不过滤——过滤会让第 N 槽显示第 N+1 个维度的海报，与占位色配色矛盾。
+                const work = sampleByKind[item];
+                return (
+                  <div className="ed-stack-item" key={item}>
+                    {work ? <Poster work={work} kind={item} /> : <i className="ed-stack-blank" />}
+                  </div>
+                );
+              })}
+            </div>
+          )}
           <div className="identity glass-capsule">
             <UserRound size={15} />
             <span>{accountEmail || t("本地游客", "Local guest")}</span>

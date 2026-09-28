@@ -124,6 +124,42 @@ describe("P5a 主题人格绊线（非色彩差异 ≥2/主题）", () => {
     expect(css).toContain("[data-theme=classic] .section-heading{border-top:3px double");
     expect(css).toMatch(/\[data-theme=classic\] h1,[^}]*Songti SC/);
   });
+  it("editorial 刊物画廊（PLAN-ui-modernization P1）：pill 按钮 + 序号导航 + 直角弹窗 + 页码进度", () => {
+    expect(css).toMatch(/\[data-theme=editorial\]\{\s*--bg:#F4F1EA/);
+    expect(css).toMatch(/\[data-theme=editorial-dark\]\{\s*--bg:#1A1A18/);
+    expect(css).toMatch(
+      /\[data-theme=editorial\] \.topbar nav button:before[^{]*\{content:"0" counter/,
+    );
+    expect(css).toMatch(/\[data-theme=editorial\] \.button,[^{]*\{border-radius:999px/);
+    expect(css).toContain(".ed-round-mark{");
+    expect(css).toMatch(/\[data-theme=editorial\] \.progress-track,[^{]*\{[^}]*height:2px/);
+    // 进度尺规刻度（::after 覆盖层）与 mobile 轮播定位纪律
+    expect(css).toMatch(
+      /\[data-theme=editorial\] \.progress-track::after[^{]*\{[^}]*repeating-linear-gradient/,
+    );
+    expect(css).toContain("scroll-snap-type:x mandatory");
+    // 移动端轮播归位纪律：桌面 .ed-stack-item:nth-child(N) 的 left/top/rotate
+    // 特异性 (0,2,0) 高于同名类移动端覆写 (0,1,0)，必须用后代前缀+nth-child
+    // 抬到 (0,3,0) 覆写，否则卡片按桌面绝对定位渲染（倾斜/推右/错位）。
+    expect(css).toContain(
+      ".ed-hero-inner .ed-stack-item:nth-child(n){left:auto;top:auto;transform:none}",
+    );
+    expect(css).toContain(
+      ".ed-hero-inner .ed-stack:hover .ed-stack-item:nth-child(n){transform:none}",
+    );
+    // 移动端单列网格纪律：基座 .orb-hero-inner 的 grid-template-columns 位于本媒体查询
+    // 之后（styles.css L846），同名类 (0,1,0) 后来者胜——.ed-hero-inner 单类覆写是死代码，
+    // mobile 实际跑双轨 + 48px column-gap（实测轮播容器 438 = 486-48）。必须双类抬到 (0,2,0)。
+    expect(css).toContain(".ed-hero-inner.ed-hero-inner{grid-template-columns:minmax(0,1fr)}");
+  });
+  it("editorial L3 分支：刊物家族才渲染海报堆叠与回合水印，classic 路径不变", () => {
+    const home = readFileSync("src/views/HomeView.tsx", "utf8");
+    expect(home).toContain('family === "editorial"');
+    expect(home).toContain("ed-stack");
+    const sv = readFileSync("src/views/SortingView.tsx", "utf8");
+    expect(sv).toContain("ed-round-mark");
+    expect(sv).toContain('useThemeFamily() === "editorial"');
+  });
   it("纹理配额：主题人格纹 ≤3% 不透明度", () => {
     for (const m of css.matchAll(/opacity='\.(\d+)'\/>/g)) {
       expect(Number(m[1])).toBeLessThanOrEqual(5); // .05 = 信纸线纹（线纹例外）

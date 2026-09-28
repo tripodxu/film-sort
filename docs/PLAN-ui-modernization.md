@@ -98,14 +98,25 @@ export function useTheme(): string {
 
 **验收**：五道门禁绿；旧主题 zero-diff；无视觉变化。
 
-### P1 · editorial / editorial-dark（2 天）
+### P1 · editorial / editorial-dark（2 天）—— 本地完成 ⏸，线上验证留 P4
 
 按 §2.1 矩阵落地 9 个差异组件。L3 分支：HomeView hero、duel 水印；其余 L2 覆写 + 变量块。
 
-- [ ] 变量块 ×2（21 必需 + 对比度底线）；`theme.ts` 注册；玻璃关闭（paper 先例）
-- [ ] 衬线回退链实测 Windows/macOS；中文正文保持黑体
-- [ ] 移动端：海报堆叠 → 单张轮播；水印字号降级
-- [ ] `ui-diff`：旧 7 主题 zero-diff；editorial 双主题截图入库
+- [x] 变量块 ×2（21 必需 + 对比度底线）；`theme.ts` 注册；玻璃关闭（paper 先例）
+- [x] 移动端：海报堆叠 → 单张轮播（scroll-snap 零 JS）；水印字号降级
+- [x] `ui-diff`：旧 7 主题 zero-diff（14/14 张 tol=0）；editorial 双主题进 `scripts/ui-shots-themes.json` 归档
+- [x]~ 衬线回退链：Windows 实测通过（Georgia→SimSun 段生效）；**macOS 段（Songti SC/STSong）无设备未测**——留 P4 线上验证
+
+**执行偏差（相对 §2.1 矩阵，均已截图确认）**：
+
+1. **弹窗直角未走 `--r-*` 全 0**：矩阵写「直角（--r-* 全 0）」，实际为弹窗/菜单/toast 显式 `border-radius:0` + 2px 实线框，`--r-*` 保留 2/3/4/6px 小圆角给其余组件——`--r-*` 归零会让海报卡、dim-chip 等全部剃刀化，超出「杂志跨页」的意图范围。
+2. **两处特异性陷阱（实测踩到并修复，均有 ui-diff 证据 + 绊线测试）**：
+   - 桌面 `.ed-stack-item:nth-child(N)` 定位（0,2,0）压过移动端同名类覆写（0,1,0）——媒体查询不加特异性。修复：`.ed-hero-inner .ed-stack-item:nth-child(n)` 抬到 (0,3,0)（hover 扩散 (0,4,0) 同分后来者胜）。修复前实测泄漏：rotate(-6deg) 倾斜、left:108px 推右成 127px 巨间隙、top:26px 错位；修复后顶边斜率 0.05°、三卡直立。
+   - 基座 `.orb-hero-inner` 的 `grid-template-columns` 在样式表 L846（移动端媒体查询**之后**），同名类后来者胜——`.ed-hero-inner` 单类单列覆写是死代码，mobile 实际跑双轨 + 48px column-gap（盒模型 dump 实测轮播容器 438 = 486−48）。修复：双类 `.ed-hero-inner.ed-hero-inner` 抬到 (0,2,0)；修复后容器 486 满宽，card3 可见宽度 84→132px。
+3. **移动端轮播差异说明**：home-540 双主题截图相对修复前基线变化 ~2.4% 像素，全部位于轮播容器右缘 48px 条带（card3 右半 newly visible）+ 标题细线端点随标题轨宽 438→475 外延；标题文字、桌面 6 图、移动端 sorting 均 0 diff。
+
+**验证状态**：五道门禁绿 ｜ 旧 7 主题 14 张 zero-diff ｜ editorial 8 张截图肉眼 + 盒模型 dump 签收 ｜ **线上 ⬜（P4）**。
+> 测试数波动说明：本环境 vitest 偶发漏收集 `worker/ai.test.ts`（44 例）与 `src/content-intro.test.ts`（9 例，live-API 门控默认跳过）——单独跑均通过，判定为 WorkBuddy fs 代理的 glob 竞态，非代码回归。
 
 ### P2 · aurora（1.5 天）
 
@@ -167,6 +178,7 @@ export function useTheme(): string {
 
 ## 7. 变更记录
 
+- **v3.2（2026-09-28，P1 执行完毕）**：落地 editorial/editorial-dark 双主题（§2.1 九差异组件全做）；实测踩到两处 CSS 特异性陷阱并修复（移动端 ed-stack 桌面定位泄漏、单列网格覆写被基座后来者胜），各配绊线测试；旧 7 主题 14 张截图 zero-diff 实证 L3 默认路径零回归；记录三处执行偏差（弹窗直角走显式 radius:0 而非 `--r-*` 归零、macOS 衬线段未测、移动端轮播差异范围）。线上验证按计划留 P4。
 - **v3.1（2026-09-28，P0 执行中修正）**：`--ease-spring` 改名 `--ease-settle`（1.2 过冲）——`cubic-bezier(.34,1.56,.64,1)` 是 2026-09-22 焕新定死的「玩具感元凶」，有绊线测试看守（`src/ui-fixes.test.ts`）；auraColor 增加「胜出桶须甩开第二名 1.5×」margin 守卫，避免双色海报掷硬币。
 - **v3（2026-09-28）**：用户拍板「不是简单换色，要组件级可感知差异」→ 新增三层差异化机制（L3 useTheme 条件渲染）、§2 组件级差异矩阵（12 组件 × 4 主题，每主题 ≥6 差异组件）、「肉眼可辨」纳入验收。
 - **v2（2026-09-28）**：三方向全做、增量多主题、不改老 UI。

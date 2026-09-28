@@ -77,6 +77,20 @@ const extraSeed = (s) => {
   if (s?.ns) {
     parts.push(`document.documentElement.setAttribute("data-ns",${JSON.stringify(s.ns)});`);
   }
+  // 任意 localStorage 预置（如 art-rank:draft:v2 排序草稿，供 /sorting 页截图）
+  if (s?.ls && typeof s.ls === "object") {
+    for (const [k, v] of Object.entries(s.ls)) {
+      parts.push(`localStorage.setItem(${JSON.stringify(k)},${JSON.stringify(v)});`);
+    }
+  }
+  // 挂载后点击某选择器（轮询等 React 水合后再点，供「继续上次进度」→ /sorting 这类流程截图）
+  if (s?.click) {
+    parts.push(
+      `(function(){var sel=${JSON.stringify(s.click)},t0=Date.now();` +
+        `(function poll(){var el=document.querySelector(sel);` +
+        `if(el){el.click();}else if(Date.now()-t0<8000){setTimeout(poll,100);}})();})();`,
+    );
+  }
   return parts.join("");
 };
 

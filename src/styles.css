@@ -538,6 +538,8 @@ kbd{display:inline-flex;align-items:center;justify-content:center;min-width:22px
 .theme-dot.theme-classic{--dot-a:#f3ead6;--dot-b:#8c1c13;background:linear-gradient(135deg,var(--dot-a) 50%,var(--dot-b) 50%)}
 .theme-dot.theme-cyber{--dot-a:#05060a;--dot-b:#00f0ff;background:linear-gradient(135deg,var(--dot-a) 50%,var(--dot-b) 50%)}
 .theme-dot.theme-paper{--dot-a:#F2EDE3;--dot-b:#D33A2C;background:linear-gradient(135deg,var(--dot-a) 50%,var(--dot-b) 50%)}
+.theme-dot.theme-editorial{--dot-a:#F4F1EA;--dot-b:#B4432F;background:linear-gradient(135deg,var(--dot-a) 50%,var(--dot-b) 50%)}
+.theme-dot.theme-editorial-dark{--dot-a:#1A1A18;--dot-b:#E0644A;background:linear-gradient(135deg,var(--dot-a) 50%,var(--dot-b) 50%)}
 .theme-name{flex:1}
 .settings-group-label{font-family:var(--font-mono);font-size:10px;letter-spacing:.1em;color:var(--muted);text-transform:uppercase;padding:4px 8px 4px}
 .settings-hint{font-size:11px;color:var(--muted);line-height:1.5;padding:4px 8px 4px;border-top:1px solid var(--line);margin-top:4px}
@@ -632,6 +634,140 @@ kbd{display:inline-flex;align-items:center;justify-content:center;min-width:22px
   --line:#D9D0BF;--border-2:#C9BFA9;--r-xs:0;--r-sm:2px;--r-md:2px;--r-lg:3px;--r-pill:3px;
 }
 [data-theme=paper] .topbar{border-bottom:3px double var(--line)}
+
+/* ===== 主题：刊物 / 刊物暗色（PLAN-ui-modernization P1 · 组件级差异 9 项） =====
+   杂志封面式首页（L3 海报堆叠）+ 衬线标题 + 序号导航 + pill 按钮 +
+   去卡片化 duel + 回合水印 + 页码进度 + 行式榜单 + 坐标纸维度条 + 直角弹窗。 */
+[data-theme=editorial]{
+  --bg:#F4F1EA;--text:#1A1A18;--text-2:#353331;--text-3:#4A4946;--muted:#6E6A60;
+  --accent:#B4432F;--accent-2:#D96A4A;--accent-ink:#FBF8F1;
+  --line:#CBC8BE;--border-2:#B4B0A4;
+  --surface:#E7E4DB;--surface-2:#DFDCD3;--surface-3:#D8D4CA;--surface-hover:#DBD7CD;
+  --ok:#2F6B45;--warn:#B08528;--danger:#B4432F;--danger-2:#C05A45;--indigo:#5B5EA6;--pink:#A05A7A;
+  --film:#B4432F;--book:#2F4A3C;--music:#8A6D2F;--other:#5B5EA6;
+  --scrim:rgba(26,26,24,.55);--toast-bg:#1A1A18;--toast-bg-2:#2A2A26;--toast-ink:#F4F1EA;--toast-border:#1A1A18;
+  --font-display:Georgia,"Noto Serif SC","Songti SC","STSong","SimSun",serif;
+  --reader-dim:.92;--reader-poster-opacity:.18;
+  --status-ok:#3E8A5A;--status-warn:#C99A1A;--status-danger:#C04A35;
+  --r-xs:2px;--r-sm:3px;--r-md:4px;--r-lg:6px;
+}
+[data-theme=editorial-dark]{
+  --bg:#1A1A18;--text:#F2EFE6;--text-2:#D8D5CD;--text-3:#C2C0B9;--muted:#9A9689;
+  --accent:#E0644A;--accent-2:#EC8A70;--accent-ink:#1A1A18;
+  --line:#3A3934;--border-2:#4A4944;
+  --surface:#292924;--surface-2:#322F29;--surface-3:#3A3833;--surface-hover:#35332D;
+  --ok:#5FB87E;--warn:#D9AE5F;--danger:#E0644A;--danger-2:#EC8A70;--indigo:#9FA3E0;--pink:#D48AAB;
+  --film:#E0644A;--book:#7FA98C;--music:#D9AE5F;--other:#9FA3E0;
+  --scrim:rgba(0,0,0,.66);--toast-bg:#F2EFE6;--toast-bg-2:#E4E0D2;--toast-ink:#1A1A18;--toast-border:#F2EFE6;
+  --font-display:Georgia,"Noto Serif SC","Songti SC","STSong","SimSun",serif;
+  --reader-dim:.28;--reader-poster-opacity:.5;
+  --status-ok:#5FB87E;--status-warn:#D9AE5F;--status-danger:#E0644A;
+  --r-xs:2px;--r-sm:3px;--r-md:4px;--r-lg:6px;
+}
+/* 刊物系关闭玻璃（纸感统一规则只列了旧主题，刊物单独一条，避免动那行多主题长选择器） */
+[data-theme=editorial] :is(.topbar,.glass-capsule,.segmented,.medium-item,.account-dialog,.artwork-main,.toast,.dim-chip,.rank-pill,.rank-menu,.settings-menu,.guide-help-btn,.plaza-header,.scroll-top,.custom-suggestions,.detail-dialog,.rank-detail-dialog,.theme-menu),[data-theme=editorial-dark] :is(.topbar,.glass-capsule,.segmented,.medium-item,.account-dialog,.artwork-main,.toast,.dim-chip,.rank-pill,.rank-menu,.settings-menu,.guide-help-btn,.plaza-header,.scroll-top,.custom-suggestions,.detail-dialog,.rank-detail-dialog,.theme-menu){backdrop-filter:none;-webkit-backdrop-filter:none}
+/* 差异 2 · 标题体系：h1/h2 衬线 + 紧字距 */
+[data-theme=editorial] h1,[data-theme=editorial] h2,[data-theme=editorial] .section-heading h2,[data-theme=editorial-dark] h1,[data-theme=editorial-dark] h2,[data-theme=editorial-dark] .section-heading h2{font-family:var(--font-display);letter-spacing:-.01em}
+[data-theme=editorial] .home-heading h1>span,[data-theme=editorial-dark] .home-heading h1>span{font-family:var(--font-display)}
+/* 差异 3 · topbar：序号前缀导航（01 排序 / 02 画像），active 去下划线改序号着色 */
+[data-theme=editorial] .topbar nav,[data-theme=editorial-dark] .topbar nav{counter-reset:ednav}
+[data-theme=editorial] .topbar nav button,[data-theme=editorial-dark] .topbar nav button{counter-increment:ednav}
+[data-theme=editorial] .topbar nav button:before,[data-theme=editorial-dark] .topbar nav button:before{content:"0" counter(ednav);margin-right:6px;font-family:var(--font-display);font-size:11px;color:var(--muted)}
+[data-theme=editorial] .topbar nav button.active:before,[data-theme=editorial-dark] .topbar nav button.active:before{color:var(--accent)}
+[data-theme=editorial] .topbar nav button.active:after,[data-theme=editorial-dark] .topbar nav button.active:after{display:none}
+/* 差异 4 · 按钮：pill 实色，无玻璃无描边 */
+[data-theme=editorial] .button,[data-theme=editorial-dark] .button{border-radius:999px;border-color:transparent;transition:transform var(--dur-2) var(--ease-settle),background var(--dur-1),color var(--dur-1)}
+[data-theme=editorial] .button:hover,[data-theme=editorial-dark] .button:hover{transform:translateY(-1px)}
+/* 差异 5 · duel 去卡片化：海报铺底 + 衬线标题（回合水印 DOM 由 L3 注入，样式在此） */
+[data-theme=editorial] .artwork-main,[data-theme=editorial-dark] .artwork-main{background:none;border:0;box-shadow:none;padding:0;border-radius:0}
+[data-theme=editorial] .artwork-info h2,[data-theme=editorial-dark] .artwork-info h2{font-family:var(--font-display);font-weight:600}
+[data-theme=editorial] .artwork-card,[data-theme=editorial-dark] .artwork-card{border:0;background:none;box-shadow:none}
+[data-theme=editorial] .view-sorting,[data-theme=editorial-dark] .view-sorting{position:relative}
+.ed-round-mark{position:absolute;top:72px;left:50%;transform:translateX(-50%);z-index:0;pointer-events:none;font-family:var(--font-display);font-size:min(38vw,300px);line-height:1;color:color-mix(in srgb,var(--text) 7%,transparent);white-space:nowrap;user-select:none}
+[data-theme=editorial] .duel-grid,[data-theme=editorial-dark] .duel-grid{position:relative;z-index:1}
+/* 差异 6 · 进度：发丝轨道 + 尺规细线刻度 + 页码排印 */
+[data-theme=editorial] .progress-track,[data-theme=editorial-dark] .progress-track{position:relative;height:2px;background:var(--line);border-radius:0}
+[data-theme=editorial] .progress-track>span,[data-theme=editorial-dark] .progress-track>span{background:var(--text);border-radius:0}
+/* 刻度尺规：::after 后绘于填充 span 之上，1px 细线每 5% 一刻（纯装饰，pointer-events 关） */
+[data-theme=editorial] .progress-track::after,[data-theme=editorial-dark] .progress-track::after{content:"";position:absolute;inset:0;pointer-events:none;background-image:repeating-linear-gradient(90deg,color-mix(in srgb,var(--text) 42%,transparent) 0 1px,transparent 1px 5%)}
+[data-theme=editorial] .progress-meta,[data-theme=editorial-dark] .progress-meta{font-family:var(--font-display);letter-spacing:.06em}
+/* 差异 7 · 榜单：行式排印——衬线巨号 + 细分隔线，去卡片 */
+[data-theme=editorial] .ranking-list li,[data-theme=editorial-dark] .ranking-list li{border:0;border-bottom:1px solid var(--line);border-radius:0;background:none;box-shadow:none}
+[data-theme=editorial] .row-number,[data-theme=editorial-dark] .row-number{font-family:var(--font-display);font-size:29px;color:var(--accent)}
+/* 差异 8 · 画像维度条：坐标纸细网格 + 衬线数值 */
+[data-theme=editorial] .profile-dimension,[data-theme=editorial-dark] .profile-dimension{background-image:linear-gradient(color-mix(in srgb,var(--line) 55%,transparent) 1px,transparent 1px),linear-gradient(90deg,color-mix(in srgb,var(--line) 55%,transparent) 1px,transparent 1px);background-size:100% 25%,25% 100%;border-radius:0;box-shadow:none}
+[data-theme=editorial] .profile-dimension strong,[data-theme=editorial-dark] .profile-dimension strong{font-family:var(--font-display)}
+/* 差异 9 · 弹窗：直角 + 2px 实线框（杂志跨页感） */
+[data-theme=editorial] :is(.account-dialog,.detail-dialog,.rank-detail-dialog,.settings-menu,.rank-menu,.theme-menu,.toast,.guide-modal,.tech-modal),[data-theme=editorial-dark] :is(.account-dialog,.detail-dialog,.rank-detail-dialog,.settings-menu,.rank-menu,.theme-menu,.toast,.guide-modal,.tech-modal){border-radius:0;border:2px solid color-mix(in srgb,var(--text) 78%,transparent);box-shadow:none}
+/* 差异 1 · 首页 hero（L3 分支 DOM 的样式：ed-hero 仅刊物家族渲染） */
+.ed-hero-inner{position:relative}
+.ed-hero-inner .identity.glass-capsule{position:absolute;top:0;right:0;z-index:5;margin:0}
+/* 刊物是干净纸面：hero 的半调网点（::after）与左缘衬纸渐变（::before 弱化保留） */
+[data-theme=editorial] .orb-hero.orb-hero::after,[data-theme=editorial-dark] .orb-hero.orb-hero::after{display:none}
+.ed-hero-inner .home-heading h1.ed-title{font-family:var(--font-display);font-size:min(60px,7vw);line-height:1.16;font-weight:600;letter-spacing:-.015em;max-width:12em}
+/* 双行报头：首行墨色，次行强调斜体（base 的 h1>span 是 accent 斜体，这里按行分工） */
+.ed-hero-inner .home-heading h1.ed-title>span{color:var(--text);font-style:normal}
+.ed-hero-inner .home-heading h1.ed-title>em{color:var(--accent);font-style:italic}
+.ed-hero-inner .home-heading p{max-width:34em}
+.ed-stack{position:absolute;right:0;top:50%;transform:translateY(-50%);width:min(400px,36%);height:340px;pointer-events:auto}
+.ed-stack-item{position:absolute;width:150px;height:216px;border-radius:3px;overflow:hidden;box-shadow:0 10px 30px color-mix(in srgb,var(--text) 22%,transparent);transition:transform var(--dur-3) var(--ease-settle)}
+.ed-stack-item .poster{width:100%;height:100%}
+.ed-stack-item:nth-child(1){left:0;top:26px;transform:rotate(-6deg);z-index:1}
+.ed-stack-item:nth-child(2){left:108px;top:0;transform:rotate(-1deg);z-index:3}
+.ed-stack-item:nth-child(3){left:224px;top:34px;transform:rotate(5deg);z-index:2}
+.ed-stack-item:nth-child(4){left:168px;top:112px;transform:rotate(2deg);z-index:4}
+.ed-stack:hover .ed-stack-item:nth-child(1){transform:rotate(-9deg) translateX(-14px)}
+.ed-stack:hover .ed-stack-item:nth-child(2){transform:rotate(-1deg) translateY(-12px)}
+.ed-stack:hover .ed-stack-item:nth-child(3){transform:rotate(8deg) translateX(14px)}
+.ed-stack:hover .ed-stack-item:nth-child(4){transform:rotate(4deg) translateY(10px)}
+.ed-stack-blank{display:block;width:100%;height:100%;background:var(--ed-blank,var(--surface-3));border:1px solid var(--line)}
+.ed-stack-item:nth-child(1) .ed-stack-blank{--ed-blank:color-mix(in srgb,var(--film) 30%,var(--bg))}
+.ed-stack-item:nth-child(2) .ed-stack-blank{--ed-blank:color-mix(in srgb,var(--book) 42%,var(--bg))}
+.ed-stack-item:nth-child(3) .ed-stack-blank{--ed-blank:color-mix(in srgb,var(--music) 34%,var(--bg))}
+.ed-stack-item:nth-child(4) .ed-stack-blank{--ed-blank:color-mix(in srgb,var(--other) 34%,var(--bg))}
+@media(prefers-reduced-motion:reduce){.ed-stack:hover .ed-stack-item{transform:inherit}}
+/* 移动端（PLAN P1）：海报堆叠 → 单张轮播（scroll-snap，零 JS 零依赖）。
+   注意：.ed-stack 改 relative 后会被 v2 网格自动编排进第二列（auto 轨），
+   必须把 ed-hero-inner 显式改单列并逐项放置（PITFALLS 4.12 同源纪律）；
+   orb-index 的 grid-column:2 在单列网格会炸出隐式列，直接隐藏。
+   特异性陷阱：基座 .orb-hero-inner 的 grid-template-columns 在 L846（本媒体查询之后），
+   同名类 (0,1,0) 后来者胜——直接写 .ed-hero-inner{grid-template-columns:...} 是死代码，
+   mobile 实际跑的是双轨 + 48px column-gap（轮播容器实测 438 = 486-48，窄 48px）。
+   必须双类抬到 (0,2,0)。行模板保持基座 auto 1fr auto（轮播行吸收剩余高度，卡片垂直居中）。 */
+@media(max-width:800px){
+  .ed-hero-inner.ed-hero-inner{grid-template-columns:minmax(0,1fr)}
+  .ed-hero-inner .home-heading{grid-column:1;grid-row:1}
+  .ed-hero-inner .ed-stack{
+    position:relative;right:auto;top:auto;transform:none;
+    grid-column:1;grid-row:2;
+    display:flex;align-items:center;gap:14px;
+    width:100%;margin-top:28px;padding:4px 6px 10px;
+    overflow-x:auto;overflow-y:hidden;
+    scroll-snap-type:x mandatory;-webkit-overflow-scrolling:touch;
+    scrollbar-width:none;
+  }
+  .ed-hero-inner .ed-stack::-webkit-scrollbar{display:none}
+  .ed-stack-item{
+    position:relative;left:auto;top:auto;transform:none;
+    flex:0 0 auto;width:clamp(128px,32%,180px);aspect-ratio:2/3;
+    scroll-snap-align:center;
+    box-shadow:0 8px 22px color-mix(in srgb,var(--text) 20%,transparent);
+  }
+  /* 桌面 nth-child 定位规则（left/top/rotate，特异性 0,2,0）会压过上面同名类的
+     移动端覆写（0,1,0）——媒体查询本身不加特异性。必须用「后代前缀+nth-child」
+     把特异性抬到 (0,3,0)，轮播卡片才真正归位；否则实测泄漏： rotate(-6deg) 倾斜、
+     left:108px 推右成 127px 巨间隙、top:26px 垂直错位。hover 扩散抬到 (0,4,0)
+     与桌面同分、后来者胜。 */
+  .ed-hero-inner .ed-stack-item:nth-child(n){left:auto;top:auto;transform:none}
+  .ed-hero-inner .ed-stack:hover .ed-stack-item:nth-child(n){transform:none}
+  .ed-hero-inner .orb-index{display:none}
+  .ed-hero-inner .home-heading h1.ed-title{font-size:min(44px,11vw)}
+  .ed-round-mark{font-size:28vw;top:96px}
+}
+@media(max-width:540px){
+  .ed-stack-item{width:clamp(120px,42%,160px)}
+  [data-theme=editorial] .topbar nav button:before,[data-theme=editorial-dark] .topbar nav button:before{margin-right:3px;font-size:10px}
+}
 
 /* ===== 比较指标：共识评分 hero + 悬浮解释 + 折叠明细 ===== */
 .consensus-hero{display:flex;align-items:center;gap:24px;margin:0 0 24px;padding:24px 24px;border:1px solid var(--line);border-radius:12px;background:color-mix(in srgb,var(--surface-3) 55%,transparent)}

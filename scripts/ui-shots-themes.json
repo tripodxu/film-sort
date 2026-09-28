@@ -92,5 +92,53 @@
     "height": 900,
     "fixture": "demo-profile",
     "theme": "cyber"
+  },
+  {
+    "name": "th-paper-home",
+    "path": "/",
+    "width": 1300,
+    "height": 900,
+    "fixture": "demo-profile",
+    "theme": "paper"
+  },
+  {
+    "name": "th-paper-profile",
+    "path": "/myself",
+    "width": 1300,
+    "height": 900,
+    "fixture": "demo-profile",
+    "theme": "paper"
+  },
+  {
+    "name": "th-editorial-home",
+    "path": "/",
+    "width": 1300,
+    "height": 900,
+    "fixture": "demo-profile",
+    "theme": "editorial"
+  },
+  {
+    "name": "th-editorial-profile",
+    "path": "/myself",
+    "width": 1300,
+    "height": 900,
+    "fixture": "demo-profile",
+    "theme": "editorial"
+  },
+  {
+    "name": "th-editorial-dark-home",
+    "path": "/",
+    "width": 1300,
+    "height": 900,
+    "fixture": "demo-profile",
+    "theme": "editorial-dark"
+  },
+  {
+    "name": "th-editorial-dark-profile",
+    "path": "/myself",
+    "width": 1300,
+    "height": 900,
+    "fixture": "demo-profile",
+    "theme": "editorial-dark"
   }
 ]

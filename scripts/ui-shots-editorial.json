@@ -1,0 +1,74 @@
+[
+  {
+    "name": "ed-editorial-home",
+    "path": "/",
+    "width": 1300,
+    "height": 900,
+    "fixture": "demo-profile",
+    "theme": "editorial"
+  },
+  {
+    "name": "ed-editorial-profile",
+    "path": "/myself",
+    "width": 1300,
+    "height": 900,
+    "fixture": "demo-profile",
+    "theme": "editorial"
+  },
+  {
+    "name": "ed-editorial-dark-home",
+    "path": "/",
+    "width": 1300,
+    "height": 900,
+    "fixture": "demo-profile",
+    "theme": "editorial-dark"
+  },
+  {
+    "name": "ed-editorial-dark-profile",
+    "path": "/myself",
+    "width": 1300,
+    "height": 900,
+    "fixture": "demo-profile",
+    "theme": "editorial-dark"
+  },
+  {
+    "name": "ed-editorial-home-540",
+    "path": "/",
+    "width": 540,
+    "height": 960,
+    "fixture": "demo-profile",
+    "theme": "editorial"
+  },
+  {
+    "name": "ed-editorial-dark-home-540",
+    "path": "/",
+    "width": 540,
+    "height": 960,
+    "fixture": "demo-profile",
+    "theme": "editorial-dark"
+  },
+  {
+    "name": "ed-editorial-sorting",
+    "path": "/",
+    "width": 1300,
+    "height": 900,
+    "fixture": "demo-profile",
+    "theme": "editorial",
+    "ls": {
+      "art-rank:draft:v2": "{\"collection\":{\"id\":\"shot-film\",\"kind\":\"film\",\"source\":\"custom\",\"title\":\"2025 年度观影\",\"description\":\"\",\"topN\":10,\"works\":[{\"id\":\"ns-film-1\",\"title\":\"花样年华\",\"creator\":\"王家卫\",\"year\":2000},{\"id\":\"ns-film-2\",\"title\":\"The Substance\",\"creator\":\"Coralie Fargeat\",\"year\":2024},{\"id\":\"ns-film-3\",\"title\":\"过往人生\",\"creator\":\"Celine Song\",\"year\":2023},{\"id\":\"ns-film-4\",\"title\":\"燃烧女子的肖像\",\"creator\":\"Céline Sciamma\",\"year\":2019},{\"id\":\"ns-film-5\",\"title\":\"千与千寻\",\"creator\":\"宫崎骏\",\"year\":2001},{\"id\":\"ns-film-6\",\"title\":\"Aftersun\",\"creator\":\"Charlotte Wells\",\"year\":2022},{\"id\":\"ns-film-7\",\"title\":\"爱情神话\",\"creator\":\"邵艺辉\",\"year\":2021},{\"id\":\"ns-film-8\",\"title\":\"Drive My Car\",\"creator\":\"濱口竜介\",\"year\":2021},{\"id\":\"ns-film-9\",\"title\":\"布达佩斯大饭店\",\"creator\":\"Wes Anderson\",\"year\":2014},{\"id\":\"ns-film-10\",\"title\":\"让子弹飞\",\"creator\":\"姜文\",\"year\":2010}]},\"ranking\":\"{\\\"version\\\":2,\\\"mode\\\":\\\"classic\\\",\\\"seed\\\":\\\"ed-shot-seed\\\",\\\"topN\\\":10,\\\"sourceIds\\\":[\\\"ns-film-1\\\",\\\"ns-film-2\\\",\\\"ns-film-3\\\",\\\"ns-film-4\\\",\\\"ns-film-5\\\",\\\"ns-film-6\\\",\\\"ns-film-7\\\",\\\"ns-film-8\\\",\\\"ns-film-9\\\",\\\"ns-film-10\\\"],\\\"shuffledIds\\\":[\\\"ns-film-10\\\",\\\"ns-film-9\\\",\\\"ns-film-8\\\",\\\"ns-film-7\\\",\\\"ns-film-6\\\",\\\"ns-film-5\\\",\\\"ns-film-4\\\",\\\"ns-film-3\\\",\\\"ns-film-2\\\",\\\"ns-film-1\\\"],\\\"rankedIds\\\":[\\\"ns-film-3\\\",\\\"ns-film-7\\\",\\\"ns-film-1\\\"],\\\"pendingIds\\\":[\\\"ns-film-2\\\",\\\"ns-film-4\\\",\\\"ns-film-5\\\",\\\"ns-film-6\\\",\\\"ns-film-8\\\",\\\"ns-film-9\\\",\\\"ns-film-10\\\"],\\\"deferredIds\\\":[],\\\"skippedIds\\\":[],\\\"outsideTopIds\\\":[],\\\"activeInsertion\\\":{\\\"candidateId\\\":\\\"ns-film-5\\\",\\\"low\\\":0,\\\"high\\\":3,\\\"presentationIndex\\\":0,\\\"stage\\\":\\\"bisect\\\"},\\\"phase\\\":\\\"ranking\\\",\\\"verificationQueue\\\":[],\\\"activeVerification\\\":null,\\\"pairEvidence\\\":[],\\\"recentPairKeys\\\":[],\\\"preferenceEdges\\\":[],\\\"cycleEvents\\\":[],\\\"cycleStatus\\\":\\\"none\\\",\\\"preferenceTension\\\":{\\\"level\\\":0,\\\"status\\\":\\\"none\\\",\\\"cycleCount\\\":0},\\\"comparisonCount\\\":4,\\\"estimatedTotalComparisons\\\":22,\\\"processedCount\\\":3,\\\"nextPresentationIndex\\\":1,\\\"completed\\\":false,\\\"calibration\\\":{\\\"checked\\\":0,\\\"consistent\\\":0},\\\"decisionLog\\\":[]}\",\"profileName\":\"夜航西飞\"}"
+    },
+    "click": ".home-actions .button.quiet"
+  },
+  {
+    "name": "ed-editorial-sorting-540",
+    "path": "/",
+    "width": 540,
+    "height": 960,
+    "fixture": "demo-profile",
+    "theme": "editorial",
+    "ls": {
+      "art-rank:draft:v2": "{\"collection\":{\"id\":\"shot-film\",\"kind\":\"film\",\"source\":\"custom\",\"title\":\"2025 年度观影\",\"description\":\"\",\"topN\":10,\"works\":[{\"id\":\"ns-film-1\",\"title\":\"花样年华\",\"creator\":\"王家卫\",\"year\":2000},{\"id\":\"ns-film-2\",\"title\":\"The Substance\",\"creator\":\"Coralie Fargeat\",\"year\":2024},{\"id\":\"ns-film-3\",\"title\":\"过往人生\",\"creator\":\"Celine Song\",\"year\":2023},{\"id\":\"ns-film-4\",\"title\":\"燃烧女子的肖像\",\"creator\":\"Céline Sciamma\",\"year\":2019},{\"id\":\"ns-film-5\",\"title\":\"千与千寻\",\"creator\":\"宫崎骏\",\"year\":2001},{\"id\":\"ns-film-6\",\"title\":\"Aftersun\",\"creator\":\"Charlotte Wells\",\"year\":2022},{\"id\":\"ns-film-7\",\"title\":\"爱情神话\",\"creator\":\"邵艺辉\",\"year\":2021},{\"id\":\"ns-film-8\",\"title\":\"Drive My Car\",\"creator\":\"濱口竜介\",\"year\":2021},{\"id\":\"ns-film-9\",\"title\":\"布达佩斯大饭店\",\"creator\":\"Wes Anderson\",\"year\":2014},{\"id\":\"ns-film-10\",\"title\":\"让子弹飞\",\"creator\":\"姜文\",\"year\":2010}]},\"ranking\":\"{\\\"version\\\":2,\\\"mode\\\":\\\"classic\\\",\\\"seed\\\":\\\"ed-shot-seed\\\",\\\"topN\\\":10,\\\"sourceIds\\\":[\\\"ns-film-1\\\",\\\"ns-film-2\\\",\\\"ns-film-3\\\",\\\"ns-film-4\\\",\\\"ns-film-5\\\",\\\"ns-film-6\\\",\\\"ns-film-7\\\",\\\"ns-film-8\\\",\\\"ns-film-9\\\",\\\"ns-film-10\\\"],\\\"shuffledIds\\\":[\\\"ns-film-10\\\",\\\"ns-film-9\\\",\\\"ns-film-8\\\",\\\"ns-film-7\\\",\\\"ns-film-6\\\",\\\"ns-film-5\\\",\\\"ns-film-4\\\",\\\"ns-film-3\\\",\\\"ns-film-2\\\",\\\"ns-film-1\\\"],\\\"rankedIds\\\":[\\\"ns-film-3\\\",\\\"ns-film-7\\\",\\\"ns-film-1\\\"],\\\"pendingIds\\\":[\\\"ns-film-2\\\",\\\"ns-film-4\\\",\\\"ns-film-5\\\",\\\"ns-film-6\\\",\\\"ns-film-8\\\",\\\"ns-film-9\\\",\\\"ns-film-10\\\"],\\\"deferredIds\\\":[],\\\"skippedIds\\\":[],\\\"outsideTopIds\\\":[],\\\"activeInsertion\\\":{\\\"candidateId\\\":\\\"ns-film-5\\\",\\\"low\\\":0,\\\"high\\\":3,\\\"presentationIndex\\\":0,\\\"stage\\\":\\\"bisect\\\"},\\\"phase\\\":\\\"ranking\\\",\\\"verificationQueue\\\":[],\\\"activeVerification\\\":null,\\\"pairEvidence\\\":[],\\\"recentPairKeys\\\":[],\\\"preferenceEdges\\\":[],\\\"cycleEvents\\\":[],\\\"cycleStatus\\\":\\\"none\\\",\\\"preferenceTension\\\":{\\\"level\\\":0,\\\"status\\\":\\\"none\\\",\\\"cycleCount\\\":0},\\\"comparisonCount\\\":4,\\\"estimatedTotalComparisons\\\":22,\\\"processedCount\\\":3,\\\"nextPresentationIndex\\\":1,\\\"completed\\\":false,\\\"calibration\\\":{\\\"checked\\\":0,\\\"consistent\\\":0},\\\"decisionLog\\\":[]}\",\"profileName\":\"夜航西飞\"}"
+    },
+    "click": ".home-actions .button.quiet"
+  }
+]

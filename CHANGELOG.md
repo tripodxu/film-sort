@@ -1,5 +1,18 @@
 # Changelog
 
+## 2026-09-28 · UI 现代化 P1 · editorial / editorial-dark 双主题（本地验证完成，线上留 P4）
+
+新增两组内置主题「刊物 / 刊物暗色」（`docs/PLAN-ui-modernization.md` §2.1，9 个差异组件，L1 变量 + L2 结构覆写 + L3 条件渲染三层机制）：
+
+- **首页 hero（L3 DOM 重构）**：左文右图杂志封面式；3–4 张收藏海报错落堆叠（桌面绝对定位 ±6° 旋转 + hover 展开；移动端改 scroll-snap 单张轮播，零 JS）；eyebrow 改「第一期 · 你的私人文化索引」期号；orb 隐藏；空维度由 CSS 占位色块补齐（槽位↔维度一一对应）
+- **标题体系**：h1 衬线（Georgia→Songti SC→SimSun 链）+ 字重 600；区块巨型序号装饰
+- **topbar**：active 项序号前缀（01 排序 / 02 画像）+ 底部通栏细线；**按钮**全圆角 pill 实色；**弹窗/菜单**显式直角 + 2px 实线框、去玻璃 backdrop
+- **duel 卡（排序页）**：去卡片化——海报铺底 + 衬线标题排印，「第 N 回合」巨型衬线水印（L3 注入）；**进度**改页码排印 + 发丝轨道尺规刻度；**榜单**行式排印去卡片；**画像维度条**坐标纸细网格
+- **回归实证**：旧 7 主题 × home/profile 共 14 张截图 tol=0 zero-diff（P0 基线 vs P1 对比）；editorial 桌面 4 张修复前后 0 diff；移动端 home 双主题仅轮播右缘 48px 条带与标题细线端点变化（盒模型 dump 逐项核对）
+- **修复两处特异性陷阱**（各配 `src/ui-fixes.test.ts` 绊线）：① 桌面 `.ed-stack-item:nth-child(N)` 定位泄漏到移动端轮播（媒体查询不加特异性，同名类 (0,1,0) 压不过 (0,2,0)）→ 后代前缀 + nth-child 抬到 (0,3,0)；② 移动端单列网格覆写被样式表后置的基座 `.orb-hero-inner` 规则后来者胜（死代码，mobile 实测双轨 + 48px column-gap）→ 双类选择器抬到 (0,2,0)
+- **工具链**：`scripts/gen-editorial-shots.mjs`（一次性 manifest 生成器）、`scripts/ui-shots-themes.json` 补 paper/editorial/editorial-dark 归档、`scripts/ui-contrast.mjs` 支持 editorial
+- **遗留**：macOS 衬线回退段（Songti SC/STSong）无设备未测；sort.logicc.top 线上实机验证按计划留 P4；`--r-*` 未归零（弹窗走显式 radius:0，见 PLAN §P1 偏差记录）
+
 ## 2026-09-28 · 优化冲刺 P1-P5（滑动选择 / OG 卡片 / 品味相似度 / 路由拆包 / Jev 辅助）
 
 ### P1 移动端滑动选择
