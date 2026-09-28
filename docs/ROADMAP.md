@@ -45,6 +45,10 @@ Jev 是 TypeSafe AI 的「System One」决策模型(2026-09-15 发布):输入 st
 **测试**:worker/typesafe.test.ts(请求构造 / 响应解析 / 错误映射,mock fetch,比照 `ai.test.ts`);线上验证无 key 降级路径;真实排序效果待用户配置 key 后端到端自测。
 
 ### Phase 2:维基消歧 Choice
+### Phase 1.5:Jev 辅助模式(AI 代判)(✅ 已实施,2026-09-28,随优化冲刺 P5 交付)
+
+排序中每对先经 /api/ai/jev-pick(Choice 二选一)预测:置信 ≥0.8 自动落位(进决策日志可撤销),低于阈值或复测阶段交还用户;开关默认关(key 仍用户自配)。端点与限流见 docs/API.md。
+
 
 `worker/media.ts`(及「其他」媒介路径)的维基候选消歧,从手写打分(限定标题 / 类型声明 / 年份守卫)换成一条 Choice 问题:「哪个候选是《X》(Y 年)的作品?」——候选列表 ≤255 天然匹配 Choice 基数;概率与 confidence 替代整套启发式。现有规则保留为降级路径(未配 key / 调用失败时)。改动面较大,独立一批提交。
 

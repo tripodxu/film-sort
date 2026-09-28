@@ -39,6 +39,7 @@ ART/RANK 后端 API 完整参考。所有接口由 Cloudflare Worker 处理，�
 | `ai_models` | `POST /api/ai/models` | 10 | 600 |
 | `ai_jev_test` | `POST /api/ai/jev/test` | 5 | 600 |
 | `ai_jev` | `POST /api/ai/jev-rank` | 10 | 600 |
+| `ai_jev_pick` | `POST /api/ai/jev-pick` | 60 | 600 |
 | `music_play` | `GET /api/music/play` | 12 | 600 |
 | `music_lyric` | `GET /api/music/lyric` | 12 | 600 |
 | `netease` | `/api/netease/*` | 120 | 60 |
@@ -609,6 +610,24 @@ AI 快排：一次 systemone 调用（state = 用户品味档案 + 清单全文�
 ```
 **响应：** `{ "ok": true, "model": "jev-1.13.0", "order": [2, 0, 1], "scores": [0.72, 0.68, 0.59], "inputTokens": 567 }`；错误沿用 AI 错误码（`invalid_config` / `invalid_data` / `rate_limited` / `upstream_auth_failed` / `upstream_rate_limited` / `upstream_error`）。
 **限流：** 桶 `ai_jev` 10 次/10 分钟。
+
+### POST /api/ai/jev-pick
+
+1v1 取舍预测（辅助模式）：一次 systemone 调用（Choice 二选一）预测用户会保留哪件，返回校准置信度。前端阈值 0.8——达到则自动落位（可撤销），低于则交还用户；复测阶段不调用。
+
+**请求体：**
+```json
+{
+  "kind": "film",
+  "left": { "title": "…", "creator": "…", "year": 2010 },
+  "right": { "title": "…", "year": 1993 },
+  "profileContext": "（可选，≤4096 字符）",
+  "locale": "zh",
+  "config": { "apiKey": "…" }
+}
+```
+**响应：** `{ "ok": true, "model": "jev-1.13.0", "pick": "left", "confidence": 0.98, "probabilities": { "left": 0.99, "right": 0.01 }, "inputTokens": 427 }`；错误沿用 AI 错误码。
+**限流：** 桶 `ai_jev_pick` 60 次/10 分钟。
 
 ---
 

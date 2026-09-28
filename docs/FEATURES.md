@@ -33,6 +33,8 @@
 | 三种排序模式：简易(守门员截断,~1次/件)/经典(二分+回环+复测,默认)/精确(加强校准+校准一致率) | Setup「排序模式」segmented，localStorage 记忆 | `ranking.ts mode`：quick gate 阶段 + precise 验证队列/校准统计 |
 | 撤销（O(1) 快照栈，上限 500）/ 略过 / 暂放 | 排序页底部工具 | `undoLastAction/skipWork/deferWork` |
 | 偏好回环检测（A>B>C>A）+ 二次确认 | 排序页 evidence 条 | `recordPreference/recordCycleConfirmation` |
+| 触屏滑动选择（往哪边甩选哪边，56px 阈值 + 垂直意图否决；鼠标不启用） | 排序页 duel-grid | `lib/swipe.ts decideSwipe` + SortingView pointer 处理 |
+| Jev 辅助模式（AI 代判：置信 ≥0.8 自动落位可撤销，复测不代判；默认关） | 排序页 +「AI 服务」开关 | `/api/ai/jev-pick` + `lib/typesafe.ts requestJevPick`（键控防竞态） |
 | 验证阶段（终局少量反证对局） | 排序尾段 | `startVerification` |
 | 草稿自动保存/恢复 | 首页「继续」 | `art-rank:draft:v2` |
 | 精选清单（`data/catalog.ts` 32 份内置片单，另含书籍/音乐/其他内置清单）+ 搜索 | Source/精选 | `data/media.ts getCollectionsByKind` |
@@ -184,6 +186,15 @@
 | 限流：内置 8 / 自定义 15 / test 5 / models 10（次/10 分钟） | — | `allowUpstreamRequest` 桶 `ai / ai_custom / ai_test / ai_models` |
 
 ## 回归走查清单（改版后必查）
+## 12. Jev 决策集成（2026-09-28 新增）
+
+| 功能 | 入口 | 实现 |
+|---|---|---|
+| AI 快排（≤255 件单次打分直接成榜；第三种成榜方式） | 准备页「AI 快排」 | `POST /api/ai/jev-rank` + `lib/typesafe.ts requestJevRanking` |
+| 连接测试 / Key 用户自配（localStorage，服务端不落盘） | 「AI 服务」Jev 区 | `POST /api/ai/jev/test` + `AiConfigDialog` Jev 小节 |
+| 分享/广场 OG 卡片（爬虫可取，豆瓣图走代理） | worker HTML 注入 | `worker/og.ts` + `/share/:code`、`/plaza/:id` 路由 |
+| 广场品味相似度（卡片「重合 N/3」、详情「重合 NN%」） | PlazaView / PlazaPostView | `lib/similarity.ts rankingSimilarity`（workIdentity 口径） |
+
 
 1. 首页→选维度→精选/搜索/批量导入→TopN→排序（键盘+撤销+回环提示）→完成落画像
 2. 画像：切换胶囊、改名/删除(⋯+确认条)、手动调整拖拽、编辑作品增删搜、三级批注、点海报详情

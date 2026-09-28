@@ -334,6 +334,9 @@ film-sort3/
 | 文档 | 用途 |
 |------|------|
 | [`docs/archive/PLAN-ui-refresh.md`](docs/archive/PLAN-ui-refresh.md) | UI 焕新总记录（已收官归档：§10 执行盘点 / 运维预案 / 遗留清单） |
+| [`docs/ROADMAP.md`](docs/ROADMAP.md) | **Jev 集成路线图**——Phase 1 快排已实施；消歧/护栏/张力校准排队 |
+| [`docs/PLAN-AI-QUICK-RANK.md`](docs/PLAN-AI-QUICK-RANK.md) | AI 快排实施计划（writing-plans 规格，7 任务 TDD 全记录） |
+| [`docs/PLAN-OPTIMIZATION-SPRINT.md`](docs/PLAN-OPTIMIZATION-SPRINT.md) | 优化冲刺 P1-P8（P1-P5 已完成：滑动/OG/相似度/拆包/代判） |
 | [`docs/FEATURES.md`](docs/FEATURES.md) | **已实现功能全量清单与回归走查基线**——改完 UI 逐条走查 |
 | [`docs/USAGE.md`](docs/USAGE.md) | 面向用户的操作指南 |
 | [`docs/API.md`](docs/API.md) | 后端 API 参考 |

@@ -1,5 +1,39 @@
 # Changelog
 
+## 2026-09-28 · 优化冲刺 P1-P5（滑动选择 / OG 卡片 / 品味相似度 / 路由拆包 / Jev 辅助）
+
+### P1 移动端滑动选择
+- 对战页触摸滑动：往哪边甩就选哪边（与键盘 ←/A = 左同语义）；56px 阈值 + 垂直意图否决（artwork-info 内滚与页面滚动零干扰）；拖动跟随位移直接写 transform（reduced-motion 跳过）；鼠标不启用（桌面保留点击+键盘）；触屏提示语替换键盘提示；commit 时 vibrate(10)
+- 纯判定逻辑 `lib/swipe.ts`（可单测）；线上合成触摸全链路验证
+
+### P2 分享/广场 OG 卡片
+- 爬虫不发 JS——worker 对 `/share/:code` 与 `/plaza/:id` 的 HTML 请求注入 og:/twitter: 元数据：share 链接出画像名+榜单/No.1；广场帖出标题+作者+件数+首位作品海报（服务端从海报侧表解析，豆瓣域走 `/api/image` 代理让爬虫可取）
+- 用户可控文本全部 HTML 转义后再进 meta；任何 DB/解析异常降级为无 OG 的普通 SPA
+
+### P3 广场品味相似度
+- `lib/similarity.ts`：Jaccard 重合 + 共同作品顺序一致度（workIdentity 匹配，与落库管线同口径）
+- 卡片徽章「重合 N/3」（对方前三名在我同媒介榜单中的件数）；详情页「与你的品味重合 NN%」（共同 ≥3 件才显示，低于即噪声不渲染）
+
+### P4 路由拆包
+- SourceView/ProfileView/CompareView/ShareView/PlazaPostView 改 React.lazy + Suspense（DeferredOrb 同款）；index chunk 1072→964KB（gzip 307→279）
+
+### P5 Jev 辅助模式（AI 代判）
+- 排序中每对先经 `/api/ai/jev-pick`（Choice 二选一）预测：置信 ≥0.8 自动落位并标注「上一对由 Jev 代判 · 置信 NN%」（进决策日志可撤销）；低于阈值或复测阶段交还用户
+- 开关在 AI 弹窗 Jev 区，默认关；键控竞态守卫丢弃迟到响应——绝不覆盖用户真实选择；品味上下文（既有榜单摘要）随请求带上
+
+## 2026-09-27 · UI 全量打磨 + 移动端抢救 + Jev 集成 Phase 1（AI 快排）
+
+### UI 打磨（全部线上验证）
+- 移动端 Hero 抢救：identity 胶囊退出 v2 网格流（修复 ART/RANK 断行成 RA/NK、竖排书脊压眉标）；光球衬纸渐变；≤540px 竖排书脊转横排
+- 顶栏收纳：≤540px 导航收 3 项（`:nth-child(4)`，修复匿名用户「广场」被 `:last-child` 误伤）、图标 27px、双语 320px 零溢出；设置/主题下拉改锚 topbar（修复 overflow-x 隐式裁剪下拉——「点击设置什么都看不见」）；触屏 tooltip 粘滞根治（hover:none 隐藏）；hero「继续上次进度」收编为同款 chip 并与主按钮左对齐
+- 名次墨块竖排修复（36px 定宽遗留 × P0.7 padding 冲突）；重排行 5 子元素 flex 覆盖（(0,2,1) 特异性压 grid）；比较页移动端单列；广场工具栏换行；`:focus-visible` 不再改 border-radius
+- 图标纪律：🗑/✓/📝/≡ 全部收编 lucide（Trash2/Check/StickyNote/Rows3/Columns3 + aria-pressed）；发布粒子色改 token
+
+### Jev 集成 Phase 1（AI 快排）
+- TypeSafe Jev（System One 决策模型）接入：准备页第三种成榜方式——单次 systemone 调用（state=品味档案+清单全文，questions=每件作品一个 Noul）对 ≤255 件打 0-1 分直接成榜
+- key 用户自配（浏览器 localStorage，服务端不落盘）；worker REST 客户端走 fetchBounded 精确白名单；错误映射复用 AiError 族
+- 三端点：`/api/ai/jev/test`（探活）、`/api/ai/jev-rank`（快排）、`/api/ai/jev-pick`（代判）；限流桶 ai_jev_test 5 / ai_jev 10 / ai_jev_pick 60（次/10 分钟）
+
 ## 2026-09-25 · P0/P1 安全加固 + 插件系统（主题包 / 开场特效 / 清缓存）
 
 ### 安全与数据完整性（全量回归 376 tests）
