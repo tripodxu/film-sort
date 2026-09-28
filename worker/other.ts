@@ -118,28 +118,32 @@ export async function otherSearch(query: string): Promise<OtherWork[]> {
     : [];
 }
 
-/** 百度百科词条图（bkimg.cdn.bcebos.com，已在 allowedImage/CSP 白名单）。
- *  游戏/书籍的封面因版权不上传维基共享，zh wiki 条目常命中却无 pageimages——
- *  这恰恰是「其他」维度最需要封面的作品形态，故取图独立于 abstract 兜底。 */
-async function baikeImage(title: string): Promise<string | null> {
-  try {
-    const r = await fetch(
-      `https://baike.baidu.com/api/openapi/BaikeLemmaCardApi?scope=103&format=json&appid=379029&bk_key=${encodeURIComponent(title)}&bk_length=600`,
-      {
-        headers: { "user-agent": UA, accept: "application/json" },
-        signal: AbortSignal.timeout(8000),
-      },
-    );
-    if (!r.ok) return null;
-    const j = (await r.json()) as { image?: string };
-    // bkimg 有 http 形态：https 页面直接引用会 mixed-content 被浏览器拦掉
-    return j.image ? j.image.replace(/^http:/, "https:") : null;
-  } catch {
-    return null;
+/** zh 条目的英文对应标题（langlinks）：en wiki 的 pageimages 覆盖面与 zh 不同，
+ *  且 enwiki 对部分非自由封面（游戏/书）会返回主图——zh 查不到图时的第二机会。 */
+export async function wikiEnTitle(title: string): Promise<string | null> {
+  const q = new URLSearchParams({
+    action: "query",
+    titles: title.trim().slice(0, 120),
+    prop: "langlinks",
+    lllang: "en",
+    lllimit: "1",
+    redirects: "1",
+    converttitles: "1",
+    format: "json",
+  });
+  const pages = await wikiJson("zh", q, 7000);
+  if (!pages) return null;
+  for (const page of Object.values(pages)) {
+    const langlinks = page as WikiPage & { langlinks?: Array<{ "*": string }> };
+    const en = langlinks.langlinks?.[0]?.["*"];
+    if (en) return en;
   }
+  return null;
 }
 
-/** 其他类作品详情：精确标题直查（中/英），百度百科 abstract 兜底 */
+/** 其他类作品详情：精确标题直查（中/英）。
+ *  注：曾有百度百科 openapi 兜底，2026-09-28 实测已废弃（恒返回 errno 6），
+ *  纯拖 8s 超时——已移除；简介与图均以维基为准。 */
 export async function otherDetail(name: string): Promise<OtherWork | null> {
   const title = name.trim().slice(0, 120);
   if (!title) return null;
@@ -161,44 +165,12 @@ export async function otherDetail(name: string): Promise<OtherWork | null> {
         .map((p) => toWork(p, "zh"))
         .find(Boolean)
     : null;
-  const enPages = zhWork ? null : await wikiJson("en", q, 7000);
+  if (zhWork) return zhWork;
+  const enPages = await wikiJson("en", q, 7000);
   const enWork = enPages
     ? Object.values(enPages)
         .map((p) => toWork(p, "en"))
         .find(Boolean)
     : null;
-  const work = zhWork ?? enWork;
-  if (work) {
-    // wiki 命中但无图（版权封面不在维基共享）：补百度百科词条图
-    if (!work.poster_url) {
-      const img = await baikeImage(title);
-      if (img) return { ...work, poster_url: img };
-    }
-    return work;
-  }
-  // 百度百科兜底（仅简介）
-  try {
-    const r = await fetch(
-      `https://baike.baidu.com/api/openapi/BaikeLemmaCardApi?scope=103&format=json&appid=379029&bk_key=${encodeURIComponent(title)}&bk_length=600`,
-      {
-        headers: { "user-agent": UA, accept: "application/json" },
-        signal: AbortSignal.timeout(8000),
-      },
-    );
-    if (r.ok) {
-      const j = (await r.json()) as { abstract?: string; image?: string };
-      if (j.abstract && j.abstract.length > 20) {
-        return {
-          id: `baike-${encodeURIComponent(title)}`,
-          title,
-          content_intro: j.abstract,
-          content_source: "baike",
-          ...(j.image ? { poster_url: j.image.replace(/^http:/, "https:") } : {}),
-        };
-      }
-    }
-  } catch {
-    /* ignore */
-  }
-  return null;
+  return enWork;
 }

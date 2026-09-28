@@ -2,7 +2,7 @@ import curatedPosters from "./imdb-posters.json";
 import { gdPicUrl, gdSearch, pickTracks, toSc, type GdProxyEnv } from "./gdstudio";
 import { fetchBounded, parseAllowedUrl, readBoundedText, type OutboundPolicy } from "./outbound";
 import { generationOf, registerPurger } from "./cachePurge";
-import { otherDetail } from "./other";
+import { otherDetail, wikiEnTitle } from "./other";
 
 export interface DoubanWork {
   id: string;
@@ -1598,8 +1598,14 @@ async function computePosters(
     // undefined 走纯标题匹配，恰好是该维度应有的语义。
     const wiki = await searchWikiPoster(title, english, undefined, year);
     if (wiki.length) return { urls: wiki, outcome: "found" };
-    // 二段兜底：otherDetail 不做标题评分（zh wiki 的简繁变体条目会被上面的
-    // 严格匹配漏掉），且自带百度百科图；外链图域均已在 allowedImage/CSP 放行。
+    // 二段：langlinks 拿英文标题再查 en wiki（覆盖面不同；zh 简繁变体也会被
+    // 严格标题匹配漏掉，en 查询绕开）。en wiki 无结果则 title 为 null。
+    const enTitle = await wikiEnTitle(title);
+    if (enTitle) {
+      const enWiki = await searchWikiPoster(enTitle, enTitle, undefined, year);
+      if (enWiki.length) return { urls: enWiki, outcome: "found" };
+    }
+    // 三段：otherDetail（无标题评分，含 redirects/converttitles 变体容错）
     const fallback = await otherDetail(title).catch(() => null);
     const urls = fallback?.poster_url ? [fallback.poster_url] : [];
     return { urls, outcome: urls.length ? "found" : throttled ? "throttled" : "absent" };
