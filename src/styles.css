@@ -1274,3 +1274,6 @@ body[data-theme=classic]{
   color:var(--accent);
   font-family:var(--font-mono);font-size:10px;font-weight:600;letter-spacing:.04em
 }
+
+/* 路由懒加载占位:与页面等高的最小骨架,脉冲节奏复用 plaza-pulse */
+.route-loading{min-height:60vh}

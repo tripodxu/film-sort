@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { lazy, Suspense, useEffect, useState, type ReactNode } from "react";
 import {
   ArrowLeft,
   Check,
@@ -49,14 +49,26 @@ import { SettingsMenu } from "./components/SettingsMenu";
 import { applyTheme, readTheme } from "./lib/theme";
 import { HomeView } from "./views/HomeView";
 import { applyLayout, readLayout } from "./lib/layout";
-import { SourceView } from "./views/SourceView";
 import { SetupView } from "./views/SetupView";
 import { SortingView } from "./views/SortingView";
-import { ProfileView } from "./views/ProfileView";
-import { CompareView } from "./views/CompareView";
-import { ShareView } from "./views/ShareView";
 import { PlazaView } from "./views/PlazaView";
-import { PlazaPostView } from "./views/PlazaPostView";
+// 非首页的大视图按路由拆包(DeferredOrb 同款模式):四个千行视图占主包大头,
+// 首屏用不到的不进 index chunk。首页是落地视图,保持同步渲染。
+const SourceView = lazy(() =>
+  import("./views/SourceView").then((module) => ({ default: module.SourceView })),
+);
+const ProfileView = lazy(() =>
+  import("./views/ProfileView").then((module) => ({ default: module.ProfileView })),
+);
+const CompareView = lazy(() =>
+  import("./views/CompareView").then((module) => ({ default: module.CompareView })),
+);
+const ShareView = lazy(() =>
+  import("./views/ShareView").then((module) => ({ default: module.ShareView })),
+);
+const PlazaPostView = lazy(() =>
+  import("./views/PlazaPostView").then((module) => ({ default: module.PlazaPostView })),
+);
 
 import { stored, track, decode, saveFile, type Locale } from "./lib/utils";
 import { useRouter, type View } from "./lib/useRouter";
@@ -1465,7 +1477,11 @@ export default function App() {
             {t("回到上一层", "Back")}
           </button>
         )}
-        <ErrorBoundary>{content}</ErrorBoundary>
+        <ErrorBoundary>
+          <Suspense fallback={<div className="route-loading" aria-label="Loading" />}>
+            {content}
+          </Suspense>
+        </ErrorBoundary>
       </main>
       <footer>
         <span>ART/RANK</span>
