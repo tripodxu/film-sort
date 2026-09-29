@@ -1301,7 +1301,9 @@ interface WikiImagePage {
 }
 
 function wikiImageUrl(page: WikiImagePage): string | undefined {
-  const raw = page.original?.source ?? page.thumbnail?.source;
+  // 缩略档优先：original 是 commons 原始扫描件（蒙娜丽莎实测数十 MB），
+  // 列表/弹窗位根本加载不动；查询带 pithumbsize=1200，缩略档已够 2x 弹窗大图。
+  const raw = page.thumbnail?.source ?? page.original?.source;
   return raw ? raw.replace(/^http:/, "https:") : undefined;
 }
 
