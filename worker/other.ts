@@ -146,15 +146,13 @@ export async function wikiEnTitle(title: string): Promise<string | null> {
  *  唯一免费来源。取文件列表的首个位图，跳过图标/标志类杂件。
  *  标题变体：用户数据常见「底特律 变人」而条目名是「底特律：变人」
  *  （空格/全角冒号差异不是重定向），变体一并发给 titles 一起解析。 */
-export async function wikiPageImageAny(
-  lang: "zh" | "en",
-  title: string,
-): Promise<string | null> {
+export async function wikiPageImageAny(lang: "zh" | "en", title: string): Promise<string | null> {
   const base = title.trim().slice(0, 120);
   if (!base) return null;
-  const variants = [
-    ...new Set([base, base.replace(/\s+/g, "："), base.replace(/\s+/g, "")]),
-  ].slice(0, 3);
+  const variants = [...new Set([base, base.replace(/\s+/g, "："), base.replace(/\s+/g, "")])].slice(
+    0,
+    3,
+  );
   const list = new URLSearchParams({
     action: "query",
     titles: variants.join("|"),
@@ -185,12 +183,7 @@ export async function wikiPageImageAny(
   const SKIP = /icon|logo|edit|commons|symbol|flag|question|placeholder|disambig/i;
   const file = images
     .map((image) => image.title ?? "")
-    .find(
-      (t) =>
-        t.startsWith("File:") &&
-        /\.(jpe?g|png)$/i.test(t) &&
-        !SKIP.test(t),
-    );
+    .find((t) => t.startsWith("File:") && /\.(jpe?g|png)$/i.test(t) && !SKIP.test(t));
   if (!file) return null;
   const info = new URLSearchParams({
     action: "query",
@@ -203,9 +196,11 @@ export async function wikiPageImageAny(
   const infoPages = await wikiJson(lang, info, 8000);
   if (!infoPages) return null;
   for (const infoPage of Object.values(infoPages)) {
-    const infos = (infoPage as WikiPage & {
-      imageinfo?: Array<{ url?: string; thumburl?: string }>;
-    }).imageinfo;
+    const infos = (
+      infoPage as WikiPage & {
+        imageinfo?: Array<{ url?: string; thumburl?: string }>;
+      }
+    ).imageinfo;
     const url = infos?.[0]?.thumburl ?? infos?.[0]?.url;
     if (url) return url.replace(/^http:/, "https:");
   }
