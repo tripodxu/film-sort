@@ -62,7 +62,7 @@ npm run build          # 构建
 
 ### L3 — 历史记忆（需要背景时才查，不要通读）
 
-`docs/memory/TIMELINE.md`（按日倒序演化）· `docs/memory/DECISIONS.md`（关键决策与理由）· `docs/memory/EPISODES.md`（战役复盘 + 9 条通用教训）· `docs/archive/**`（已过时，只读不引用）
+`docs/memory/TIMELINE.md`（按日倒序演化）· `docs/memory/DECISIONS.md`（关键决策与理由）· `docs/memory/EPISODES.md`（战役复盘 + 10 条通用教训）· `docs/archive/**`（已过时，只读不引用）
 
 ---
 

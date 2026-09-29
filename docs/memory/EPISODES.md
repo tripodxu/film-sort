@@ -6,6 +6,27 @@
 
 ---
 
+## E-20260923 · 邮件验证码体系与 secret 污染根因
+
+**任务**：注册/改密切到邮件验证码通道，并保证 Cloudflare 上真能发信。
+**打法**：双出口邮件（Resend 主 + luckycola 兜底，诊断信息带 provider 原文）；React Email 模板服务端 `renderToStaticMarkup`；验证码 60s 冷却 / 10min TTL / 5 次尝试 / SHA-256 存储 / 改密后吊销会话；migration 0023。
+**踩到的坑**：
+- **secret 绝不经 shell 管道传递** —— PS 管道 stdin 的 CR 污染让 5 个邮件 secret 全部变成 invalid-key（code_-14），经干净 Buffer 重设后才通。现象是「配置明明设了却鉴权失败」，极易误判为服务商问题。
+- 验证码 submit 匹配不到行时 D1 attempts=0，所有失败一个样 —— 错误要按 code_not_requested / code_expired / code_locked / invalid_code 分开（带剩余次数），否则无法排查。
+- 双运行时陷阱：esbuild classic JSX 需显式 `import React`；workerd 把 `react-dom/server` 解析到 Node build（要用 server.browser 入口）。
+**可复用资产**：mailer v3 双出口 + provider 诊断、React Email 模板、验证码错误判别与输入归一化（邮箱小写 / code 去空白）。
+**结论**：**外部凭证一律用干净途径写入，不借道管道**；失败原因必须细分到「为什么失败」，别让所有错误共用一个 internal_error。
+
+## E-20260929 · 「其他」维度取图管线攻坚（维基）
+
+**任务**：让「其他」维度（无豆瓣 / 网易云源）的封面从「上线以来就没有」到可用，且不能取错图。
+**打法**：多段兜底链逐步补齐（otherDetail 简繁变体与百科词条图 → en-langlinks 二段 → 条目主图直取，含 en wiki 非自由封面），再把主图直取**重排到最前** —— 用最强信号替代不可靠打分。
+**踩到的坑**：
+- **维基标题变体（空格 / 全角冒号差异）不是重定向** —— 查不到 ≠ 不存在，按变体逐一查；条目名比较前先剥分隔符，否则全角冒号页名漏配。
+- 兜底链补段前先看清旧段是否已废弃：`2d68678` 移除的百度百科调用与 `4a570ee` 新增的词条图兜底不是同一段。
+**可复用资产**：`worker/other.ts` 的 `wikiPageImageAny` 标题变体查询、`computePosters` other 分支直走 `searchWikiPoster`。
+**结论**：**没有类型词表的维度，不要依赖标题打分，改用条目自身的最强信号（主图）**；兜底链段序按可靠性排，不按实现顺序排。
+
 ## E-20260928 · 五项优化冲刺（滑动 / OG / 相似度 / 拆包 / AI 代判）
 
 **任务**：一天内交付 5 个独立优化项，互不依赖。
@@ -109,3 +130,4 @@
 7. **优化前先做事实核查** —— 直觉（qrcode 太重）常错，实测（五个千行视图）才准。
 8. **文档必须对着代码校订** —— 2026-09-18 专门有过一次全量校订提交（`68bc9e6`），因为文档漂移是常态。
 9. **未线上验证不标 ✅** —— 本项目铁律，`sort.logicc.top` 是最终裁判。
+10. **Secrets 绝不借道 shell 管道** —— PS 管道 stdin 的 CR 污染让 5 个邮件 secret 全部 invalid-key，现象是「配置了却鉴权失败」，极难定位（E-20260923）。

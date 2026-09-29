@@ -4,7 +4,7 @@
 > 本文件是**跨会话、跨 agent 共享**的项目长期记忆（git 可追踪）。单会话的过程记录写 `.workbuddy/memory/YYYY-MM-DD.md`。
 > 完整演化脉络见 [`docs/memory/TIMELINE.md`](docs/memory/TIMELINE.md)；决策理由见 [`docs/memory/DECISIONS.md`](docs/memory/DECISIONS.md)。
 
-最后更新：2026-09-28
+最后更新：2026-09-29
 
 ---
 
@@ -17,12 +17,18 @@
 | 仓库 | `git@github.com:tripodxu/film-sort.git`（私有） |
 | 线上 | `sort.logicc.top` |
 | 技术栈 | React 19 + TypeScript + Vite（前端 SPA） / Cloudflare Workers + D1 + KV-free（后端全在 Worker） / Vitest + ESLint + Prettier |
-| 规模 | 515 commits（2026-09-06 → 2026-09-28，23 天，单人开发）；`worker/` + `src/` + `shared/` ≈ 39,600 行 TS/TSX；25 个 D1 migration |
+| 规模 | 536 commits（2026-09-06 → 2026-09-29，24 天，单人开发）；`worker/` + `src/` + `shared/` ≈ 39,600 行 TS/TSX；25 个 D1 migration |
 | 关键约束 | **全站零自建服务器**，所有能力必须能在 Cloudflare Workers（workerd）运行时内跑起来 |
 
 ---
 
 ## 1. 活跃记录（最近 7 天，最新在最上）
+
+### 2026-09-29 · 「其他」维度取图管线攻坚（维基主图直取 + 标题变体）
+
+- T-20260928-07 的后续迭代（`82d7581` `d3c5e4e` `7334442`）：other 维度无豆瓣 / 网易云结构化源，取图完全走维基；维基打分依赖类型词表，other 恰无词表可依 → **取图顺序重排为「条目主图直取优先」**（infobox 封面即作品本体，最强信号）。
+- **维基标题变体（空格 / 全角冒号差异）不是重定向** —— `wikiPageImageAny` 按变体逐一查询；主图条目选择先剥分隔符再比较，全角冒号页名不再漏配。
+- 经验沉淀：EPISODES E-20260929 / DECISIONS D-20260929-01 / PITFALLS 2.7。
 
 ### 2026-09-28 · 优化冲刺 P1–P5 全部完成，Phase 6–8 待办
 
@@ -31,13 +37,16 @@
 - **P3 品味相似度**：`src/lib/similarity.ts`（Jaccard 重合 + 共同作品顺序一致度，`workIdentity` 口径与落库管线一致）；共同 <3 件不渲染（低于即噪声）。commit `bcdaabb`。
 - **P4 路由拆包**：五个大视图改 `React.lazy`，index chunk 1072→964 KB（gzip 307→279）。commit `82b5b2d`。
 - **P5 Jev 辅助模式**：`/api/ai/jev-pick` 二选一，**置信 ≥0.8 才自动落位**并标「AI 代判 · 置信 NN%」；键控竞态守卫丢弃迟到响应——**绝不覆盖用户真实选择**；开关默认关。commit `50e46df`。
-- **当前状态**：P1–P5 ✅（均线上验证），P6（相遇页预测分歧）/ P7（文化年度报告 Wrapped）/ P8（PWA 离线）⬜ 未开始；全部计划见 `docs/PLAN-OPTIMIZATION-SPRINT.md`。
+- **Jev Phase 1（AI 快排）**：`/api/ai/jev/test` + `/api/ai/jev-rank` 两端点（限流桶 `ai_jev_test 5` / `ai_jev 10` 次每 10 分钟），准备页第三种成榜方式「AI 快排」。**Jev 集成四原则**（后续所有 AI 接入都要遵守）：① key 不内置，用户自填存 localStorage，worker 不落盘；② 只做**决策**不做生成，生成类继续走 OpenAI 兼容通道；③ 每个接入点必须有降级路径，主链路永不依赖；④ 非关键路径先行。
+- **移动端顶栏抢救**：`overflow-x` 隐式裁剪下拉（设置菜单改锚 topbar）、≤540px 收导航（修复匿名「广场」被 `:last-child` 误伤）、≤360px 紧凑档、触屏 tooltip 关闭。
+- **UI 现代化 P0–P4**（`docs/PLAN-ui-modernization.md` v3）：editorial 双主题 → aurora 极光主题（含 ribbon 光球特效）→ gallery 数据画廊（Bento 画像页 + 卡片墙）→ P4 收尾（主题菜单分组 + `--ev-*` 全局景深 + 11 主题新基线）；旧主题截图零差异回归，均线上实机验证。
+- **T-20260928-07 报障两批**：「其他」维度接入 wiki 海报管线（上线以来无封面）、other 详情超时 20s→30s、AI 点评按档位放宽截断（2500/5000/9000 字符）。
+- **当前状态**：P1–P5 ✅（均线上验证）；P6（相遇页预测分歧）已实现待线上复核；P7（Wrapped 年度报告）/ P8（PWA 离线）⬜ 未开始；全部计划见 `docs/PLAN-OPTIMIZATION-SPRINT.md`。
 
-### 2026-09-27 · UI 全量打磨 + Jev Phase 1（AI 快排）
+### 2026-09-27 · 全量审查缺陷清零 + 排序交互收尾
 
-- 移动端 Hero 抢救、顶栏 `≤540px` 收 3 项（修复匿名「广场」被 `:last-child` 误伤）、设置下拉改锚 topbar（`overflow-x` 会隐式裁剪下拉）、触屏 tooltip 粘滞根治。
-- Jev（TypeSafe System One 决策模型）接入：`/api/ai/jev/test` / `jev-rank` / `jev-pick` 三端点，限流桶 `ai_jev_test 5` / `ai_jev 10` / `ai_jev_pick 60`（次/10 分钟）。
-- **Jev 集成四原则**（后续所有 AI 接入都要遵守）：① key 不内置，用户自填存 localStorage，worker 不落盘；② 只做**决策**不做生成，生成类继续走 OpenAI 兼容通道；③ 每个接入点必须有降级路径，主链路永不依赖；④ 非关键路径先行。
+- `7f89afc` 全量审查缺陷清零（3 high / 4 medium / 4 low），产出 P2 打磨待办池。
+- `5ae91cb` 移动端 Hero 抢救 + 图标/令牌纪律排查；`b5d984f` 重排行 grid 溢出 / 移动端比较页堆叠 / 广场工具栏折行 / i18n 缺口；`a1dc142` `6f3aa8a` 名次墨块生产环境换行与重排行 grid 渲染修复。
 
 ### 2026-09-25 · P0/P1 安全加固 + 插件系统（主题包 / 光球特效 / 分类清缓存）
 
