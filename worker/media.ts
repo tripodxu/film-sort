@@ -1605,15 +1605,18 @@ async function computePosters(
     // ④ otherDetail 变体容错兜底。
     const wiki = await searchWikiPoster(title, english, undefined, year);
     if (wiki.length) return { urls: wiki, outcome: "found" };
+    // 简繁变体会让标题评分失败（用户「蒙娜丽莎」vs 条目「蒙娜麗莎」），
+    // langlinks 英文标题同时服务 en 匹配与文件名优选
     const enTitle = await wikiEnTitle(title);
     if (enTitle) {
       const enWiki = await searchWikiPoster(enTitle, enTitle, undefined, year);
       if (enWiki.length) return { urls: enWiki, outcome: "found" };
     }
-    const directZh = await wikiPageImageAny("zh", title);
+    const prefer = enTitle ? [title, enTitle] : [title];
+    const directZh = await wikiPageImageAny("zh", title, prefer);
     if (directZh) return { urls: [directZh], outcome: "found" };
     if (enTitle) {
-      const directEn = await wikiPageImageAny("en", enTitle);
+      const directEn = await wikiPageImageAny("en", enTitle, prefer);
       if (directEn) return { urls: [directEn], outcome: "found" };
     }
     const fallback = await otherDetail(title).catch(() => null);

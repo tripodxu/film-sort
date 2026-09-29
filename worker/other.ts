@@ -146,7 +146,13 @@ export async function wikiEnTitle(title: string): Promise<string | null> {
  *  唯一免费来源。取文件列表的首个位图，跳过图标/标志类杂件。
  *  标题变体：用户数据常见「底特律 变人」而条目名是「底特律：变人」
  *  （空格/全角冒号差异不是重定向），变体一并发给 titles 一起解析。 */
-export async function wikiPageImageAny(lang: "zh" | "en", title: string): Promise<string | null> {
+export async function wikiPageImageAny(
+  lang: "zh" | "en",
+  title: string,
+  /** 文件名匹配的优先关键词（用户标题 + 英文标题——zh 简繁变体会让标题评分
+   *  失败落到这里，而条目内文件名常是英文，如 Mona Lisa）。 */
+  preferTitles: readonly string[] = [],
+): Promise<string | null> {
   const base = title.trim().slice(0, 120);
   if (!base) return null;
   const variants = [...new Set([base, base.replace(/\s+/g, "："), base.replace(/\s+/g, "")])].slice(
@@ -182,7 +188,11 @@ export async function wikiPageImageAny(lang: "zh" | "en", title: string): Promis
   const images = (page as WikiPage & { images?: Array<{ title?: string }> }).images ?? [];
   const SKIP = /icon|logo|edit|commons|symbol|flag|question|placeholder|disambig/i;
   // 文件名含标题字词者优先：文章内相关画作按字母序会抢在主图前
-  // （蒙娜丽莎实测命中拉斐尔《巴尔达萨雷·卡斯蒂廖内》）
+  // （蒙娜丽莎实测命中拉斐尔《巴尔达萨雷·卡斯蒂廖内》；用户简体标题与
+  //  条目繁体名/英文文件名对不上时，用 enTitle 等关键词补匹配）
+  const prefers = [compactBase, ...preferTitles]
+    .map((t) => t.replace(/[\s：:·・（）()]/g, "").toLowerCase())
+    .filter(Boolean);
   const files = images
     .map((image) => image.title ?? "")
     .filter(
@@ -192,8 +202,10 @@ export async function wikiPageImageAny(lang: "zh" | "en", title: string): Promis
         !SKIP.test(t),
     );
   const file =
-    files.find((f) => f.slice(5).replace(/[\s_:]/g, "").toLowerCase().includes(compactBase)) ??
-    files[0];
+    files.find((f) => {
+      const compact = f.slice(5).replace(/[\s_]/g, "").toLowerCase();
+      return prefers.some((p) => compact.includes(p));
+    }) ?? files[0];
   if (!file) return null;
   const info = new URLSearchParams({
     action: "query",
