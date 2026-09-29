@@ -6,7 +6,7 @@
 
 **修复**：`rankMode` 改为 `useState`（惰性初始化读 localStorage，非法值回退 classic），点击同时 setState + 持久化，高亮/提示立即联动。
 
-**验证**：五道门禁绿（484 passed·9 skipped）；本地实机：点击高亮立即切换 + localStorage 写入 + 提示文案联动，重进 setup 后按存储值恢复，开始相遇页头显示所选模式（端到端）。
+**验证**：五道门禁绿（484 passed·9 skipped）；本地实机：点击高亮立即切换 + localStorage 写入 + 提示文案联动，重进 setup 后按存储值恢复，开始相遇页头显示所选模式（端到端）。线上实机验证通过（sort.logicc.top，d0120b2）。
 
 ## 2026-09-28 · 修复两批：「其他」维度封面/详情 + AI 点评截断
 
