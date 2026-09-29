@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { Play, Save, Sparkles } from "lucide-react";
 import { Poster } from "../components/Poster";
 import { heading } from "./helpers";
@@ -55,10 +56,19 @@ export function SetupView({
   startJevRanking,
   jevBusy,
 }: SetupViewProps) {
-  const rankMode =
-    (typeof window !== "undefined" && window.localStorage.getItem("art-rank:rank-mode")) ||
-    "classic";
-  const setRankMode = (mode: string) => {
+  const [rankMode, setRankMode] = useState<string>(() => {
+    try {
+      const stored = RANK_MODES.find(
+        (m) => m.value === window.localStorage.getItem("art-rank:rank-mode"),
+      );
+      return stored ? stored.value : "classic";
+    } catch {
+      /* 隐私模式 */
+      return "classic";
+    }
+  });
+  const chooseRankMode = (mode: string) => {
+    setRankMode(mode);
     try {
       window.localStorage.setItem("art-rank:rank-mode", mode);
     } catch {
@@ -90,7 +100,7 @@ export function SetupView({
               <button
                 key={m.value}
                 className={rankMode === m.value ? "active" : ""}
-                onClick={() => setRankMode(m.value)}
+                onClick={() => chooseRankMode(m.value)}
               >
                 {t(m.zh, m.en)}
               </button>
