@@ -181,9 +181,19 @@ export async function wikiPageImageAny(lang: "zh" | "en", title: string): Promis
   if (!page) return null;
   const images = (page as WikiPage & { images?: Array<{ title?: string }> }).images ?? [];
   const SKIP = /icon|logo|edit|commons|symbol|flag|question|placeholder|disambig/i;
-  const file = images
+  // 文件名含标题字词者优先：文章内相关画作按字母序会抢在主图前
+  // （蒙娜丽莎实测命中拉斐尔《巴尔达萨雷·卡斯蒂廖内》）
+  const files = images
     .map((image) => image.title ?? "")
-    .find((t) => t.startsWith("File:") && /\.(jpe?g|png)$/i.test(t) && !SKIP.test(t));
+    .filter(
+      (t) =>
+        t.startsWith("File:") &&
+        /\.(jpe?g|png)$/i.test(t) &&
+        !SKIP.test(t),
+    );
+  const file =
+    files.find((f) => f.slice(5).replace(/[\s_:]/g, "").toLowerCase().includes(compactBase)) ??
+    files[0];
   if (!file) return null;
   const info = new URLSearchParams({
     action: "query",

@@ -1385,6 +1385,9 @@ async function searchWikiPoster(
       titles: exactTitles.join("|"),
       prop: "pageimages|info|extracts",
       piprop: "original|thumbnail",
+      // pilicense=any：默认 free 会把非自由封面排除（游戏/书恰好全是），
+      // any 让 infobox 封面直接成为 pageimage，标题评分匹配即可命中
+      pilicense: "any",
       pithumbsize: "1200",
       exintro: "true",
       explaintext: "true",
@@ -1413,6 +1416,7 @@ async function searchWikiPoster(
         gsrlimit: "5",
         prop: "pageimages|info|extracts",
         piprop: "original|thumbnail",
+        pilicense: "any",
         pithumbsize: "1200",
         exintro: "true",
         explaintext: "true",
@@ -1594,23 +1598,27 @@ async function computePosters(
     primary = [...new Set([...direct, ...proxied])];
   } else if (type === "other") {
     // 「其他」维度（游戏/艺术/建筑等，豆瓣无条目）。取图优先级：
-    // ① 条目主图直取（infobox 封面 = 作品本体；pageimages API 对非自由文件
-    //    政策性恒空，但 images→imageinfo 链能拿到本地托管文件）；
-    // ② langlinks 拿英文标题再直取（en wiki 覆盖面更广；zh 简繁变体也一并绕开）；
-    // ③ searchWikiPoster 评分匹配（自由图为主，艺术/摄影类在此命中；
-    //    type 必须以 undefined 参与评分——TYPE_WORDS 无 other 词表，带着 "other"
-    //    时 declareType 推断出的 movie/book/music 会把正确条目全部误杀）；
+    // ① searchWikiPoster 评分匹配（pilicense=any 后 infobox 封面——含非自由
+    //    游戏封面——直接成为 pageimage，标题评分天然防同名条目错配；
+    //    type 必须以 undefined 参与评分——TYPE_WORDS 无 other 词表，带着
+    //    "other" 时 declareType 推断出的 movie/book/music 会误杀正确条目）；
+    // ② langlinks→英文标题再匹配（en wiki 覆盖面更广，zh 简繁变体一并绕开）；
+    // ③ 条目主图直取（images→imageinfo，pageimages 恒空时的兜底；蒙娜丽莎
+    //    实测教训：文章内相关画作按文件名字母序会抢在主图前，故只在
+    //    文件名含标题时采用）；
     // ④ otherDetail 变体容错兜底。
-    const directZh = await wikiPageImageAny("zh", title);
-    if (directZh) return { urls: [directZh], outcome: "found" };
-    const enTitle = await wikiEnTitle(title);
-    const directEn = await wikiPageImageAny("en", enTitle ?? title);
-    if (directEn) return { urls: [directEn], outcome: "found" };
     const wiki = await searchWikiPoster(title, english, undefined, year);
     if (wiki.length) return { urls: wiki, outcome: "found" };
+    const enTitle = await wikiEnTitle(title);
     if (enTitle) {
       const enWiki = await searchWikiPoster(enTitle, enTitle, undefined, year);
       if (enWiki.length) return { urls: enWiki, outcome: "found" };
+    }
+    const directZh = await wikiPageImageAny("zh", title);
+    if (directZh) return { urls: [directZh], outcome: "found" };
+    if (enTitle) {
+      const directEn = await wikiPageImageAny("en", enTitle);
+      if (directEn) return { urls: [directEn], outcome: "found" };
     }
     const fallback = await otherDetail(title).catch(() => null);
     const urls = fallback?.poster_url ? [fallback.poster_url] : [];
