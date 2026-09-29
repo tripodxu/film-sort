@@ -1608,16 +1608,19 @@ async function computePosters(
     // 简繁变体会让标题评分失败（用户「蒙娜丽莎」vs 条目「蒙娜麗莎」），
     // langlinks 英文标题同时服务 en 匹配与文件名优选
     const enTitle = await wikiEnTitle(title);
-    if (enTitle) {
-      const enWiki = await searchWikiPoster(enTitle, enTitle, undefined, year);
-      if (enWiki.length) return { urls: enWiki, outcome: "found" };
-    }
     const prefer = enTitle ? [title, enTitle] : [title];
+    // en 条目主图直取先于 en 评分匹配：pageimages 默认 free 档下，en 的
+    // 「相关自由图」（塞尔达实测命中系列 logo svg）会抢在 infobox 封面前，
+    // 而非自由封面（作品本体）只能从 images→imageinfo 直取拿到
     const directZh = await wikiPageImageAny("zh", title, prefer);
     if (directZh) return { urls: [directZh], outcome: "found" };
     if (enTitle) {
       const directEn = await wikiPageImageAny("en", enTitle, prefer);
       if (directEn) return { urls: [directEn], outcome: "found" };
+    }
+    if (enTitle) {
+      const enWiki = await searchWikiPoster(enTitle, enTitle, undefined, year);
+      if (enWiki.length) return { urls: enWiki, outcome: "found" };
     }
     const fallback = await otherDetail(title).catch(() => null);
     const urls = fallback?.poster_url ? [fallback.poster_url] : [];
