@@ -16,8 +16,8 @@
 - **最小上下文**：`src/lib/wrapped.ts`（数据层）+ `src/lib/exportPng.ts`（renderWrappedPng）+ `src/views/ProfileView.tsx`（侧栏按钮）+ `src/App.tsx`（exportWrapped）
 - **改了什么**：① `lib/wrapped.ts` 纯函数（buildWrappedStats 复用 galleryStats；draftInsight 最纠结一对 = cycleEvents observations 最高且 ≥2、id→标题经草稿 collection.works 解析宁缺毋错；readDraftLike 防御解析；×8 单测）；② `renderWrappedPng`/`wrappedFileName`（印刷年鉴版式：双线页眉→画像名→英雄数字带[榜单/作品/年代跨度]→媒介占比堆叠条[维度色]→年代分布→进行中节[取舍大数字+最纠结一对]→榜单速览[各榜 Top3]→页脚；主题感知、2x）；③ 接线：ProfileView 侧栏「年度年鉴 PNG」+ App exportWrapped（两模块按需加载；titleOf 从草稿 collection.works）；④ 文档：冲刺计划 Phase 7 ✅、CHANGELOG、FEATURES、README、USAGE
 - **为什么**：冲刺队列下一个大件（P6 已完成）；数据边界已确认——decisionLog/cycleEvents 仅存于进行中草稿（art-rank:draft:v2，全量 RankingState 序列化），画像里没有 → 年鉴卡主体用画像统计，取舍次数与最纠结一对从草稿条件性附加
-- **验证状态**：五道门禁 ✅（492 passed·9 skipped，+8 例）｜ 本地烟测 ✅：静态服务 + 注入画像与含回环草稿，拦截生成的 blob（2400×2620 @2x）页面渲染逐节核对（英雄数字/媒介堆叠条 56%+44%/年代条 2010s-2000s/最纠结一对 花样年华↔The Substance 反转 3 次/榜单速览/页脚全部正确）｜ **线上 ⬜（推送后实测按钮与下载）**
-- **遗留风险**：① 「最纠结一对」仅反映进行中草稿（历史排序无回环数据落盘）——卡片用「进行中 · 本次排序」标签明示，若要全量历史需扩画像存储白名单（硬规则 4，另立批次）；② 无草稿时卡片缺取舍节（设计如此）；③ H 高度公式按内容估算，极端数据（超多媒介/年代）下页面留白可能偏大
+- **验证状态**：五道门禁 ✅（492 passed·9 skipped，+8 例）｜ 本地烟测 ✅：静态服务 + 注入画像与含回环草稿，拦截生成的 blob（2400×2620 @2x）页面渲染逐节核对（英雄数字/媒介堆叠条 56%+44%/年代条 2010s-2000s/最纠结一对 花样年华↔The Substance 反转 3 次/榜单速览/页脚全部正确）｜ **线上 ✅（2026-09-30）**：生产环境点击「年度年鉴 PNG」生成 280KB PNG（blob 捕获验证 type/size）；无草稿路径同时验证（卡片省略取舍节）
+- **遗留风险**：① 「最纠结一对」仅反映进行中草稿（历史排序无回环数据落盘）——卡片用「进行中 · 本次排序」标签明示，若要全量历史需扩画像存储白名单（硬规则 4，另立批次）；② 无草稿时卡片缺取舍节（设计如此）；③ H 高度公式按内容估算，极端数据（超多媒介/年代）下页面留白可能偏大；④ **自动化注意**：渲染收尾用 requestAnimationFrame，后台标签页（visibility:hidden）rAF 冻结会让导出挂起——真用户前台不受影响，但无头/后台自动化验证需覆写 rAF（实测证实）
 - **下一步（给接手者）**：推送后线上点「年度年鉴 PNG」下载实测；接 Phase 8（PWA 离线）
 
 ### T-20260929-02 · 回归排查：T-01 同类缺陷全仓扫描 + 线上功能冒烟
