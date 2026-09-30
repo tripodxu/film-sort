@@ -56,6 +56,7 @@
 | 导出 JSON / TXT / MD / CSV（BOM+防注入）/ PNG | 右侧导出面板 | `profileText` / `lib/exportPng.renderProfilePng` |
 | PNG 五版式：编辑/领奖台/拼贴/胶片/极简 | 导出格式=PNG 时版式切换器 | `exportLayout` 状态 |
 | PNG 主题感知（采样当前 data-theme 配色，2x 高清） | 同上 | `exportPng.samplePalette` |
+| **年度年鉴 PNG**（印刷年鉴风统计海报：媒介占比/年代分布/榜单速览；取舍次数+最纠结一对从进行中草稿条件附加） | 画像页侧栏「年度年鉴 PNG」 | `lib/wrapped.ts` + `exportPng.renderWrappedPng`（复用 galleryStats 统计） |
 | 品味年轮（首页，row/col 两布局，就地改名/删除） | 首页 | `HomeView` |
 | 导入画像 JSON（校验+合并） | 首页/比较页 | `importProfile` |
 | AI 点评单份榜单（三档长度、来源徽标、会话缓存+重新生成） | 榜单动作栏「AI 点评」 | `AiInsightCard` + `buildRankingData` → `/api/insights(scene=ranking)` |

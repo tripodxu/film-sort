@@ -195,12 +195,7 @@ export async function wikiPageImageAny(
     .filter(Boolean);
   const files = images
     .map((image) => image.title ?? "")
-    .filter(
-      (t) =>
-        t.startsWith("File:") &&
-        /\.(jpe?g|png)$/i.test(t) &&
-        !SKIP.test(t),
-    );
+    .filter((t) => t.startsWith("File:") && /\.(jpe?g|png)$/i.test(t) && !SKIP.test(t));
   const file =
     files.find((f) => {
       const compact = f.slice(5).replace(/[\s_]/g, "").toLowerCase();

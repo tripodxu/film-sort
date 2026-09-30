@@ -1,5 +1,6 @@
 import type { ArtisticProfile, RankedArtwork, RankingExport } from "./profile";
 import type { MediaKind } from "../data/media";
+import { buildWrappedStats, type WrappedDraftInsight } from "./wrapped";
 
 // ===== 画像 PNG 导出：纯 Canvas 手绘，主题感知（采样当前 data-theme 的 CSS 变量），五套版式 =====
 
@@ -624,4 +625,262 @@ export function pngFileName(profileName: string, layout: ExportLayout): string {
       .slice(0, 40) || "art-profile";
   const d = new Date();
   return `${clean}-${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, "0")}${String(d.getDate()).padStart(2, "0")}-${layout}.png`;
+}
+
+// ===== 文化年度报告（优化冲刺 Phase 7）：印刷年鉴风格统计海报 =====
+
+export interface WrappedPngContext {
+  profile: ArtisticProfile;
+  locale: "zh" | "en";
+  label: (kind: MediaKind) => string;
+  t: (zh: string, en: string) => string;
+  /** 进行中草稿的取舍/张力洞察；无草稿传 null（卡片省略该节）。 */
+  draft: WrappedDraftInsight | null;
+}
+
+/** 年鉴卡文件名（与 pngFileName 同口径，版式段固定 wrapped）。 */
+export function wrappedFileName(profileName: string): string {
+  const clean =
+    profileName
+      .trim()
+      .replace(/[\\/:*?"<>|\s]+/g, "-")
+      .replace(/^-+|-+$/g, "")
+      .slice(0, 40) || "art-profile";
+  const d = new Date();
+  return `${clean}-wrapped-${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, "0")}${String(d.getDate()).padStart(2, "0")}.png`;
+}
+
+export async function renderWrappedPng({
+  profile,
+  locale,
+  label,
+  t,
+  draft,
+}: WrappedPngContext): Promise<Blob> {
+  await document.fonts.ready;
+  const p = samplePalette();
+  const W = 1200;
+  const M = 76;
+  const date = new Date().toLocaleDateString(locale === "zh" ? "zh-CN" : "en-US");
+  const stats = buildWrappedStats(profile);
+  const items = profile.rankings.flatMap((entry) =>
+    entry.items.slice(0, 3).map((item) => ({ entry, item })),
+  );
+  const hasDraft = draft !== null;
+  const H = Math.max(900, 430 + (hasDraft ? 300 : 0) + 190 + items.length * 40 + 150);
+
+  const canvas = document.createElement("canvas");
+  canvas.width = W * 2;
+  canvas.height = H * 2;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) throw new Error("canvas unavailable");
+  ctx.scale(2, 2);
+  const bg = resolveColor(p.bg),
+    text = resolveColor(p.text),
+    text2 = resolveColor(p.text2),
+    faint = resolveColor(p.faint),
+    accent = resolveColor(p.accent),
+    line = resolveColor(p.line);
+
+  ctx.fillStyle = bg;
+  ctx.fillRect(0, 0, W, H);
+  ctx.textBaseline = "alphabetic";
+  let y = 0;
+
+  const rule = (weight = 1) => {
+    ctx.strokeStyle = line;
+    ctx.lineWidth = weight;
+    ctx.beginPath();
+    ctx.moveTo(M, y);
+    ctx.lineTo(W - M, y);
+    ctx.stroke();
+  };
+  const bigStat = (x: number, num: string, caption: string, width: number, hero = false) => {
+    ctx.font = `700 ${hero ? 84 : 64}px ${p.fontDisplay}`;
+    ctx.fillStyle = hero ? accent : text;
+    ctx.fillText(ellipsis(ctx, num, width), x, y);
+    ctx.font = `13px ${p.fontMono}`;
+    ctx.fillStyle = faint;
+    ctx.fillText(caption, x, y + 26);
+  };
+
+  // ===== 页眉：报名 + 期号 =====
+  y = 88;
+  ctx.font = `700 26px ${p.fontDisplay}`;
+  ctx.fillStyle = text;
+  ctx.fillText("ART", M, y);
+  const artW = ctx.measureText("ART").width;
+  ctx.fillStyle = accent;
+  ctx.fillText("/", M + artW + 2, y);
+  ctx.fillStyle = text;
+  ctx.fillText("RANK", M + artW + 18, y);
+  ctx.font = `13px ${p.fontMono}`;
+  ctx.fillStyle = faint;
+  ctx.textAlign = "right";
+  ctx.fillText(t("年度文化报告", "ANNUAL CULTURE REPORT") + ` · ${date}`, W - M, y);
+  ctx.textAlign = "left";
+  y += 16;
+  rule(2);
+  y += 20;
+  rule();
+  y += 76;
+
+  // 画像名 + 副行
+  ctx.font = `700 56px ${p.fontDisplay}`;
+  ctx.fillStyle = text;
+  ctx.fillText(ellipsis(ctx, profile.profileName, W - M * 2), M, y);
+  y += 40;
+  ctx.font = `15px ${p.fontMono}`;
+  ctx.fillStyle = faint;
+  ctx.fillText(
+    `${stats.lists} ${t("个领域", "media")} · ${stats.works} ${t("件作品", "works")} · ${stats.creators} ${t("位创作者", "creators")}`,
+    M,
+    y,
+  );
+  y += 46;
+
+  // ===== 英雄数字带：榜单 / 作品 / 年代跨度（创作者在副行已示） =====
+  const bandW = (W - M * 2) / 3;
+  bigStat(M, String(stats.lists), t("份榜单", "LISTS"), bandW - 20);
+  bigStat(M + bandW, String(stats.works), t("件作品", "WORKS"), bandW - 20);
+  bigStat(
+    M + bandW * 2,
+    stats.span.earliest !== null && stats.span.latest !== null
+      ? `${stats.span.earliest}–${stats.span.latest}`
+      : "—",
+    t("年代跨度", "YEAR SPAN"),
+    bandW,
+  );
+  y += 130;
+
+  // ===== 媒介占比：堆叠条 + 图例 =====
+  ctx.font = `600 13px ${p.fontMono}`;
+  ctx.fillStyle = faint;
+  ctx.fillText(t("媒介占比", "MEDIA SHARE"), M, y);
+  y += 18;
+  const total = Math.max(1, stats.works);
+  let bx = M;
+  const barW = W - M * 2;
+  for (const share of stats.mediaShare) {
+    const w = (share.count / total) * barW;
+    ctx.fillStyle = resolveColor(kindColor(p, share.kind));
+    ctx.fillRect(bx, y, Math.max(0, w - 2), 30);
+    bx += w;
+  }
+  if (!stats.mediaShare.length) {
+    ctx.fillStyle = line;
+    ctx.fillRect(M, y, barW, 30);
+  }
+  y += 30;
+  ctx.font = `14px ${p.fontMono}`;
+  stats.mediaShare.forEach((share, index) => {
+    const x = M + (index % 3) * (barW / 3);
+    if (index % 3 === 0) y += 30;
+    ctx.fillStyle = resolveColor(kindColor(p, share.kind));
+    ctx.fillRect(x, y - 11, 12, 12);
+    ctx.fillStyle = text2;
+    ctx.fillText(
+      `${label(share.kind)} ${share.count} ${t("件", "")} · ${share.pct}%`,
+      x + 20,
+      y - 1,
+    );
+  });
+  y += 56;
+
+  // ===== 年代分布 Top =====
+  if (stats.topDecades.length) {
+    ctx.font = `600 13px ${p.fontMono}`;
+    ctx.fillStyle = faint;
+    ctx.fillText(t("年代分布", "DECADES"), M, y);
+    y += 18;
+    const maxCount = Math.max(...stats.topDecades.map((d) => d.count));
+    for (const slice of stats.topDecades) {
+      const w = ((slice.count / maxCount) * (barW - 170)) | 0;
+      ctx.fillStyle = accent;
+      ctx.globalAlpha = 0.55;
+      ctx.fillRect(M + 110, y, Math.max(4, w), 16);
+      ctx.globalAlpha = 1;
+      ctx.font = `13px ${p.fontMono}`;
+      ctx.fillStyle = faint;
+      ctx.fillText(`${slice.decade}s`, M, y + 13);
+      ctx.fillStyle = text2;
+      ctx.textAlign = "right";
+      ctx.fillText(String(slice.count), W - M, y + 13);
+      ctx.textAlign = "left";
+      y += 26;
+    }
+    y += 34;
+  }
+
+  // ===== 进行中：取舍次数 + 最纠结一对（有草稿才出现） =====
+  if (draft) {
+    ctx.font = `600 13px ${p.fontMono}`;
+    ctx.fillStyle = faint;
+    ctx.fillText(t("进行中 · 本次排序", "IN PROGRESS"), M, y);
+    y += 20;
+    rule();
+    y += 40;
+    bigStat(M, String(draft.comparisons), t("次取舍", "DECISIONS"), 360, true);
+    if (draft.tornPair) {
+      const tx = M + 400;
+      ctx.font = `600 13px ${p.fontMono}`;
+      ctx.fillStyle = accent;
+      ctx.fillText(
+        t(
+          `最纠结的一对 · 反转 ${draft.tornPair.flips} 次`,
+          `MOST TORN PAIR · ${draft.tornPair.flips} flips`,
+        ),
+        tx,
+        y - 8,
+      );
+      ctx.font = `600 24px ${p.fontBody}`;
+      ctx.fillStyle = text;
+      ctx.fillText(ellipsis(ctx, draft.tornPair.a, W - M - tx), tx, y + 22);
+      ctx.fillText(ellipsis(ctx, draft.tornPair.b, W - M - tx), tx, y + 54);
+    }
+    y += 120;
+  }
+
+  // ===== 榜单速览：各榜单前三名 =====
+  ctx.font = `600 13px ${p.fontMono}`;
+  ctx.fillStyle = faint;
+  ctx.fillText(t("榜单速览", "TOP PICKS"), M, y);
+  y += 20;
+  rule();
+  y += 34;
+  for (const { entry, item } of items) {
+    ctx.font = `600 12px ${p.fontMono}`;
+    ctx.fillStyle = resolveColor(kindColor(p, entry.kind));
+    ctx.fillText(label(entry.kind).toUpperCase(), M, y);
+    ctx.fillStyle = item.rank === 1 ? accent : text2;
+    ctx.fillText(
+      `${String(item.rank).padStart(2, "0")}  ${ellipsis(ctx, item.title, 420)}`,
+      M + 76,
+      y,
+    );
+    ctx.font = `12px ${p.fontMono}`;
+    ctx.fillStyle = faint;
+    ctx.textAlign = "right";
+    ctx.fillText(ellipsis(ctx, entry.collectionTitle, 320), W - M, y);
+    ctx.textAlign = "left";
+    y += 40;
+  }
+
+  // ===== 页脚 =====
+  y = H - 56;
+  rule();
+  ctx.font = `13px ${p.fontMono}`;
+  ctx.fillStyle = faint;
+  ctx.fillText(t("偏好没有标准答案", "PREFERENCE HAS NO ANSWER KEY"), M, H - 26);
+  ctx.textAlign = "right";
+  ctx.fillText(`ART/RANK · ${t("年度报告", "WRAPPED")}`, W - M, H - 26);
+  ctx.textAlign = "left";
+
+  await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+  return await new Promise<Blob>((resolve, reject) => {
+    canvas.toBlob((blob) => {
+      if (blob) resolve(blob);
+      else reject(new Error("toBlob failed"));
+    }, "image/png");
+  });
 }

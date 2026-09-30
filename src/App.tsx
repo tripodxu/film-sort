@@ -709,6 +709,42 @@ export default function App() {
       setDetailWork({ work, kind: detailKind, data: null, loading: false });
     }
   }
+  async function exportWrapped() {
+    const next = namedProfile();
+    if (!next) return;
+    persist(next);
+    setBusy(true);
+    try {
+      // PNG 导出模块按需加载，不进首屏关键路径。
+      const [{ renderWrappedPng, wrappedFileName }, { readDraftLike, draftInsight }] =
+        await Promise.all([import("./lib/exportPng"), import("./lib/wrapped")]);
+      // 取舍次数与最纠结一对只在进行中草稿里：id→标题映射用草稿自带的 collection
+      let insight: ReturnType<typeof draftInsight> = null;
+      const draftLike = readDraftLike(localStorage);
+      if (draftLike) {
+        const idTitles = new Map<string, string>();
+        try {
+          const raw = JSON.parse(localStorage.getItem(DRAFT_KEY) ?? "") as {
+            collection?: { works?: Array<{ id?: unknown; title?: unknown }> };
+          };
+          for (const work of raw.collection?.works ?? []) {
+            if (typeof work?.id === "string" && typeof work?.title === "string")
+              idTitles.set(work.id, work.title);
+          }
+        } catch {
+          /* 草稿形状不对时只损失张力节，年鉴卡其余部分照常 */
+        }
+        insight = draftInsight(draftLike, (id) => idTitles.get(id));
+      }
+      const blob = await renderWrappedPng({ profile: next, locale, label, t, draft: insight });
+      saveFile(blob, wrappedFileName(next.profileName), "image/png");
+    } catch {
+      setNotice(t("导出失败，请重试。", "Export failed, please retry."));
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function importProfile(file: File, target: "own" | "peer") {
     try {
       if (file.size > MAX_PROFILE_BYTES) throw new Error();
@@ -1217,6 +1253,7 @@ export default function App() {
         exportLayout={exportLayout}
         setExportLayout={setExportLayout}
         exportProfile={exportProfile}
+        exportWrapped={exportWrapped}
         share={share}
         shareUrl={shareUrl}
         qrUrl={qrUrl}

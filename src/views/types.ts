@@ -127,6 +127,8 @@ export interface ProfileViewProps {
   exportLayout: ExportLayout;
   setExportLayout: (layout: ExportLayout) => void;
   exportProfile: () => void;
+  /** 年度年鉴 PNG（Wrapped，Phase 7） */
+  exportWrapped: () => void;
   share: () => void;
   shareUrl: string;
   qrUrl: string;

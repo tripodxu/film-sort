@@ -46,6 +46,7 @@ export function ProfileView({
   exportLayout,
   setExportLayout,
   exportProfile,
+  exportWrapped,
   share,
   shareUrl,
   qrUrl,
@@ -755,6 +756,18 @@ export function ProfileView({
           >
             <Download size={16} />
             {exporting ? t("导出中…", "Exporting…") : t("导出全部维度", "Export all media")}
+          </button>
+          <button
+            className="button secondary"
+            disabled={busy}
+            onClick={() => exportWrapped()}
+            title={t(
+              "生成印刷年鉴风格的年度报告卡（媒介占比、年代分布、榜单速览）",
+              "Generate a print-yearbook style annual report card",
+            )}
+          >
+            <CalendarDays size={16} />
+            {t("年度年鉴 PNG", "Annual report PNG")}
           </button>
           <button className="button secondary" onClick={share}>
             <Share2 size={16} />

@@ -1,5 +1,15 @@
 # Changelog
 
+## 2026-09-30 · 优化冲刺 Phase 7 · 文化年度报告（Wrapped 年鉴卡）
+
+「我的文化索引」侧栏新增「年度年鉴 PNG」——印刷年鉴风格的可导出统计海报：
+
+- **数据边界（设计前已确认）**：decisionLog / cycleEvents 只存在于进行中排序草稿（art-rank:draft:v2 全量 RankingState 序列化），完成的画像里没有——年鉴主体用画像统计（复用 galleryStats：榜单/作品/创作者/年代跨度/媒介占比/年代分布），「取舍次数 + 最纠结一对」从草稿条件性附加（无草稿时省略该节，卡片不缺角）
+- **新增 `lib/wrapped.ts`**：buildWrappedStats（媒介占比百分比/年代 Top6，×2 单测）+ draftInsight（最纠结一对 = cycleEvents observations 最高且 ≥2 的成员对，id→标题经草稿 collection.works 解析，解析不到宁缺毋错，×4 单测）+ readDraftLike（防御式解析，×2 单测）
+- **新增 `renderWrappedPng`/`wrappedFileName`**（exportPng.ts）：主题感知调色板复用既有 samplePalette/resolveColor；版式 = 报名双线页眉 → 画像名大字 → 英雄数字带（榜单/作品/年代跨度）→ 媒介占比堆叠条（维度色）→ 年代分布条形 → 进行中节（取舍大数字 + 最纠结一对）→ 榜单速览（各榜 Top3）→ 页脚；2x 导出
+- **入口**：画像页侧栏「年度年鉴 PNG」按钮（exportWrapped 按需加载两模块，不进首屏关键路径）
+- **验证**：五道门禁绿（492 passed·9 skipped，+8 例）；本地静态服务烟测实锤——注入画像+含回环草稿，捕获生成的 blob（2400×2620 @2x）页面渲染逐节核对（英雄数字/堆叠条/年代条/最纠结一对 花样年华↔The Substance 反转 3 次/榜单速览/页脚全部正确）；线上验证随推送进行
+
 ## 2026-09-29 · 修复：catalog/setup 排序模式无法更改
 
 用户报障。**根因**：排序三模式上线时（d47c444）引入——`SetupView` 的 `rankMode` 是每次渲染时直接读 localStorage 的普通变量，点击模式按钮的 `setRankMode` 只写 localStorage、不触发任何 React 状态更新，组件不重渲染，分段按钮高亮与提示文案永远停在原处。实际 localStorage 已写入、起跑时 `useSorting` 也能读到新值，但用户视觉上「点了没反应」。
