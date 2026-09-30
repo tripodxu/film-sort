@@ -14,7 +14,7 @@
 
 ### ① 「其他」维度的作品没有封面和详情
 - **封面根因**：海报管线对 other 一直不解析（`TYPE_BY_KIND.other` 映射到 movie、`mediaTypeForKind("other")` 返回 null、`computePosters` 无 other 分支）——「其他」维度作品在所有界面只有图标兜底；更早还有正确性问题：old 映射把 other 当 movie 查豆瓣，会错误匹配到同名电影海报
-- **修复（最终形态，四段链路）**：管线全面放行 type=other（posterStore/media/index 三处白名单 + `TYPE_BY_KIND.other="other"`）；`computePosters` other 分支取图链——① 条目主图直取（pageimages API 对非自由封面政策性恒空，改走 images→imageinfo 链拿本地托管文件，游戏/书籍封面的唯一天然来源；标题变体空格/全角冒号一并解析，条目选择剥分隔符防「底特律 变人→底特律市」错配）② langlinks→英文标题再直取 ③ searchWikiPoster 评分匹配（自由图为主，艺术/摄影类；type 以 undefined 参与评分防 TYPE_WORDS 误杀）④ otherDetail 变体容错。顺带移除已废弃的百度百科 openapi 调用（实测恒返回 errno 6，简介兜底与取图均失效，纯拖 8s 超时）。线上实测：艾尔登法环/辐射 4/只狼/蒙娜丽莎均命中正确封面
+- **修复（最终形态，五段链路）**：管线全面放行 type=other（posterStore/media/index 三处白名单 + `TYPE_BY_KIND.other="other"`）；`computePosters` other 分支取图链——① searchWikiPoster 评分匹配（free 档自由图：蒙娜丽莎实测教训——用户简体「蒙娜丽莎」vs 条目「蒙娜麗莎」会被逐字评分 -1 过滤，故 langlinks 英文标题补匹配 + wikiImageUrl 缩略档优先 [commons 原始扫描件数十 MB 列表位加载不动]）② zh 主图直取（pageimages 对非自由封面政策性恒空，走 images→imageinfo 拿本地托管文件——游戏封面唯一天然来源；标题变体空格/全角冒号一并解析，条目与文件选择均剥分隔符+按标题关键词优选，防「底特律 变人→底特律市」「蒙娜丽莎→拉斐尔卡斯蒂廖内像」错配）③ en 主图直取（先于 en 评分匹配：en free 档的「相关自由图」[塞尔达实测命中系列 logo] 会抢在 infobox 封面前）④ en searchWikiPoster ⑤ otherDetail 变体容错。曾试 `pilicense=any` 一步到位——实测该参数使 pageimages 查询整体失效，已还原。顺带移除已废弃的百度百科 openapi 调用（恒返回 errno 6，纯拖 8s 超时）。线上实测：蒙娜丽莎（正确原画 1280px 缩略）、艾尔登法环/辐射 4/塞尔达（非自由封面）、只狼均命中
 - **详情根因**：`openArtworkDetail` 的 other 分支 20s 超时——维基 zh→en 兜底链冷缓存实测可超 25s，本可成功的详情被掐成「暂时没有更多资料」。放宽到 30s。线上实测：艾尔登法环详情 386 字简介 + 大图海报正常
 - **测试**：posterStore 语义翻转（other → "other"）+ normalizePosterItem other 合法条目，×2 更新/新增
 - **已知限制（记台账）**：① 取图长尾质量——同名概念/人物条目可能取到语义不符的图（无类型词表可依），经海报失败上报观察；② 负缓存 24h——管线灰度期解析失败的标题 24h 内不出图，可在设置「清除服务端缓存→海报」推进代次立即重试
