@@ -10,6 +10,15 @@
 
 ## 进行中 / 最近
 
+### T-20260929-02 · 回归排查：T-01 同类缺陷全仓扫描 + 线上功能冒烟
+- **状态**：✅ 完成（排查型任务，无代码改动；结论：**除 T-01 已修复项外未发现其他回归**）｜ **负责人**：本 agent
+- **任务类型**：§2.2（前端视图）+ 排查
+- **静态扫描（全仓 localStorage 写点 × state 同步审计）**：逐个核对 `src/views|components|App.tsx` 全部 `localStorage.setItem/removeItem` 调用点——CompareView compare-level、PlazaView plaza-cols、HomeView rings-layout、App guide-dismissed、PlazaPostView/acceptPeer 的 peer:v2 均为「setState + 持久化」正确写法；**ShareView「与我比较」疑似只写不 set，实查为非缺陷**——App 挂载 ShareView 时对 navigateTo 做了包装，跳 compare 时走 `acceptPeer(sharePeer)`（setPeer + 持久化 + 维度联动），ShareView 内的 setItem 只是冗余
+- **线上冒烟（sort.logicc.top，d0120b2）**：① 简易模式 9 件完整排序端到端（起跑页头「TOP 3 · 简易」、完成落画像页 Top3 正确产出）；② quick 模式撤销正常；③ setup TopN 数字框与滑块联动；④ 比较页三档深度切换 + localStorage 持久化；⑤ 比较页手动/自动模式（20 复选框渲染）；⑥ 深链 /encounter?payload= 自动导入 peer；⑦ 主题 cyber 切换生效+持久化+切回 modern；⑧ 中英语言切换；⑨ 广场列数 2/3/4 切换持久化；⑩ 帖子详情深链 /plaza/29；⑪ 广场「与我比较」→ acceptPeer → 比较页双方索引渲染（无共同维度时边界提示正确）
+- **未覆盖（已有其他保障）**：AI 快排/预测分歧（需真实 key，T-06 台账留用户复核）；Worker 侧 wiki 海报（T-07 已线上验证）；视觉回归（P3/P4 截图基线体系覆盖）；precise 模式完整排序（ranking.test.ts ×165 行单测覆盖算法，模式传递链路与 quick 同路径已验证）
+- **遗留风险**：无。注意广场卡片是 `div.plaza-sticker`（role=button）非 `<button>` 标签，自动化测试选择器需用 role 而非标签
+- **下一步（给接手者）**：无遗留
+
 ### T-20260929-01 · 修复：catalog/setup 排序模式无法更改
 - **状态**：✅ 完成（五道门禁绿 + **线上实机验证通过** 2026-09-29：sort.logicc.top 新 bundle index-Dysxd8Py.js 上，setup 页默认「经典」高亮正确，点击「简易/精确」高亮立即切换且 localStorage 写入 `precise`）｜ **负责人**：本 agent
 - **任务类型**：§2.2（前端视图）
