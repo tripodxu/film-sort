@@ -252,6 +252,58 @@ function normFile(value: string): string {
     .toLowerCase();
 }
 
+/**
+ * 维基缩略图的**合法桶宽白名单**——取自官方 `$wgThumbnailSteps`
+ * （`https://w.wiki/GHai` → MediaWiki:Common thumbnail sizes，2026-10-02 抓取），
+ * 值为 `20, 40, 60, 120, 250, 330, 500, 960, 1280, 1920, 3840`。
+ *
+ * 为什么必须是白名单而不是随便写个宽度：桶外宽度上游直接 **400**
+ * `Use thumbnail sizes listed on https://w.wiki/GHai`，经 `/api/image` 代理后
+ * 呈现为 502，表现为「封面随机消失」。2026-10-02 实测：桶内 11 档全部 200
+ * （20px=0.7KB … 960px=505.2KB / 1280px=957.4KB / 3840px=9011.6KB），
+ * 桶外 23 档全部失败。
+ *
+ * 语义要点（官方原文）：`iiurlwidth` 是**向上**取桶——
+ * 「the thumbnail with smallest step that has larger value than requested」。
+ * 所以旧代码的 `iiurlwidth:"600"` 拿到的其实是 **960px**，
+ * 这就是蒙娜丽莎封面 505.2KB 的全部来历。
+ */
+const THUMB_BUCKETS = [20, 40, 60, 120, 250, 330, 500, 960, 1280, 1920, 3840] as const;
+
+/**
+ * 要「不超过 maxWidth 宽」时取哪一档（保守向下取，绝不白拿大一倍）。
+ *
+ * 注意是**向下**取：官方 `iiurlwidth` 语义是向上（`600` → 960），
+ * 那正是 505KB 蒙娜丽莎封面的来历。向下取保证「要 500 就不会拿到 960」。
+ * 非有限输入（NaN / ±Infinity）一律退到最小桶，绝不静默放大。
+ */
+export function pickThumbBucket(maxWidth: number): number {
+  const limit = Number.isFinite(maxWidth) ? maxWidth : 0;
+  let best: number = THUMB_BUCKETS[0];
+  for (const bucket of THUMB_BUCKETS) {
+    if (bucket > limit) break;
+    if (bucket > best) best = bucket;
+  }
+  return best;
+}
+
+/**
+ * 「其他」维度的显示尺寸上限。
+ *
+ * 取 500 而不是旧值 600：旧值因为 `iiurlwidth` 向上取桶，落到 960px。
+ * 500 是同时站得住两端的一档——
+ * - 清单贴纸卡 `.collection-row .poster` 实际 369–557px（2/3/4 列 × 1120px 容器，
+ *   见 `src/views/SourceView.tsx:653` 与 `src/lib/useSorting.ts:119-125`），
+ *   500 对 369px 是 1.35×，1x 屏够用；
+ * - 榜单行 `.poster-small` 只有 26–50px，960 对它是 25× 过量。
+ * 蒙娜丽莎由 505.2KB（960px）降到 114.6KB（500px），4.4×。
+ *
+ * 弹窗大图（`.poster-large` 整宽）会偏糊，这是**已知且刻意接受**的代价：
+ * 原图 URL 仍在候选里（`thumbnail → original` 回落顺序未变），要彻底解决得让
+ * 前端把显示宽度上报服务端，见 `docs/PLAN-THUMBNAIL-SIZING.md` §5 的「不做」清单。
+ */
+const OTHER_THUMB_MAX_WIDTH = 500;
+
 /** 批量把 pageprops.page_image 换成 URL（一次 imageinfo 顶 50 个文件），
  *  结果写回 page.fileUrl。media.ts 的维基评分链也要用，故导出。 */
 export async function wikiFileThumbUrls(
@@ -275,7 +327,7 @@ export async function wikiFileThumbUrls(
       titles: titles.slice(index, index + 50).join("|"),
       prop: "imageinfo",
       iiprop: "url",
-      iiurlwidth: "600",
+      iiurlwidth: String(pickThumbBucket(OTHER_THUMB_MAX_WIDTH)),
       format: "json",
     });
     const pages = await wikiJson(lang, q, 8000);
@@ -350,6 +402,7 @@ export function titleMatchTier(
   // 该文内曾俊贤的签名照。
   if (bare.startsWith(baseCompact) || bare.endsWith(baseCompact)) {
     if (isDescriptiveSuffix(bare, baseCompact)) return 0;
+    if (isAlternateNamePrefix(bare, baseCompact)) return 0;
     return 2;
   }
   if (compact.includes(baseCompact)) {
@@ -374,6 +427,32 @@ function isDescriptiveSuffix(candidate: string, base: string): boolean {
   const tail = candidate.slice(base.length);
   return tail.length <= 8 && DIFFERENT_WORK_TAIL.test(tail);
 }
+
+/** 标题末尾的 base 是不是**英文原名注脚**，前面另有一个中文名
+ *  （「隨興旅 -That's Journey-」之于 Journey）。`isDescriptiveSuffix` 的镜像：
+ *  它只审 base **之后**的尾词，于是「原名裹在末尾」这一侧完全没设防——
+ *  compact.endsWith 成立就直接判了 tier 2。
+ *  2026-10-02 线上实测的代价：Journey 2012 的封面取成了 2019 年连载的日本漫画
+ *  《隨興旅》的 logo。它拿到 tier2（剥括号后以原名结尾 +3）、摘要够长（+1）、
+ *  有 pageimages 缩略图（+1）、带类型词（+2）= 7 分，压过真正命中的 tier1
+ *  《风之旅人》（5.5）。**tier 优先于分数**，1.5 分翻不了档，而真封面
+ *  `Journey_PSN_Cover.png` 在 page_image 里，要等 infobox 那一步才轮得到。
+ *  判据是「**括号外的拉丁注脚**」而不是「前缀里有没有原名」（实测前缀
+ *  `隨兴旅thats` 里并没有第二个 journey）：
+ *   · `隨興旅 -That's Journey-` / `That's Journey -隨興旅` → 前缀含拉丁字母 → 降档
+ *   · `集合啦！動物森友會` → 前缀「集合啦」全中文，是本地化包装词 → 仍 tier2
+ *   · `西遊記 (Journey to the West)` → 拉丁注脚在**括号内**，已被上面那层
+ *     「剥括号后完全一致」判成 tier2，不走这条
+ * 真正的外国作品注脚一律带括号或连字符，且括号形态已被先行覆盖，故此判据
+ * 不会误杀中文本地化名。 */
+function isAlternateNamePrefix(candidate: string, base: string): boolean {
+  if (!candidate.endsWith(base) || !LATIN.test(base)) return false;
+  const head = candidate.slice(0, candidate.length - base.length);
+  return head.length > 0 && LATIN.test(head);
+}
+
+/** 拉丁字母（罗马字/英文），用于区分「中文本地化包装词」与「英文原名注脚」 */
+const LATIN = /[a-z]/;
 
 /** 摘要讲的到底是不是**用户要的那件作品**。条目名把原名裹在末尾、或在括号里
  *  蹭到原名时（傑克 (動物森友會)、集合啦！動物森友會、道奇Journey），标题层
@@ -496,7 +575,7 @@ async function wikiSearchOnce(lang: "zh" | "en", query: string): Promise<WikiPag
     gsrlimit: "6",
     prop: "extracts|pageimages|pageprops|info",
     piprop: "original|thumbnail",
-    pithumbsize: "600",
+    pithumbsize: String(pickThumbBucket(OTHER_THUMB_MAX_WIDTH)),
     exintro: "true",
     explaintext: "true",
     exlimit: "20",
@@ -645,7 +724,7 @@ async function wikiTitlePages(
     prop: "extracts|pageimages|pageprops|info",
     exintro: "true",
     explaintext: "true",
-    pithumbsize: "600",
+    pithumbsize: String(pickThumbBucket(OTHER_THUMB_MAX_WIDTH)),
     exlimit: "20",
     inprop: "url",
     redirects: "1",
@@ -945,7 +1024,11 @@ export async function otherCandidateReport(
       .map((value) => (value ?? "").trim())
       .filter(Boolean);
     if (!queries.length) continue;
-    const ranked = await resolveOtherPages(lang, base, queries, yearText);
+    // 诊断端点必须与真链路同一份别名，否则「候选池报告」会描述一个
+    // 真实判决里不存在的池子（迭代 3 线上实测踩过）。
+    const diagExact = await wikiTitlePages(lang, titleVariants(base));
+    const diagAliases = disambiguationAliases(diagExact ?? [], compactTitle(base));
+    const ranked = await resolveOtherPages(lang, base, queries, yearText, diagAliases);
     const best = pickBest(ranked, yearText);
     if (!best) continue;
     // 别名由同一批候选反推：与评分时用的是同一份 allPages。
@@ -983,7 +1066,15 @@ export async function resolveOtherCover(
       .map((value) => (value ?? "").trim())
       .filter(Boolean);
     if (!queries.length) continue;
-    const ranked = await resolveOtherPages(lang, base, queries, yearText);
+    // 别名只认「精确标题轮」那张消歧页自列的名单——搜索轮混进来的旁支消歧页
+    // （搜「日常幻想」会带回「性幻想」）会注入一堆无关别名。2026-10-02 线上实测：
+    // 不传这批别名时，Journey 搜索轮里《风之旅人》拿不到唯一证据被判 tier0，
+    // 只剩 tier2 的《隨興旅 -That's Journey-》（2006 年漫画）与《道奇Journey》
+    // 同池，靠 0.5 分之差把漫画 logo 当成了游戏封面。otherDetail 早就传了，
+    // 这里是唯一一处漏掉的调用点。
+    const coverExact = await wikiTitlePages(lang, titleVariants(base));
+    const coverAliases = disambiguationAliases(coverExact ?? [], compactTitle(base));
+    const ranked = await resolveOtherPages(lang, base, queries, yearText, coverAliases);
     const best = pickBest(ranked, yearText);
     if (!best) continue;
     // 补图范围：最优条目 + 它后面 2 名，**且不跨「有没有字面证据」这道界**

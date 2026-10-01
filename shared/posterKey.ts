@@ -47,10 +47,17 @@ export function mediaTypeForKind(kind: unknown): PosterMediaType | null {
  *  故事FM→萧煌奇《我們的故事》专辑、看理想→《勇者斗恶龙》游戏封面。
  *  gen2 的 15 行缓存里就固化了这些错图，key 不换就永远是那张签名照。
  *
+ * gen4（2026-10-02，迭代 3/20）：**缩略图桶宽**。这暴露了「其他维度」的
+ * 代数还有一个更广的用途——它不只是解析算法的版本号，还是**缓存产物格式的
+ * 版本号**。维基桶宽是**烧进 URL 字符串**的（`.../960px-....jpg`），所以任何
+ * 尺寸策略改动都会让全部已缓存行变成过期行：线上蒙娜丽莎改完仍返回 960px，
+ * 因为 D1 里那一行在解析之前就把结果短路了。代数 +1 即让 6 行自然失效，
+ * 不需要写 DELETE 脚本——这正是 gen2→gen3 当初用来清 gen1 孤儿的手法。
+ *
  * 服务端 `normalizeYear` 与前端都可能产出越界年份（《蒙娜丽莎》1503 在 API
  * 层就被丢掉），这里以同一口径兜一次，保证两端键一致。
  */
-export const OTHER_POSTER_GENERATION = "3";
+export const OTHER_POSTER_GENERATION = "4";
 
 /** 与 posterStore.normalizeYear 同一口径（1800–2200 的整数）。 */
 export function posterKeyYear(year?: number): number | undefined {

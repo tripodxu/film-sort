@@ -1,9 +1,11 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { readFileSync } from "node:fs";
 import {
   otherCandidateReport,
   otherConfidence,
   otherDetail,
   otherSearch,
+  pickThumbBucket,
   resetWikiDegraded,
   resolveOtherCover,
   titleMatchTier,
@@ -784,6 +786,93 @@ describe("other wiki pipeline", () => {
       expect(detail?.title).toBe("風之旅人");
     });
 
+    it("Journey：resolveOtherCover 也必须吃消歧页别名，否则漫画像 logo 当游戏封面", async () => {
+      // 2026-10-02 迭代 3 线上实录（缩略图代数 bump 让缓存作废后第一次真回源）：
+      // 连续 8 次 /api/posters/batch 都返
+      //   500px-Zatsu_Tabi_That's_Journey_Logo.webp
+      // 《隨興旅 -That's Journey-》是 2006 年日本漫画，与 2012 年游戏无关。
+      // 根因是 resolveOtherCover 调 resolveOtherPages 时没把「精确标题轮的消歧页
+      // 自列名单」传进去（otherDetail 一直传了），于是：
+      //   · 风之旅人 —— 与 "Journey" 零字重合，缺别名时 titleMatchTier 判 tier0
+      //     直接淘汰（真实条目拿不到别名 = 全池最靠后）
+      //   · 剩下同池的《隨興旅 -That's Journey-》与《道奇Journey》都是 tier2，
+      //     漫画像摘要更长、有封面，靠 0.5 分之差夺冠
+      // 这条用例同时锁住「必须传 coverAliases」与「漫画像不许赢」两件事。
+      const manga = {
+        title: "隨興旅 -That's Journey-",
+        pageprops: { page_image: "Zatsu_Tabi_That's_Journey_Logo.webp" },
+        extract:
+          "《隨興旅》（日語：ザSpecified That's Journey!）是 succession 於 2006 年發行的日本漫畫作品。",
+      };
+      const dodge = {
+        title: "道奇Journey",
+        pageprops: {},
+        extract:
+          "道奇Journey（官方中文名：道奇酷威）是一款由道奇品牌在2009至2020车型年间生产销售中型跨界SUV。",
+      };
+      const game = {
+        title: "风之旅人",
+        pageprops: { page_image: "Journey_PSN_Cover.png" },
+        extract: "《风之旅人》（英文版名：Journey）是一款冒险类独立游戏，由thatgamecompany开发。",
+      };
+      const disambig = {
+        query: {
+          pages: {
+            disambig: {
+              title: "Journey",
+              pageprops: { disambiguation: "" },
+              extract: "Journey可以指：\n旅行者合唱團，美國搖滾樂團\n風之旅人，2012年电子游戏",
+              ...noFreeImage,
+            },
+          },
+        },
+      };
+      installFetch([
+        // 精确标题轮：只有消歧页（与 otherDetail 同形状）
+        { match: /titles=Journey/, body: disambig },
+        // 纯标题轮把漫画像带回来（它 endsWith("journey")，标题层分不出是漫画）
+        { match: /gsrsearch=Journey$/, body: { query: { pages: { manga, dodge } } } },
+        // 类型词轮把真正的游戏页带回来（它零字面重合，只能靠这条 + 别名）
+        {
+          match: /gsrsearch=Journey 电子游戏/,
+          body: { query: { pages: { game } } },
+        },
+        {
+          match: /titles=File:Journey_PSN_Cover\.png/,
+          body: {
+            query: {
+              pages: {
+                file: {
+                  title: "File:Journey PSN Cover.png",
+                  imageinfo: [{ thumburl: `${UP}/2/2b/500px-Journey_PSN_Cover.png` }],
+                },
+              },
+            },
+          },
+        },
+      ]);
+      const cover = await resolveOtherCover("Journey", "Journey", 2012);
+      // 必须是游戏封面；漫画像 logo 与汽车都不许赢
+      expect(cover ?? "").toContain("Journey_PSN_Cover");
+      expect(cover ?? "").not.toContain("Zatsu_Tabi");
+      expect(cover ?? "").not.toContain("Dodge");
+    });
+
+    it("原名被埋在标题末尾的别名页必须降档（隨興旅 vs Journey）", () => {
+      // 线上实录（2026-10-02）：zh 维基有《隨興旅 -That's Journey-》，
+      // 石坂ケンタ 2019 年连载的日本漫画，**与游戏无关**。compact 以 journey
+      // 结尾，endsWith 成立拿到 tier2；而正确的《风之旅人》靠消歧页别名只到
+      // tier1 —— tier 优先于分数（7 vs 5.5），漫画 logo 直接压过游戏封面。
+      // isDescriptiveSuffix 只看 base 之后的**尾词**，对这一侧没设防。
+      expect(titleMatchTier("journey", "隨興旅 -That's Journey-")).toBe(0);
+      // 前缀里不含原名时仍是 tier2：中文本地化名不能被误杀
+      // （集合啦！動物森友會 ⊃ 动物森友会，前缀「集合啦」不含原名）
+      expect(titleMatchTier("动物森友会", "集合啦！動物森友會")).toBe(2);
+      expect(titleMatchTier("inside", "Inside (遊戲)")).toBe(2);
+      // 纯括号本地化名照旧
+      expect(titleMatchTier("纪念碑谷", "紀念碑谷 (遊戲)")).toBe(2);
+    });
+
     it("闸门不能反过来放行同前缀蹭词页（日常幻想 vs 日常幻想指南）", () => {
       // 直接验证分档：同前缀 + 描述性后缀必须落在被淘汰的一侧
       expect(titleMatchTier("日常幻想", "日常幻想指南")).toBe(0);
@@ -1131,5 +1220,78 @@ describe("上游降级信号", () => {
     expect(wikiWasDegraded()).toBe(true);
     resetWikiDegraded();
     expect(wikiWasDegraded()).toBe(false);
+  });
+});
+
+// ===== 缩略图桶宽白名单（PLAN-THUMBNAIL-SIZING 迭代 3/20） =====
+// 维基的缩略图只存在于固定桶宽，桶外一律 400 `Use thumbnail sizes listed on
+// https://w.wiki/GHai`，经 /api/image 代理呈现为 502 →「封面随机消失」。
+// 且官方语义是**向上**取桶：旧的 iiurlwidth:"600" 实际拿到 960px。
+// 2026-10-02 经线上 /api/image 代理逐个实测 11 桶全部 200：
+// 20px=0.7KB / 40px=1.4KB / 60px=2.5KB / 120px=7.2KB / 250px=26.6KB /
+// 330px=46.5KB / 500px=114.6KB / 960px=505.2KB / 1280px=957.4KB /
+// 1920px=2324.2KB / 3840px=9011.6KB。
+const WIKI_BUCKETS = [20, 40, 60, 120, 250, 330, 500, 960, 1280, 1920, 3840];
+
+describe("pickThumbBucket（维基缩略图桶宽）", () => {
+  it("每个桶宽都能精确命中自己", () => {
+    for (const bucket of WIKI_BUCKETS) {
+      expect(pickThumbBucket(bucket)).toBe(bucket);
+    }
+  });
+
+  it("非桶宽落在不超过它的最大桶（向下取，绝不向上白拿一档）", () => {
+    expect(pickThumbBucket(1)).toBe(20);
+    expect(pickThumbBucket(38)).toBe(20);
+    expect(pickThumbBucket(119)).toBe(60);
+    expect(pickThumbBucket(121)).toBe(120);
+    expect(pickThumbBucket(200)).toBe(120);
+    expect(pickThumbBucket(331)).toBe(330);
+    expect(pickThumbBucket(501)).toBe(500);
+    // 回归锁：旧的 600 因为向上取桶落到 960，这里必须仍是 500
+    expect(pickThumbBucket(600)).toBe(500);
+  });
+
+  it("边界与非法输入不炸，也不静默放大", () => {
+    expect(pickThumbBucket(0)).toBe(20);
+    expect(pickThumbBucket(-5)).toBe(20);
+    expect(pickThumbBucket(3840)).toBe(3840);
+    expect(pickThumbBucket(99999)).toBe(3840);
+    expect(pickThumbBucket(Number.NaN)).toBe(20);
+    expect(pickThumbBucket(Number.POSITIVE_INFINITY)).toBe(20);
+    expect(pickThumbBucket(Number.NEGATIVE_INFINITY)).toBe(20);
+  });
+});
+
+describe("维基桶宽接线（PLAN-THUMBNAIL-SIZING tripwire）", () => {
+  const source = readFileSync(new URL("./other.ts", import.meta.url), "utf8");
+
+  it("桶表与官方 $wgThumbnailSteps 完全一致（含官方出处与抓取日期）", () => {
+    const table = source.match(/const THUMB_BUCKETS = \[([^\]]+)\] as const;/);
+    expect(table, "找不到 THUMB_BUCKETS 定义").toBeTruthy();
+    const actual = table![1]
+      .split(",")
+      .map((part) => Number(part.trim()))
+      .filter((n) => Number.isFinite(n));
+    expect(actual).toEqual(WIKI_BUCKETS);
+    expect(source).toContain("w.wiki/GHai");
+    expect(source).toContain("$wgThumbnailSteps");
+  });
+
+  it("没有把上界偷偷改回 600（那会让 500 的论证失效）", () => {
+    const width = source.match(/const OTHER_THUMB_MAX_WIDTH = (\d+);/);
+    expect(width, "找不到 OTHER_THUMB_MAX_WIDTH 定义").toBeTruthy();
+    expect(Number(width![1])).toBe(500);
+  });
+
+  it("不再出现字面量 iiurlwidth/pithumbsize（全部走 pickThumbBucket）", () => {
+    // 注释里会引用旧字面量（"所以旧的 iiurlwidth:\"600\" 拿到的是 960px"），
+    // 那是解释性文字不是代码，所以先剥掉注释再扫。
+    const code = source.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^[^\S\n]*\/\/.*$/gm, "");
+    expect(code).not.toMatch(/iiurlwidth:\s*"/);
+    expect(code).not.toMatch(/pithumbsize:\s*"/);
+    const wired = code.match(/pickThumbBucket\(OTHER_THUMB_MAX_WIDTH\)/g) ?? [];
+    // 三处：wikiFileThumbUrls 的 iiurlwidth + 两个 pithumbsize
+    expect(wired).toHaveLength(3);
   });
 });
