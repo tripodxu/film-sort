@@ -23,7 +23,21 @@
 - **测试**：新增 `shared/posterKey.test.ts` ×8（三段/五段键形态、旧代数键取不到、年份同口径、
   前端不许手抄）+ `worker/posterStore.test.ts` +1（D1 里躺着旧代数错图行时，`loadPosterUrls`
   按当前键查不到、落库只写新键）；全量 514 passed·9 skipped（+9）
-- **验证**：五道门禁绿（check/lint 0 errors/format:check/test 514·9/build）
+- **验证**：五道门禁 ✅（check/lint 0 errors/format:check/test 514·9/build 4.24s）｜ 线上 ✅
+  （`4dcd622` 推送 + Cloudflare 自动部署后，cb 时间戳绕 CDN）：
+  ① posters/batch **旧格式键**（english 留空，正是此前被 D1 错图短路的那批）全部改判正确——
+  `other|动物森友会||2020|2` → Animal_Crossing_New_Horizons.png、`other|journey||2012|2` →
+  Journey_PSN_Cover.png、`other|蒙娜丽莎|mona lisa||2` → Mona Lisa 960px、`other|inside||2016|2` →
+  INSIDE_Cover.jpg；新格式键（english 非空）同样全对；单条 `GET /api/posters?q=…&type=other&year=2020`
+  也走新键返回正确封面；② `/api/other/detail` 十件复测全对（动物森友会+2020、Inside+2016、蒙娜丽莎、
+  塞尔达传说 王国之泪+2023、只狼+2019、黑神话 悟空+2024、艾尔登法环+2022、底特律 变人+2018、
+  纪念碑谷+2014；Journey+2012 这次摘到 en 页 `Journey (2012 video game)` + Journey_Title_Poster.png，
+  与 zh 页 Journey_PSN_Cover.png 同为该作封面，非错配）；③ 线上 JS bundle（index-D_X-wD8d.js）
+  已含共享键实现（`normalize("NFKC")` 段 + `const …="2"` 代数 + `a>=1800&&a<=2200` 年份闸）
+- **部署后首请求抖动**：刚部署完的头几个请求出现过一次异常（纪念碑谷+2014 → "List of sites in
+  Jinan" 济南景点列表页、底特律 变人+2018 → 404），即刻原参重试三次全部恢复正确 → 判定为
+  isolate 冷启动/上游 gsrsearch 抖动，非本批改动引入（详情链逻辑本批零改动）。**部署后复测
+  请至少重试一次**再下结论
 - **遗留**：孤儿行仍在表里（无害但占空间），有 CF 凭证时可择机 `DELETE ... WHERE media_key LIKE 'other|%'`
   清理；`other|%` 的行从此都带代数后缀
 
