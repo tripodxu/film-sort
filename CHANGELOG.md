@@ -9,8 +9,8 @@
 - **根因三（opensearch 盲区）**：zh opensearch("动物森友会") 只回 6 个简体错页、opensearch("Journey") 把 Journey(EP專輯) 排在游戏页前——换成 gsrsearch + 评分（页标题含用户词 +3/条目名带限定词 +3/类型词 +2/infobox 封面 +1.5/深度 +1/系列消歧语式 -3/年份命中 +2）
 - **改了哪些**：`worker/other.ts` 重写取图与选页链（新增 `resolveOtherCover`、`wikiFileThumbUrls`、`OTHER_TYPE_WORDS`；`otherDetail`/`otherSearch`/`wikiPageImageAny` 补 pageprops/消歧剔除/变体/评分择优；`wikiPageImageAny` 删 `files[0]` 兜底）；`worker/media.ts` other 分支以 `resolveOtherCover` 打头、`searchWikiPoster` 的 exact/gsrsearch 加 `pageprops` 并把选图扩到 page_image、消歧页剔除；`worker/index.ts` `/api/other/detail` 与 `/api/artwork/detail?kind=other` 接收 `year`；`src/App.tsx` other 详情请求带上 `work.year`
 - **顺手订正（2026-09-28 台账的误判）**：`files[0]` 兜底与 `SKIP` 曾被认为命中 series/franchise 首页词的高频图，实测只是**文件名字母序巧合**
-- **测试**：新增 `worker/other.test.ts`（×10，fetch 桩录像级 fixture，离线）：年份摘页、消歧页剔除、详情改走搜索、候选海报补齐、infobox 封面优先、文件名关键词匹配/无命中返回 null
-- **已知限制**：未上线云端的**线上验收暂无法执行**——本机到 wikipedia 全系域名 DNS 被污染（zh.wikipedia.org→199.16.158.9、wikipedia.org→31.13.94.41，baidu 等正常），推包后需在部署环境用清单三条目复测；且旧解析结果会短路新代码，需双清 D1 poster_urls（`DELETE ... WHERE media_key LIKE 'other\|%'`）+ 清海报缓存
+- **测试**：新增 `worker/other.test.ts`（×10，fetch 桩录像级 fixture，离线）：年份摘页、消歧页剔除、同名异作跨过（西遊記 extract 含 2012）、详情改走搜索、候选海报补齐、infobox 封面优先、文件名关键词匹配/无命中返回 null
+- **已知限制**：线上复测（部署后）新链在**未缓存键**上全部正确——`风之旅人|Journey|2012`→Journey_PSN_Cover.png、`纪念碑谷|Monument Valley|2014`→Monument_Valley_icon_unrounded.jpg（游戏 infobox 封面，非真实地貌照片）、`/api/other/detail?name=动物森友会&year=2020`→集合啦！動物森友會；但 D1 里的**旧键**（`other|动物森友会||2020` 大角鸮照、`other|journey||2012` 道奇汽车）会短路新代码，须双清 poster_urls（`DELETE ... WHERE media_key LIKE 'other|%'`）+ 清海报缓存。另：zh gsrsearch("Journey") 会把《西遊記》排很前（其 extract 含 2012 重播）→ 已加严为「条目自身首个年份≠用户年份就降权 + pickBest 三档择优」
 
 ## 2026-09-30 · 优化冲刺 Phase 7 · 文化年度报告（Wrapped 年鉴卡）
 
