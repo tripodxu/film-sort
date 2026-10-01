@@ -219,7 +219,9 @@ async function wikiSearchOnce(lang: "zh" | "en", query: string): Promise<WikiPag
 }
 
 /** 评分择优：每个查询词跑「纯标题轮 + 作品类型词轮」，同页去重后按分排序。
- *  纯标题轮已找到带封面的结果就不再跑类型词轮（省一次请求）。 */
+ *  两轮都必须跑：纯标题轮常被同名异作占据（线上实测 zh gsrsearch("Journey")
+ *  首位是《西遊記》且带封面），若因「已见到封面」就跳过类型词轮，正确的
+ *  「风之旅人」永远进不了候选集（2026-09-30 线上复测的教训）。 */
 async function resolveOtherPages(
   lang: "zh" | "en",
   baseTitle: string,
@@ -230,14 +232,11 @@ async function resolveOtherPages(
   const seen = new Set<string>();
   const scored: Array<{ page: WikiPage; score: number }> = [];
   for (const query of queries) {
-    let hasImage = false;
     for (const search of [query, `${query} ${OTHER_HINT[lang]}`]) {
-      if (search !== query && hasImage) break;
       for (const page of await wikiSearchOnce(lang, search)) {
         const title = (page.title ?? "").trim();
         if (!title || seen.has(title)) continue;
         seen.add(title);
-        if ((page.pageprops ?? {}).page_image) hasImage = true;
         const score = scoreOtherPage(page, compactBase, year);
         if (score > -Infinity) scored.push({ page, score });
       }

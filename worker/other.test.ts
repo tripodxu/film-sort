@@ -320,6 +320,60 @@ describe("other wiki pipeline", () => {
     expect(detail?.year).toBe(2012);
   });
 
+  it("Journey：纯标题轮被同名异作占据时，类型词轮仍必须跑（风之旅人才能进候选）", async () => {
+    // 线上实测：zh gsrsearch("Journey") 首位《西遊記》且带封面——若因「已见封面」
+    // 跳过「Journey 电子游戏」轮，风之旅人永远不在候选集里（2026-09-30 回归教训）
+    installFetch([
+      { match: /titles=Journey/, body: { query: { pages: {} } } },
+      {
+        match: /gsrsearch=Journey&/,
+        body: {
+          query: {
+            pages: {
+              tv: {
+                title: "西遊記 (無綫1996年電視劇)",
+                pageprops: { page_image: "Journey_to_the_West_I.png" },
+                extract:
+                  "《西遊記》是香港電視廣播有限公司古裝神話電視劇，共三十集。1996年11月首播，2012年凌晨重播。",
+              },
+            },
+          },
+        },
+      },
+      {
+        match: /gsrsearch=Journey\s/,
+        body: {
+          query: {
+            pages: {
+              game: {
+                title: "風之旅人",
+                pageprops: { page_image: "Journey_PSN_Cover.png" },
+                extract: "《風之旅人》是thatgamecompany開發的2012年電子遊戲。",
+              },
+            },
+          },
+        },
+      },
+      {
+        match: /titles=File:Journey_PSN_Cover\.png/,
+        body: {
+          query: {
+            pages: {
+              file: {
+                title: "File:Journey PSN Cover.png",
+                imageinfo: [{ thumburl: `${UP}/2/2b/600px-Journey_PSN_Cover.png` }],
+              },
+            },
+          },
+        },
+      },
+    ]);
+    const detail = await otherDetail("Journey", 2012);
+    expect(detail?.title).toBe("風之旅人");
+    expect(detail?.year).toBe(2012);
+    expect(detail?.poster_url).toBe(`${UP}/2/2b/600px-Journey_PSN_Cover.png`);
+  });
+
   it("otherSearch 用 infobox 封面文件名补齐各候选的海报", async () => {
     installFetch([
       { match: /gsrsearch=动物森友会/, body: ANIMAL_CROSSING },
