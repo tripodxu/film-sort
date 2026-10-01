@@ -1,16 +1,27 @@
 # Changelog
 
+## 2026-09-30 · 修复续：「其他」维度三轮线上回归（同名异作 / 繁简失配 / 年份信号）
+
+上面那条上线后逐轮线上复测，又暴露三个层层递进的缺陷，均单独推送 + 部署 + 回归：
+
+- **根因四（省请求短路，191ec5f）**：`resolveOtherPages` 原有 `if (search !== query && hasImage) break;`——纯标题轮（gsrsearch=Journey）只要见到带 `pageprops.page_image` 的页就跳过「Journey 电子游戏」类型词轮，而风旅人只在类型词轮出现（线上 `/api/other/list?key=Journey 电子游戏` 首位即风旅人）。结果年份择优根本选不到正确页，Journey 详情仍返回《西遊記 (無綫1996年電視劇)》。**修法**：删短路，两轮都跑（同页仍去重）
+- **根因五（封面与详情两张皮，eb11566）**：同作品详情对、封面错（蒙娜丽莎→Stray 游戏封面、塞尔达→林克 E3 照片）——封面链（评分择优）与详情链（精确标题直查）精度不同。**修法**：`computePosters` other 第一档改走 `otherDetail(title, year)`，封面与详情弹窗同一页同一图；`toWork` 海报改 `thumbnail ?? original ?? fileUrl`（original 优先会返回 Commons 数十 MB 全尺寸扫描件）
+- **根因六（zh 繁简失配 + 年份信号取错，8e9d2f6 + e044093）**：zh 维基条目名是繁体（動物森友會/薩爾達傳說 王國之淚）、用户简体输入，`compactTitle` 只去标点+小写不转简繁 →「页标题含用户词」这条最强消歧信号**永不亮**，作品页与角色页/系列页同分，谁排前全看 gsrsearch 排序抖动（线上同一请求先对后错）。**修法**：`compactTitle`/`wikiKey` 先过 `T2S_SOURCE` 繁简表归一，`scoreOtherPage` 标题改三级（剥括号后：裸标题 equal +4 / startsWith|endsWith +3 / 整体包含 +1）。动物森友会 2020 仍摘到角色页「傑克 (動物森友會)」（猫图）→ 真正原因是年份信号取错：摘要首年对作品页和角色页都不可靠（2020 正作首年=2018 公布年、角色页首年=2020）。**修法**：删「摘要首年≠用户年份 −2」，改「**条目名**自带年份 ≠ 用户年份 −4」（标题年份才是本体年份：西遊記 (無綫1996年電視劇)；正则 `/(?:1[5-9]|20)\d{2}/` 不带 `\b`——中文旁汉字时 `\b` 永不成立）
+- **验证（e044093 部署后，cb 时间戳绕 CDN 3600s）**：`/api/other/detail` 十件全对——动物森友会→集合啦！動物森友會 + Animal_Crossing_New_Horizons.png、Inside→Inside (游戏) + INSIDE_Cover.jpg、Journey→风之旅人 + Journey_PSN_Cover.png、蒙娜丽莎、塞尔达传说 王国之泪、只狼、黑神话 悟空、底特律 变人、纪念碑谷、艾尔登法环；posters/batch 未缓存新键也全对
+- **测试**：worker/other.test.ts 增至 ×13（新增：类型词轮不可跳过、繁简失配下作品页压过角色页、动物森友会 2020→集合啦！動物森友會）
+- **已知限制**：D1 `poster_urls` 侧表无 TTL，**旧键**仍会短路新代码返回旧错图（`other|动物森友会||2020`→大角鸮、`other|journey||2012`→道奇汽车、`other|蒙娜丽莎|mona lisa|`→Stray 封面），须 `DELETE FROM poster_urls WHERE media_key LIKE 'other|%'` + 清海报缓存；另：本机到 wikipedia 全系域名 DNS 污染，复测只能走线上端点，本机无 `CLOUDFLARE_API_TOKEN`/`ACCOUNT_ID` 无法执行 remote SQL，双清须用户侧做
+
 ## 2026-09-30 · 修复：「其他」维度封面/详情错配（游戏品类）
 
 用户清单条目（动物森友会 2020 / Inside 2016 / Journey 2012）线上复现三类错配，逐一定诊修复。
 
 - **根因一（取图链）**：`pageimages` 的默认 free 档对商品化封面**政策性恒空**（动物森友会/Inside/Journey 的 pageimage 全空），旧链只能靠 `images→imageinfo` 在文章文件列表里翻；翻取时又以 `files[0]` 兜底，动物森友会因此命中文章配图**大角鸮照片**、蒙娜丽莎命中**同页拉斐尔像**、Journey 命中**2012 Dodge Journey 汽车**。而 infobox 封面文件名一直躺在 `pageprops.page_image` 里——**非自由封面也有值**，实测 Inside(游戏)=INSIDE_Cover.jpg、風之旅人=Journey_PSN_Cover.png、集合啦！動物森友會=Animal_Crossing_New_Horizons.png，只需补一次 imageinfo 换 URL
-- **根因二（消歧）**：`otherDetail`/`otherSearch` 全靠 opensearch 首条直进——动物森友会命中系列页、Inside 命中消歧页（year=1999）。改为「gsrsearch 评分择优 + `pageprops.disambiguation` 机械剔除消歧页 + 标题分隔符变体精确直查」；**年份是消歧最硬信号**（用户清单格式「标题 - 游戏 (年)」）：给了年份就优先摘述命中年份的条目，动物森友会由此越过系列页/2001 首作落到 2020 正作
+- **根因二（消歧）**：`otherDetail`/`otherSearch` 全靠 opensearch 首条直进——动物森友会命中系列页、Inside 命中消歧页（year=1999）。改为「gsrsearch 评分择优 + `pageprops.disambiguation` 机械剔除消歧页 + 标题分隔符变体精确直查」；**年份是消歧最硬信号**（用户清单格式「标题 - 游戏 (年)」）：给了年份就优先摘述命中年份的条目，动物森友会由此越过系列页/2001 首作落到 2020 正作（年份信号历经三版迭代，终态=「**条目名**自带年份 vs 用户年份」，见下条）
 - **根因三（opensearch 盲区）**：zh opensearch("动物森友会") 只回 6 个简体错页、opensearch("Journey") 把 Journey(EP專輯) 排在游戏页前——换成 gsrsearch + 评分（页标题含用户词 +3/条目名带限定词 +3/类型词 +2/infobox 封面 +1.5/深度 +1/系列消歧语式 -3/年份命中 +2）
 - **改了哪些**：`worker/other.ts` 重写取图与选页链（新增 `resolveOtherCover`、`wikiFileThumbUrls`、`OTHER_TYPE_WORDS`；`otherDetail`/`otherSearch`/`wikiPageImageAny` 补 pageprops/消歧剔除/变体/评分择优；`wikiPageImageAny` 删 `files[0]` 兜底）；`worker/media.ts` other 分支以 `resolveOtherCover` 打头、`searchWikiPoster` 的 exact/gsrsearch 加 `pageprops` 并把选图扩到 page_image、消歧页剔除；`worker/index.ts` `/api/other/detail` 与 `/api/artwork/detail?kind=other` 接收 `year`；`src/App.tsx` other 详情请求带上 `work.year`
 - **顺手订正（2026-09-28 台账的误判）**：`files[0]` 兜底与 `SKIP` 曾被认为命中 series/franchise 首页词的高频图，实测只是**文件名字母序巧合**
-- **测试**：新增 `worker/other.test.ts`（×10，fetch 桩录像级 fixture，离线）：年份摘页、消歧页剔除、同名异作跨过（西遊記 extract 含 2012）、详情改走搜索、候选海报补齐、infobox 封面优先、文件名关键词匹配/无命中返回 null
-- **已知限制**：线上复测（部署后）新链在**未缓存键**上全部正确——`风之旅人|Journey|2012`→Journey_PSN_Cover.png、`纪念碑谷|Monument Valley|2014`→Monument_Valley_icon_unrounded.jpg（游戏 infobox 封面，非真实地貌照片）、`/api/other/detail?name=动物森友会&year=2020`→集合啦！動物森友會；但 D1 里的**旧键**（`other|动物森友会||2020` 大角鸮照、`other|journey||2012` 道奇汽车）会短路新代码，须双清 poster_urls（`DELETE ... WHERE media_key LIKE 'other|%'`）+ 清海报缓存。另：zh gsrsearch("Journey") 会把《西遊記》排很前（其 extract 含 2012 重播）→ 已加严为「条目自身首个年份≠用户年份就降权 + pickBest 三档择优」
+- **测试**：新增 `worker/other.test.ts`（×13，fetch 桩录像级 fixture，离线；含三轮线上回归补的用例：类型词轮不可跳过、繁简失配下作品页压过角色页、动物森友会 2020→集合啦！動物森友會）：年份摘页、消歧页剔除、同名异作跨过（西遊記 extract 含 2012）、详情改走搜索、候选海报补齐、infobox 封面优先、文件名关键词匹配/无命中返回 null
+- **已知限制**：线上复测（部署后）新链在**未缓存键**上全部正确——`风之旅人|Journey|2012`→Journey_PSN_Cover.png、`纪念碑谷|Monument Valley|2014`→Monument_Valley_icon_unrounded.jpg（游戏 infobox 封面，非真实地貌照片）、`/api/other/detail?name=动物森友会&year=2020`→集合啦！動物森友會；但 D1 里的**旧键**（`other|动物森友会||2020` 大角鸮照、`other|journey||2012` 道奇汽车）会短路新代码，须双清 poster_urls（`DELETE ... WHERE media_key LIKE 'other|%'`）+ 清海报缓存。另：zh gsrsearch("Journey") 会把《西遊記》排很前（其 extract 含 2012 重播）→ 先加严为「条目自身首个年份≠用户年份就降权 + pickBest 三档择优」，e044093 改为「条目名自带年份」信号，详见上一条
 
 ## 2026-09-30 · 优化冲刺 Phase 7 · 文化年度报告（Wrapped 年鉴卡）
 
