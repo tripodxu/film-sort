@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { BookOpen, Film, Library, Music2 } from "lucide-react";
 import type { Artwork, MediaKind } from "../data/media";
+import { mediaTypeForKind, posterMediaKey } from "../../shared/posterKey";
 
 // ===== 并发闸门 =====
 // 单次 flush 只发一个请求，但多份榜单可能同时触发；把在途请求限制在 8 个以内。
@@ -32,14 +33,10 @@ const FLUSH_DELAY_MS = 50;
 const MAX_BATCH_SIZE = 30;
 const BATCH_TIMEOUT_MS = 60000;
 
-const TYPE_BY_KIND: Record<string, string> = {
-  film: "movie",
-  book: "book",
-  music: "music",
-  // 「其他」维度走服务端 wiki 取图管线（posterStore/media 的 type=other 分支），
-  // 与 worker 端 mediaTypeForKind 保持一致；维基图域已在 allowedImage/CSP 放行。
-  other: "other",
-};
+// 「其他」维度走服务端 wiki 取图管线（posterStore/media 的 type=other 分支）；
+// kind→type 与兜底键都从 shared/posterKey.ts 取唯一实现（服务端同一份），
+// 维基图域已在 allowedImage/CSP 放行。
+const TYPE_BY_KIND = (kind: MediaKind): string => mediaTypeForKind(kind) ?? "movie";
 
 interface BatchEntry {
   work: Artwork;
@@ -52,18 +49,13 @@ const batchQueue: BatchEntry[] = [];
 /** 本次页面加载是否已经发过第一批请求（决定是否带 retry）。 */
 let firstBatchDispatched = false;
 
-function normalizeKey(value: string): string {
-  return value.normalize("NFKC").trim().toLowerCase();
-}
-
-/** 服务端缓存键的本地等价物，仅在服务端未回显 keys 时作为兜底。 */
+/**
+ * 服务端缓存键的本地等价物，仅在服务端未回显 keys 时作为兜底。
+ * 直接复用 shared/posterKey.ts 的唯一实现（含 `other` 维度的代数后缀），
+ * 不再手抄一份——两端漂移的后果是「存了但取不到」，且没有任何报错信号。
+ */
 function batchKey(work: Artwork, kind: MediaKind): string {
-  return [
-    TYPE_BY_KIND[kind] ?? "movie",
-    normalizeKey(work.title),
-    normalizeKey(work.subtitle ?? work.title),
-    work.year ?? "",
-  ].join("|");
+  return posterMediaKey(work.title, work.subtitle ?? work.title, TYPE_BY_KIND(kind), work.year);
 }
 
 function flushBatch(): void {
@@ -83,7 +75,7 @@ async function dispatchBatch(batch: BatchEntry[]): Promise<void> {
     title: entry.work.title,
     english: entry.work.subtitle ?? entry.work.title,
     year: entry.work.year,
-    type: TYPE_BY_KIND[entry.kind] ?? "movie",
+    type: TYPE_BY_KIND(entry.kind),
   }));
 
   // 每次页面加载的**首次**批量带 retry：服务端据此绕过「被上游限流」的负缓存

@@ -233,6 +233,27 @@ describe("loadPosterUrls（Phase 1 先查库用）", () => {
     } as unknown as D1Database;
     await expect(loadPosterUrls(failing, ["music|a|a|"])).resolves.toEqual(new Map());
   });
+
+  it("旧代数 other 行不再被读到：D1 无 TTL，错图只能靠换键作废", async () => {
+    // 复刻线上事故：旧解析器把四段键 other|动物森友会||2020 写成了大角鸮封面。
+    const legacy = fakeDb([
+      {
+        media_key: "other|动物森友会||2020",
+        urls: JSON.stringify(["https://upload.wikimedia.org/.../Bubo_virginianus.jpg"]),
+      },
+    ]);
+    // 当前键推导带代数后缀 → 查不到旧行 → 走新解析器（而不是被错图永久短路）。
+    const current = posterKeyFor({ title: "动物森友会", type: "other", year: 2020 });
+    expect(current).not.toBe("other|动物森友会||2020");
+    expect(await loadPosterUrls(legacy, [current!])).toEqual(new Map());
+    // 落库也只写新键，旧行孤儿化（读侧不许删数据）。
+    const writes: Array<{ sql: string; args: unknown[] }> = [];
+    const fresh = fakeDb([], (sql, args) => writes.push({ sql, args }));
+    await saveResolvedPosters(fresh, [
+      { key: current!, urls: ["https://upload.wikimedia.org/.../Animal_Crossing.jpg"] },
+    ]);
+    expect(writes[0].args[0]).toBe(current);
+  });
 });
 
 describe("saveResolvedPosters", () => {

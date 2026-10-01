@@ -1,5 +1,32 @@
 # Changelog
 
+## 2026-09-30 · 修复续二：错图不靠 SQL 双清也能作废（other 键带解析器代数）
+
+上一条的「已知限制」说旧键错图必须 `DELETE FROM poster_urls WHERE media_key LIKE 'other|%'` 才能治，
+但本机没有 `CLOUDFLARE_API_TOKEN`/`ACCOUNT_ID`，remote SQL 只能等用户侧执行。于是把作废手段
+收回代码里——**换键**而不是删行（读侧不许删数据，与 cachePurge 的代次失效同一思路）：
+
+- **根因**：D1 `poster_urls` 行无 TTL，旧解析器写下的错图行会**永久**短路新代码。这不是 bug，
+  是有意设计的持久缓存；错的是「解析器写错过之后没有办法作废」。线上实测（e044093 部署后）
+  三个旧键仍返回大角鸮 / 2012 道奇 Journey / Stray 游戏封面，而同一作品的新键（english 非空值）
+  全部正确——差别只在键不同，证明新解析器没问题。
+- **改了哪些**：新增 `shared/posterKey.ts`——海报键的**唯一实现**（`posterKeySegment` /
+  `mediaTypeForKind` / `posterKeyYear` / `posterMediaKey`），客户端（`src/components/Poster.tsx`
+  的 `batchKey` 兜底与 `TYPE_BY_KIND`）与 Worker（`worker/media.ts` 转出给单条 route / 批量
+  route / 读取挂载三处）共用；`other` 维度键尾部多一段 `OTHER_POSTER_GENERATION = "2"`，
+  代数 +1 即旧行孤儿化。movie/book/music 保持裸键（没有同类事故，且一次推平常=全站海报重新
+  回源，豆瓣侧大概率 418）。客户端兜底键原先手抄了一份竖线拼接公式，改为直接调共享函数，
+  并补一条源码级测试盯「不许再手抄」。
+- **为什么年份也要收进共享函数**：`normalizeYear` 只放行 1800–2200，《蒙娜丽莎》1503 在 API 层
+  就被丢掉，而前端兜底键仍会拼上 1503 ——两端键差一段。`posterKeyYear` 用同一口径兜一次，
+  服务端各路径本已归一（batch 走 normalizePosterItem、单条 route 自己校验），属无行为变化的对齐。
+- **测试**：新增 `shared/posterKey.test.ts` ×8（三段/五段键形态、旧代数键取不到、年份同口径、
+  前端不许手抄）+ `worker/posterStore.test.ts` +1（D1 里躺着旧代数错图行时，`loadPosterUrls`
+  按当前键查不到、落库只写新键）；全量 514 passed·9 skipped（+9）
+- **验证**：五道门禁绿（check/lint 0 errors/format:check/test 514·9/build）
+- **遗留**：孤儿行仍在表里（无害但占空间），有 CF 凭证时可择机 `DELETE ... WHERE media_key LIKE 'other|%'`
+  清理；`other|%` 的行从此都带代数后缀
+
 ## 2026-09-30 · 修复续：「其他」维度三轮线上回归（同名异作 / 繁简失配 / 年份信号）
 
 上面那条上线后逐轮线上复测，又暴露三个层层递进的缺陷，均单独推送 + 部署 + 回归：

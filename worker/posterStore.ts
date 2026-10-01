@@ -1,4 +1,4 @@
-import { posterMediaKey } from "./media";
+import { mediaTypeForKind, posterMediaKey, type PosterMediaType } from "../shared/posterKey";
 
 /**
  * 海报地址持久化。
@@ -7,16 +7,11 @@ import { posterMediaKey } from "./media";
  * 而豆瓣对批量查询会回 418，结果大部分条目拿不到海报、只能显示占位图标。
  * 把解析结果按 `type|title|english|year` 落库后，同一榜单只有第一次需要回源。
  */
-export type PosterMediaType = "movie" | "book" | "music" | "other";
 
-/** 与前端 Poster.tsx 的 TYPE_BY_KIND 保持一致（other=维基系，走 wiki 取图管线）。 */
-export function mediaTypeForKind(kind: unknown): PosterMediaType | null {
-  if (kind === "film") return "movie";
-  if (kind === "book") return "book";
-  if (kind === "music") return "music";
-  if (kind === "other") return "other";
-  return null;
-}
+// 唯一实现在 shared/posterKey.ts（客户端 Poster.tsx 的同名映射共用）；此处
+// 再导出以保持既有 import 路径不变。
+export type { PosterMediaType };
+export { mediaTypeForKind };
 
 export interface NormalizedPosterItem {
   title: string;

@@ -10,6 +10,16 @@
 
 ## 进行中 / 最近
 
+### T-20260930-03 · 「其他」维度旧错图键作废（posterMediaKey 换代数）
+- **状态**：🔄 进行中（五道门禁绿 + 换键逻辑单测 ✅；**线上复测未做**）｜ **负责人**：本 agent｜ **上级**：T-20260930-02（其遗留风险②「双清 D1 未做」即本任务入口）
+- **任务类型**：§2.6（外部平台/海报管线）+ §2.7
+- **最小上下文**：`shared/posterKey.ts`（新增，海报键唯一实现）+ `worker/media.ts`（键函数转出 + `key` 别名）+ `worker/posterStore.ts`（posterKeyFor 内部改用共享体，对外 API 不变）+ `src/components/Poster.tsx`（batchKey 兜底改调共享函数，删手抄 normalizeKey）
+- **改了什么**：`posterMediaKey()` 在 `type==="other"` 时输出五段键 `other|title|english|year|<代数>`，代数常量 `OTHER_POSTER_GENERATION = "2"`；movie/book/music 仍为原四段裸键。客户端兜底键公式原先手抄竖线拼接+猜测 `type`，改为直接 import 共享实现；年份过滤 `posterKeyYear` 也收进共享（1800–2200），只为对齐前端兜底键（服务端 batch/单条路径本已归一，属无行为变化）。
+- **为什么**：D1 `poster_urls` 行无 TTL，`saveResolvedPosters` 是 UPSERT 但 batch/单条 route 过滤 `!known?.get(key)?.length` → 已存在的错图行永不重写，永久短路新解析器（运维教训：「调取图逻辑后必须双清」）。但本机无 `CLOUDFLARE_API_TOKEN`/`ACCOUNT_ID`，remote SQL 不可执行。改用 cachePurge 同思路的「代次失效」：代数 +1 后旧行既取不到也不必删（读侧永不删数据）。只动 other——movie/book/music 无同类事故，且一次推平常=全站海报重新回源，豆瓣侧大概率 418。
+- **验证状态**：五道门禁 ✅（check ✅ / lint 0 errors·29 warnings 预存 / format:check ✅ / test **514 passed·9 skipped**（+9：shared/posterKey.test.ts ×8 + worker/posterStore.test.ts +1）/ build ✅ 4.24s）｜ 离线 ✅（fakeDb 躺 `other|动物森友会||2020`→大角鸮行时，`loadPosterUrls` 按当前键查不到、`saveResolvedPosters` 只写新键）｜ **线上 ⬜**
+- **遗留风险**：① 旧代数四段键行成为永不读取的孤儿（无害占空间，有 CF 凭证时可择机 `DELETE ... WHERE media_key LIKE 'other|%'`）；② 换键后所有 `other` 封面首次都要重新走解析器（wiki 请求量上升，冷缓存耗时需前端实测，详情端已有 30s 超时）；③ `posterMediaKey` 签名不变（五段只在 type=other 时出现），旧调用点零改动，但下游如有解析 `split("|")` 取第 3 段的地方需注意（已全仓 grep 确认无）
+- **下一步（给接手者）**：推送部署后线上复测 posters/batch——旧格式请求的键应变为 `other|动物森友会||2020|2` 等，D1 无此行 → 走新解析器 → 返回正确封面（动物森友会→Animal_Crossing_New_Horizons.png / journey→Journey_PSN_Cover.png / 蒙娜丽莎→Mona Lisa 960px）；同步复测清单三条目 `/api/other/detail` 与 posters/batch 新键
+
 ### T-20260930-02 · 修复：「其他」维度封面/详情错配（游戏品类取图与消歧）
 - **状态**：🔄 进行中（五道门禁绿 + 离线 fixture 回归 ×13；**线上已复测：详情 10/10 全对、新键封面全对，只剩「双清 D1 poster_urls」未做**）｜ **负责人**：本 agent｜ **上级**：T-20260928-07（其遗留风险「底特律 变人→天际线 / 纪念碑谷→真实照片」即本任务入口）
 - **任务类型**：§2.6（外部平台/海报管线）+ §2.7
@@ -19,6 +29,7 @@
 - **验证状态**：五道门禁 ✅（**505 passed·9 skipped**，+13 例 worker/other.test.ts，最终态 e044093）｜ 离线 fixture 回归 ✅（fetch 桩录像：年份摘页/消歧剔除/同名异作跨过[西遊記 extract 含 2012]/详情改走搜索/候选海报补齐/infobox 封面优先/文件名关键词命中与无命中返回 null/纯标题轮被异作占据时类型词轮仍须跑/繁简失配下作品页不被角色页压/动物森友会 2020→集合啦！動物森友會）｜ **线上 ✅（2026-09-30）**：① `/api/other/list?key=动物森友会` 已换成 gsrsearch 评分链，返回遊戲/集合啦！動物森友會等繁体游戏页且**每条都带 infobox 封面**；② `/api/other/detail?name=动物森友会&year=2020` → 集合啦！動物森友會 + Animal_Crossing_New_Horizons.png ✅；③ 同端点 Inside&year=2016 → Inside (游戏) + INSIDE_Cover.jpg ✅；④ Journey&year=2012 初版返回《西遊記 (無綫1996年電視劇)》（其 extract 含 2012 重播）→ 年份三档择优 + 191ec5f 删省请求短路 + e044093 年份信号改为条目名自带年份，历次均再部署复测；⑤ **新键** posters/batch 实测：`风之旅人|Journey|2012` → Journey_PSN_Cover.png、`纪念碑谷|Monument Valley|2014` → Monument_Valley_icon_unrounded.jpg（均为 infobox 封面，非地貌照片）✅；⑥ 旧键 `other|动物森友会||2020`、`other|journey||2012` 仍返回 D1 里的**旧错图**（大角鸮 / Dodge 汽车）——负缓存短路，见遗留风险②；⑦ **e044093 部署后线上复测（cb 时间戳绕 CDN 3600s）**：`/api/other/detail` 十件全对——动物森友会+2020 → 集合啦！動物森友會 + Animal_Crossing_New_Horizons.png（此前 19ff2d7 线上仍返回角色页「傑克 (動物森友會)」+ 猫图，已定位为年份信号取错：傑克 extract 首年 2020、2020 正作首年 2018）、Inside+2016 → Inside (游戏) + INSIDE_Cover.jpg、Journey+2012 → 风之旅人 + Journey_PSN_Cover.png、蒙娜丽莎、塞尔达传说 王国之泪+2023、只狼+2019、黑神话 悟空+2024、底特律 变人+2018、纪念碑谷+2014、艾尔登法环+2022 全部命中正确条目+infobox 封面；⑧ posters/batch **新键**（english 后缀非 D1 已有值）全对：`other|动物森友会|animal crossing|2020` → Animal_Crossing_New_Horizons.png、`other|inside|inside game|2016` → INSIDE_Cover.jpg、`other|journey|journey game|2012` → Journey_PSN_Cover.png、`other|蒙娜丽莎|mona lisa probe <stamp>|` → Mona Lisa 960px、`other|塞尔达传说 王国之泪|zelda tears of the kingdom|2023` → 薩爾達傳說王國之淚.jpg；⑨ posters/batch 旧键仍被 D1 旧错图短路（新代码无法短路）：`other|蒙娜丽莎|mona lisa|` → Stray_game_cover.jpg、`other|动物森友会||2020` → Bubo_virginianus 大角鸮、`other|journey||2012` → 2012_Dodge_Journey——本机 `CLOUDFLARE_API_TOKEN`/`ACCOUNT_ID` 均未设置，无法执行 `wrangler d1 execute --remote`
 - **遗留风险**：① 本机到 wikipedia 全系域名 DNS 污染（zh.wikipedia.org→199.16.158.9、wikipedia.org→31.13.94.41）→ 复测只能走线上端点；② **双清 D1 未做**：`DELETE FROM poster_urls WHERE media_key LIKE 'other|%'` + 清海报缓存，否则清单旧键永远返回旧错图（Inside 之前是空数组所以已自动重解析成功，其余两个旧键不是）；③ `wikiSearchOnce` 每查询词最多 2 次 gsrsearch + 1 次 imageinfo，other 取图链最坏 ~8 次请求，冷缓存耗时需前端实测（详情端已有 30s 超时）；④ ~~搜索列表排名仍可能把同名系列页排在作品页前（繁体页标题简繁失配）~~ → 8e9d2f6 繁简归一生效后已解决；⑤ `toWork` 的 year 取 extract 首个 4 位年份，集合啦！動物森友會实际显示 2018（任天堂公布年）而非 2020 发售年——封面/详情选页不受影响，但列表/详情的年份字段可能偏早
 - **下一步（给接手者）**：① 用户侧执行双清 D1（`DELETE ... WHERE media_key LIKE 'other|%'`）+ 清海报缓存，然后用清单三条目复测 posters/batch（旧键应变为 2020 封面等正确图）；② 观察 poster_errors 上报的其他品类错配；③ 若长尾错配多，考虑把 year 提取改为「发售/发行」就近年份而非全文首个 4 位数字
+- **相关**：遗留风险② 的代码化解决方案见 **T-20260930-03**（其他键带解析器代数，换键作废替代 SQL 双清——已不必等用户侧执行 remote SQL）
 
 ### T-20260930-01 · 优化冲刺 Phase 7 · 文化年度报告（Wrapped 年鉴卡）
 - **状态**：👀 待审（本地全绿 + 烟测实锤；**线上验证随推送进行**）｜ **负责人**：本 agent

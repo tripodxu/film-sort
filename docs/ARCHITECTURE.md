@@ -442,13 +442,19 @@ Worker 模块划分：
 
 | 层 | 键 | TTL / 上界 |
 |----|----|-----------|
-| 客户端内存 | `${kind}\|${title}\|${subtitle}\|${year}`（`Poster.tsx`） | 会话内；`requests` 去重 + `resolvedPosters` 同步副本 |
+| 客户端内存 | `${kind}\|${title}\|${subtitle}\|${year}`（`Poster.tsx` 的 `batchKey` 兜底，实为 `posterMediaKey()`） | 会话内；`requests` 去重 + `resolvedPosters` 同步副本 |
 | 客户端 sessionStorage | 同上，`art-rank:poster-cache` | 上限 500 条，超出淘汰最早一半；空结果不写入 |
-| D1 `poster_urls` | `type\|title\|english\|year`（`posterMediaKey()`） | 无过期；空结果不落库（导入路径会「种子化」写入） |
+| D1 `poster_urls` | `type\|title\|english\|year`（`posterMediaKey()`，唯一实现在 `shared/posterKey.ts`，客户端与 Worker 共用；`other` 维度尾部多一段解析器代数） | 无过期；空结果不落库（导入路径会「种子化」写入） |
 | isolate LRU | 同上（`posterCache` Map） | `found` 24h / `throttled` 15s / `absent` 24h；上限 2000 条，按 LRU 淘汰 |
 | Edge Cache | `https://poster-cache.art-rank.internal/` + `posterMediaKey` 的截断 SHA-256（128 bit） | 与 isolate 相同的 TTL 规则，跨 isolate/机房共享 |
 
 失败上报：图片 `onError` 时上报到 `/api/poster-errors/client`，同一 URL 不重复上报。
+
+D1 行无 TTL，所以「解析器写错过一次」会被永久短路：改代码治不了已经落库的错图。
+`other`（维基）维度的对策是**换键作废**——`posterMediaKey()` 给 `other` 键带一段
+解析器代数（`OTHER_POSTER_GENERATION`，`shared/posterKey.ts`），代数 +1 后旧行
+既取不到也不必删（读侧不许删数据），新解析结果写到新键上；movie/book/music 三个
+维度没有同类事故，保持裸键以免全站海报重新回源。
 
 ### 5.4 详情获取策略
 

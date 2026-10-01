@@ -2,6 +2,7 @@ import curatedPosters from "./imdb-posters.json";
 import { gdPicUrl, gdSearch, pickTracks, toSc, type GdProxyEnv } from "./gdstudio";
 import { fetchBounded, parseAllowedUrl, readBoundedText, type OutboundPolicy } from "./outbound";
 import { generationOf, registerPurger } from "./cachePurge";
+import { posterKeySegment, posterMediaKey } from "../shared/posterKey";
 import {
   otherDetail,
   resolveOtherCover,
@@ -78,18 +79,16 @@ interface PosterCacheEntry {
 const posterCache = new Map<string, PosterCacheEntry & { expiresAt: number }>();
 
 /**
- * 海报条目的规范键：`type|title|english|year`（NFKC/去空白/小写）。
- * 单条 route、批量 route、以及读取时挂载 posterUrls 三处必须共用本函数——
- * 任何一处漂移都会变成「存了但取不到」。
+ * 海报条目的规范键（唯一实现在 `shared/posterKey.ts`，此处转出以保持既有
+ * import 路径不变）。`other` 维度尾部多一段解析器代数——D1 行无 TTL，
+ * 旧解析器写下的错图只能靠换键作废，详见 shared/posterKey.ts 文件头。
  */
-export function posterMediaKey(
-  title: string,
-  english: string,
-  type?: string,
-  year?: number,
-): string {
-  return (type ?? "movie") + "|" + key(title) + "|" + key(english) + "|" + (year ?? "");
-}
+export {
+  OTHER_POSTER_GENERATION,
+  posterKeySegment,
+  posterKeyYear,
+  posterMediaKey,
+} from "../shared/posterKey";
 
 /**
  * Edge Cache 的键：对 `type|title|english|year` 取稳定摘要。
@@ -305,7 +304,8 @@ let musicIndexPromise: Promise<void> | undefined;
 let indexExpires = 0;
 let bookIndexExpires = 0;
 let musicIndexExpires = 0;
-const key = (value: string) => value.normalize("NFKC").trim().toLowerCase();
+// 键段归一化的本地别名（唯一实现在 shared/posterKey.ts，前端兜底键共用）。
+const key = posterKeySegment;
 
 async function bookTopPage(start: number): Promise<DoubanWork[]> {
   try {
