@@ -420,3 +420,71 @@ describe("首屏依赖图绊线（PLAN-BUNDLE-SPLIT）", () => {
     expect(scene).toContain("if (token !== mountToken)");
   });
 });
+
+/**
+ * 首屏依赖图绊线 第二批（PLAN-ROUTE-EAGER.md）。
+ *
+ * 迭代 1 把 three 摘出主包后定下的规矩是「非首屏的不进 index chunk」，但只被执行了一次：
+ * `App.tsx` 里六个同步 import 的视图/弹窗一直没被复查，于是它们连同各自的 lucide 图标
+ * 一直占着首包。这类"扫过一次就不再回看"的债务最容易复发，所以逐条锁死。
+ */
+describe("首屏依赖图绊线（PLAN-ROUTE-EAGER）", () => {
+  // 必须 lazy 的六个：都是「用户先点一下才会挂载」的模块。
+  const MUST_BE_LAZY = [
+    ["./components/AiConfigDialog", "AiConfigDialog"],
+    ["./components/RankingDetail", "RankingDetail"],
+    ["./components/SettingsMenu", "SettingsMenu"],
+    ["./views/SetupView", "SetupView"],
+    ["./views/PlazaView", "PlazaView"],
+  ] as const;
+  // 必须保持同步的：落地视图 / 排序主流程 / 首屏立刻要用（PLAN-ROUTE-EAGER §3.2）。
+  const MUST_STAY_EAGER = [
+    ["./views/HomeView", "HomeView"],
+    ["./views/SortingView", "SortingView"],
+  ] as const;
+
+  const app = readFileSync("src/App.tsx", "utf8");
+  // 剥掉注释后再扫描：解释性注释里会提到模块路径，按代码判定会误伤。
+  const code = app.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^[^\S\n]*\/\/.*$/gm, "");
+
+  it("六个非首屏模块不得回到同步 import", () => {
+    for (const [specifier, name] of MUST_BE_LAZY) {
+      expect(code, `${name} 同步 import 会把它拖回首包`).not.toMatch(
+        new RegExp(`^import[^;\\n]*from\\s+["']${specifier.replace(/[./]/g, "\\$&")}["']`, "m"),
+      );
+      expect(code, `${name} 必须走 lazy(() => import(...))`).toContain(
+        `lazy(() =>\n  import("${specifier}")`,
+      );
+      expect(code).toContain(`default: module.${name}`);
+    }
+  });
+
+  it("落地视图与排序主流程保持同步渲染（lazy 化会换来首屏一次闪烁，不划算）", () => {
+    for (const [specifier, name] of MUST_STAY_EAGER) {
+      expect(code).toMatch(
+        new RegExp(
+          `^import[^;\\n]*\\b${name}\\b[^;\\n]*from\\s+["']${specifier.replace(/[./]/g, "\\$&")}["']`,
+          "m",
+        ),
+      );
+      expect(code).not.toContain(`import("${specifier}")`);
+    }
+  });
+
+  it("整棵路由树仍在同一个 Suspense 里（兜底不许被删）", () => {
+    expect(app).toContain(
+      '<Suspense fallback={<div className="route-loading" aria-label="Loading" />}>',
+    );
+    // ErrorBoundary 必须还在 Suspense 外层兜住懒加载失败
+    expect(app).toContain('import { ErrorBoundary } from "./components/ErrorBoundary";');
+  });
+
+  it("挂载在 Suspense 之外的懒弹窗自带 fallback（首次点击不许白屏）", () => {
+    // SettingsMenu 在顶栏、AiConfigDialog 与 RankingDetail 在弹层，三者都在 content 之外。
+    expect(code).toContain("function LazySpot()");
+    expect(code).toContain('return <div className="route-loading" aria-label="Loading" />;');
+    expect(code.match(/<Suspense fallback=\{<LazySpot \/>\}>/g) ?? []).toHaveLength(2);
+    // 顶栏那个不能露出布局空洞，用 null 兜底
+    expect(code).toContain("<Suspense fallback={null}>");
+  });
+});

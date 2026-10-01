@@ -36,23 +36,18 @@ import { importCollection } from "./lib/collections";
 import type { ExportLayout } from "./lib/exportPng";
 import { FocusTrap } from "./components/FocusTrap";
 import { ErrorBoundary } from "./components/ErrorBoundary";
-import { AiConfigDialog } from "./components/AiConfigDialog";
 import { readNotes, writeNotes, setNote } from "./lib/notes";
 import { buildProfileSyncBody } from "./lib/profileSync";
 import { buildTasteContext } from "./lib/typesafe";
 import { epochQuery } from "./lib/cacheBust";
 import { Poster } from "./components/Poster";
-import { RankingDetail } from "./components/RankingDetail";
 import { ArtworkDetail, type ArtworkDetailInfo } from "./components/ArtworkDetail";
 import { IconButton } from "./views/IconButton";
 import { ThemeSwitcher } from "./components/ThemeSwitcher";
-import { SettingsMenu } from "./components/SettingsMenu";
 import { applyTheme, readTheme } from "./lib/theme";
 import { HomeView } from "./views/HomeView";
 import { applyLayout, readLayout } from "./lib/layout";
-import { SetupView } from "./views/SetupView";
 import { SortingView } from "./views/SortingView";
-import { PlazaView } from "./views/PlazaView";
 // 非首页的大视图按路由拆包(DeferredOrb 同款模式):四个千行视图占主包大头,
 // 首屏用不到的不进 index chunk。首页是落地视图,保持同步渲染。
 const SourceView = lazy(() =>
@@ -70,6 +65,29 @@ const ShareView = lazy(() =>
 const PlazaPostView = lazy(() =>
   import("./views/PlazaPostView").then((module) => ({ default: module.PlazaPostView })),
 );
+// 弹窗与次级视图同样不进首屏:它们要等用户先点一下(齿轮/AI 设置/榜单海报)才会挂载,
+// 同步 import 只会让它们连同各自的 lucide 图标白白占住主包(PLAN-ROUTE-EAGER §3.1)。
+// 写法与上面五条保持一致:这些模块都是具名导出,default 需要显式包一层。
+const AiConfigDialog = lazy(() =>
+  import("./components/AiConfigDialog").then((module) => ({ default: module.AiConfigDialog })),
+);
+const RankingDetail = lazy(() =>
+  import("./components/RankingDetail").then((module) => ({ default: module.RankingDetail })),
+);
+const SettingsMenu = lazy(() =>
+  import("./components/SettingsMenu").then((module) => ({ default: module.SettingsMenu })),
+);
+const SetupView = lazy(() =>
+  import("./views/SetupView").then((module) => ({ default: module.SetupView })),
+);
+const PlazaView = lazy(() =>
+  import("./views/PlazaView").then((module) => ({ default: module.PlazaView })),
+);
+// 挂载在 <Suspense> 之外的三处(顶栏齿轮 / AI 设置 / 榜单海报)没有现成 fallback,
+// 首次点击会白屏一瞬。复用已有的 .route-loading,不新增 CSS。
+function LazySpot() {
+  return <div className="route-loading" aria-label="Loading" />;
+}
 
 import { stored, track, decode, saveFile, type Locale } from "./lib/utils";
 import { useRouter, type View } from "./lib/useRouter";
@@ -1459,12 +1477,14 @@ export default function App() {
           )}
         </nav>
         <div className="header-tools">
-          <SettingsMenu
-            zh={locale === "zh"}
-            cap={importCap}
-            onCap={setImportCap}
-            onNotice={setNotice}
-          />
+          <Suspense fallback={null}>
+            <SettingsMenu
+              zh={locale === "zh"}
+              cap={importCap}
+              onCap={setImportCap}
+              onNotice={setNotice}
+            />
+          </Suspense>
           <ThemeSwitcher zh={locale === "zh"} onNotice={setNotice} />
           <IconButton title={t("使用说明", "Guide")} onClick={() => setShowGuide(true)}>
             ?
@@ -1564,7 +1584,11 @@ export default function App() {
           <ArrowLeft size={18} style={{ transform: "rotate(90deg)" }} />
         </button>
       )}
-      {aiConfigOpen && <AiConfigDialog t={t} onClose={() => setAiConfigOpen(false)} />}
+      {aiConfigOpen && (
+        <Suspense fallback={<LazySpot />}>
+          <AiConfigDialog t={t} onClose={() => setAiConfigOpen(false)} />
+        </Suspense>
+      )}
       {cloudConflict && (
         <div className="modal-backdrop" onClick={() => setCloudConflict(null)}>
           <section
@@ -1893,26 +1917,31 @@ export default function App() {
             }}
           >
             {compareRankDetail.ranking ? (
-              <RankingDetail
-                kind={compareRankDetail.ranking.kind}
-                collectionTitle={compareRankDetail.collectionTitle}
-                items={compareRankDetail.ranking.items}
-                notes={compareRankDetail.side === "peer" ? peerNotes : notes}
-                kindLabel={label}
-                eyebrow={`${compareRankDetail.side === "own" ? t("我的索引", "MY INDEX") : t("对方索引", "THEIR INDEX")} / ${label(compareRankDetail.ranking.kind)}`}
-                headerExtra={
-                  <IconButton title={t("关闭", "Close")} onClick={() => setCompareRankDetail(null)}>
-                    <X size={18} />
-                  </IconButton>
-                }
-                onNoteView={(title, text, posterUrls) => {
-                  openNoteView(title, text, posterUrls);
-                }}
-                onArtworkClick={(work, kind) => {
-                  void openArtworkDetail(work, kind);
-                }}
-                highlightId={compareRankDetail.highlightId}
-              />
+              <Suspense fallback={<LazySpot />}>
+                <RankingDetail
+                  kind={compareRankDetail.ranking.kind}
+                  collectionTitle={compareRankDetail.collectionTitle}
+                  items={compareRankDetail.ranking.items}
+                  notes={compareRankDetail.side === "peer" ? peerNotes : notes}
+                  kindLabel={label}
+                  eyebrow={`${compareRankDetail.side === "own" ? t("我的索引", "MY INDEX") : t("对方索引", "THEIR INDEX")} / ${label(compareRankDetail.ranking.kind)}`}
+                  headerExtra={
+                    <IconButton
+                      title={t("关闭", "Close")}
+                      onClick={() => setCompareRankDetail(null)}
+                    >
+                      <X size={18} />
+                    </IconButton>
+                  }
+                  onNoteView={(title, text, posterUrls) => {
+                    openNoteView(title, text, posterUrls);
+                  }}
+                  onArtworkClick={(work, kind) => {
+                    void openArtworkDetail(work, kind);
+                  }}
+                  highlightId={compareRankDetail.highlightId}
+                />
+              </Suspense>
             ) : (
               <div className="section-heading">
                 <h2>{compareRankDetail.collectionTitle}</h2>

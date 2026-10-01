@@ -114,6 +114,14 @@
 - **4.28 档位闸门只审一侧，另一侧就是洞** —— `isDescriptiveSuffix` 审的是「用户标题 + 描述性尾缀」（日常幻想指南、勇者斗恶龙），但对**反向形状**「别名 + 用户标题」完全没设防：`隨興旅 -That's Journey-` 去掉标点后是 `隨兴旅thatsjourney`，`endsWith("journey")` 成立，于是被放成 tier2 作品页。它靠 3(剥括号后以原名结尾)+2(类型词)+1(摘要够长)+1(pageimages 缩略图)= **7 分**压过靠消歧页别名放行的 tier1《风之旅人》**5.5 分**——而 tier 优先于分数，真封面 `Journey_PSN_Cover.png`（在 `page_image` 里）根本没机会出场，只能退到漫画像唯一的 `pageimages` logo。**tier 闸门不是「有洞就调分」，是「两侧都要审」**：候选侧要审 `isAlternateNamePrefix`（判 **0 淘汰**而非降档——漫画与游戏是不同作品）。
 - **4.29 淘汰判据要挑不会误杀合法本地化名的那一个** —— 同一现象试了三个判据：`head.includes(baseCompact)`（红，`expected 2 to be 1`，因为前缀是「隨兴旅thats」并没有第二个 journey）→ 「base 含拉丁字母时前缀也含拉丁字母」→ ✅ `集合啦！動物森友會`（前缀「集合啦」全中文）仍 tier2、`Inside (遊戲)`/`紀念碑谷 (遊戲)`（拉丁注脚在括号内，已被上层剥括号分支收走）不受影响。**判据的验证集必须是「长得像但合法」的对照项**，只测那个错例就上，等于把 bug 换个形状留着。
 - **4.30 出图候选池也可能本身是错的** —— 漫画像的 `pageprops.page_image` **为空**，唯一能出的图是 `pageimages.thumbnail`（那个 logo）。所以「选错页」与「选对页但没图」在结果上同形（都返一张不像的图），排查时**先确认冠军页的出图字段，再谈排序对不对**；只看到 URL 不对就回头调 `pickBest` 是白费功夫。
+- **4.31 台账里的候选在开工前必须重新核一遍** —— 台账 T-20261002-04 给下一轮留的头号候选是「摘 `fflate` 出主包」，开工 grep 才发现 `src/lib/utils.ts:28` **早就是** `await import("fflate")`，主包里那 5 处 `strFromU8` 是**调用点**不是库代码（库本体早已在 `browser-BTM47nOj.js`，5.09 KB）。**上一轮判断时成立 ≠ 现在还成立**：迭代之间隔着完整一轮部署与若干改动，候选会被做完、会被别人顺手做掉。**开工顺序应为：先核候选 → 再量体积 → 再定方案**，不是直接照着候选开干。
+- **4.32 先量后写：`@license` 横幅是噪音不是体积** —— 主包 44 条 `@license` 横幅看着吓人，实测 **lucide-react 全量 = 16.14 KB raw / 3.58 KB gzip**，其中 icon-name 字面量只有 6.87 KB（40 个图标）。照着印象写计划会跑去优化一个 3.5 KB 的东西。可靠做法是 `npx vite build --sourcemap` + 解 VLQ mappings + 按 `sourceId` 归属**压缩后产物字节**。
+- **4.33 sourcemap 字节归属只能当优先级排序器，不能当收益预测器** —— 归属结果只覆盖 414.71 KB 中的 **169.54 KB**（压缩后单行无映射），缺口近六成。**用它的排序决定「动谁」是真的，用它的数字承诺「省多少」是假的**；收益只认真 build 的输出。配套：批量替换实验（`Get-Content -Raw` + `.Replace()` + `[System.IO.File]::WriteAllText`）测出的收益与最终手改代码的误差 ≤0.25 KB，可作为计划预测的精度参考。
+- **4.34 收益数字好看不等于代码对，tsc 是唯一裁判** —— 重排 `src/App.tsx` 的 import 块时误删了 `import { SortingView } from "./views/SortingView";`，build 的体积数字**依然漂亮**（402.60 KB / 134.34 gzip，完全符合预期），是 `npx tsc -b` 报 `src/App.tsx(1250,8): error TS2304: Cannot find name 'SortingView'` 抓到的——**否则会带着一个排序页直接崩的版本上线**。凡是大段 import 重排，`tsc` 必须排在体积测量之前看。
+- **4.35 SPA fallback 要求 `Accept: text/html`，用 `Invoke-WebRequest` 探路由必假 404** —— `worker/index.ts:1726-1736` `serveAssets` 的回退分支判 `request.headers.get("accept")?.includes("text/html")`，而 `Invoke-WebRequest` 默认发 `*/*`，于是 `/catalog/setup` `/plaza` `/myself` `/encounter` `/share` 全部 404。**看起来像「lazy 化把路由搞坏了」的严重回归，实际只是探针不像浏览器。** 加上 `-Headers @{ Accept = "text/html,application/xhtml+xml" }` 后七个路由全 200。任何 SPA 路由的线上验证都必须带这个 header。
+- **4.36 计划内部数字不一致，比计划本身的错更消耗时间** —— `docs/PLAN-ROUTE-EAGER.md` §3.1 表里列了 5 个模块，表头却写「六个」（第六个 `ArtworkDetail` 在正文被划掉），而 §0 与 §3.3 的收益数字是按 6 个算的。**验收时人是照着错误的数字去判的**，所以正文与表格必须一起改。`ArtworkDetail` 最终明确不做：它导出的 `ArtworkDetailInfo` 是类型（`import type` 会被擦除，技术上可 lazy），但被 `openArtworkDetail` 在多种视图里触发，会多出一条 chunk 依赖边，而实测归属只有 0.62 KB。
+- **4.37 少做也要有硬依据** —— `HomeView` 实测再省 5.53 KB gzip（384.79 / 128.77），**不 lazy**：它是落地视图，lazy 化会让首屏多一次模块往返 + 一次 fallback 闪烁，而本项目用户抱怨的正是「有点卡」（m00079）——**闪烁比 5 KB 更容易被感知**。这条决定用源码扫描绊线锁死（`MUST_STAY_EAGER`），防止下一个人「顺手优化」掉。
+
 
 **可访问性 / 交互类**：
 
@@ -164,3 +172,10 @@
 | 只审了「标题 + 描述性尾缀」，闸门就够了 | 反向形状「别名 + 原名」是洞，且 tier 优先于分数，小分差也翻不了档（4.28） |
 | 判据写了 `head.includes(base)` 就对了 | 它误杀不了真正的错例也会误杀合法本地化名，验证集必须含「长得像但合法」的对照项（4.29） |
 | 选错页才会返错图 | 选对页也可能没图（`page_image` 空 → 只能退到 `pageimages`），先查冠军页的出图字段（4.30） |
+| 台账里写着「下轮摘 fflate」，那就照着干 | `src/lib/utils.ts:28` 早已动态化，库本体早就不在主包里，候选已过期（4.31） |
+| 44 条 `@license` 横幅说明 lucide 很重 | 全量只 3.58 KB gzip/icon 字面量 6.87 KB，先量再写（4.32） |
+| sourcemap 归属算出来省 12 KB，那就能省 12 KB | 它只覆盖 169.54/414.71 KB，收益只认 build 输出（4.33） |
+| build 体积达标了，代码就是对的 | 误删 `SortingView` 时体积照样漂亮，是 `tsc` 的 TS2304 抓到的（4.34） |
+| `/catalog/setup` 404 = lazy 化把路由搞坏了 | SPA fallback 要求 `Accept: text/html`，`Invoke-WebRequest` 默认 `*/*` 必假 404（4.35） |
+| 计划表里有 5 个模块，表头写 6 个没关系 | 验收时人是照着错误的数字去判的，正文与表格必须一起改（4.36） |
+| HomeView 再省 5.53 KB，没理由不做 | 落地视图 lazy 化换一次首屏闪烁，闪烁比 5 KB 更被感知（4.37） |
