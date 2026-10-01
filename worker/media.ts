@@ -1629,18 +1629,23 @@ async function computePosters(
     primary = [...new Set([...direct, ...proxied])];
   } else if (type === "other") {
     // 「其他」维度（游戏/艺术/建筑等，豆瓣无条目）。取图优先级：
-    // ① resolveOtherCover：gsrsearch 评分择优 + pageprops.page_image（infobox
+    // ① otherDetail 详情链：与详情弹窗**同一条链路、同一个页面**——封面和
+    //    简介必须指向同一件作品（用户先看封面再点详情）。实测这一条就解决了
+    //    蒙娜丽莎→Stray 游戏封面、王国之泪→林克 E3 照片（评分链会把
+    //    带封面的同名页顶到作品页前面）这两类错配；
+    // ② resolveOtherCover：gsrsearch 评分择优 + pageprops.page_image（infobox
     //    封面文件名，**非自由封面也有值**）。pageimages 的默认 free 档对游戏封面
     //    恒空，动物森友会/Inside/Journey 实测这类商品封面全在这里拿到；年份是
     //    消歧最硬信号（用户清单格式「标题 - 游戏 (年)」），系列页/同名概念页
     //    （动物森友会→系列页、Journey→旅行者合唱团）靠评分+年份压下去；
-    // ② langlinks→英文标题再匹配（en wiki 覆盖面更广，zh 简繁变体一并绕开）；
-    // ③ 条目主图直取（images→imageinfo，非自由封面兜底；蒙娜丽莎实测教训：
+    // ③ langlinks→英文标题再匹配（en wiki 覆盖面更广，zh 简繁变体一并绕开）；
+    // ④ 条目主图直取（images→imageinfo，非自由封面兜底；蒙娜丽莎实测教训：
     //    文章内相关画作按文件名字母序会抢在主图前，故只在文件名含标题时采用）；
-    // ④ searchWikiPoster 评分匹配（pageimages 自由图：名画/摄影/公共版权作品）；
-    // ⑤ otherDetail 变体容错兜底。type 必须以 undefined 参与评分——TYPE_WORDS
-    //    无 other 词表，带着 "other" 时 declareType 推断出的 movie/book/music
-    //    会误杀正确条目。
+    // ⑤ searchWikiPoster 评分匹配（pageimages 自由图：名画/摄影/公共版权作品）。
+    //    type 必须以 undefined 参与评分——TYPE_WORDS 无 other 词表，带着
+    //    "other" 时 declareType 推断出的 movie/book/music 会误杀正确条目。
+    const detailCover = await otherDetail(title, year).catch(() => null);
+    if (detailCover?.poster_url) return { urls: [detailCover.poster_url], outcome: "found" };
     const gameCover = await resolveOtherCover(title, english, year);
     if (gameCover) return { urls: [gameCover], outcome: "found" };
     // 简繁变体会让标题评分失败（用户「蒙娜丽莎」vs 条目「蒙娜麗莎」），
@@ -1662,9 +1667,9 @@ async function computePosters(
       const enWiki = await searchWikiPoster(enTitle, enTitle, undefined, year);
       if (enWiki.length) return { urls: enWiki, outcome: "found" };
     }
-    const fallback = await otherDetail(title, year).catch(() => null);
-    const urls = fallback?.poster_url ? [fallback.poster_url] : [];
-    return { urls, outcome: urls.length ? "found" : throttled ? "throttled" : "absent" };
+    // otherDetail 已作为第一档跑过（有详情但没封面时下面几档补图），
+    // 兜底链全部跑完仍无图就认缺
+    return { urls: [], outcome: throttled ? "throttled" : "absent" };
   } else {
     const [suggestion, imdb, search] = await Promise.allSettled([
       doubanSuggest(title),

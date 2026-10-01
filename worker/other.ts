@@ -270,7 +270,9 @@ async function toWork(page: WikiPage, lang: "zh" | "en"): Promise<OtherWork | nu
   // 消歧页（「X 可以指：…」）不是作品介绍，机械剔除
   if (isDisambiguation(page)) return null;
   const year = extract.match(YEAR_RE)?.[0];
-  const poster = (page.original?.source ?? page.thumbnail?.source ?? page.fileUrl)?.replace(
+  // 缩略图优先于 original：original 是 Commons 全尺寸扫描件（数十 MB），
+  // infobox 封面文件（fileUrl，600px）最后兜底
+  const poster = (page.thumbnail?.source ?? page.original?.source ?? page.fileUrl)?.replace(
     /^http:/,
     "https:",
   );
