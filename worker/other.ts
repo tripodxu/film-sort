@@ -186,6 +186,12 @@ function scoreOtherPage(page: WikiPage, compactBase: string, year?: string): num
   if (extract.length >= 80) score += 1;
   if (/(系列|以下条目|可以指|可指|消歧义|消歧義)/.test(`${title} ${extract}`)) score -= 3;
   if (year && text.includes(year)) score += 2;
+  // 条目自身的首个年份 ≠ 用户年份时降权（「摘要里提到 2012」的同名异作，
+  // 典型：西遊記 extract 带 2012，条目本体是 1996 电视剧）
+  if (year) {
+    const own = (extract.match(YEAR_RE) ?? [])[0];
+    if (own && own !== year) score -= 2;
+  }
   return score;
 }
 
@@ -242,18 +248,20 @@ async function resolveOtherPages(
 
 /** 从候选页里挑最优：给了年份就优先摘述命中该年份的条目（用户清单格式是
  *  「标题 - 游戏 (年)」，年份是消歧的最硬信号——动物森友会实测：系列页/
- *  2001 首作都不带 2020，2020 正作带），没有年份命中的候选才放宽。 */
+ *  2001 首作都不带 2020，2020 正作带），没有年份命中的候选才放宽。
+ *  分三档：条目自身年份 == 用户年份 > 摘要提到用户年份 > 全体第一。 */
 function pickBest(
   candidates: Array<{ page: WikiPage; score: number }>,
   year?: string,
 ): { page: WikiPage; score: number } | null {
   if (!candidates.length) return null;
   if (!year) return candidates[0];
-  const hit = candidates.filter((entry) => {
+  const mentions = candidates.filter((entry) => {
     const text = `${entry.page.extract ?? ""} ${entry.page.description ?? ""}`;
     return text.includes(year);
   });
-  return (hit.length ? hit : candidates)[0];
+  const exact = mentions.filter((entry) => (entry.page.extract ?? "").match(YEAR_RE)?.[0] === year);
+  return (exact.length ? exact : mentions.length ? mentions : candidates)[0];
 }
 
 async function toWork(page: WikiPage, lang: "zh" | "en"): Promise<OtherWork | null> {

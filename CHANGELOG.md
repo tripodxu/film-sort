@@ -9,7 +9,7 @@
 - **根因三（opensearch 盲区）**：zh opensearch("动物森友会") 只回 6 个简体错页、opensearch("Journey") 把 Journey(EP專輯) 排在游戏页前——换成 gsrsearch + 评分（页标题含用户词 +3/条目名带限定词 +3/类型词 +2/infobox 封面 +1.5/深度 +1/系列消歧语式 -3/年份命中 +2）
 - **改了哪些**：`worker/other.ts` 重写取图与选页链（新增 `resolveOtherCover`、`wikiFileThumbUrls`、`OTHER_TYPE_WORDS`；`otherDetail`/`otherSearch`/`wikiPageImageAny` 补 pageprops/消歧剔除/变体/评分择优；`wikiPageImageAny` 删 `files[0]` 兜底）；`worker/media.ts` other 分支以 `resolveOtherCover` 打头、`searchWikiPoster` 的 exact/gsrsearch 加 `pageprops` 并把选图扩到 page_image、消歧页剔除；`worker/index.ts` `/api/other/detail` 与 `/api/artwork/detail?kind=other` 接收 `year`；`src/App.tsx` other 详情请求带上 `work.year`
 - **顺手订正（2026-09-28 台账的误判）**：`files[0]` 兜底与 `SKIP` 曾被认为命中 series/franchise 首页词的高频图，实测只是**文件名字母序巧合**
-- **测试**：新增 `worker/other.test.ts`（×9，fetch 桩录像级 fixture，离线）：年份摘页、消歧页剔除、详情改走搜索、候选海报补齐、infobox 封面优先、文件名关键词匹配/无命中返回 null
+- **测试**：新增 `worker/other.test.ts`（×10，fetch 桩录像级 fixture，离线）：年份摘页、消歧页剔除、详情改走搜索、候选海报补齐、infobox 封面优先、文件名关键词匹配/无命中返回 null
 - **已知限制**：未上线云端的**线上验收暂无法执行**——本机到 wikipedia 全系域名 DNS 被污染（zh.wikipedia.org→199.16.158.9、wikipedia.org→31.13.94.41，baidu 等正常），推包后需在部署环境用清单三条目复测；且旧解析结果会短路新代码，需双清 D1 poster_urls（`DELETE ... WHERE media_key LIKE 'other\|%'`）+ 清海报缓存
 
 ## 2026-09-30 · 优化冲刺 Phase 7 · 文化年度报告（Wrapped 年鉴卡）
@@ -52,7 +52,7 @@
 
 - **语义**：用「我的」品味档案让 Jev 预测「我」会怎么排对方的榜单，与对方真实排名求偏差——偏差最大 Top 3 即对方的意外之爱（+N，对方排得比按我品味的预测更高）与冷遇（−N，更低）
 - **零 Worker 改动**：既有 `/api/ai/jev-rank` 本身就是「profileContext=谁的品味 → 预测 works 偏好序」，predict 模式即「我的档案 × 对方合并榜单」的调用语义（计划写「加 predict 模式」，实际为纯复用，无新端点、`docs/API.md` 不变）
-- **新增**：`lib/jevDivergence.ts` 偏差 Top3 纯函数（×9 单测：位置换算/越界过滤/零偏差剔除/同分按对方名次）；`JevDivergenceCard`（对齐 AiInsightCard 交互：点击才请求不预取、失败按原因分类带「去配置」入口、数据签名变化即旧结果作废防张冠李戴、榜单 <4 件提示无参考价值）；CompareView 接入（对方合并榜单与比较结果同一 merge 口径，自动/指定/三档深度全兼容）
+- **新增**：`lib/jevDivergence.ts` 偏差 Top3 纯函数（×10 单测：位置换算/越界过滤/零偏差剔除/同分按对方名次）；`JevDivergenceCard`（对齐 AiInsightCard 交互：点击才请求不预取、失败按原因分类带「去配置」入口、数据签名变化即旧结果作废防张冠李戴、榜单 <4 件提示无参考价值）；CompareView 接入（对方合并榜单与比较结果同一 merge 口径，自动/指定/三档深度全兼容）
 - **验证**：五道门禁绿（481 passed·9 skipped）；本地 stub smoke 实锤（倒序 stub → 偏差 +9/−9/+7 数学正确、同分排序正确、失败路径正确显示）；真实 TypeSafe key 端到端留用户日常复核（台账依赖项）
 - **备注**：`npm run worker:dev` 本地起不来系历史遗留（`DASHBOARD_HTML` 字符串导出被本地 workerd 拒绝，线上部署不受影响），smoke 改走 .tmp 静态服务 + stub
 
@@ -70,7 +70,7 @@
 
 新增内置主题「画廊」（`docs/PLAN-ui-modernization.md` §2.3，8 个差异组件，L1 变量 + L2 结构覆写 + L3 条件渲染）：
 
-- **画像页 Bento 网格（L3）**：`src/components/GalleryBento.tsx`——Top1 大卡（2×2，含 2-5 名跟进行）+ 手写 SVG 维度雷达（四媒介固定轴，值=各媒介作品数占比）+ 年代堆叠条（按维度分行、段色随年代由浅入深、右端跨度刻度）+ 口味坐标（作品/创作者/榜单/年代跨度）+ 榜单索引（承接维度页签切换职能）；`grid-template-areas` 编排，≤800px 单列堆叠；数据全部由 `src/lib/galleryStats.ts` 纯函数现场聚合（×9 单测），零数据层改动
+- **画像页 Bento 网格（L3）**：`src/components/GalleryBento.tsx`——Top1 大卡（2×2，含 2-5 名跟进行）+ 手写 SVG 维度雷达（四媒介固定轴，值=各媒介作品数占比）+ 年代堆叠条（按维度分行、段色随年代由浅入深、右端跨度刻度）+ 口味坐标（作品/创作者/榜单/年代跨度）+ 榜单索引（承接维度页签切换职能）；`grid-template-areas` 编排，≤800px 单列堆叠；数据全部由 `src/lib/galleryStats.ts` 纯函数现场聚合（×10 单测），零数据层改动
 - **榜单卡片墙（L3）**：`src/components/GalleryWall.tsx`——海报正面（名次徽章 + 渐变字幕）/ 批注背面（摘录 + 批注/详情入口），hover（桌面，`media(hover:hover)` 包裹防触屏粘滞）或点按（触屏）3D 翻转；CDP 探针实证 hover 时 transform=rotateY(180°)、`preserve-3d`/`perspective:1100px` 在位；reduced-motion 降级为正反面文档流平铺（探针实证 hover 后 transform 仍 none）
 - **分享卡（L3）**：ShareView 在 gallery 家族渲染「Bento 缩略」分享卡（Top1+雷达+年代+坐标，无切换语义）于榜单区之上；画像页侧栏 `.share-output` 由 L2 改为「二维码与链接并排的展签格」
 - **topbar 对称报刊亭（L2）**：`display:grid` 三列——Logo 居中、导航居左、工具居右（PITFALLS 4.12 显式声明纪律）

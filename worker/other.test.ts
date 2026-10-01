@@ -262,6 +262,64 @@ describe("other wiki pipeline", () => {
     expect(detail?.poster_url).toBe(`${UP}/2/2b/600px-Journey_PSN_Cover.png`);
   });
 
+  it("Journey：摘要提到 2012 的同名异作（西遊記）不能压过风之旅人", async () => {
+    installFetch([
+      {
+        match: /titles=Journey/,
+        body: {
+          query: {
+            pages: {
+              disambig: {
+                title: "Journey",
+                pageprops: { disambiguation: "" },
+                extract: "Journey可以指：旅行者合唱團、风之旅人等。",
+                ...noFreeImage,
+              },
+            },
+          },
+        },
+      },
+      {
+        match: /gsrsearch=Journey/,
+        body: {
+          query: {
+            pages: {
+              // 线上实测：zh gsrsearch("Journey") 会把《西遊記》排得很前，
+              // 且它的 extract 里出现过 2012（重播），条目本体是 1996 电视剧
+              tv: {
+                title: "西遊記 (無綫1996年電視劇)",
+                pageprops: { page_image: "Journey_to_the_West_I.png" },
+                extract:
+                  "《西遊記》是香港電視廣播有限公司古裝神話電視劇，共三十集。1996年11月首播，2012年凌晨重播。",
+              },
+              game: {
+                title: "風之旅人",
+                pageprops: { page_image: "Journey_PSN_Cover.png" },
+                extract: "《風之旅人》是thatgamecompany開發的2012年電子遊戲。",
+              },
+            },
+          },
+        },
+      },
+      {
+        match: /titles=File:Journey_PSN_Cover\.png/,
+        body: {
+          query: {
+            pages: {
+              file: {
+                title: "File:Journey PSN Cover.png",
+                imageinfo: [{ thumburl: `${UP}/2/2b/600px-Journey_PSN_Cover.png` }],
+              },
+            },
+          },
+        },
+      },
+    ]);
+    const detail = await otherDetail("Journey", 2012);
+    expect(detail?.title).toBe("風之旅人");
+    expect(detail?.year).toBe(2012);
+  });
+
   it("otherSearch 用 infobox 封面文件名补齐各候选的海报", async () => {
     installFetch([
       { match: /gsrsearch=动物森友会/, body: ANIMAL_CROSSING },
