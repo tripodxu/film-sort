@@ -630,8 +630,7 @@ describe("other wiki pipeline", () => {
             disambig: {
               title: "Journey",
               pageprops: { disambiguation: "" },
-              extract:
-                "Journey可以指：\n旅行者合唱團，美國搖滾樂團\n風之旅人，2012年电子游戏",
+              extract: "Journey可以指：\n旅行者合唱團，美國搖滾樂團\n風之旅人，2012年电子游戏",
               ...noFreeImage,
             },
             game: {
@@ -683,12 +682,14 @@ describe("other wiki pipeline", () => {
             ys: {
               title: "伊苏 失落的伊苏古国 序章",
               pageprops: { page_image: "Ys_Ancient_Ys_Vanished_Cover.jpg" },
-              extract: "《伊苏 失落的伊苏古国 序章》是日本Falcom动作角色扮演游戏系列伊苏的第一作，于1987年推出。",
+              extract:
+                "《伊苏 失落的伊苏古国 序章》是日本Falcom动作角色扮演游戏系列伊苏的第一作，于1987年推出。",
             },
             kh: {
               title: "王国之心系列作品列表",
               pageprops: { page_image: "Kingdom_Hearts_media.jpg" },
-              extract: "《王国之心》是由日本游戏开发商史克威尔艾尼克斯开发并发行的一系列动作角色扮演游戏。",
+              extract:
+                "《王国之心》是由日本游戏开发商史克威尔艾尼克斯开发并发行的一系列动作角色扮演游戏。",
             },
           },
         },
@@ -753,8 +754,7 @@ describe("other wiki pipeline", () => {
                 disambig: {
                   title: "Journey",
                   pageprops: { disambiguation: "" },
-                  extract:
-                    "Journey可以指：\n旅行者合唱團，美國搖滾樂團\n風之旅人，2012年电子游戏",
+                  extract: "Journey可以指：\n旅行者合唱團，美國搖滾樂團\n風之旅人，2012年电子游戏",
                   ...noFreeImage,
                 },
               },

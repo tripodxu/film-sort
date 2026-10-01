@@ -1388,7 +1388,12 @@ function wikiTitleMatchesUserTitle(
   if (!raw) return false;
   const bare = raw.replace(/[（(【[][^）)】\]]*[）)】\]]/g, "");
   const compact = (value: string) =>
-    toSimplified(value.normalize("NFKC").replace(/[\s：:·・、，,。.．!！?？"'“”‘’()（）[\]【】{}_-]/g, "").toLowerCase());
+    toSimplified(
+      value
+        .normalize("NFKC")
+        .replace(/[\s：:·・、，,。.．!！?？"'“”‘’()（）[\]【】{}_-]/g, "")
+        .toLowerCase(),
+    );
   const candidates = [raw, bare].map(compact).filter(Boolean);
   const wants = [match.title, match.english]
     .map((value) => (value ?? "").trim())
@@ -1439,8 +1444,7 @@ async function queryWikiImages(
         // 达标——Journey/2012 拿到的就是「道奇Journey」那张 NHTSA 照片。
         .filter(
           (entry) =>
-            !requireTitleMatch ||
-            wikiTitleMatchesUserTitle(entry.page, requireTitleMatch, year),
+            !requireTitleMatch || wikiTitleMatchesUserTitle(entry.page, requireTitleMatch, year),
         )
         .sort((a, b) => b.score - a.score)
         .map((entry) => wikiPagePoster(entry.page, fileUrls)!)

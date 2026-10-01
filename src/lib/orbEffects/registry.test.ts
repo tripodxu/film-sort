@@ -2,10 +2,12 @@
 // 浏览器依赖（localStorage）用 in-memory stub（同 aiInsight.test.ts 约定）；
 // WebGL/渲染行为属部署后浏览器 smoke（ORB-EFFECTS §6 验收清单）。
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { readFileSync } from "node:fs";
 import {
   createOrbEffectById,
   listOrbEffects,
   notifyOrbEffectChanged,
+  EFFECT_META,
   ORB_EFFECT_KEY,
   readOrbEffectId,
   writeOrbEffectId,
@@ -107,19 +109,19 @@ describe("orb 特效注册表", () => {
     expect(readOrbEffectId()).toBe("ribbon");
   });
 
-  it("createOrbEffectById 返回四成员契约实例（ORB-EFFECTS §4）", () => {
+  it("createOrbEffectById 返回四成员契约实例（ORB-EFFECTS §4，异步版）", async () => {
     // ribbon 无 CanvasTexture/shader 依赖，node 环境可完整走一遍契约；
     // plasma（CanvasTexture）与渲染行为属浏览器 smoke。
     const scene = { add: () => {}, remove: () => {}, clear: () => {} };
     const host = { scene, camera: null, renderer: null, host: null, reducedMotion: false };
-    const instance = createOrbEffectById("ribbon", host as never, palette);
+    const instance = await createOrbEffectById("ribbon", host as never, palette);
     expect(typeof instance.update).toBe("function");
     expect(typeof instance.resize).toBe("function");
     expect(typeof instance.applyPalette).toBe("function");
     expect(typeof instance.dispose).toBe("function");
     // reduced-motion 路径（宿主冻结时钟恒 0.8）也必须静止而不消失
     const frozenHost = { ...host, reducedMotion: true };
-    const frozen = createOrbEffectById("ribbon", frozenHost as never, palette);
+    const frozen = await createOrbEffectById("ribbon", frozenHost as never, palette);
     expect(() => frozen.update(0.8, { x: 0, y: 0 })).not.toThrow();
     expect(() => frozen.resize(375, 700)).not.toThrow();
     expect(() => frozen.applyPalette(palette)).not.toThrow();
@@ -128,6 +130,18 @@ describe("orb 特效注册表", () => {
     expect(() => instance.update(1.2, { x: 0.1, y: -0.1 })).not.toThrow();
     expect(() => instance.applyPalette(palette)).not.toThrow();
     expect(() => instance.dispose()).not.toThrow();
+  });
+
+  it("loader 表与 EFFECT_META 的 id 集合完全对齐（漏登记会被这条抓住）", async () => {
+    // 不能直接 import orbEffectLoaders 来断言——它静态持有特效模块，
+    // 在 node 下会连带拉起 three。这里读源码 + 运行时读导出，取交集断言。
+    const source = readFileSync("src/lib/orbEffects/orbEffectLoaders.ts", "utf8");
+    const declared = [...source.matchAll(/^\s{2}(\w+):\s*async \(\)/gm)].map((m) => m[1]);
+    expect(declared).toEqual(EFFECT_META.map((effect) => effect.id));
+    const { ORB_EFFECT_LOADER_IDS } = await import("./orbEffectLoaders");
+    expect([...ORB_EFFECT_LOADER_IDS].sort()).toEqual(
+      EFFECT_META.map((effect) => effect.id).sort(),
+    );
   });
 
   it("notifyOrbEffectChanged 派发事件（宿主据此重挂实例）", () => {

@@ -96,6 +96,13 @@
   **主题块变体（P3 gallery 实测预防）**：新主题块追加在文件末尾，其 `[data-theme=x] .ranking-list>li{display:grid}`（0,2,1）会反过来压过**前面**的历史修复 `.ranking-list.reorder-list>li{display:flex}`（0,2,1）——手动重排行第 5 个子元素折进 92px 名次列。凡在文件尾部加主题块，先 grep 它触碰的类有没有「特异性相同的后置修复」，有就必须更高特异性把修复要回来（gallery 用 0,3,1 重排守卫 + 绊线）。
 - **4.20 「被引用的 token 从未定义」会静默变 none** —— `--ev-1/2/3` 自 `7fb1d5c`（P1b-3 阴影两级收敛）起被 ~20 处 `box-shadow:var(--ev-2)` 引用，但 `:root`×2、主题块、index.html、dist 全无定义 → 全部解析为 `box-shadow:none`，且**当时的 zero-diff 基线就是在这个「无投影」状态下产出的**。教训：① 引用前先 `grep -c '\-\-ev-1:'` 确认定义存在（绊线：全文仅 1 处定义）；② 给某个新主题补定义前，先想清楚旧主题基线是否依赖「未定义 = none」的现状——要补就全局补并**重立基线**，只在新主题块内补则用绊线看守数量。
 
+**构建 / 产物体积类**（⚠️ 都栽在「看起来已经优化过了」的地方）：
+
+- **4.21 `lazy()` 只推迟渲染，不推迟依赖** —— chunk 图按**静态 import**算，不按运行时。`DeferredOrb` 已有 `lazy(() => import("./OrbScene"))` + `requestIdleCallback` + `prefersLiteMode` 三重省流，注释还写明 three 约 522KB 原始/128KB gzip 占落地页 ~45%，实测主包里 `WebGLRenderer`=38 —— 三重防护全部失效。根因是首屏常驻组件（`ThemeSwitcher.tsx`）静态 import 纯数据注册表 `registry.ts`，注册表再静态 import 四个特效模块 → 静态 `from "three"`。**凡「元数据 + 实现」共处一个模块而首屏只用元数据，必复发**；修法是把元数据与 loader 拆两层（`EFFECT_META` 纯字面量 + `orbEffectLoaders.ts` 的 loader 表），loader 里的动态 import **必须写字面量**（`await import("./plasma")`，写变量 vite 扫不到、chunk 拆不出来）。async 化后 `OrbScene` 必须补 `mountToken` 竞态守卫，否则快速切主题/切特效会泄漏半初始化实例。
+- **4.22 性能注释不是证据，构建产物指纹才是** —— 查「某重依赖进没进首屏」用 `[regex]::Matches((Get-Content dist\assets\index-*.js -Raw),'WebGLRenderer')`。主包 `index-*.js` 963.7 → 440.31 KB（gzip 202.49 → 145.21 KB），指纹 `WebGLRenderer`/`THREE.`/`ShaderMaterial`/`DataTexture` 全部归零才算数。**注意 `REVISION` 常量被 terser 内联，计数恒为 0，别拿它当探针**。配套纪律：给这类不变量加源码扫描绊线（`src/ui-fixes.test.ts` 的「首屏依赖图绊线」），并且**必须做「把故障改回去，测试要变红」的验证** —— 否则测试可能因为桩没生效而永远绿。
+- **4.23 部署切换瞬间会抓到旧 asset 名并 404** —— `Invoke-WebRequest https://<host>/` 可能拿到上一版的 `/assets/index-XXXX.js`（此时已 404），HTML 本身 200。加 cache-buster 重取或重跑即可。HTML 的 `cache-control: public, must-revalidate, max-age=0` 对哈希资源名是**正确**配置（来自 `env.ASSETS` 透传，`worker/index.ts:1723-1733` `serveAssets`），别误改成 `no-store`；判断依据是「带 cache-buster 重取后连续 3 次都指向新 asset 名」。
+- **4.24 单测环境跑不了浏览器专属模块** —— `plasma` 依赖 `CanvasTexture`，在 node/vitest 下 `document is not defined`。断言「loader 表与元数据对齐」别去真的 `createOrbEffectById()`，改用源码正则 `[...source.matchAll(/^\s{2}(\w+):\s*async \(\)/gm)]` + 运行时读 `ORB_EFFECT_LOADER_IDS` 双重比对。
+
 **可访问性 / 交互类**：
 
 - **4.14 emoji 要 `aria-hidden`**，图标统一收编 lucide 并带 `aria-label` / `aria-pressed`。
@@ -132,3 +139,6 @@
 | 样式没生效 | `display:block` 空化了 grid / 被通用选择器覆盖 |
 | 部署没生效 | Service Worker 缓存 |
 | 视觉没变化 | 差异小到百分比看不出来，但结构已经坏了 |
+| 已经 lazy 了所以很轻 | 静态 import 链把它拉回首屏主包（4.21/4.22） |
+| 部署没生效 | **部署切换瞬间**抓到了旧 asset 名且 404，先带 cache-buster 重取（4.23） |
+| 部署后封面还不对 | D1 旧行 / 旧代数键仍在短路新解析器（§2.17），不是代码没上 |

@@ -57,23 +57,33 @@ export function OrbScene() {
     let currentEffectId = "";
     let width = 0;
     let height = 0;
+    // createOrbEffectById 已 async（three 走动态 import）。连续切换 / 切主题时，
+    // 先发起的 await 可能后到，把新实例顶掉 —— 用递增 token 让过期结果自行作废。
+    let mountToken = 0;
 
-    const mountInstance = () => {
+    const mountInstance = async () => {
+      const token = (mountToken += 1);
       instance?.dispose();
       instance = null;
       scene.clear();
-      currentEffectId = readOrbEffectId();
+      const effectId = readOrbEffectId();
       const palette = readOrbPalette();
-      instance = createOrbEffectById(
-        currentEffectId,
+      const next = await createOrbEffectById(
+        effectId,
         { scene, camera, renderer, host, reducedMotion: mediaQuery.matches },
         palette,
       );
+      if (token !== mountToken) {
+        next.dispose();
+        return;
+      }
+      instance = next;
+      currentEffectId = effectId;
       if (width > 0) instance.resize(width, height);
     };
-    mountInstance();
+    void mountInstance();
 
-    const onEffectChanged = () => mountInstance();
+    const onEffectChanged = () => void mountInstance();
     window.addEventListener("art-rank:orb-effect-changed", onEffectChanged);
 
     const onThemeChanged = () => {
@@ -81,7 +91,7 @@ export function OrbScene() {
       // 有持久化选择则只换色（不动用户的选择）。
       const next = readOrbEffectId();
       if (next !== currentEffectId) {
-        mountInstance();
+        void mountInstance();
         return;
       }
       instance?.applyPalette(readOrbPalette());

@@ -367,3 +367,56 @@ describe("P4 收尾绊线（PLAN-ui-modernization）", () => {
     expect((theme.match(/id: "/g) ?? []).length).toBe(11);
   });
 });
+
+/**
+ * 首屏关键路径体积绊线（PLAN-BUNDLE-SPLIT.md）。
+ *
+ * Three.js 曾整块躺在主包里：`ThemeSwitcher` → `registry.ts` → 四个特效模块 → `three`，
+ * 把首包从 440KB 顶到 963KB。`DeferredOrb` 的 `lazy()` + `requestIdleCallback`
+ * 只推迟了渲染，没把 three 摘出关键路径 —— 这类"看起来已经优化过"的假象最容易复发，
+ * 所以用源码扫描锁死依赖图：主包可达模块一律不得静态 import 特效模块或 three。
+ */
+describe("首屏依赖图绊线（PLAN-BUNDLE-SPLIT）", () => {
+  const EFFECT_MODULES = ["plasma", "halo", "blackhole", "ribbon"] as const;
+
+  it("registry.ts 只做纯数据：零 three、零特效模块的静态 import", () => {
+    const registry = readFileSync("src/lib/orbEffects/registry.ts", "utf8");
+    expect(registry).not.toMatch(/from\s+["']three["']/);
+    for (const name of EFFECT_MODULES) {
+      expect(registry).not.toMatch(new RegExp(`from\\s+["']\\./${name}["']`));
+    }
+    // 构造函数必须走动态 import
+    expect(registry).toContain('await import("./orbEffectLoaders")');
+  });
+
+  it("主包可达模块不得静态 import 特效模块（否则 three 被拖回首包）", () => {
+    // ThemeSwitcher 是首屏常驻组件，是这条依赖链的入口；锁它连带锁住整条链。
+    const switcher = readFileSync("src/components/ThemeSwitcher.tsx", "utf8");
+    for (const name of EFFECT_MODULES) {
+      expect(switcher).not.toMatch(new RegExp(`orbEffects/${name}`));
+    }
+    // 只允许从注册表取元数据
+    expect(switcher).toMatch(/from\s+["']\.\.\/lib\/orbEffects\/registry["']/);
+  });
+
+  it("loader 表逐个用字面量动态 import（vite 依赖分析入口，间接写会拆不出 chunk）", () => {
+    const loaders = readFileSync("src/lib/orbEffects/orbEffectLoaders.ts", "utf8");
+    for (const name of EFFECT_MODULES) {
+      expect(loaders).toContain(`await import("./${name}")`);
+    }
+    expect(loaders).toMatch(/await loadOrbEffect|const factory = await loader\(\)/);
+  });
+
+  it("DeferredOrb 的省流/空闲短路仍在（推迟加载不该被当成摘出关键路径）", () => {
+    const deferred = readFileSync("src/components/DeferredOrb.tsx", "utf8");
+    expect(deferred).toContain("prefersLiteMode");
+    expect(deferred).toContain("requestIdleCallback");
+  });
+
+  it("OrbScene 的挂载走 async + token 守卫（createOrbEffectById 已变异 async）", () => {
+    const scene = readFileSync("src/components/OrbScene.tsx", "utf8");
+    expect(scene).toContain("mountToken");
+    expect(scene).toMatch(/const mountInstance = async \(\)/);
+    expect(scene).toContain("if (token !== mountToken)");
+  });
+});

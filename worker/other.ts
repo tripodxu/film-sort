@@ -199,10 +199,7 @@ function isDisambiguation(page: WikiPage): boolean {
  *  @param pages 本轮拿到的全部页面（精确标题轮 + 搜索轮）
  *  @param compactBase 用户标题的 compact 形态
  *  @returns 已 compact 过的小写候选名数组 */
-function disambiguationAliases(
-  pages: readonly WikiPage[],
-  compactBase: string,
-): string[] {
+function disambiguationAliases(pages: readonly WikiPage[], compactBase: string): string[] {
   const aliasPattern =
     /可以指[：:]|可指[：:]|以下條目|以下条目|以下为|是以下|指下列|消歧義頁|消歧义页/g;
   const out = new Set<string>();
@@ -817,8 +814,7 @@ export async function otherDetail(name: string, year?: number): Promise<OtherWor
   const yearText = year && year >= 1500 && year <= 2100 ? String(year) : undefined;
   const compactBase = compactTitle(base);
   // 同档位内评分高者优先（tier 已由 scoreOtherPage 保证 ≥1）
-  const byRank = (a: OtherCandidate, b: OtherCandidate) =>
-    b.tier - a.tier || b.score - a.score;
+  const byRank = (a: OtherCandidate, b: OtherCandidate) => b.tier - a.tier || b.score - a.score;
   for (const lang of ["zh", "en"] as const) {
     // ① 精确标题（含分隔符变体）直查
     const exactPages = await wikiTitlePages(lang, titleVariants(base));
@@ -861,7 +857,8 @@ export async function otherDetail(name: string, year?: number): Promise<OtherWor
       const searchWork = await toWork(searchBest.page, lang);
       if (
         searchWork &&
-        (!exactRank || searchBest.tier > exactRank.tier ||
+        (!exactRank ||
+          searchBest.tier > exactRank.tier ||
           (searchBest.tier === exactRank.tier && searchBest.score > exactRank.score))
       )
         return searchWork;
