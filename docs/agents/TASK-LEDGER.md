@@ -11,12 +11,12 @@
 ## 进行中 / 最近
 
 ### T-20260930-02 · 修复：「其他」维度封面/详情错配（游戏品类取图与消歧）
-- **状态**：🔄 进行中（五道门禁绿 + 离线 fixture 回归 ×7；**线上验收受阻——本机到 wikipedia 全系域名 DNS 污染**）｜ **负责人**：本 agent｜ **上级**：T-20260928-07（其遗留风险「底特律 变人→天际线 / 纪念碑谷→真实照片」即本任务入口）
+- **状态**：🔄 进行中（五道门禁绿 + 离线 fixture 回归 ×9；**线上验收受阻——本机到 wikipedia 全系域名 DNS 污染**）｜ **负责人**：本 agent｜ **上级**：T-20260928-07（其遗留风险「底特律 变人→天际线 / 纪念碑谷→真实照片」即本任务入口）
 - **任务类型**：§2.6（外部平台/海报管线）+ §2.7
 - **最小上下文**：`worker/other.ts`（重写：resolveOtherCover/wikiFileThumbUrls/OTHER_TYPE_WORDS/otherDetail/otherSearch/wikiPageImageAny）+ `worker/media.ts`（computePosters other 分支 + queryWikiImages + searchWikiPoster）+ `worker/index.ts`（/api/other/detail、/api/artwork/detail?kind=other 加 year）+ `src/App.tsx`（other 详情带 work.year）+ `worker/other.test.ts`（新增）
 - **改了什么**：① 取图主链 pageimages（非自由封面恒空）→ `pageprops.page_image`（infobox 封面文件名，非自由文件也有值）+ `wikiFileThumbUrls` 批量 imageinfo 换 URL；② 消歧页靠 `pageprops.disambiguation` 机械剔除（替代正则猜「可以指」）；③ 搜索/详情从「opensearch 首条直进」改为「标题分隔符变体精确直查 + gsrsearch 评分择优」，评分 = 页标题含用户词+3 / 条目名带限定词+3 / 类型词+2 / infobox封面+1.5 / 深度+1 / 系列消歧语式−3 / **年份命中+2**；④ 给年份时**优先摘述命中年份的条目**（硬过滤），动物森友会因此越过系列页与 2001 首作落到 2020 正作；⑤ `wikiPageImageAny` 删 `files[0]` 兜底（大角鸮/拉斐尔像错配根因），只保留 infobox 封面与「文件名含标题关键词」两条路；⑥ other 分支顺序改为 resolveOtherCover → langlinks → 主图直取(zh/en) → searchWikiPoster(zh/en) → otherDetail(title, **year**)；⑦ `media.ts` searchWikiPoster 的 exact/gsrsearch 补 `pageprops`、选图扩到 page_image、剔除消歧页
 - **为什么**：用户清单（动物森友会 2020 / Inside 2016 / Journey 2012，格式「标题 - 游戏 (年)」）线上三类错配：动物森友会→大角鸮照片（系列页 files[0]）、Inside→消歧页（1999）、Journey→2012 Dodge Journey 汽车（同名概念页，且 `(video game)` 不是标题而是 redirect 到乐团页）
-- **验证状态**：五道门禁 ✅（499 passed·9 skipped，+7 例 worker/other.test.ts）｜ 离线 fixture 回归 ✅（fetch 桩录像：年份摘页/消歧剔除/详情改走搜索/候选海报补齐/infobox 封面优先/文件名关键词命中与无命中返回 null）｜ 事实采集 ✅（pageprops.page_image 与 disambiguation、gsrsearch 排名、精确标题陷阱、客户/服务端调用链均已实测）｜ **线上验收 ⬜**
+- **验证状态**：五道门禁 ✅（499 passed·9 skipped，+9 例 worker/other.test.ts）｜ 离线 fixture 回归 ✅（fetch 桩录像：年份摘页/消歧剔除/详情改走搜索/候选海报补齐/infobox 封面优先/文件名关键词命中与无命中返回 null）｜ 事实采集 ✅（pageprops.page_image 与 disambiguation、gsrsearch 排名、精确标题陷阱、客户/服务端调用链均已实测）｜ **线上验收 ⬜**
 - **遗留风险**：① **线上验收受阻**——本机 wikipedia 全系域名 DNS 污染（zh.wikipedia.org→199.16.158.9、wikipedia.org→31.13.94.41，Node fetch 与 pwsh/Invoke-WebRequest 均不通，baidu 等正常），推包后需在部署环境用清单三条目复测；② 沿用 T-07 运维教训：改取图逻辑后必须双清 D1 poster_urls（`DELETE ... WHERE media_key LIKE 'other|%'`）+ 清海报缓存，否则旧解析结果短路新代码；③ `wikiSearchOnce` 每查询词最多 2 次 gsrsearch + 1 次 imageinfo，other 取图链最坏 ~8 次请求，冷缓存耗时仍需线上复核（详情端已有 30s 超时）；④ 搜索列表排名仍可能把同名系列页排在作品页前（繁体页标题简繁失配，评分只靠限定词/类型词）——用户可点选，可接受
 - **下一步（给接手者）**：① 推送后在部署环境跑清单三条目（POST /api/posters/batch + /api/other/detail?name=&year=）复测，并双清 D1/缓存；② 观察 poster_errors 上报的其他品类错配；③ 若长尾错配多，考虑把 `wikiSearchOnce` 的年份过滤从「命中优先」升级为「条目年份≠用户年份时降权」
 
@@ -63,9 +63,9 @@
 - **状态**：👀 待审（本地全绿 + stub smoke 实锤；**真实 key 端到端留用户复核，推送后线上可见**）｜ **负责人**：本 agent
 - **任务类型**：§2.1（排序/比较）+ §2.7（AI）
 - **最小上下文**：`src/components/JevDivergenceCard.tsx` + `src/lib/jevDivergence.ts` + `src/views/CompareView.tsx`（AI 卡下方挂载点）+ `src/lib/typesafe.ts`（requestJevRanking 复用）
-- **改了什么**：① `lib/jevDivergence.ts` 偏差 Top3 纯函数（×7 单测：predictedPositions 越界/重复过滤、topDivergences 零偏差剔除/同分按对方名次）；② `JevDivergenceCard.tsx`（点击才请求/失败分类+去配置入口/数据签名过期守卫/<4 件提示/track jev_predict_divergence）；③ CompareView 接入（peerMergedForJev 与比较结果同一 merge 口径 + myTasteContext=buildTasteContext(我的全维度)）；④ 文档：冲刺计划 Phase 6 ✅、FEATURES §3/§12、README 相遇行、USAGE 新小节、CHANGELOG
+- **改了什么**：① `lib/jevDivergence.ts` 偏差 Top3 纯函数（×9 单测：predictedPositions 越界/重复过滤、topDivergences 零偏差剔除/同分按对方名次）；② `JevDivergenceCard.tsx`（点击才请求/失败分类+去配置入口/数据签名过期守卫/<4 件提示/track jev_predict_divergence）；③ CompareView 接入（peerMergedForJev 与比较结果同一 merge 口径 + myTasteContext=buildTasteContext(我的全维度)）；④ 文档：冲刺计划 Phase 6 ✅、FEATURES §3/§12、README 相遇行、USAGE 新小节、CHANGELOG
 - **为什么**：台账待办队列首位；Jev 第三应用点；**零 Worker 改动**——jev-rank 的 profileContext 参数化即 predict 模式，无新端点（API.md 不变）
-- **验证状态**：五道门禁 ✅（481 passed·9 skipped，+7 例）｜ 本地 stub smoke ✅（.tmp/jev-smoke-server stub 倒序 order → 偏差 +9/−9/+7 数学正确、同分排序正确、失败路径「去配置」按钮正确）｜ **真实 TypeSafe key 端到端 ⬜（用户配置 key 后在相遇页点「预测分歧」即可复核）**
+- **验证状态**：五道门禁 ✅（481 passed·9 skipped，+9 例）｜ 本地 stub smoke ✅（.tmp/jev-smoke-server stub 倒序 order → 偏差 +9/−9/+7 数学正确、同分排序正确、失败路径「去配置」按钮正确）｜ **真实 TypeSafe key 端到端 ⬜（用户配置 key 后在相遇页点「预测分歧」即可复核）**
 - **遗留风险**：① Jev 单次预测 ~n 件作品一个 systemone 调用，费率受限（ai_jev 10 次/窗口）——卡上已注明隐私与频率；② 偏差口径基于「合并榜单位次」而非原始 rank（median 重排后 rank 有空洞），设计如此；③ `npm run worker:dev` 历史遗留起不来（DASHBOARD_HTML 字符串导出被本地 workerd 拒绝），不影响部署，待单独批次修
 - **下一步（给接手者）**：推送后线上复核（配置 key → 相遇页 → 预测分歧）；接 Phase 7（Wrapped 年鉴卡）或 Phase 8（PWA）
 

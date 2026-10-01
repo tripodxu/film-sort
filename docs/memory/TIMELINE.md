@@ -10,7 +10,7 @@
 
 ## 2026-09-30 · 「其他」维度封面/详情错配修复（pageprops.page_image + 年份消歧）
 
-T-20260930-02（父 T-20260928-07）。用户清单三条目线上错配 → 改 `worker/other.ts`、`worker/media.ts`、`worker/index.ts`、`src/App.tsx`，新增 `worker/other.test.ts`（×7，离线 fetch 桩）。
+T-20260930-02（父 T-20260928-07）。用户清单三条目线上错配 → 改 `worker/other.ts`、`worker/media.ts`、`worker/index.ts`、`src/App.tsx`，新增 `worker/other.test.ts`（×9，离线 fetch 桩）。
 
 - **封面主源换轨** —— pageimages 对非自由封面恒空，改 `pageprops.page_image` + `wikiFileThumbUrls` 批量 imageinfo 换 URL。
 - **删 files[0] 兜底** —— 文件列表改为「文件名含标题关键词，否则 null」（大角鸮 / 拉斐尔像错配根因）。

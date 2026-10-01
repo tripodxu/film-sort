@@ -156,6 +156,50 @@ describe("other wiki pipeline", () => {
     expect(detail?.content_intro).toContain("2016");
   });
 
+  it("Journey：封面由 2012 摘到风之旅人（跨过乐团页）", async () => {
+    const journeyPages = {
+      query: {
+        pages: {
+          disambig: {
+            title: "Journey",
+            pageprops: { disambiguation: "" },
+            extract: "Journey可以指：旅行者合唱團、风之旅人等。",
+            ...noFreeImage,
+          },
+          band: {
+            title: "旅行者合唱團",
+            extract: "旅行者合唱團是1973年成立的美國搖滾樂團。",
+            ...noFreeImage,
+          },
+          game: {
+            title: "風之旅人",
+            pageprops: { page_image: "Journey_PSN_Cover.png" },
+            extract: "《風之旅人》是thatgamecompany開發的2012年電子遊戲。",
+          },
+        },
+      },
+    };
+    installFetch([
+      { match: /gsrsearch=Journey/, body: journeyPages },
+      {
+        match: /titles=File:Journey_PSN_Cover\.png/,
+        body: {
+          query: {
+            pages: {
+              file: {
+                title: "File:Journey PSN Cover.png",
+                imageinfo: [{ thumburl: `${UP}/2/2b/600px-Journey_PSN_Cover.png` }],
+              },
+            },
+          },
+        },
+      },
+    ]);
+    expect(await resolveOtherCover("Journey", "", 2012)).toBe(
+      `${UP}/2/2b/600px-Journey_PSN_Cover.png`,
+    );
+  });
+
   it("Journey：精确标题命中消歧页时，详情改用搜索结果", async () => {
     installFetch([
       {
@@ -182,6 +226,11 @@ describe("other wiki pipeline", () => {
                 title: "Journey",
                 pageprops: { disambiguation: "" },
                 extract: "Journey可以指：旅行者合唱團、风之旅人等。",
+                ...noFreeImage,
+              },
+              band: {
+                title: "旅行者合唱團",
+                extract: "旅行者合唱團是1973年成立的美國搖滾樂團。",
                 ...noFreeImage,
               },
               game: {
@@ -224,6 +273,46 @@ describe("other wiki pipeline", () => {
       `${UP}/7/7e/600px-Doubutsu.jpg`,
       `${UP}/6/6b/600px-Animal_Crossing_New_Horizons.png`,
     ]);
+  });
+
+  it("纪念碑谷：2014 游戏页的 infobox 封面（而非真实地貌照片）", async () => {
+    installFetch([
+      {
+        match: /gsrsearch=纪念碑谷/,
+        body: {
+          query: {
+            pages: {
+              valley: {
+                title: "紀念碑谷",
+                extract: "紀念碑谷是位於美國亞利桑那州的荒漠地貌。",
+                ...noFreeImage,
+              },
+              game: {
+                title: "紀念碑谷 (遊戲)",
+                pageprops: { page_image: "Monument_Valley_icon_unrounded.jpg" },
+                extract: "《紀念碑谷》是2014年由ustwo開發的益智遊戲。",
+              },
+            },
+          },
+        },
+      },
+      {
+        match: /titles=File:Monument_Valley_icon_unrounded\.jpg/,
+        body: {
+          query: {
+            pages: {
+              file: {
+                title: "File:Monument Valley icon unrounded.jpg",
+                imageinfo: [{ thumburl: `${UP}/4/4c/600px-Monument_Valley_icon_unrounded.jpg` }],
+              },
+            },
+          },
+        },
+      },
+    ]);
+    expect(await resolveOtherCover("纪念碑谷", "", 2014)).toBe(
+      `${UP}/4/4c/600px-Monument_Valley_icon_unrounded.jpg`,
+    );
   });
 
   it("wikiPageImageAny：infobox 封面文件名优先于 images 列表", async () => {
