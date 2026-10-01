@@ -17,6 +17,7 @@ import {
 import {
   loadPosterUrls,
   normalizePosterItem,
+  normalizeYear,
   resolveStoredPosterUrls,
   saveResolvedPosters,
 } from "./posterStore";
@@ -2468,9 +2469,13 @@ async function route(request: Request, env: Env): Promise<Response> {
     ) {
       return json({ status: false, msg: "invalid_query", data: null }, 400);
     }
+    // 同 /api/other/detail：年份是消歧最硬信号（清单格式「标题 - 游戏 (年)」）
+    const detailYear = normalizeYear(
+      url.searchParams.get("year") ?? url.searchParams.get("release_date"),
+    );
     if (kind === "other") {
       try {
-        const work = await otherDetail(title);
+        const work = await otherDetail(title, detailYear);
         if (!work)
           return json({ status: false, msg: "not_found", data: null }, 404, {
             "cache-control": "public, max-age=300",
@@ -2558,10 +2563,15 @@ async function route(request: Request, env: Env): Promise<Response> {
     const name = (url.searchParams.get("name") ?? url.searchParams.get("title"))?.trim() ?? "";
     if (!name || name.length > 120)
       return json({ status: false, msg: "invalid_name", data: null }, 400);
+    // 用户条目的年份是消歧最硬信号（清单格式「标题 - 游戏 (年)」）：精确页是
+    // 系列页/同名概念页时按年份重新择优（动物森友会→2001 首作 vs 2020 正作）
+    const year = normalizeYear(
+      url.searchParams.get("year") ?? url.searchParams.get("release_date"),
+    );
     if (!(await allowUpstreamRequest(request, "other", 20)))
       return json({ error: "rate_limited" }, 429, { "retry-after": "60" });
     try {
-      const work = await otherDetail(name);
+      const work = await otherDetail(name, year);
       if (!work)
         return json({ status: false, msg: "not_found", data: null }, 404, {
           "cache-control": "public, max-age=300",

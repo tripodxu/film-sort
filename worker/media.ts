@@ -2,7 +2,13 @@ import curatedPosters from "./imdb-posters.json";
 import { gdPicUrl, gdSearch, pickTracks, toSc, type GdProxyEnv } from "./gdstudio";
 import { fetchBounded, parseAllowedUrl, readBoundedText, type OutboundPolicy } from "./outbound";
 import { generationOf, registerPurger } from "./cachePurge";
-import { otherDetail, wikiEnTitle, wikiPageImageAny } from "./other";
+import {
+  otherDetail,
+  resolveOtherCover,
+  wikiEnTitle,
+  wikiFileThumbUrls,
+  wikiPageImageAny,
+} from "./other";
 
 export interface DoubanWork {
   id: string;
@@ -1296,8 +1302,22 @@ interface WikiImagePage {
   extract?: string;
   description?: string;
   missing?: boolean;
+  /** pageprops：page_image = infobox 封面文件名（非自由封面也有值，pageimages
+   *  恒空）；disambiguation = 消歧页权威标记（值为空串）。 */
+  pageprops?: Record<string, string>;
   original?: { source?: string };
   thumbnail?: { source?: string };
+}
+
+function wikiIsDisambiguation(page: WikiImagePage): boolean {
+  return (page.pageprops ?? {}).disambiguation !== undefined;
+}
+
+/** 候选页取图：infobox 封面文件（pageprops.page_image，非自由封面也有值）优先，
+ *  其次 pageimages 缩略图。fileUrls 由 wikiFileThumbUrls 预先批量换好。 */
+function wikiPagePoster(page: WikiImagePage, fileUrls: Map<string, string>): string | undefined {
+  const file = (page.pageprops ?? {}).page_image ?? "";
+  return (file ? fileUrls.get(file) : undefined) ?? wikiImageUrl(page);
 }
 
 function wikiImageUrl(page: WikiImagePage): string | undefined {
@@ -1352,13 +1372,28 @@ async function queryWikiImages(
     });
     if (!response.ok) return [];
     const data = (await response.json()) as { query?: { pages?: Record<string, WikiImagePage> } };
-    return Object.values(data.query?.pages ?? {})
-      .map((page) => ({ page, score: scoreWikiImage(page, title, english, type, year) }))
-      .filter((entry) => entry.score >= 0 && !!wikiImageUrl(entry.page))
-      .sort((a, b) => b.score - a.score)
-      .map((entry) => wikiImageUrl(entry.page)!)
-      .filter((url, index, urls) => urls.indexOf(url) === index)
-      .slice(0, 4);
+    const pages = Object.values(data.query?.pages ?? {});
+    // pageprops.page_image（infobox 封面）是文件名，批量换一次 URL；非自由封面
+    // （游戏/新上映影片盒装）只能从这里拿，pageimages 默认 free 档恒空
+    const fileUrls = await wikiFileThumbUrls(
+      lang,
+      pages.map((page) => (page.pageprops ?? {}).page_image ?? ""),
+    );
+    return (
+      pages
+        .map((page) => ({ page, score: scoreWikiImage(page, title, english, type, year) }))
+        // 消歧页（「X 可以指：…」）不是作品页，机械剔除
+        .filter(
+          (entry) =>
+            entry.score >= 0 &&
+            !wikiIsDisambiguation(entry.page) &&
+            !!wikiPagePoster(entry.page, fileUrls),
+        )
+        .sort((a, b) => b.score - a.score)
+        .map((entry) => wikiPagePoster(entry.page, fileUrls)!)
+        .filter((url, index, urls) => urls.indexOf(url) === index)
+        .slice(0, 4)
+    );
   } catch {
     return [];
   }
@@ -1383,7 +1418,7 @@ async function searchWikiPoster(
     const exactParams = new URLSearchParams({
       action: "query",
       titles: exactTitles.join("|"),
-      prop: "pageimages|info|extracts",
+      prop: "pageimages|pageprops|info|extracts",
       piprop: "original|thumbnail",
       pithumbsize: "1200",
       exintro: "true",
@@ -1411,7 +1446,7 @@ async function searchWikiPoster(
         gsrsearch: typeHint ? `${query} ${typeHint}` : query,
         gsrnamespace: "0",
         gsrlimit: "5",
-        prop: "pageimages|info|extracts",
+        prop: "pageimages|pageprops|info|extracts",
         piprop: "original|thumbnail",
         pithumbsize: "1200",
         exintro: "true",
@@ -1594,17 +1629,20 @@ async function computePosters(
     primary = [...new Set([...direct, ...proxied])];
   } else if (type === "other") {
     // 「其他」维度（游戏/艺术/建筑等，豆瓣无条目）。取图优先级：
-    // ① searchWikiPoster 评分匹配（pageimages 默认 free 档，自由图为主：
-    //    名画/摄影/公共版权作品在此命中；type 必须以 undefined 参与评分——
-    //    TYPE_WORDS 无 other 词表，带着 "other" 时 declareType 推断出的
-    //    movie/book/music 会误杀正确条目）；
+    // ① resolveOtherCover：gsrsearch 评分择优 + pageprops.page_image（infobox
+    //    封面文件名，**非自由封面也有值**）。pageimages 的默认 free 档对游戏封面
+    //    恒空，动物森友会/Inside/Journey 实测这类商品封面全在这里拿到；年份是
+    //    消歧最硬信号（用户清单格式「标题 - 游戏 (年)」），系列页/同名概念页
+    //    （动物森友会→系列页、Journey→旅行者合唱团）靠评分+年份压下去；
     // ② langlinks→英文标题再匹配（en wiki 覆盖面更广，zh 简繁变体一并绕开）；
-    // ③ 条目主图直取（images→imageinfo，pageimages 恒空时的兜底；蒙娜丽莎
-    //    实测教训：文章内相关画作按文件名字母序会抢在主图前，故只在
-    //    文件名含标题时采用）；
-    // ④ otherDetail 变体容错兜底。
-    const wiki = await searchWikiPoster(title, english, undefined, year);
-    if (wiki.length) return { urls: wiki, outcome: "found" };
+    // ③ 条目主图直取（images→imageinfo，非自由封面兜底；蒙娜丽莎实测教训：
+    //    文章内相关画作按文件名字母序会抢在主图前，故只在文件名含标题时采用）；
+    // ④ searchWikiPoster 评分匹配（pageimages 自由图：名画/摄影/公共版权作品）；
+    // ⑤ otherDetail 变体容错兜底。type 必须以 undefined 参与评分——TYPE_WORDS
+    //    无 other 词表，带着 "other" 时 declareType 推断出的 movie/book/music
+    //    会误杀正确条目。
+    const gameCover = await resolveOtherCover(title, english, year);
+    if (gameCover) return { urls: [gameCover], outcome: "found" };
     // 简繁变体会让标题评分失败（用户「蒙娜丽莎」vs 条目「蒙娜麗莎」），
     // langlinks 英文标题同时服务 en 匹配与文件名优选
     const enTitle = await wikiEnTitle(title);
@@ -1618,11 +1656,13 @@ async function computePosters(
       const directEn = await wikiPageImageAny("en", enTitle, prefer);
       if (directEn) return { urls: [directEn], outcome: "found" };
     }
+    const wiki = await searchWikiPoster(title, english, undefined, year);
+    if (wiki.length) return { urls: wiki, outcome: "found" };
     if (enTitle) {
       const enWiki = await searchWikiPoster(enTitle, enTitle, undefined, year);
       if (enWiki.length) return { urls: enWiki, outcome: "found" };
     }
-    const fallback = await otherDetail(title).catch(() => null);
+    const fallback = await otherDetail(title, year).catch(() => null);
     const urls = fallback?.poster_url ? [fallback.poster_url] : [];
     return { urls, outcome: urls.length ? "found" : throttled ? "throttled" : "absent" };
   } else {

@@ -135,7 +135,7 @@
 | `worker/doubanlist.ts` | 豆列 / 想看已看导入 | 豆瓣改版频繁，解析器需兼容新旧版式 |
 | `worker/netease.ts` | 网易云歌单 / 扫码登录 | weapi 分层降级 + 分片 + 退避；Cookie 保险库 AES-GCM |
 | `worker/gdstudio.ts` | 音乐试听 / 歌词 | 播放链与歌词缓存；翻唱检测 |
-| `worker/other.ts` | 维基「其他」类别 | pageimages + 百度百科兜底 |
+| `worker/other.ts` | 维基「其他」类别 | `pageprops.page_image`（infobox 封面）+ 标题变体 + gsrsearch 评分择优；`pageprops.disambiguation` 机械剔消歧页；年份是最硬消歧信号 |
 | `worker/import.ts` | 分批导入引擎 | offset 游标、单批 300、进度、上限可调 |
 | `worker/qrTransactions.ts` | 扫码事务 | 凭证只写发起账户（migration 0024） |
 

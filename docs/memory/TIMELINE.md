@@ -8,6 +8,16 @@
 
 ---
 
+## 2026-09-30 · 「其他」维度封面/详情错配修复（pageprops.page_image + 年份消歧）
+
+T-20260930-02（父 T-20260928-07）。用户清单三条目线上错配 → 改 `worker/other.ts`、`worker/media.ts`、`worker/index.ts`、`src/App.tsx`，新增 `worker/other.test.ts`（×7，离线 fetch 桩）。
+
+- **封面主源换轨** —— pageimages 对非自由封面恒空，改 `pageprops.page_image` + `wikiFileThumbUrls` 批量 imageinfo 换 URL。
+- **删 files[0] 兜底** —— 文件列表改为「文件名含标题关键词，否则 null」（大角鸮 / 拉斐尔像错配根因）。
+- **选页换轨** —— opensearch 首条直进 → gsrsearch 评分择优 + `pageprops.disambiguation` 机械剔消歧页 + 标题分隔符变体精确直查。
+- **年份硬消歧** —— `/api/other/detail` 与 `/api/artwork/detail?kind=other` 接收 `year`，前端 other 详情带上 `work.year`；给年份就优先摘述命中年份的条目。
+- 门禁全绿（499 passed·9 skipped）；线上验收受阻（本机 wikipedia 域名 DNS 污染）。
+
 ## 2026-09-29 · 「其他」维度取图管线攻坚（3 commits）
 
 T-20260928-07（用户报障两批）的维基取图专项后续，集中在 `worker/other.ts` + `worker/media.ts`。

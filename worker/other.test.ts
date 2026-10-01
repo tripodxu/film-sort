@@ -1,0 +1,328 @@
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { otherDetail, otherSearch, resolveOtherCover, wikiPageImageAny } from "./other";
+
+// ===== 其他类别维基管线的离线回归测试 =====
+// 用录像级 fixture 驱动 fetch 桩，验证三条链路的选页逻辑：
+// ① 消歧页（pageprops.disambiguation）必须被机械剔除；
+// ② 给了年份时优先摘述命中年份的条目（消歧最硬信号）；
+// ③ pageprops.page_image（infobox 封面）优先于 pageimages（非自由封面恒空），
+//    images→imageinfo 兜底只在文件名含标题关键词时采用，无命中不回落 files[0]
+//    （蒙娜丽莎教训：文章内相关画作按字母序抢在主图前）。
+// fixture 形状按 2026-09-30 线上实测的 zh api.php 响应录制。
+
+interface Route {
+  match: RegExp;
+  body: Record<string, unknown>;
+}
+
+const UP = "https://upload.wikimedia.org/wikipedia/commons/thumb";
+
+/** URLSearchParams 把空格编码成 +，decodeURIComponent 不解 +，一并还原 */
+function decodeUrl(input: string): string {
+  return decodeURIComponent(String(input)).replace(/\+/g, " ");
+}
+
+function installFetch(routes: Route[]): void {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async (input: string) => {
+      const url = decodeUrl(input);
+      const route = routes.find((candidate) => candidate.match.test(url));
+      const body = route ? route.body : { query: { pages: {} } };
+      return new Response(JSON.stringify(body), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+    }),
+  );
+}
+
+/** pageimages 自由图档（对非自由封面恒空，这里就是空） */
+const noFreeImage = { images: undefined };
+
+const ANIMAL_CROSSING = {
+  query: {
+    pages: {
+      series: {
+        title: "動物森友會系列",
+        pageprops: { disambiguation: "" },
+        extract: "動物森友會系列是任天堂的生活模擬遊戲系列。",
+        ...noFreeImage,
+      },
+      first: {
+        title: "動物森友會 (遊戲)",
+        pageprops: { page_image: "Doubutsu_No_Mori_Boxart.jpg" },
+        extract: "《動物森友會》是2001年任天堂開發的生活模擬遊戲。",
+        ...noFreeImage,
+      },
+      horizon: {
+        title: "集合啦！動物森友會",
+        pageprops: { page_image: "Animal_Crossing_New_Horizons.png" },
+        extract: "《集合啦！動物森友會》是2020年任天堂發售的生活模擬遊戲。",
+        ...noFreeImage,
+      },
+    },
+  },
+};
+
+const IMAGE_INFO = {
+  query: {
+    pages: {
+      horizon: {
+        title: "File:Animal Crossing New Horizons.png",
+        imageinfo: [{ thumburl: `${UP}/6/6b/600px-Animal_Crossing_New_Horizons.png` }],
+      },
+      first: {
+        title: "File:Doubutsu no Mori boxart.jpg",
+        imageinfo: [{ thumburl: `${UP}/7/7e/600px-Doubutsu.jpg` }],
+      },
+    },
+  },
+};
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
+
+describe("other wiki pipeline", () => {
+  it("动物森友会：封面由年份摘到 2020 正作（而非系列页/2001 首作）", async () => {
+    installFetch([
+      { match: /titles=动物森友会/, body: ANIMAL_CROSSING },
+      { match: /gsrsearch=动物森友会/, body: ANIMAL_CROSSING },
+      { match: /titles=File:Animal_Crossing_New_Horizons\.png/, body: IMAGE_INFO },
+    ]);
+    expect(await resolveOtherCover("动物森友会", "", 2020)).toBe(
+      `${UP}/6/6b/600px-Animal_Crossing_New_Horizons.png`,
+    );
+  });
+
+  it("Inside：消歧页被剔除，封面与详情落到 2016 游戏页", async () => {
+    const game = {
+      title: "Inside (遊戲)",
+      pageprops: { page_image: "INSIDE_Cover.jpg" },
+      extract: "《Inside》是2016年由Playdead開發的電子遊戲。",
+    };
+    installFetch([
+      {
+        match: /titles=Inside/,
+        body: {
+          query: {
+            pages: {
+              disambig: {
+                title: "Inside",
+                pageprops: { disambiguation: "" },
+                extract: "Inside可以指：專輯、遊戲等事物。",
+                ...noFreeImage,
+              },
+            },
+          },
+        },
+      },
+      {
+        match: /gsrsearch=Inside/,
+        body: {
+          query: {
+            pages: {
+              disambig: {
+                title: "Inside",
+                pageprops: { disambiguation: "" },
+                extract: "Inside可以指：專輯、遊戲等事物。",
+                ...noFreeImage,
+              },
+              game,
+            },
+          },
+        },
+      },
+      {
+        match: /titles=File:INSIDE_Cover\.jpg/,
+        body: {
+          query: {
+            pages: {
+              file: {
+                title: "File:INSIDE Cover.jpg",
+                imageinfo: [{ thumburl: `${UP}/1/1a/600px-INSIDE_Cover.jpg` }],
+              },
+            },
+          },
+        },
+      },
+    ]);
+    expect(await resolveOtherCover("Inside", "", 2016)).toBe(`${UP}/1/1a/600px-INSIDE_Cover.jpg`);
+    const detail = await otherDetail("Inside", 2016);
+    expect(detail?.title).toBe("Inside (遊戲)");
+    expect(detail?.year).toBe(2016);
+    expect(detail?.poster_url).toBe(`${UP}/1/1a/600px-INSIDE_Cover.jpg`);
+    expect(detail?.content_intro).toContain("2016");
+  });
+
+  it("Journey：精确标题命中消歧页时，详情改用搜索结果", async () => {
+    installFetch([
+      {
+        match: /titles=Journey/,
+        body: {
+          query: {
+            pages: {
+              disambig: {
+                title: "Journey",
+                pageprops: { disambiguation: "" },
+                extract: "Journey可以指：旅行者合唱團、风之旅人等。",
+                ...noFreeImage,
+              },
+            },
+          },
+        },
+      },
+      {
+        match: /gsrsearch=Journey/,
+        body: {
+          query: {
+            pages: {
+              disambig: {
+                title: "Journey",
+                pageprops: { disambiguation: "" },
+                extract: "Journey可以指：旅行者合唱團、风之旅人等。",
+                ...noFreeImage,
+              },
+              game: {
+                title: "風之旅人",
+                pageprops: { page_image: "Journey_PSN_Cover.png" },
+                extract: "《風之旅人》是thatgamecompany開發的2012年電子遊戲。",
+              },
+            },
+          },
+        },
+      },
+      {
+        match: /titles=File:Journey_PSN_Cover\.png/,
+        body: {
+          query: {
+            pages: {
+              file: {
+                title: "File:Journey PSN Cover.png",
+                imageinfo: [{ thumburl: `${UP}/2/2b/600px-Journey_PSN_Cover.png` }],
+              },
+            },
+          },
+        },
+      },
+    ]);
+    const detail = await otherDetail("Journey", 2012);
+    expect(detail?.title).toBe("風之旅人");
+    expect(detail?.year).toBe(2012);
+    expect(detail?.poster_url).toBe(`${UP}/2/2b/600px-Journey_PSN_Cover.png`);
+  });
+
+  it("otherSearch 用 infobox 封面文件名补齐各候选的海报", async () => {
+    installFetch([
+      { match: /gsrsearch=动物森友会/, body: ANIMAL_CROSSING },
+      { match: /titles=File:/, body: IMAGE_INFO },
+    ]);
+    const works = await otherSearch("动物森友会");
+    expect(works.map((work) => work.title)).toEqual(["動物森友會 (遊戲)", "集合啦！動物森友會"]);
+    expect(works.map((work) => work.poster_url)).toEqual([
+      `${UP}/7/7e/600px-Doubutsu.jpg`,
+      `${UP}/6/6b/600px-Animal_Crossing_New_Horizons.png`,
+    ]);
+  });
+
+  it("wikiPageImageAny：infobox 封面文件名优先于 images 列表", async () => {
+    installFetch([
+      {
+        match: /titles=蒙娜丽莎/,
+        body: {
+          query: {
+            pages: {
+              painting: {
+                title: "蒙娜麗莎",
+                pageprops: { page_image: "Mona_Lisa.jpg" },
+                images: [
+                  { title: "File:Baldassare_Castiglione.jpg" },
+                  { title: "File:Mona_Lisa,_by_Leonardo_da_Vinci.jpg" },
+                ],
+              },
+            },
+          },
+        },
+      },
+      {
+        match: /titles=File:Mona_Lisa\.jpg/,
+        body: {
+          query: {
+            pages: {
+              file: {
+                title: "File:Mona Lisa.jpg",
+                imageinfo: [{ thumburl: `${UP}/8/8a/600px-Mona_Lisa.jpg` }],
+              },
+            },
+          },
+        },
+      },
+    ]);
+    expect(await wikiPageImageAny("zh", "蒙娜丽莎", ["Mona Lisa"])).toBe(
+      `${UP}/8/8a/600px-Mona_Lisa.jpg`,
+    );
+  });
+
+  it("wikiPageImageAny：文件名命中标题关键词时才用（跨过 files[0]）", async () => {
+    installFetch([
+      {
+        match: /titles=底特律/,
+        body: {
+          query: {
+            pages: {
+              city: {
+                title: "底特律",
+                pageprops: {},
+                images: [
+                  { title: "File:Detroit_Skyline.jpg" },
+                  { title: "File:Detroit_Become_Human_Cover.jpg" },
+                ],
+              },
+            },
+          },
+        },
+      },
+      {
+        match: /titles=File:Detroit_Become_Human_Cover\.jpg/,
+        body: {
+          query: {
+            pages: {
+              file: {
+                title: "File:Detroit Become Human Cover.jpg",
+                imageinfo: [{ thumburl: `${UP}/3/34/600px-Detroit_Become_Human_Cover.jpg` }],
+              },
+            },
+          },
+        },
+      },
+    ]);
+    // files[0] 是天际线照片，必须被跳过
+    expect(await wikiPageImageAny("zh", "底特律 变人", ["Detroit: Become Human"])).toBe(
+      `${UP}/3/34/600px-Detroit_Become_Human_Cover.jpg`,
+    );
+  });
+
+  it("wikiPageImageAny：没有含标题的文件时返回 null（不回落 files[0]）", async () => {
+    installFetch([
+      {
+        match: /titles=纪念碑谷/,
+        body: {
+          query: {
+            pages: {
+              valley: {
+                title: "紀念碑谷",
+                pageprops: {},
+                images: [
+                  { title: "File:Monument_Valley_Arizona.jpg" },
+                  { title: "File:Monument_Valley_3_logotype.svg" },
+                ],
+              },
+            },
+          },
+        },
+      },
+    ]);
+    expect(await wikiPageImageAny("zh", "纪念碑谷", ["Monument Valley"])).toBeNull();
+  });
+});

@@ -471,7 +471,7 @@ ART/RANK 后端 API 完整参考。所有接口由 Cloudflare Worker 处理，�
 
 | 参数 | 类型 | 必填 | 说明 |
 |------|------|------|------|
-| key | string | 是 | 关键词（≤80 字符），先 opensearch 取候选标题再批量取摘要+图片 |
+| key | string | 是 | 关键词（≤80 字符），gsrsearch 取候选页 + 评分择优（标题/限定词/类型词/封面/深度），再批量取摘要与 `pageprops.page_image` 封面 |
 
 **响应：** `{ "status": true, "data": [{ "id": "wiki-zh-…", "title": "纪念碑谷 (游戏)", "subtitle": "解谜游戏", "year": 2014, "poster_url": "https://upload.wikimedia.org/…", "content_intro": "…", "content_source": "zhwiki" }] }`
 
@@ -479,11 +479,11 @@ ART/RANK 后端 API 完整参考。所有接口由 Cloudflare Worker 处理，�
 
 ### GET /api/other/detail
 
-「其他」类别详情。参数 `name`（或兼容 `title`，≤120 字符）。中文精确标题直查 → 英文 → 百度百科 abstract 兜底。限流桶 `other`（20 次/10 分钟）。
+「其他」类别详情。参数 `name`（或兼容 `title`，≤120 字符）+ 可选 `year`（四位年份，归一化 1800–2200）。标题分隔符变体精确直查 → gsrsearch 评分择优；`pageprops.disambiguation` 的消歧页机械剔除，`pageprops.page_image`（infobox 封面，非自由文件也有值）补图。`year` 是消歧最硬信号：给了年份就优先摘述命中年份的条目（清单格式「标题 - 游戏 (年)」），避免命中系列页/同名概念页。限流桶 `other`（20 次/10 分钟）。
 
 ### GET /api/artwork/detail
 
-统一作品详情入口（前端已不再调用）。`kind` ∈ `film|book|music|other`，`q` 为标题（≤120 字符）。`other` 走维基详情（失败为 `502 wiki_unavailable`）；其余先搜索取 subject 链接，再调用对应类型的豆瓣详情（film → `doubanMovieDetail`），失败为 `502 douban_unavailable`。响应为对应详情体并附加 `source_url`；参数非法 `400 invalid_query`，无匹配 `404 not_found`。
+统一作品详情入口（前端已不再调用）。`kind` ∈ `film|book|music|other`，`q` 为标题（≤120 字符），可选 `year`（同 `/api/other/detail`）。`other` 走维基详情（失败为 `502 wiki_unavailable`）；其余先搜索取 subject 链接，再调用对应类型的豆瓣详情（film → `doubanMovieDetail`），失败为 `502 douban_unavailable`。响应为对应详情体并附加 `source_url`；参数非法 `400 invalid_query`，无匹配 `404 not_found`。
 
 ---
 

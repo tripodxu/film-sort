@@ -678,8 +678,12 @@ export default function App() {
       if (detailKind === "other") {
         // 维基 zh→en→百科兜底链实测冷缓存可超 25s：20s 会把本可成功的详情掐成
         // 「暂时没有更多资料」，表现为「其他维度没有详情」。
+        // 带年份：消歧最硬信号（清单格式「标题 - 游戏 (年)」），精确页是系列页/
+        // 同名概念页时服务端按年份重新择优。
+        const extra = new URLSearchParams();
+        if (work.year) extra.set("year", String(work.year));
         const response = await fetch(
-          `/api/other/detail?name=${encodeURIComponent(work.title)}${epochQuery("&")}`,
+          `/api/other/detail?name=${encodeURIComponent(work.title)}${extra.size ? `&${extra}` : ""}${epochQuery("&")}`,
           { signal: AbortSignal.timeout(30000) },
         );
         const payload = (await response.json()) as {

@@ -39,6 +39,11 @@
 - **2.5 维基消歧**：龙猫（原名后缀污染）、活着（书→电影）、范特西（→美国偶像）、Joker（→市镇/物理学家）。启发式打分的边际收益递减很快 —— 若要动这块，直接看 `docs/ROADMAP.md` 的 Jev Phase 2，别再堆规则。
 - **2.6 描述上游超时**：音乐详情曾 ~20s → 百度直连熔断 + 双路并行 + anysearch 提为首选传输 → ~4s。
 - **2.7 维基标题变体不是重定向**：空格 / 全角冒号造成的标题差异，维基**不会**自动重定向 —— 查不到 ≠ 不存在，要按变体逐一查（`d3c5e4e`）；条目名比较前先剥分隔符，否则全角冒号页名漏配（`7334442`）；没有类型词表的维度（other）取图改用条目主图直取，不靠标题打分（`82d7581`）。
+- **2.8 维基 `pageimages` 对非自由封面恒空**：游戏/动漫等商品化封面的 infobox 图是**非自由文件**，pageimages 默认只索引自由图 → 恒空。但 `prop=pageprops` 的 `page_image`（文件名）**非自由文件也有值**（实测 Inside(游戏)=INSIDE_Cover.jpg、風之旅人=Journey_PSN_Cover.png），再补一次 `imageinfo&iiurlwidth` 就出 URL —— 别信「拿不到封面」。
+- **2.9 文件列表兜底必然错配**：文章 `images` 里第一个文件常是无关配图（动物森友会→大角鸮照片、蒙娜丽莎→拉斐尔《卡斯蒂廖内像》）。曾误判为命中 series/franchise 首页词的高频图，实测只是**文件名字母序巧合**。规则：要么 `pageprops.page_image`，要么文件名关键词命中，**不许 files[0] 兜底**（无命中就返回 null）。
+- **2.10 opensearch 有盲区 + `(video game)` 不是标题**：zh opensearch("动物森友会") 只回 6 个简体错页、opensearch("Journey") 把乐团 EP 排在游戏页前 → 用 `generator=search`（gsrsearch）+ `prop=pageprops` 自行评分。另外 en 标题形如 `Journey (video game)` 是 **redirect 到乐团页**，正确标题形如 `Journey (2012 video game)`，拼 `(${hint})` 与 `(${year} ${hint})` 两种都试。年份（用户清单「标题 - 品类 (年)」）是消歧最硬信号，给年份就优先摘述命中年份的条目。
+- **2.11 `pageprops.disambiguation` 是机械消歧标记**：正常作品页无此 key，消歧页有 → 直接剔除，不要用 `/(可以指|可指|消歧義)/` 猜 extract。
+- **2.12 Node `fetch` 不吃环境变量代理**：vitest 里 `fetch` 绕过系统代理（DNS 污染时全超时），DNS 污染的域名（如 wikipedia）连 `Resolve-DnsName` 都返回假 IP —— 探测用 pwsh `Invoke-WebRequest`（走 .NET 代理栈）或桩掉 fetch 跑录像级 fixture，别在 vitest 里做外网探测。
 
 ---
 

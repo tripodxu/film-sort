@@ -121,8 +121,8 @@
 | 豆瓣扫码连接（qrlogin_code/status，dbcl2 入库，服务端代理二维码图） | 「扫码连接豆瓣」 | `/api/douban/qr/*` |
 | 粘贴 Cookie 连接（校验凭证真实可用才入库；扫码风控的兜底） | 弹窗内/「粘贴 Cookie 连接」 | `POST /api/netease/cookie`、`/api/douban/cookie` |
 | Cookie 保险库（AES-GCM 加密，密钥存 admin_config；断开即删） | 「断开连接」 | `user_cookie_vault` 表 |
-| 其他类别数据：维基搜索/详情/图片（pageimages）+ 百度百科兜底 | other 媒介搜索框/详情 | `/api/other/list`、`/api/other/detail`、`/api/artwork/detail?kind=other` |
-| 海报解析与代理（豆瓣/IMDb/网易云 CDN/维基；音乐网易云直出优先、豆瓣兜底；「其他」维度走维基 pageimages；失败上报 poster_errors） | 全站 Poster 组件 | `/api/posters`、`/api/posters/batch`、`/api/image`、`/api/poster-errors/client` |
+| 其他类别数据：维基搜索/详情/图片（gsrsearch 评分择优 + pageprops.page_image 封面 + disambiguation 剔除消歧页 + 年份消歧） | other 媒介搜索框/详情 | `/api/other/list`、`/api/other/detail`、`/api/artwork/detail?kind=other` |
+| 海报解析与代理（豆瓣/IMDb/网易云 CDN/维基；音乐网易云直出优先、豆瓣兜底；「其他」维度走维基 pageprops.page_image + images→imageinfo + gsrsearch 评分择优；失败上报 poster_errors） | 全站 Poster 组件 | `/api/posters`、`/api/posters/batch`、`/api/image`、`/api/poster-errors/client` |
 | 导入封面写入侧表（豆列/豆瓣清单/网易云歌单导入时顺带写 `poster_urls`） | — | `worker/import.ts seedImportedPosterUrls` |
 | 简介消歧（豆瓣 v:summary 优先 → 维基打分择优[限定标题/年份/类型声明/消歧页拒绝/正文须含作品名] → 百度百科；音乐中文歌名百科优先，百科传输 openapi→词条页 meta→anysearch 三级探测 + isolate 缓存） | 作品详情 | `fetchContentIntro` |
 

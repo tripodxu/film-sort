@@ -17,6 +17,19 @@
 **可复用资产**：mailer v3 双出口 + provider 诊断、React Email 模板、验证码错误判别与输入归一化（邮箱小写 / code 去空白）。
 **结论**：**外部凭证一律用干净途径写入，不借道管道**；失败原因必须细分到「为什么失败」，别让所有错误共用一个 internal_error。
 
+## E-20260930 · 「其他」维度封面/详情错配修复（pageprops.page_image + 年份消歧）
+
+**任务**：T-20260930-02。用户清单（动物森友会 2020 / Inside 2016 / Journey 2012）线上三类错配——动物森友会命中系列页配图大角鸮照片、Inside 命中消歧页（year=1999）、Journey 命中 2012 Dodge Journey 汽车。延续 T-07 / E-20260929 的遗留风险。
+**打法**：先用真实 API 把三条候选链的返回逐条测清（pageimages / pageprops.page_image / images 文件列表 / opensearch / gsrsearch / 精确标题 redirect 行为），再据此重写选页与取图链，然后用 fetch 桩录像级 fixture 离线回归（DNS 污染导致线上复测做不了）。
+**踩到的坑**：
+- **pageimages 对非自由封面恒空**（政策性只索引自由图），而 `pageprops.page_image`（infobox 封面文件名）**非自由文件也有值** —— 之前整条链都建立在 pageimages 上，等于把游戏封面全漏了。
+- **文件列表 `files[0]` 兜底必然错配**：无关配图按字母序排在前（大角鸮、拉斐尔《卡斯蒂廖内像》）；曾误判为命中 series/franchise 首页词的高频图，实测纯巧合 → 规则改为「infobox 封面 or 文件名关键词命中，否则 null」。
+- **opensearch 有盲区**：zh("动物森友会") 只回 6 个简体错页、zh("Journey") 把乐团 EP 排前 → 换 gsrsearch 自评分。
+- **`(video game)` 不是标题**：en `Journey (video game)` redirect 到乐团页，正确标题形如 `Journey (2012 video game)`。
+- **年份是消歧最硬信号**：用户清单自带年份（「标题 - 品类 (年)」），给了年份就优先摘述命中年份的条目；`pageprops.disambiguation` 可机械剔除消歧页，不用正则猜「可以指」。
+**可复用资产**：`resolveOtherCover` / `wikiFileThumbUrls` / `OTHER_TYPE_WORDS` / `wikiTitlePages`（`worker/other.ts`）、`wikiPagePoster` / `wikiIsDisambiguation`（`worker/media.ts`）、`worker/other.test.ts` 的 `installFetch` 路由桩。
+**结论**：**维基取图先问「封面是自由文件吗」**——不是就走 pageprops.page_image；**选页先问「用户给了年份吗」**——给了就把年份当硬过滤；兜底链每加一段前先验证该段对目标品类实际返回什么。
+
 ## E-20260929 · 「其他」维度取图管线攻坚（维基）
 
 **任务**：让「其他」维度（无豆瓣 / 网易云源）的封面从「上线以来就没有」到可用，且不能取错图。

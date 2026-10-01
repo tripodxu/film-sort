@@ -1,5 +1,17 @@
 # Changelog
 
+## 2026-09-30 · 修复：「其他」维度封面/详情错配（游戏品类）
+
+用户清单条目（动物森友会 2020 / Inside 2016 / Journey 2012）线上复现三类错配，逐一定诊修复。
+
+- **根因一（取图链）**：`pageimages` 的默认 free 档对商品化封面**政策性恒空**（动物森友会/Inside/Journey 的 pageimage 全空），旧链只能靠 `images→imageinfo` 在文章文件列表里翻；翻取时又以 `files[0]` 兜底，动物森友会因此命中文章配图**大角鸮照片**、蒙娜丽莎命中**同页拉斐尔像**、Journey 命中**2012 Dodge Journey 汽车**。而 infobox 封面文件名一直躺在 `pageprops.page_image` 里——**非自由封面也有值**，实测 Inside(游戏)=INSIDE_Cover.jpg、風之旅人=Journey_PSN_Cover.png、集合啦！動物森友會=Animal_Crossing_New_Horizons.png，只需补一次 imageinfo 换 URL
+- **根因二（消歧）**：`otherDetail`/`otherSearch` 全靠 opensearch 首条直进——动物森友会命中系列页、Inside 命中消歧页（year=1999）。改为「gsrsearch 评分择优 + `pageprops.disambiguation` 机械剔除消歧页 + 标题分隔符变体精确直查」；**年份是消歧最硬信号**（用户清单格式「标题 - 游戏 (年)」）：给了年份就优先摘述命中年份的条目，动物森友会由此越过系列页/2001 首作落到 2020 正作
+- **根因三（opensearch 盲区）**：zh opensearch("动物森友会") 只回 6 个简体错页、opensearch("Journey") 把 Journey(EP專輯) 排在游戏页前——换成 gsrsearch + 评分（页标题含用户词 +3/条目名带限定词 +3/类型词 +2/infobox 封面 +1.5/深度 +1/系列消歧语式 -3/年份命中 +2）
+- **改了哪些**：`worker/other.ts` 重写取图与选页链（新增 `resolveOtherCover`、`wikiFileThumbUrls`、`OTHER_TYPE_WORDS`；`otherDetail`/`otherSearch`/`wikiPageImageAny` 补 pageprops/消歧剔除/变体/评分择优；`wikiPageImageAny` 删 `files[0]` 兜底）；`worker/media.ts` other 分支以 `resolveOtherCover` 打头、`searchWikiPoster` 的 exact/gsrsearch 加 `pageprops` 并把选图扩到 page_image、消歧页剔除；`worker/index.ts` `/api/other/detail` 与 `/api/artwork/detail?kind=other` 接收 `year`；`src/App.tsx` other 详情请求带上 `work.year`
+- **顺手订正（2026-09-28 台账的误判）**：`files[0]` 兜底与 `SKIP` 曾被认为命中 series/franchise 首页词的高频图，实测只是**文件名字母序巧合**
+- **测试**：新增 `worker/other.test.ts`（×7，fetch 桩录像级 fixture，离线）：年份摘页、消歧页剔除、详情改走搜索、候选海报补齐、infobox 封面优先、文件名关键词匹配/无命中返回 null
+- **已知限制**：未上线云端的**线上验收暂无法执行**——本机到 wikipedia 全系域名 DNS 被污染（zh.wikipedia.org→199.16.158.9、wikipedia.org→31.13.94.41，baidu 等正常），推包后需在部署环境用清单三条目复测；且旧解析结果会短路新代码，需双清 D1 poster_urls（`DELETE ... WHERE media_key LIKE 'other\|%'`）+ 清海报缓存
+
 ## 2026-09-30 · 优化冲刺 Phase 7 · 文化年度报告（Wrapped 年鉴卡）
 
 「我的文化索引」侧栏新增「年度年鉴 PNG」——印刷年鉴风格的可导出统计海报：

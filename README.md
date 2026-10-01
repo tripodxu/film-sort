@@ -390,8 +390,8 @@ film-sort3/
 | GET | `/api/book/detail?name=&year=&creator=` | 书籍详情（豆瓣官方简介优先，维基消歧打分兜底） |
 | GET | `/api/movie/detail?name=&year=&creator=` | 影视详情（同上） |
 | GET | `/api/music/detail?name=&year=&creator=` | 音乐详情（同上） |
-| GET | `/api/other/list?key=` | 其他类别搜索（维基百科 opensearch + pageimages 图片） |
-| GET | `/api/other/detail?name=` | 其他类别详情（维基中英双语 + 百度百科兜底） |
+| GET | `/api/other/list?key=` | 其他类别搜索（维基 gsrsearch 评分择优 + pageprops.page_image 封面） |
+| GET | `/api/other/detail?name=&year=` | 其他类别详情（维基中英双语；可选 year 参与消歧，详见 docs/API.md） |
 | GET | `/api/artwork/detail?kind=film|book|music|other&q=` | 统一作品详情入口 |
 | POST | `/api/insights` | AI 点评（榜单/画像/比较三场景；内置或用户自带 API 双通道，详见 docs/API.md） |
 | POST | `/api/ai/test` | 测试用户 AI 配置（探活 + 协议探测回显） |
