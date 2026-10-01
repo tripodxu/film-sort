@@ -1,5 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
+  otherCandidateReport,
+  otherConfidence,
   otherDetail,
   otherSearch,
   resetWikiDegraded,
@@ -8,6 +10,7 @@ import {
   toSimplified,
   wikiPageImageAny,
   wikiWasDegraded,
+  type OtherCandidate,
 } from "./other";
 
 // ===== 其他类别维基管线的离线回归测试 =====
@@ -853,6 +856,224 @@ describe("other wiki pipeline", () => {
       expect(detail?.title).toBe("集合啦！動物森友會");
       expect(detail?.poster_url).toBe(`${UP}/6/6b/600px-Animal_Crossing_New_Horizons.png`);
     });
+  });
+});
+
+// ===== 迭代 2/20（PLAN-JEV-DISAMBIGUATION）：结构化置信度 =====
+// 出发点是 2026-10-02 的「分数不是置信度」：道奇Journey 6.5 与 風之旅人 5.5
+// 相差 1 分，这一分却直接决定了用户看到汽车还是看到游戏。所以除了判决之外，
+// 必须额外能回答「有多确定」。这些用例锁死的就是那条「不确定」的信号线。
+
+describe("otherConfidence（结构化置信度）", () => {
+  /** compactTitle 会做繁→简归一，别名必须按归一后的形态给（见下面的用例）。 */
+  const candidate = (
+    title: string,
+    extract: string,
+    score: number,
+    tier: 0 | 1 | 2,
+    extra: Partial<OtherCandidate> = {},
+  ): OtherCandidate => ({ page: { title, extract }, score, tier, ...extra });
+
+  it("没有冠军：weak / 0 分 / pickedTitle=null（而不是伪造一个 0.5）", () => {
+    const confidence = otherConfidence([], null, "2014");
+    expect(confidence.band).toBe("weak");
+    expect(confidence.score).toBe(0);
+    expect(confidence.pickedTitle).toBeNull();
+    expect(confidence.evidence).toBe("none");
+  });
+
+  it("有候选但没选出冠军：仍然 weak（池子里没有可用项 ≠ 有信心）", () => {
+    // hintRescued 且摘要不提年份 → usableForPick 全淘汰 → 没有冠军
+    const ranked = [candidate("SCP基金会", "一个虚构组织。", 6.5, 1, { hintRescued: true })];
+    const confidence = otherConfidence(ranked, null, "2017");
+    expect(confidence.band).toBe("weak");
+    expect(confidence.poolSize).toBe(0);
+  });
+
+  it("exact：tier2 + 字面证据 + 有年份佐证 + 领先幅度够（纪念碑谷形状）", () => {
+    const ranked = [
+      candidate("紀念碑谷 (遊戲)", "《紀念碑谷》是一款2014年推出的益智解謎類遊戲。", 13.5, 2),
+      candidate("紀念碑谷2", "《紀念碑谷2》是一款2017年推出的續作遊戲。", 9.5, 2),
+    ];
+    const confidence = otherConfidence(ranked, ranked[0], "2014");
+    expect(confidence.band).toBe("exact");
+    expect(confidence.evidence).toBe("literal");
+    expect(confidence.margin).toBeGreaterThan(0.3);
+    expect(confidence.pickedTitle).toBe("紀念碑谷 (遊戲)");
+    expect(confidence.poolSize).toBe(2);
+  });
+
+  it("strong：同样字面证据但领先幅度不足（同档势均力敌，得让用户看一眼）", () => {
+    // 两条都 tier2 分差 1 分 / span 12 → margin≈0.083，低于 exact 的 0.05 线之上但需区分：
+    // 造一个分差 < 0.6 的场景：margin = 0.04 < 0.05 → strong
+    const ranked = [
+      candidate("紀念碑谷 (遊戲)", "《紀念碑谷》是一款2014年推出的益智解謎類遊戲。", 13.5, 2),
+      candidate("紀念碑谷2", "《紀念碑谷2》是一款2014年推出的續作遊戲。", 13.1, 2),
+    ];
+    const confidence = otherConfidence(ranked, ranked[0], "2014");
+    expect(confidence.band).toBe("strong");
+    expect(confidence.margin).toBeLessThan(0.05);
+  });
+
+  it("shaky：靠消歧页别名救回来的（Journey → 風之旅人 是 alias 不是 literal）", () => {
+    const ranked = [
+      candidate("風之旅人", "《風之旅人》是一款2012年推出的冒險類獨立遊戲。", 5.5, 1),
+      candidate("Thatgamecompany", "一家獨立遊戲工作室，作品包括 Journey。", 3.5, 1),
+    ];
+    // 别名比对走 compactTitle（含繁→简），所以传的是归一后的「风之旅人」
+    const confidence = otherConfidence(ranked, ranked[0], "2012", ["风之旅人"]);
+    expect(confidence.evidence).toBe("alias");
+    expect(confidence.band).toBe("shaky");
+    // alias 证据权重 0.6 → 0.45*0.6 + 0.35*margin + 0.2*1
+    expect(confidence.score).toBeGreaterThan(0.4);
+    expect(confidence.score).toBeLessThan(0.8);
+  });
+
+  it("别名给的是繁体原名时也算命中（compactTitle 两侧都归一，不该要求调用方手工转简）", () => {
+    const ranked = [
+      candidate("風之旅人", "《風之旅人》是一款2012年推出的冒險類獨立遊戲。", 5.5, 1),
+    ];
+    expect(otherConfidence(ranked, ranked[0], "2012", ["風之旅人"]).evidence).toBe("alias");
+    expect(otherConfidence(ranked, ranked[0], "2012", ["风之旅人"]).evidence).toBe("alias");
+  });
+
+  it("hint：只靠类型词轮救回来、零字面证据的候选永远不是 shaky（最多 weak）", () => {
+    const ranked = [
+      candidate("SCP基金会", "《风之旅人》是一款2017年推出的冒險類獨立遊戲。", 9.5, 1, {
+        hintRescued: true,
+      }),
+      candidate("SCP基金会2", "另一段够长的摘要文字凑长度。", 4.5, 1),
+    ];
+    const confidence = otherConfidence(ranked, ranked[0], "2017");
+    expect(confidence.evidence).toBe("hint");
+    expect(confidence.band).toBe("weak");
+  });
+
+  it("年份不佐证降档：tier2 字面证据但摘要没提用户年份 → 不给 exact", () => {
+    const ranked = [
+      candidate("紀念碑谷 (遊戲)", "《紀念碑谷》是一款益智解謎類遊戲。", 13.5, 2),
+      candidate("紀念碑谷2", "《紀念碑谷2》是一款益智解謎類遊戲。", 3.5, 2),
+    ];
+    const confidence = otherConfidence(ranked, ranked[0], "2014");
+    expect(confidence.evidence).toBe("literal");
+    // 权重里年份项 0.2 直接丢掉
+    expect(confidence.band).not.toBe("exact");
+    expect(confidence.band).not.toBe("strong");
+    expect(confidence.band).toBe("weak");
+  });
+
+  it("不给年份时不惩罚年份项（score 不因缺年份缩水）", () => {
+    const ranked = [candidate("蒙娜丽莎", "《蒙娜丽莎》是一幅油画。", 11.5, 2)];
+    const withYear = otherConfidence(ranked, ranked[0], undefined);
+    const expectBand = withYear.band;
+    expect(expectBand).toBe("exact");
+    expect(withYear.score).toBeCloseTo(1, 5);
+  });
+
+  it("hintRescued 且不给年份 → 没有可用冠军，margin 记 0（不给年份就无法自证）", () => {
+    // usableForPick 要求 hintRescued 自证年份；不给年份时 usable 为空 →
+    // 报 weak，而不是「margin 满幅 = 很确信」这种把不确定说成确定的假信号。
+    const ranked = [candidate("林更新", "中国内地男演员。", 5.5, 1, { hintRescued: true })];
+    const confidence = otherConfidence(ranked, ranked[0], undefined);
+    expect(confidence.band).toBe("weak");
+    expect(confidence.evidence).toBe("none");
+    expect(confidence.margin).toBe(0);
+  });
+
+  it("池里只有一条可用冠军 → margin 记满 1（无对手时不该装作不确定）", () => {
+    const ranked = [candidate("蒙娜丽莎", "《蒙娜丽莎》是一幅油画。", 5.5, 2)];
+    const confidence = otherConfidence(ranked, ranked[0], undefined);
+    expect(confidence.margin).toBe(1);
+    expect(confidence.band).toBe("exact");
+  });
+});
+
+describe("otherCandidateReport（候选池诊断）", () => {
+  it("纪念碑谷 2014：报告说 exact、冠军就是紀念碑谷 (遊戲)", async () => {
+    installFetch([
+      {
+        match: /gsrsearch=纪念碑谷/,
+        body: {
+          query: {
+            pages: {
+              game: {
+                title: "紀念碑谷 (遊戲)",
+                pageprops: { page_image: "Monument_Valley_icon_unrounded.jpg" },
+                extract: "《紀念碑谷》是一款2014年推出的空间解謎類手機遊戲。",
+              },
+              geo: {
+                title: "紀念碑谷",
+                pageprops: {},
+                extract: "紀念碑谷是美國亞利桑那州的一處地質構造。",
+              },
+            },
+          },
+        },
+      },
+      { match: /titles=紀念碑谷/, body: { query: { pages: {} } } },
+    ]);
+    const report = await otherCandidateReport("纪念碑谷", "纪念碑谷", 2014);
+    expect(report.picked).toBe("紀念碑谷 (遊戲)");
+    expect(report.confidence.band).toBe("exact");
+    expect(report.lang).toBe("zh");
+    expect(report.candidates[0].title).toBe("紀念碑谷 (遊戲)");
+    expect(report.candidates[0].hasCover).toBe(true);
+    expect(report.candidates[0].year).toBe("2014");
+  });
+
+  it("线上实测：已修好的 Journey 报告 alias/shaky，不是被误判成 hint/weak", async () => {
+    // 2026-10-02 线上 /api/other/candidates?name=Journey&year=2012 实录：
+    // picked=风之旅人 但 evidence=hint/band=weak——判决是对的，诊断端点却说没信心。
+    // 根因：風之旅人 同样带 hintRescued（它是被「Journey 电子游戏」轮返回来的，
+    // 标题零重合），而 evidenceOf 先看 hintRescued 就返回 hint，从没查过别名表。
+    // 修法：tier1 先查别名表再退到 hint。
+    installFetch([
+      {
+        match: /gsrsearch=Journey 电子游戏/,
+        body: {
+          query: {
+            pages: {
+              // 消歧页与两款同名作品在**同一个搜索池**里返回：线上就是这样，
+              // disambiguationAliases 要从同一批 pages 里读出「风之旅人」这份名单。
+              disambig: {
+                title: "Journey",
+                pageprops: { disambiguation: "" },
+                extract: "Journey可以指：\n旅行者合唱團，美國搖滾樂團\n風之旅人，2012年电子游戏",
+              },
+              game: {
+                title: "風之旅人",
+                pageprops: {},
+                extract: "《風之旅人》（英文版名：Journey）是一款2012年推出的冒險類獨立遊戲。",
+              },
+              dodge: {
+                title: "道奇Journey",
+                pageprops: {},
+                extract: "道奇Journey是克莱斯勒品牌旗下的一款中型SUV。",
+              },
+            },
+          },
+        },
+      },
+      { match: /gsrsearch=Journey$/, body: { query: { pages: {} } } },
+    ]);
+    const report = await otherCandidateReport("Journey", "journey", 2012);
+    expect(report.picked).toBe("風之旅人");
+    expect(report.confidence.evidence).toBe("alias");
+    expect(report.confidence.band).toBe("shaky");
+    // 道奇Journey 的 compact 自己就含「journey」——它被放进 tier1 是因为
+    // declaresWorkTopic 降档（摘要说它是 SUV，不是作品），但它的证据来源仍是
+    // 字面文本，不是我们从消歧页找回来的，所以是 literal 而非 hint。
+    const dodge = report.candidates.find((entry) => entry.title === "道奇Journey");
+    expect(dodge?.evidence).toBe("literal");
+    expect(dodge?.tier).toBe(1);
+  });
+
+  it("空标题：返回空报告而不是去打维基", async () => {
+    const report = await otherCandidateReport("", "");
+    expect(report.candidates).toEqual([]);
+    expect(report.picked).toBeNull();
+    expect(report.confidence.band).toBe("weak");
+    expect(report.lang).toBeNull();
   });
 });
 

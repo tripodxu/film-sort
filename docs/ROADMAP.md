@@ -44,13 +44,20 @@ Jev 是 TypeSafe AI 的「System One」决策模型(2026-09-15 发布):输入 st
 
 **测试**:worker/typesafe.test.ts(请求构造 / 响应解析 / 错误映射,mock fetch,比照 `ai.test.ts`);线上验证无 key 降级路径;真实排序效果待用户配置 key 后端到端自测。
 
-### Phase 2:维基消歧 Choice
 ### Phase 1.5:Jev 辅助模式(AI 代判)(✅ 已实施,2026-09-28,随优化冲刺 P5 交付)
 
 排序中每对先经 /api/ai/jev-pick(Choice 二选一)预测:置信 ≥0.8 自动落位(进决策日志可撤销),低于阈值或复测阶段交还用户;开关默认关(key 仍用户自配)。端点与限流见 docs/API.md。
 
+### Phase 2:维基消歧 Choice（🔶 部分实施,2026-10-02 迭代 2/20 落地「出口层」）
 
 `worker/media.ts`(及「其他」媒介路径)的维基候选消歧,从手写打分(限定标题 / 类型声明 / 年份守卫)换成一条 Choice 问题:「哪个候选是《X》(Y 年)的作品?」——候选列表 ≤255 天然匹配 Choice 基数;概率与 confidence 替代整套启发式。现有规则保留为降级路径(未配 key / 调用失败时)。改动面较大,独立一批提交。
+
+**2026-10-02 迭代 2/20 落地的是出口层,判决层暂不动**。理由见 `docs/PLAN-JEV-DISAMBIGUATION.md`:海报解析跑在 `/api/posters/batch` 里,**拿不到用户 key**(key 只在浏览器 localStorage);一批 8 条 = 8 次外部请求违反 CONVENTIONS §3;再加 70–500ms 会放大 m00079「有点卡」。所以先做两个不改变任何既有判决的出口:
+
+- `GET /api/other/candidates` —— 无 key 可用的候选池诊断端点,把「为什么是这个 / 为什么不敢给」摊开,并给出结构化置信度(`exact`/`strong`/`shaky`/`weak` + 证据类型 `literal`/`alias`/`hint`);
+- `POST /api/ai/jev-disambiguate` —— Choice 多选一(2–255 选一),未配 key 返 400、上游失败附 `fallback: "rules"`。
+
+判决层接入(哪个 `band` 触发一次 Jev 调用、用户选择如何回写 D1)留给前端「让用户选」UI 那一轮。
 
 ### Phase 3:广场内容护栏(Noul)
 

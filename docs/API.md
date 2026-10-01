@@ -30,7 +30,7 @@ ART/RANK 后端 API 完整参考。所有接口由 Cloudflare Worker 处理，�
 |----|----------|------|---------------|
 | `events` | `POST /api/events` | 120 | 60 |
 | `other` | `POST /api/poster-errors/client` | 120 | 60 |
-| `other` | `GET /api/other/list`、`GET /api/other/detail` | 20 | 60 |
+| `other` | `GET /api/other/list`、`GET /api/other/detail`、`GET /api/other/candidates` | 20 | 60 |
 | `auth` | `POST /api/admin/reset`、`/api/admin/change-password`、`/api/admin/sessions/revoke-all` | 30 | 300 |
 | `posters` | `POST /api/posters/batch` | 60 | 600 |
 | `ai` | `POST /api/insights`（内置通道） | 8 | 600 |
@@ -40,6 +40,7 @@ ART/RANK 后端 API 完整参考。所有接口由 Cloudflare Worker 处理，�
 | `ai_jev_test` | `POST /api/ai/jev/test` | 5 | 600 |
 | `ai_jev` | `POST /api/ai/jev-rank` | 10 | 600 |
 | `ai_jev_pick` | `POST /api/ai/jev-pick` | 60 | 600 |
+| `ai_jev_disambiguate` | `POST /api/ai/jev-disambiguate` | 20 | 600 |
 | `music_play` | `GET /api/music/play` | 12 | 600 |
 | `music_lyric` | `GET /api/music/lyric` | 12 | 600 |
 | `netease` | `/api/netease/*` | 120 | 60 |
@@ -481,6 +482,54 @@ ART/RANK 后端 API 完整参考。所有接口由 Cloudflare Worker 处理，�
 
 「其他」类别详情。参数 `name`（或兼容 `title`，≤120 字符）+ 可选 `year`（四位年份，归一化 1800–2200）。标题分隔符变体精确直查 → gsrsearch 评分择优；`pageprops.disambiguation` 的消歧页机械剔除，`pageprops.page_image`（infobox 封面，非自由文件也有值）补图。`year` 是消歧最硬信号：给了年份就优先摘述命中年份的条目（清单格式「标题 - 游戏 (年)」），避免命中系列页/同名概念页。限流桶 `other`（20 次/10 分钟）。
 
+### GET /api/other/candidates
+
+「其他」维度**候选池诊断**（迭代 2/20 新增）。参数与 `/api/other/detail` 同为 `name`（或 `title`，≤120 字符）+ 可选 `year` + 可选 `english`。检索链与出图链同源（zh/en × 纯标题轮/`电子游戏`类型词轮），但**不参与判决**：只回答「候选池里有什么、我们有多确定」。
+
+限流桶 `other`（20 次/10 分钟，与 `/api/other/detail` 共享——诊断端点不能变成绕过配额的旁路）。成功 `cache-control: public, max-age=300`；上游故障 `502 wiki_unavailable` + `max-age=60`；`name` 缺失或超长 `400 invalid_name`。
+
+**响应：**
+```json
+{
+  "status": true,
+  "msg": "ok",
+  "data": {
+    "picked": "纪念碑谷 (游戏)",
+    "lang": "zh",
+    "confidence": {
+      "score": 0.767,
+      "band": "exact",
+      "margin": 0.333,
+      "evidence": "literal",
+      "pickedTitle": "纪念碑谷 (游戏)",
+      "poolSize": 4
+    },
+    "candidates": [
+      {
+        "title": "纪念碑谷 (游戏)",
+        "year": "2014",
+        "excerpt": "《纪念碑谷》是一款2014年推出的空间解谜类手机游戏。",
+        "score": 13.5,
+        "tier": 2,
+        "evidence": "literal",
+        "hasCover": true
+      }
+    ]
+  }
+}
+```
+
+`confidence.band` 四档：
+
+| 档 | 含义 | 典型形状 |
+|----|------|----------|
+| `exact` | tier2 + 字面证据 + 有年份佐证 + 领先幅度足够 | 纪念碑谷 2014 |
+| `strong` | tier2 + 字面证据，但同档势均力敌 | 动物森友会 2020 |
+| `shaky` | tier1 且靠消歧页**自列别名**救回，领先幅度够 | 风味（形状正确，但证据来自别名而非标题） |
+| `weak` | 没有可用冠军，或冠军只有「类型词硬凑数」这一种证据 | 日常幻想 / 故事FM / 看理想（永久空图） |
+
+`confidence.evidence` 三档：`literal`（条目名自己就贴着用户标题）、`alias`（标题零重合，但消歧页权威列名的同名候选）、`hint`（标题零重合、也不是消歧页自列，只靠 `电子游戏` 类型词轮凑数）、`none`（没有冠军）。`score = 0.45×证据权重 + 0.35×领先幅度 + 0.20×年份佐证`，证据权重 literal=1 / alias=0.6 / hint=0.25。
+
 ### GET /api/artwork/detail
 
 统一作品详情入口（前端已不再调用）。`kind` ∈ `film|book|music|other`，`q` 为标题（≤120 字符），可选 `year`（同 `/api/other/detail`）。`other` 走维基详情（失败为 `502 wiki_unavailable`）；其余先搜索取 subject 链接，再调用对应类型的豆瓣详情（film → `doubanMovieDetail`），失败为 `502 douban_unavailable`。响应为对应详情体并附加 `source_url`；参数非法 `400 invalid_query`，无匹配 `404 not_found`。
@@ -628,6 +677,30 @@ AI 快排：一次 systemone 调用（state = 用户品味档案 + 清单全文�
 ```
 **响应：** `{ "ok": true, "model": "jev-1.13.0", "pick": "left", "confidence": 0.98, "probabilities": { "left": 0.99, "right": 0.01 }, "inputTokens": 427 }`；错误沿用 AI 错误码。
 **限流：** 桶 `ai_jev_pick` 60 次/10 分钟。
+
+### POST /api/ai/jev-disambiguate
+
+Choice 多选一（迭代 2/20 新增，用于「哪个候选才是用户要的那件作品」）。与 `/api/ai/jev-pick` 的区别是基数：这里是 2–255 选一，`criteria` 逐条铺开候选描述，一次问清。
+
+**调用铁律：本端点永远不是主链路。** key 存在浏览器 localStorage，Worker 拿不到；未配置 key 一律 `400 invalid_config`，上游失败响应附 `fallback: "rules"`，调用方必须回落规则路径（`docs/agents/CONVENTIONS.md` §3）。
+
+**请求体：**
+```json
+{
+  "question": "用户清单里写的是《Journey》(2012)，哪个候选才是它？",
+  "options": [
+    { "key": "dodge", "description": "道奇Journey，克莱斯勒品牌旗下的一款中型SUV。" },
+    { "key": "game", "description": "《风之旅人》，2012 年发布的冒险类独立游戏。" }
+  ],
+  "locale": "zh",
+  "config": { "apiKey": "…" }
+}
+```
+
+`key` 须匹配 `^[A-Za-z0-9_-]{1,64}$` 且不重复（要能原样回传给前端）；`description` 压平空白并截到 400 字符；候选 2–255 项（1 项无从「选」，255 是 Choice 基数上限）。
+
+**响应：** `{ "ok": true, "model": "jev-1.13.0", "pick": "game", "confidence": 0.91, "probabilities": { "dodge": 0.03, "game": 0.91 }, "inputTokens": 210 }`。`confidence` 缺失时回退被选中项的概率；上游吐出入参之外的 `choice`（模型幻觉）按 `502 upstream_error` 拒绝；`probabilities` 只保留入参里出现过的 key。错误沿用 AI 错误码，上游失败额外带 `fallback: "rules"`。
+**限流：** 桶 `ai_jev_disambiguate` 20 次/10 分钟。
 
 ---
 

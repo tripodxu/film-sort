@@ -758,6 +758,214 @@ export async function wikiPageImageAny(
   return wikiFileThumbUrl(lang, file);
 }
 
+/** 置信度分档。命名对应「证据有多硬」，不是「分数有多高」。 */
+export type OtherConfidenceBand = "exact" | "strong" | "shaky" | "weak";
+
+/** 冠军的字面证据强度（由弱到强）：
+ *  - `literal` tier2 且条目名本身就贴着用户标题（纪念碑谷 (遊戲)）
+ *  - `alias`   tier1，但候选是消歧页自列的同名候选（Journey → 風之旅人）
+ *  - `hint`    tier1，且标题零字面重合，只靠「<标题> 电子游戏」轮救回来 */
+export type OtherEvidenceKind = "literal" | "alias" | "hint" | "none";
+
+export interface OtherConfidence {
+  /** 0–1 综合置信度。 */
+  score: number;
+  band: OtherConfidenceBand;
+  /** 冠军领先第二名的幅度（归一到 0–1）。差得越小越不自信。 */
+  margin: number;
+  evidence: OtherEvidenceKind;
+  /** 冠军是哪个条目（null = 没选出冠军）。 */
+  pickedTitle: string | null;
+  /** 参与排序的可用候选数（usableForPick 之后）。 */
+  poolSize: number;
+}
+
+function clamp01(value: number): number {
+  if (!Number.isFinite(value)) return 0;
+  return value < 0 ? 0 : value > 1 ? 1 : value;
+}
+
+/** 冠军的字面证据强度，按「证据有多硬」排序：
+ *  - `literal` tier2（条目名就是那件作品），或 tier1 但自己就蹭到了用户标题
+ *            （道奇Journey、日常幻想指南——证据来自字面文本，只是不够精确）
+ *  - `alias`   tier1 且标题**零字面重合**，但候选是消歧页自列的同名候选
+ *            （Journey → 風之旅人）。这类候选在 resolveOtherPages 里同样带
+ *              hintRescued 标记（它是被「<标题> 电子游戏」轮返回来的），所以
+ *              必须先查别名表再看 hintRescued，否则线上实测会把「已修好的
+ *              Journey」误报成 hint——判决对了但诊断说没信心，端点就白做了。
+ *  - `hint`    tier1 且标题零重合、也不是消歧页自列的候选，只靠类型词轮活着
+ *              （故事FM → SCP基金会徽标，就是这么来的）
+ */
+function evidenceOf(
+  entry: OtherCandidate | null,
+  aliases: readonly string[],
+  compactBase: string,
+): OtherEvidenceKind {
+  if (!entry) return "none";
+  // tier2 已经由 titleMatchTier 认定「条目名就是那件作品」，是最硬的证据。
+  if (entry.tier === 2) return "literal";
+  const compact = compactTitle(entry.page.title ?? "");
+  // tier1 里有一类是**自己就蹭到了用户标题**的（道奇Journey 的 compact 含
+  // 「journey」，日常幻想指南 含「日常幻想」）——它们的证据来源是字面文本，
+  // 不是我们去找回来的，所以仍是 literal。区别只在于不够精确，压不进 tier2。
+  if (compactBase !== "" && (compact.includes(compactBase) || compactBase.includes(compact)))
+    return "literal";
+  // 到这里说明标题零重合。能站住只有两种来路：消歧页自列的别名（Journey →
+  // 風之旅人，维基权威地认为它是同名候选之一），或纯靠类型词轮凑数
+  // （SCP基金会，一个字面证据都没有）。
+  if (aliases.some((alias) => alias && compactTitle(alias) === compact)) return "alias";
+  return entry.hintRescued ? "hint" : "alias";
+}
+
+/**
+ * 结构化置信度：把 `pickBest` 的判决**额外**翻译成「有多确定」。
+ *
+ * 2026-10-02 的教训是「分数不是置信度」——「道奇Journey」6.5 与「風之旅人」5.5
+ * 相差 1 分，这条 1 分却直接决定了用户看到汽车还是看到游戏。启发式加权分是连续量，
+ * 把它当离散判决用是这个 bug 的根。所以这里不去改 `pickBest` 的判决（那条链路上
+ * 已验证正确的项一个都不能动），而是把**已有的信号重排**成一个 0–1 的置信度，
+ * 供调用方决定「要不要把选择权交出去」。
+ *
+ * 合成因子全部是既有信号，**不新增任何规则**：
+ *  - 档位 tier 2 / 1（字面证据强度的主项）
+ *  - 证据类型 literal > alias > hint
+ *  - 领先幅度 margin（冠军 − 亚军，按满分跨度 12 归一；池里只有一条时算满）
+ *  - 年份佐证（给了年份且冠军摘要命中）
+ *
+ * 分档：
+ *  - `exact`  tier2 + 字面证据 + 有年份佐证（或无年份要求）→ 已验证正确的形状
+ *  - `strong` tier2 + 字面证据，但同档内有多条势均力敌
+ *  - `shaky`  靠别名/题材词救回来，或领先幅度很小
+ *  - `weak`   没选出冠军，或冠军证据仅 `hint`
+ */
+export function otherConfidence(
+  ranked: readonly OtherCandidate[],
+  picked: OtherCandidate | null,
+  year?: string,
+  aliases: readonly string[] = [],
+  /** 用户标题的 compact 形态，用于判「候选是否零字面重合」。 */
+  compactBase = "",
+): OtherConfidence {
+  const usable = ranked.filter((entry) => usableForPick(entry, year));
+  if (!picked || !usable.length) {
+    return { score: 0, band: "weak", margin: 0, evidence: "none", pickedTitle: null, poolSize: 0 };
+  }
+  const evidence = evidenceOf(picked, aliases, compactBase);
+  // 领先幅度：亚军取「冠军之外分数最高的那条」，池里只有冠军一条时视为满幅。
+  const rivals = usable.filter((entry) => entry !== picked);
+  const bestRival = rivals.reduce((max, entry) => Math.max(max, entry.score), -Infinity);
+  const span = 12;
+  const margin = rivals.length ? clamp01((picked.score - bestRival) / span) : 1;
+  const yearBacked = year ? mentionsYear(picked, year) : true;
+  // 权重：字面证据 0.45 / 领先幅度 0.35 / 年份佐证 0.20。
+  const evidenceWeight = evidence === "literal" ? 1 : evidence === "alias" ? 0.6 : 0.25;
+  const score = clamp01(0.45 * evidenceWeight + 0.35 * margin + 0.2 * (yearBacked ? 1 : 0));
+  let band: OtherConfidenceBand;
+  if (evidence === "literal" && picked.tier === 2 && yearBacked && margin >= 0.05) band = "exact";
+  else if (evidence === "literal" && picked.tier === 2 && yearBacked) band = "strong";
+  else if (evidence === "alias" && margin >= 0.1) band = "shaky";
+  else band = "weak";
+  return {
+    score,
+    band,
+    margin,
+    evidence,
+    pickedTitle: (picked.page.title ?? "").trim() || null,
+    poolSize: usable.length,
+  };
+}
+
+export interface OtherCandidateView {
+  title: string;
+  year?: string;
+  excerpt: string;
+  score: number;
+  tier: 0 | 1 | 2;
+  evidence: OtherEvidenceKind;
+  hasCover: boolean;
+}
+export interface OtherCandidateReport {
+  candidates: OtherCandidateView[];
+  picked: string | null;
+  confidence: OtherConfidence;
+  /** zh / en —— 冠军来自哪个语言轮的搜索池。 */
+  lang: "zh" | "en" | null;
+}
+
+/** 把内部候选翻成对外形状（只给标题/首段/分数，不回原始 JSON）。 */
+function toCandidateView(
+  entry: OtherCandidate,
+  aliases: readonly string[],
+  compactBase: string,
+): OtherCandidateView {
+  const extract = (entry.page.extract ?? "").trim();
+  return {
+    title: (entry.page.title ?? "").trim(),
+    ...(extract.match(/(?:1[5-9]|20)\d{2}/)
+      ? { year: extract.match(/(?:1[5-9]|20)\d{2}/)![0] }
+      : {}),
+    excerpt: extract.slice(0, 160),
+    score: entry.score,
+    tier: entry.tier,
+    evidence: evidenceOf(entry, aliases, compactBase),
+    hasCover: Boolean(
+      entry.page.pageprops?.page_image || entry.page.fileUrl || entry.page.thumbnail?.source,
+    ),
+  };
+}
+
+/**
+ * 候选池诊断：把 other 维度「为什么是这个 / 为什么不敢给」摊开给调用方。
+ *
+ * 2026-10-02 的教训是规则这条路已经走到头（台账 T-20261002-01 遗留风险①：
+ * 「日常幻想 / 故事FM / 看理想 三条永久空图」——zh-wiki 根本没有这些条目，
+ * 搜出来的候选零重合，再加规则也没用）。所以本函数**不参与判决**，
+ * 只回答两个问题：候选池里有什么、我们有多确定。
+ *
+ * 诊断链与 resolveOtherCover 同源（同样两语言 × 纯标题轮/类型词轮），
+ * 因此这里的 pickedTitle 就是真会取到封面的那一条。
+ */
+export async function otherCandidateReport(
+  title: string,
+  english: string,
+  year?: number,
+): Promise<OtherCandidateReport> {
+  const base = title.trim().slice(0, 120);
+  const yearText = year && year >= 1500 && year <= 2100 ? String(year) : undefined;
+  const empty: OtherCandidateReport = {
+    candidates: [],
+    picked: null,
+    confidence: otherConfidence([], null, yearText),
+    lang: null,
+  };
+  if (!base) return empty;
+  const compactBase = compactTitle(base);
+  for (const lang of ["zh", "en"] as const) {
+    const queries = (lang === "zh" ? [base, english] : [english, base])
+      .map((value) => (value ?? "").trim())
+      .filter(Boolean);
+    if (!queries.length) continue;
+    const ranked = await resolveOtherPages(lang, base, queries, yearText);
+    const best = pickBest(ranked, yearText);
+    if (!best) continue;
+    // 别名由同一批候选反推：与评分时用的是同一份 allPages。
+    const aliases = disambiguationAliases(
+      ranked.map((entry) => entry.page),
+      compactBase,
+    );
+    return {
+      candidates: ranked
+        .filter((entry) => usableForPick(entry, yearText))
+        .slice(0, 8)
+        .map((entry) => toCandidateView(entry, aliases, compactBase)),
+      picked: (best.page.title ?? "").trim(),
+      confidence: otherConfidence(ranked, best, yearText, aliases, compactBase),
+      lang,
+    };
+  }
+  return empty;
+}
+
 /** 其他类作品封面：gsrsearch 评分择优 + infobox 封面文件（pageprops.page_image）。
  *  覆盖「精确标题是系列页/消歧页/同名概念页」的场景——动物森友会实测 zh 精确
  *  标题落到「動物森友會系列」，而 2020 正作「集合啦！動物森友會」要靠搜索

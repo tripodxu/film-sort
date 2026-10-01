@@ -66,7 +66,7 @@ import {
   doubanUserId,
   doubanAccountInfo,
 } from "./douban";
-import { otherSearch, otherDetail } from "./other";
+import { otherSearch, otherDetail, otherCandidateReport } from "./other";
 import {
   gdSearch,
   gdPlayUrl,
@@ -97,8 +97,10 @@ import {
   type ResolvedAi,
 } from "./ai";
 import {
+  jevChoose,
   jevPick,
   jevRank,
+  parseJevChooseBody,
   parseJevPickBody,
   parseJevRankBody,
   testJevConnection,
@@ -204,6 +206,7 @@ async function allowUpstreamRequest(
     | "ai_jev"
     | "ai_jev_test"
     | "ai_jev_pick"
+    | "ai_jev_disambiguate"
     | "music"
     | "music_play"
     | "music_lyric"
@@ -2604,6 +2607,28 @@ async function route(request: Request, env: Env): Promise<Response> {
       return json({ ok: false, ...aiErrorPayload(error) }, aiErrorStatus(error));
     }
   }
+  if (url.pathname === "/api/other/candidates" && request.method === "GET") {
+    const name = (url.searchParams.get("name") ?? url.searchParams.get("title"))?.trim() ?? "";
+    const english = (url.searchParams.get("english") ?? "").trim();
+    if (!name || name.length > 120)
+      return json({ status: false, msg: "invalid_name", data: null }, 400);
+    const year = normalizeYear(
+      url.searchParams.get("year") ?? url.searchParams.get("release_date"),
+    );
+    // 与 /api/other/detail 共享「other」限流桶：诊断端点不能变成绕过配额的旁路。
+    if (!(await allowUpstreamRequest(request, "other", 20)))
+      return json({ error: "rate_limited" }, 429, { "retry-after": "60" });
+    try {
+      const report = await otherCandidateReport(name, english, year);
+      return json({ status: true, msg: "ok", data: report }, 200, {
+        "cache-control": "public, max-age=300",
+      });
+    } catch {
+      return json({ status: false, msg: "wiki_unavailable", data: null }, 502, {
+        "cache-control": "public, max-age=60",
+      });
+    }
+  }
   if (url.pathname === "/api/ai/jev/test" && request.method === "POST") {
     assertSameOrigin(request);
     if (!(await allowUpstreamRequest(request, "ai_jev_test", 5)))
@@ -2643,6 +2668,34 @@ async function route(request: Request, env: Env): Promise<Response> {
       return json({ ok: true, ...result }, 200, { "cache-control": "no-store" });
     } catch (error) {
       return json({ ok: false, ...aiErrorPayload(error) }, aiErrorStatus(error));
+    }
+  }
+  if (url.pathname === "/api/ai/jev-disambiguate" && request.method === "POST") {
+    assertSameOrigin(request);
+    if (!(await allowUpstreamRequest(request, "ai_jev_disambiguate", 20)))
+      return json({ ok: false, error: "rate_limited", msg: "操作太频繁，请稍后再试" }, 429, {
+        "retry-after": "600",
+      });
+    const body = await readJson(request);
+    // 未配置 key 一律 400：调用方据此回落规则路径，主链路永不依赖本端点
+    // （docs/agents/CONVENTIONS.md §3「主链路永不依赖外部决策服务」）。
+    const config = validateJevConfig(body.config);
+    if (!config)
+      return json(
+        {
+          ok: false,
+          error: "invalid_config",
+          msg: "未配置 TypeSafe API Key，请回落到规则解析",
+        },
+        400,
+      );
+    const parsed = parseJevChooseBody(body);
+    if (!parsed) return json({ ok: false, error: "invalid_data", msg: "候选数据不合法" }, 400);
+    try {
+      const result = await jevChoose(parsed, config);
+      return json({ ok: true, ...result }, 200, { "cache-control": "no-store" });
+    } catch (error) {
+      return json({ ok: false, ...aiErrorPayload(error), fallback: "rules" }, aiErrorStatus(error));
     }
   }
   if (url.pathname === "/api/ai/jev-pick" && request.method === "POST") {

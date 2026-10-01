@@ -183,6 +183,113 @@ export async function jevRank(
   };
 }
 
+/**
+ * 多选一裁决（维基消歧用）：把 Choice 从「二选一」推广到「≤255 选一」。
+ *
+ * `jevPick` 是本函数的特例（两个候选），保持不动——辅助模式的每对比较很便宜，
+ * 而消歧是「一次问清楚到底哪个候选才是用户要的那件」，两者调用频率差一个数量级。
+ *
+ * **调用铁律**：未配置 key / 调用失败 / 置信度低于调用方阈值时，
+ * 一律回落既有规则路径——本函数永不成为主链路的单点（docs/agents/CONVENTIONS.md §3）。
+ */
+export interface JevChooseInput {
+  /** state 里给模型的世界知识，例如「用户清单里写的是《Journey》(2012)」。 */
+  question: string;
+  /** 候选描述（≤255 项）。key 即模型返回的 choice 值。 */
+  options: Array<{ key: string; description: string }>;
+  locale?: "zh" | "en";
+}
+
+export interface JevChooseResult {
+  model: string;
+  pick: string;
+  confidence: number;
+  /** 每个候选的概率（缺失的键不出现）。 */
+  probabilities: Record<string, number>;
+  inputTokens: number;
+}
+
+const CHOICE_OPTION_KEY_RE = /^[A-Za-z0-9_-]{1,64}$/;
+
+/** 校验并清洗多选一入参：候选 2–255 项（1 项无从「选」），key 必须可回传。 */
+export function parseJevChooseBody(body: Record<string, unknown>): JevChooseInput | null {
+  if (typeof body.question !== "string" || !body.question.trim() || body.question.length > 2000)
+    return null;
+  if (!Array.isArray(body.options) || body.options.length < 2 || body.options.length > 255)
+    return null;
+  if (body.locale !== undefined && body.locale !== "zh" && body.locale !== "en") return null;
+  const options: Array<{ key: string; description: string }> = [];
+  const seen = new Set<string>();
+  for (const raw of body.options) {
+    if (typeof raw !== "object" || raw === null) return null;
+    const option = raw as Record<string, unknown>;
+    if (typeof option.key !== "string" || !CHOICE_OPTION_KEY_RE.test(option.key)) return null;
+    if (typeof option.description !== "string") return null;
+    const description = option.description.replace(/\s+/g, " ").trim().slice(0, 400);
+    if (!description || seen.has(option.key)) return null;
+    seen.add(option.key);
+    options.push({ key: option.key, description });
+  }
+  return {
+    question: body.question.trim(),
+    options,
+    ...(body.locale === "en" ? { locale: "en" as const } : {}),
+  };
+}
+
+/**
+ * Choice 多选一：返回带校准置信度的裁决结果。
+ * 上游返回的 choice 必须是入参里出现过的 key，否则视为响应畸形（避免把
+ * 模型幻觉出来的字符串当成有效裁决）。
+ */
+export async function jevChoose(
+  input: JevChooseInput,
+  config: { apiKey: string },
+  fetchImpl: typeof fetch = fetch,
+): Promise<JevChooseResult> {
+  const zh = (input.locale ?? "zh") === "zh";
+  const payload = {
+    model: "jev-latest",
+    state: input.question,
+    questions: {
+      which: {
+        type: "choice",
+        instructions: zh
+          ? "以上哪一个才是用户要找的那件作品?判断依据：类型是否吻合、年份是否吻合、条目名是否就是那件作品本身。只依据候选描述判断。"
+          : "Which of the above is the work the user is looking for? Judge by: does the kind match, does the year match, is the entry literally that work. Judge only from each candidate's own description.",
+        criteria: Object.fromEntries(
+          input.options.map((option) => [option.key, option.description]),
+        ),
+      },
+    },
+  };
+  const body = await callSystemOne(payload, config.apiKey, fetchImpl);
+  const answer = body.answers?.which;
+  const pick = answer?.choice;
+  const known = new Set(input.options.map((option) => option.key));
+  if (typeof pick !== "string" || !known.has(pick))
+    throw new AiError("upstream_error", 502, "Jev choose malformed");
+  const probabilities: Record<string, number> = {};
+  for (const [key, value] of Object.entries(answer?.probabilities ?? {})) {
+    if (known.has(key) && typeof value === "number" && value >= 0 && value <= 1)
+      probabilities[key] = value;
+  }
+  const chosenProbability = probabilities[pick];
+  const confidence =
+    typeof answer?.confidence === "number" && answer.confidence >= 0 && answer.confidence <= 1
+      ? answer.confidence
+      : chosenProbability;
+  if (typeof confidence !== "number")
+    throw new AiError("upstream_error", 502, "Jev choose missing confidence");
+  return {
+    model: typeof body.model === "string" ? body.model : "jev",
+    pick,
+    confidence,
+    probabilities,
+    inputTokens: typeof body.usage?.input_tokens === "number" ? body.usage.input_tokens : 0,
+  };
+}
+
 export interface JevPickInput {
   kind: JevKind;
   left: JevWorkInput;

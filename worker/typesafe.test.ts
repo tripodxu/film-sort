@@ -2,8 +2,10 @@ import { describe, expect, it, vi } from "vitest";
 import {
   buildJevQuestions,
   buildJevState,
+  jevChoose,
   jevPick,
   jevRank,
+  parseJevChooseBody,
   parseJevPickBody,
   parseJevRankBody,
   testJevConnection,
@@ -176,12 +178,17 @@ describe("testJevConnection", () => {
 
 // ===== Phase 5:1v1 取舍预测 =====
 
-const pickResponse = (choice: string, confidence: number, probabilities: Record<string, number>) =>
+const pickResponse = (
+  choice: string,
+  confidence: number,
+  probabilities: Record<string, number>,
+  answerKey = "pick",
+) =>
   new Response(
     JSON.stringify({
       model: "jev-1.13.0",
       answers: {
-        pick: { type: "choice", choice, confidence, probabilities },
+        [answerKey]: { type: "choice", choice, confidence, probabilities },
       },
       usage: { input_tokens: 120 },
     }),
@@ -253,5 +260,143 @@ describe("parseJevPickBody", () => {
     expect(parseJevPickBody({ ...body, kind: "nope" })).toBeNull();
     expect(parseJevPickBody({ ...body, right: { title: "" } })).toBeNull();
     expect(parseJevPickBody({ ...body, profileContext: "x".repeat(4097) })).toBeNull();
+  });
+});
+
+// ===== 迭代 2/20（PLAN-JEV-DISAMBIGUATION）：Choice 多选一，用于维基消歧 =====
+
+describe("parseJevChooseBody", () => {
+  const option = (key: string, description = "描述") => ({ key, description });
+  const body = {
+    question: "哪个候选才是《Journey》(2012)？",
+    options: [option("dodge", "道奇Journey，克莱斯勒 SUV"), option("game", "风之旅人，独立游戏")],
+    locale: "zh",
+  };
+
+  it("合法 body 通过：key 原样保留；locale 缺省时不落字段（zh 是默认值），en 才落", () => {
+    const parsed = parseJevChooseBody(body);
+    expect(parsed?.options.map((entry) => entry.key)).toEqual(["dodge", "game"]);
+    // 与 parseJevPickBody / parseJevRankBody 同一约定：中文是默认，不占 payload
+    expect(parsed?.locale).toBeUndefined();
+    expect(parseJevChooseBody({ ...body, locale: "en" })?.locale).toBe("en");
+  });
+
+  it("description 压平空白并截到 400 字（防注入排版 + 防超长 payload）", () => {
+    const parsed = parseJevChooseBody({
+      ...body,
+      options: [option("a", "  多\n行   空白  "), option("b", "x".repeat(500))],
+    });
+    expect(parsed?.options[0].description).toBe("多 行 空白");
+    expect(parsed?.options[1].description).toHaveLength(400);
+  });
+
+  it("候选少于 2 项 / 多于 255 项 → null（1 项无从「选」，255 是 Choice 基数上限）", () => {
+    expect(parseJevChooseBody({ ...body, options: [option("a")] })).toBeNull();
+    const many = Array.from({ length: 256 }, (_, index) => option(`o${index}`));
+    expect(parseJevChooseBody({ ...body, options: many })).toBeNull();
+    expect(parseJevChooseBody({ ...body, options: many.slice(0, 255) })).not.toBeNull();
+  });
+
+  it("key 非法（空/超长/含空白与斜杠）或重复 → null（key 要能原样回传给前端）", () => {
+    expect(parseJevChooseBody({ ...body, options: [option(""), option("b")] })).toBeNull();
+    expect(
+      parseJevChooseBody({ ...body, options: [option("x".repeat(65)), option("b")] }),
+    ).toBeNull();
+    expect(parseJevChooseBody({ ...body, options: [option("a b"), option("c")] })).toBeNull();
+    expect(parseJevChooseBody({ ...body, options: [option("a/b"), option("c")] })).toBeNull();
+    expect(parseJevChooseBody({ ...body, options: [option("dup"), option("dup")] })).toBeNull();
+  });
+
+  it("question 缺失/超长 2000、description 非字符串、locale 非法 → null", () => {
+    expect(parseJevChooseBody({ ...body, question: "" })).toBeNull();
+    expect(parseJevChooseBody({ ...body, question: "q".repeat(2001) })).toBeNull();
+    expect(
+      parseJevChooseBody({ ...body, options: [option("a"), { key: "b", description: 7 }] }),
+    ).toBeNull();
+    expect(parseJevChooseBody({ ...body, locale: "fr" })).toBeNull();
+  });
+});
+
+describe("jevChoose", () => {
+  const input = {
+    question: "用户清单里写的是《Journey》(2012)，哪个候选才是它？",
+    options: [
+      { key: "dodge", description: "道奇Journey，克莱斯勒品牌旗下的一款中型SUV。" },
+      { key: "game", description: "《风之旅人》，2012 年发布的冒险类独立游戏。" },
+      { key: "band", description: "Journey，英國搖滾樂團。" },
+    ],
+  };
+
+  it("多选一：choice/confidence/probabilities 齐备，criteria 覆盖全部候选 key", async () => {
+    const fetchImpl = stubFetch((url, init) => {
+      expect(url).toBe("https://api.typesafe.ai/v1/systemone");
+      expect((init?.headers as Record<string, string>).authorization).toBe("Bearer ts_key12345");
+      const body = JSON.parse(String(init?.body));
+      expect(body.state).toBe(input.question);
+      expect(body.questions.which.type).toBe("choice");
+      expect(Object.keys(body.questions.which.criteria)).toEqual(["dodge", "game", "band"]);
+      return pickResponse("game", 0.91, { dodge: 0.03, game: 0.91, band: 0.06 }, "which");
+    });
+    const result = await jevChoose(input, { apiKey: "ts_key12345" }, fetchImpl);
+    expect(result.pick).toBe("game");
+    expect(result.confidence).toBe(0.91);
+    expect(result.probabilities.band).toBe(0.06);
+  });
+
+  it("confidence 缺失时回退被选中项的概率；只保留入参里出现过的概率 key", async () => {
+    const fetchImpl = stubFetch(
+      () =>
+        new Response(
+          JSON.stringify({
+            model: "jev",
+            answers: {
+              which: {
+                type: "choice",
+                choice: "band",
+                probabilities: { band: 0.77, dodge: 0.1, ghost: 0.13 },
+              },
+            },
+            usage: { input_tokens: 88 },
+          }),
+          { status: 200 },
+        ),
+    );
+    const result = await jevChoose(input, { apiKey: "ts_key12345" }, fetchImpl);
+    expect(result.confidence).toBe(0.77);
+    // 上游多吐的 ghost 不认识，剔掉——前端只拿得到能对上条目的概率
+    expect(result.probabilities).toEqual({ band: 0.77, dodge: 0.1 });
+    expect(result.inputTokens).toBe(88);
+  });
+
+  it("上游吐出入参之外的 choice → upstream_error（模型幻觉不能当有效裁决）", async () => {
+    const fetchImpl = stubFetch(
+      () =>
+        new Response(
+          JSON.stringify({
+            answers: { which: { type: "choice", choice: "not-a-candidate" } },
+          }),
+          { status: 200 },
+        ),
+    );
+    await expect(jevChoose(input, { apiKey: "ts_key12345" }, fetchImpl)).rejects.toMatchObject({
+      code: "upstream_error",
+    });
+  });
+
+  it("概率越界（负数/大于 1）不采信，且无任何合法概率时按 upstream_error 拒绝", async () => {
+    const outOfRange = stubFetch(
+      () =>
+        new Response(
+          JSON.stringify({
+            answers: {
+              which: { type: "choice", choice: "game", probabilities: { game: 4.2 } },
+            },
+          }),
+          { status: 200 },
+        ),
+    );
+    await expect(jevChoose(input, { apiKey: "ts_key12345" }, outOfRange)).rejects.toMatchObject({
+      code: "upstream_error",
+    });
   });
 });

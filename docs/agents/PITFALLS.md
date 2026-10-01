@@ -103,6 +103,12 @@
 - **4.23 部署切换瞬间会抓到旧 asset 名并 404** —— `Invoke-WebRequest https://<host>/` 可能拿到上一版的 `/assets/index-XXXX.js`（此时已 404），HTML 本身 200。加 cache-buster 重取或重跑即可。HTML 的 `cache-control: public, must-revalidate, max-age=0` 对哈希资源名是**正确**配置（来自 `env.ASSETS` 透传，`worker/index.ts:1723-1733` `serveAssets`），别误改成 `no-store`；判断依据是「带 cache-buster 重取后连续 3 次都指向新 asset 名」。
 - **4.24 单测环境跑不了浏览器专属模块** —— `plasma` 依赖 `CanvasTexture`，在 node/vitest 下 `document is not defined`。断言「loader 表与元数据对齐」别去真的 `createOrbEffectById()`，改用源码正则 `[...source.matchAll(/^\s{2}(\w+):\s*async \(\)/gm)]` + 运行时读 `ORB_EFFECT_LOADER_IDS` 双重比对。
 
+**打分 / 判决类**：
+
+- **4.25 分数不是置信度** —— `scoreOtherPage` 产出 0–13.5 的连续加权分，`pickBest` 取最高分就无条件返回。「道奇Journey」6.5 与「風之旅人」5.5 差 1 分，这一分却直接决定用户看到汽车还是游戏。**把启发式加权分当离散判决用，本身就是 bug 的根**；评分只能当**排序**信号，判决必须先过「档位/证据」闸门，再由置信度决定要不要打扰用户。
+- **4.26 证据要按「来路」分类，不是按「谁赢了」** —— `evidenceOf` 最初先判 `hintRescued`，导致已修好的 Journey（确实来自 `Journey 电子游戏` 轮，却同时在消歧页自列名单里）被误报成 `hint`；改成「零字面重合才算 hint」又把「道奇Journey」误判成 hint（它的 compact 自己就含 `journey`，只是被 `declaresWorkTopic` 降了档）。最终按来路三层判：tier2 → `literal`；tier1 但字面蹭到标题 → `literal`；tier1 零重合但在消歧页名单 → `alias`；tier1 零重合且只靠类型词轮 → `hint`。**推论：`candidate.evidence` 不能当「这是正确答案」用**（Journey 判 `weak` 时池里的道奇Journey 会显示 `literal`），得连 `picked` + `band` 一起看。
+- **4.27 诊断端点自己先要能自证** —— 「判决对了但诊断说没信心」会立刻让新诊断端点白做。调试置信度类代码时，**必须同时看冠军和被淘汰者的 evidence**；只看冠军会以为分类错了，其实两者都可能是对的（在诚实报告「没把握」的口径下，池里存在证据更硬的候选是正常输出）。
+
 **可访问性 / 交互类**：
 
 - **4.14 emoji 要 `aria-hidden`**，图标统一收编 lucide 并带 `aria-label` / `aria-pressed`。
@@ -142,3 +148,6 @@
 | 已经 lazy 了所以很轻 | 静态 import 链把它拉回首屏主包（4.21/4.22） |
 | 部署没生效 | **部署切换瞬间**抓到了旧 asset 名且 404，先带 cache-buster 重取（4.23） |
 | 部署后封面还不对 | D1 旧行 / 旧代数键仍在短路新解析器（§2.17），不是代码没上 |
+| 候选 A 分最高所以它对 | 启发式分不是置信度，1 分之差就可能跨作品（4.25） |
+| 这个候选 evidence 是 literal 所以是正确答案 | evidence 说的是**它自己的**证据来路，不是它是否被选中（4.26） |
+| 诊断端点说 `weak`，那它就没用 | 判决层可能完全正确，正是诚实暴露了无把握区（4.27） |
