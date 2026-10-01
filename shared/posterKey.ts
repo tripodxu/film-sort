@@ -41,10 +41,16 @@ export function mediaTypeForKind(kind: unknown): PosterMediaType | null {
 /**
  * 「其他」维度的解析器代数。解析逻辑（选页/消歧）升级后 +1。
  *
+ * gen3（2026-10-02）：标题吻合闸门。旧算法里条目名只要**蹭到**用户标题的
+ * 任一查询词就能靠「有 infobox 封面 / 摘要够长 / 命中类型词」这些弱信号堆分
+ * 夺冠，线上因此留下三张错图——日常幻想→日常幻想指南一文里的曾俊贤签名照、
+ *  故事FM→萧煌奇《我們的故事》专辑、看理想→《勇者斗恶龙》游戏封面。
+ *  gen2 的 15 行缓存里就固化了这些错图，key 不换就永远是那张签名照。
+ *
  * 服务端 `normalizeYear` 与前端都可能产出越界年份（《蒙娜丽莎》1503 在 API
  * 层就被丢掉），这里以同一口径兜一次，保证两端键一致。
  */
-export const OTHER_POSTER_GENERATION = "2";
+export const OTHER_POSTER_GENERATION = "3";
 
 /** 与 posterStore.normalizeYear 同一口径（1800–2200 的整数）。 */
 export function posterKeyYear(year?: number): number | undefined {

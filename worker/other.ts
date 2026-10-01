@@ -51,6 +51,24 @@ export const OTHER_HINT: Record<"zh" | "en", string> = { zh: "电子游戏", en:
 
 const YEAR_RE = /\b(?:1[5-9]|20)\d{2}\b/;
 
+/** 本轮取图里「上游没给出有效响应」发生过（超时/限流/5xx）。
+ *  与「上游明确答复：这件作品没有封面」必须分开——前者是瞬时故障，
+ *  若记成 absent 会被 24 小时负缓存固化，用户刷新多少次都是空白。
+ *  2026-10-02 线上实测：同一请求连打 8 次（换 english 造新键）拿到
+ *  2 正确 + 2 en 封面 + 4 空，后 4 次全是上游超时。 */
+let wikiDegraded = false;
+/** 每条 other 海报解析**开始前**调用：降级标记是逐条判定的，
+ *  批量请求里上一条的故障不该把这一条判成 absent。 */
+export function resetWikiDegraded(): void {
+  wikiDegraded = false;
+}
+export function noteWikiDegraded(): void {
+  wikiDegraded = true;
+}
+export function wikiWasDegraded(): boolean {
+  return wikiDegraded;
+}
+
 async function wikiJson(
   lang: "zh" | "en",
   params: URLSearchParams,
@@ -61,10 +79,16 @@ async function wikiJson(
       headers: { "user-agent": UA, accept: "application/json" },
       signal: AbortSignal.timeout(timeoutMs),
     });
-    if (!r.ok) return null;
+    if (!r.ok) {
+      // 429/5xx 是「再试一次可能就好了」；4xx（如无此条目）则是明确答复。
+      if (r.status === 429 || r.status >= 500) wikiDegraded = true;
+      return null;
+    }
     const d = (await r.json()) as { query?: { pages?: Record<string, WikiPage> } };
     return d.query?.pages ?? null;
   } catch {
+    // 超时/连接被重置：一律记成上游降级，不当「确实没有图」。
+    wikiDegraded = true;
     return null;
   }
 }
@@ -167,6 +191,61 @@ function isDisambiguation(page: WikiPage): boolean {
   return (page.pageprops ?? {}).disambiguation !== undefined;
 }
 
+/** 消歧页自列的候选条目名（`X可以指：A、B等` / `以下条目` 语式）。
+ *  用户给的标题本身是消歧页时，正确作品往往是其中某个**完全不同名**的条目
+ *  （Journey→風之旅人），标题闸门只能靠这份名单放行。
+ *  **只信「条目名就是用户标题」的那张消歧页**——搜索结果里混进的旁支消歧页
+ *  （搜「日常幻想」会带回「性幻想」）会注入一串毫不相干的别名。
+ *  @param pages 本轮拿到的全部页面（精确标题轮 + 搜索轮）
+ *  @param compactBase 用户标题的 compact 形态
+ *  @returns 已 compact 过的小写候选名数组 */
+function disambiguationAliases(
+  pages: readonly WikiPage[],
+  compactBase: string,
+): string[] {
+  const aliasPattern =
+    /可以指[：:]|可指[：:]|以下條目|以下条目|以下为|是以下|指下列|消歧義頁|消歧义页/g;
+  const out = new Set<string>();
+  for (const page of pages) {
+    if (!isDisambiguation(page)) continue;
+    if (compactTitle(page.title ?? "") !== compactBase) continue;
+    const text = `${page.extract ?? ""}\n${page.description ?? ""}`;
+    // 按语式切成若干段（「...、B等事物。」），段内再按行/顿号/逗号/斜杠切。
+    // **必须按行切**：线上「Journey」消歧页就是每行一项（实录
+    // `Journey可以指：\n旅行者合唱團，美國搖滾樂團\n風之旅人，2012年电子游戏`），
+    // 不切行会把上一项粘在候选名前面，别名永远等于「风之旅人」——线上于是
+    // 让道奇Journey 冒充作品页。
+    for (const part of text.split(aliasPattern).slice(1)) {
+      const tail = part.split(/[。．]/, 1)[0];
+      for (const name of tail.split(/[\n、，,／/｜|]/)) {
+        // 去掉「等事物」「等」这类收尾、「（2012年遊戲）」这类括号限定，
+        // 以及行尾的「，2012年电子游戏」这类**描述**——候选名是条目的名字，
+        // 描述不属于名字。剥离后仍要留下至少 2 个字符。
+        const cleaned = name
+          .replace(/[，,、;；]\s*(?:\d{4}年.*|是.*)$/u, "")
+          .replace(/(等(事物|作品|內容|内容)?|等。?)$/u, "")
+          .replace(/[（(【[][^）)】\]]*[）)】\]]/g, "")
+          .trim();
+        if (cleaned.length >= 2 && cleaned.length <= 40) out.add(compactTitle(cleaned));
+      }
+    }
+  }
+  return [...out].filter(Boolean);
+}
+
+/** 「类型词轮」救援：条目名与用户标题零重合，但**它自己声明就是这个题材**。
+ *  resolveOtherPages 除纯标题轮外还会跑 `${query} 电子游戏` 一轮；维基搜索
+ *  把某个页面返给「Journey 电子游戏」已是一次独立证据，再要求它的摘要里
+ *  真的写着「電子遊戲」，两条合起来足以放行到 tier 1——而只写「電視劇」的
+ *  《西遊記》同分落选（Journey 实测：靠这一条压过 1996 电视剧）。
+ *  这条只认**题材词本身**，不放宽到 OTHER_TYPE_WORDS 那种「任意类型词」：
+ *  否则「看理想 电子游戏」轮里混进来的电影《日常幻想指南》会被放回来。 */
+function hintTopicConfirmed(page: WikiPage, lang: "zh" | "en"): boolean {
+  const text = `${page.extract ?? ""} ${page.description ?? ""}`;
+  return lang === "zh"
+    ? /電子遊戲|电子游戏|電視遊戲|电子遊戲|電玩遊戲/.test(text)
+    : /\bvideo\s?games?\b/i.test(text);
+}
 /** pageprops.page_image 是文件名（无 File: 前缀），imageinfo 才能换 URL */
 function normFile(value: string): string {
   return value
@@ -235,28 +314,145 @@ async function fillPageImageUrls(lang: "zh" | "en", pages: WikiPage[]): Promise<
   }
 }
 
-/** 候选页评分（详情与封面共用）：
- *  +4/+3/+1 标题等于/以用户标题开头结尾/含用户标题（简繁归一后）。**先剥掉括号
- *    限定词再比**——「傑克 (動物森友會)」这类角色页把作品名放在括号里，
- *    不剥就会被 endsWith 判成作品页而与真作品页同分（动物森友会实测两者交替夺冠）。
- *    剥括号后命中的才算作品页(+3/+4)，只能整体包含的降为 +1。
+/** 「以用户标题开头 + 描述性后缀」= 另一件作品，不是作品本体。
+ *  中文维基的本地化正名是**把原名裹在末尾**（「集合啦！動物森友會」），
+ *  而「日常幻想指南」讲的是日常幻想、本身不是日常幻想——2021 年电影，
+ *  用户清单里的 日常幻想 是 2021 年展览。实测这一条靠「包含关系 +1」的
+ *  弱吻合分压过所有候选，把用户绑到那部电影的条目上（签名照就是这么来的）。 */
+const DIFFERENT_WORK_TAIL =
+  /^(指南|电影|電影|电视剧|電視劇|游戏|遊戲|专辑|專輯|小说|小說|传记|傳記|传|傳|记|記|列传|列傳|全传|外传|前传|后传|系列|列表|年表|大事记|film|game|novel|album|book|manga|series|discography|bibliography)$/i;
+
+/** 条目名与用户标题的吻合档位。**tier 0 是硬淘汰**（标题零重合 = 不是这件
+ *  作品），tier 1/2 是吻合强度，供排序用。分档规则与 scoreOtherPage 里的
+ *  标题加分（剥括号后相等 +4 / 前后缀 +3 / 互相包含 +1）一一对应，
+ *  不另发明一套相似度，避免两处口径漂移。
+ *  额外硬淘汰一类「蹭词」：以原名开头 + 描述性后缀（日常幻想→日常幻想指南）。
+ *  线上实测三张错图的来源全部落在 tier 0：
+ *   日常幻想→日常幻想指南（2021 电影）/ 故事FM→我們的故事 (專輯)（萧煌奇专辑）
+ *   / 看理想→勇者斗恶龙 (游戏)。旧算法里它们靠「+2 命中类型词 +1.5 有
+ *   infobox 封面 +1 摘要够长」堆 4.5 分夺冠，而正确的页面因标题不同拿 0 分。
+ *
+ *  `aliases` 是**消歧页自列的候选名**（`X可以指：A、B等`）。用户写「Journey」
+ *  时正确条目是《風之旅人》，与 "Journey" 零字重合，只有靠这条兜住；反过来
+ *  「日常幻想指南」不会出现在「日常幻想」的消歧页里，「我們的故事 (專輯)」
+ *  也不在「故事FM」的候选里——所以放行别名不会把已修的三张错图放回来。 */
+export function titleMatchTier(
+  baseCompact: string,
+  pageTitle: string,
+  aliases: readonly string[] = [],
+): 0 | 1 | 2 {
+  const compact = compactTitle(pageTitle);
+  if (!baseCompact || !compact) return 0;
+  if (compact === baseCompact) return 2;
+  // 剥括号限定词后完全一致：「纪念碑谷 (游戏)」「Journey (video game)」
+  const bare = compactTitle(pageTitle.replace(/[（(【[][^）)】\]]*[）)】\]]/g, ""));
+  if (bare === baseCompact) return 2;
+  // 「用户标题 + 描述性限定词」= 作品页带题材限定：「Inside (遊戲)」。
+  // 必须先排掉「原名 + 描述性词」那一类：日常幻想指南**不是**日常幻想的作品，
+  // 它是一本讲日常幻想的指南，两者只差一个尾词，混进作品页会让线上取到
+  // 该文内曾俊贤的签名照。
+  if (bare.startsWith(baseCompact) || bare.endsWith(baseCompact)) {
+    if (isDescriptiveSuffix(bare, baseCompact)) return 0;
+    return 2;
+  }
+  if (compact.includes(baseCompact)) {
+    // 以原名开头且后缀是描述性词 → 另一件作品（中文本地化名常把原名裹在末尾，
+    // 但「日常幻想指南」是日常幻想的**指南**，讲的是前者，本身不是后者）
+    if (isDescriptiveSuffix(compact, baseCompact)) return 0;
+    return 1;
+  }
+  // 「原名 + 题材限定」（集合啦！動物森友會 ⊃ 动物森友会）与「用户标题 ⊃ 条目名」
+  // （底特律 变人 ⊃ 底特律）都算弱吻合
+  if (compact.length >= 2 && baseCompact.includes(compact)) return 1;
+  // 消歧页列出的同名候选：只放行到 tier 1（弱吻合），仍需年份/类型/封面佐证
+  if (aliases.some((alias) => alias && compact === alias)) return 1;
+  return 0;
+}
+
+/** candidate 是不是「用户作品 + 描述性后缀」的蹭词页（日常幻想→日常幻想指南）。
+ *  只在 candidate 以 base 开头时才判——「底特律 变人」⊃「底特律」方向相反，
+ *  那是用户标题更长，不适用。 */
+function isDescriptiveSuffix(candidate: string, base: string): boolean {
+  if (!candidate.startsWith(base)) return false;
+  const tail = candidate.slice(base.length);
+  return tail.length <= 8 && DIFFERENT_WORK_TAIL.test(tail);
+}
+
+/** 摘要讲的到底是不是**用户要的那件作品**。条目名把原名裹在末尾、或在括号里
+ *  蹭到原名时（傑克 (動物森友會)、集合啦！動物森友會、道奇Journey），标题层
+ *  分不出「这件作品的本地化名」和「恰好同名的另一个东西」，只能看摘要。
+ *  维基首句惯例两种写法：
+ *   ① 作品本体 —— `《集合啦！動物森友會》是2020年…` / `《動物森友會 (遊戲)》
+ *      是2001年…`：剥括号后的条目名领起首句（引号只在最前面）。
+ *   ② 讲别的东西 —— `傑克是2020年遊戲《集合啦！動物森友會》的貓咪角色。`：
+ *      领起首句的是「傑克」，别作的名字在句中。
+ * 判据：剥括号后的条目名是否领起首句——在句首是本人，在句中是讲别人。
+ * 首句缺失时无从判断，保守放行。
+ * 注意这条**管不了道奇Journey**：它的首句确实以「道奇Journey」领起（自述
+ * 是那台车），标题与首句都自洽，纯文本相似度永远分不出「本作」和「同名
+ * 的车」——那种形状交给 declaresWorkTopic。 */
+function isSelfDescribed(pageTitle: string, extract: string): boolean {
+  const firstSentence = extract.split(/[。．\n]/, 1)[0] ?? "";
+  const bare = compactTitle(pageTitle.replace(/[（(【[][^）)】\]]*[）)】\]]/g, ""));
+  if (!bare || !firstSentence.trim()) return true;
+  // 剥掉首句领起的引号/书名号（作品本体的摘要以 `《X是…` 开头）
+  const head = compactTitle(firstSentence.replace(/^[「『《（(【\[]+/, ""));
+  return head.startsWith(bare);
+}
+
+/** 正文讲的到底是不是一件**作品**。专治「条目名只是**结尾**蹭到原名」那一档：
+ *  `道奇Journey` 与 `集合啦！動物森友會` 在标题层是同一个形状（原名裹在末尾、
+ *  前面还有别的东西），titleMatchTier 只能都给 tier 2，isSelfDescribed 也都为
+ *  true——两者的标题与首句都自洽。但前者自述「克莱斯勒品牌旗下的一款中型
+ *  SUV」，首句里连一个作品类型词都没有；后者自述「生活模擬遊戲」。作品页
+ *  按首句惯例必然声明自己是什么，所以**首句无类型词**是同名的实物/概念页的
+ *  可靠信号。首句缺失时无从判断，保守放行。 */
+function declaresWorkTopic(extract: string): boolean {
+  const firstSentence = extract.split(/[。．\n]/, 1)[0] ?? "";
+  if (!firstSentence.trim()) return true;
+  return OTHER_TYPE_WORDS.test(firstSentence);
+}
+
+/** 候选页评分（详情与封面共用）。标题吻合是**准入门槛**（tier 0 直接淘汰），
+ *  档位优先于分数排序——否则 tier1 的弱吻合条目能靠弱信号盖过 tier2 作品页。
+ *  +4 剥括号后标题相等 / +3 标题以用户标题开头或结尾 / +1 互相包含
  *  +3 条目名带作品限定词（(游戏)/(video game)）
  *  +2 摘要命中作品类型词 +1.5 有 infobox 封面文件 +1 有 pageimages 缩略图
  *  +1 摘要够长（内容深度） -3 系列页/消歧语式（命中同类条目时压下去）
- *  消歧页（pageprops.disambiguation）直接淘汰。 */
-function scoreOtherPage(page: WikiPage, compactBase: string, year?: string): number {
+ *  消歧页（pageprops.disambiguation）直接淘汰。
+ *  @returns 淘汰时 null；否则同时给出档位，调用方据此排序。 */
+function scoreOtherPage(
+  page: WikiPage,
+  compactBase: string,
+  year?: string,
+  aliases: readonly string[] = [],
+  hintConfirmed = false,
+  lang: "zh" | "en" = "zh",
+): { score: number; tier: 0 | 1 | 2 } | null {
   const title = (page.title ?? "").trim();
-  if (!title || page.missing || isDisambiguation(page)) return -Infinity;
+  if (!title || page.missing || isDisambiguation(page)) return null;
   const extract = page.extract ?? "";
-  const compact = compactTitle(title);
-  const bare = compactTitle(title.replace(/[（(【[][^）)】\]]*[）)】\]]/g, ""));
   const text = `${extract} ${page.description ?? ""}`.trim();
-  let score = 0;
-  if (compact && compactBase) {
-    if (bare === compactBase) score += 4;
-    else if (bare.startsWith(compactBase) || bare.endsWith(compactBase)) score += 3;
-    else if (compact.includes(compactBase) || compactBase.includes(compact)) score += 1;
+  let tier = titleMatchTier(compactBase, title, aliases);
+  // 类型词轮救援：标题零重合，但维基把这个页面返给了「<用户标题> 电子游戏」
+  // 这一轮，且它自己声明确实是游戏/電視劇。放行到 tier 1，仍需年份佐证。
+  if (tier === 0) {
+    if (!(hintConfirmed && hintTopicConfirmed(page, lang))) return null;
+    tier = 1;
   }
+  const bare = compactTitle(title.replace(/[（(【[][^）)】\]]*[）)】\]]/g, ""));
+  // 「同名实体页」降档：这类条目与正作同为 tier 2，靠标题分不出来，只能看摘要。
+  //   - 首句主语不是条目自己 → 讲的是原作里的角色/别作（「傑克 (動物森友會)」）
+  //   - 首句连一个作品类型词都没有 → 讲的是同名的实物/概念（「道奇Journey」）
+  // 两条都只在「原名裹在末尾/跟在别的东西后面」这一档生效——bare 完全等于
+  // 用户标题的条目本来就是用户点名的那件，不该再被摘要质疑。
+  if (tier === 2) {
+    if (!isSelfDescribed(title, extract)) tier = 1;
+    else if (bare !== compactBase && !declaresWorkTopic(extract)) tier = 1;
+  }
+  let score = 0;
+  if (tier === 2) score += bare === compactBase ? 4 : 3;
+  else score += 1;
   if (/[（(【\[]/.test(title) && OTHER_TYPE_WORDS.test(title)) score += 3;
   if (text && OTHER_TYPE_WORDS.test(text)) score += 2;
   if ((page.pageprops ?? {}).page_image) score += 1.5;
@@ -275,7 +471,21 @@ function scoreOtherPage(page: WikiPage, compactBase: string, year?: string): num
     const titleYear = (title.match(/(?:1[5-9]|20)\d{2}/) ?? [])[0];
     if (titleYear && titleYear !== year) score -= 4;
   }
-  return score;
+  return { score, tier };
+}
+
+/** 一个候选条目及其评分/档位（tier：2 作品页 / 1 弱吻合，0 已在评分里淘汰）。 */
+export interface OtherCandidate {
+  page: WikiPage;
+  score: number;
+  tier: 0 | 1 | 2;
+  /** tier1 且是被「<标题> 电子游戏」那一轮救回来的（标题本身零重合）。
+   *  2026-10-02 线上实测：故事FM 在 zh 维基没有条目，纯标题轮只会召回
+   *  「我們的故事 (專輯)」这类蹭词页，而「故事FM 电子游戏」这一轮召回的是
+   *  SCP基金会 / 王国之心系列作品列表——它们 tier1 却带着封面，于是压过
+   *  tier2 的真条目「故事FM」（本身无图），用户就看到了 SCP 的徽标。
+   *  救回来的条目只能当兜底，绝不能因为「有封面」而排在真标题匹配前面。 */
+  hintRescued?: boolean;
 }
 
 /** gsrsearch 候选 + pageprops 摘要/图片（generator=search 会顺带回
@@ -301,50 +511,103 @@ async function wikiSearchOnce(lang: "zh" | "en", query: string): Promise<WikiPag
   return pages ? Object.values(pages) : [];
 }
 
-/** 评分择优：每个查询词跑「纯标题轮 + 作品类型词轮」，同页去重后按分排序。
- *  两轮都必须跑：纯标题轮常被同名异作占据（线上实测 zh gsrsearch("Journey")
- *  首位是《西遊記》且带封面），若因「已见到封面」就跳过类型词轮，正确的
- *  「风之旅人」永远进不了候选集（2026-09-30 线上复测的教训）。 */
+/** 评分择优：每个查询词跑「纯标题轮 + 作品类型词轮」，同页去重后按
+ *  **档位优先、分数次之**排序。档位必须排在分数前面，否则 tier1 的高分条目
+ *  （弱吻合 + 全套弱信号）能盖过 tier2 的作品页——那正是本次线上错图的形状。 */
 async function resolveOtherPages(
   lang: "zh" | "en",
   baseTitle: string,
   queries: readonly string[],
   year?: string,
-): Promise<Array<{ page: WikiPage; score: number }>> {
+  /** 来自**精确标题轮**的消歧页别名。otherDetail 的消歧页只在那一轮出现，
+   *  搜索轮自己看不到——Journey 实测就是因此选了 1996 电视剧（Journey 实测：
+   *  gsrsearch 轮里没有消歧页，只有《西遊記》和《風之旅人》）。 */
+  extraAliases: readonly string[] = [],
+): Promise<OtherCandidate[]> {
   const compactBase = compactTitle(baseTitle);
   const seen = new Set<string>();
-  const scored: Array<{ page: WikiPage; score: number }> = [];
+  const scored: OtherCandidate[] = [];
+  // 先把所有查询轮的页面收齐，再统一算别名与「谁来自类型词轮」：消歧页可能
+  // 出现在最后一轮，边收边评会让「先被淘汰、后被别名救回」的条目永久出局
+  // （Journey 实测：風之旅人 只在「Journey 电子游戏」轮出现，标题零重合）。
+  const allPages: WikiPage[] = [];
+  const hintTitles = new Set<string>();
   for (const query of queries) {
-    for (const search of [query, `${query} ${OTHER_HINT[lang]}`]) {
+    for (const [search, isHint] of [
+      [query, false],
+      [`${query} ${OTHER_HINT[lang]}`, true],
+    ] as const) {
       for (const page of await wikiSearchOnce(lang, search)) {
         const title = (page.title ?? "").trim();
         if (!title || seen.has(title)) continue;
         seen.add(title);
-        const score = scoreOtherPage(page, compactBase, year);
-        if (score > -Infinity) scored.push({ page, score });
+        allPages.push(page);
+        if (isHint) hintTitles.add(title);
       }
     }
   }
-  return scored.sort((a, b) => b.score - a.score);
+  const aliases = disambiguationAliases(allPages, compactBase);
+  for (const alias of extraAliases) if (alias) aliases.push(alias);
+  for (const page of allPages) {
+    const title = (page.title ?? "").trim();
+    // 标题本身零重合、只因出现在「<标题> 电子游戏」轮才被放行的条目。
+    const hintRescued = hintTitles.has(title) && titleMatchTier(compactBase, title, aliases) === 0;
+    const hit = scoreOtherPage(page, compactBase, year, aliases, hintTitles.has(title), lang);
+    if (hit) scored.push({ page, score: hit.score, tier: hit.tier, hintRescued });
+  }
+  // 「纯靠类型词轮救回来」的条目排在同档的真标题匹配之后：它没有任何字面证据，
+  // 只有维基在「<标题> 电子游戏」轮把它返了回来。线上实测不修这条排序的后果
+  // 就是 故事FM 拿到 SCP基金会的徽标当播客封面（见 OtherCandidate.hintRescued）。
+  return scored.sort(
+    (a, b) =>
+      b.tier - a.tier ||
+      Number(Boolean(a.hintRescued)) - Number(Boolean(b.hintRescued)) ||
+      b.score - a.score,
+  );
 }
 
-/** 从候选页里挑最优：给了年份就优先摘述命中该年份的条目（用户清单格式是
- *  「标题 - 游戏 (年)」，年份是消歧的最硬信号——动物森友会实测：系列页/
- *  2001 首作都不带 2020，2020 正作带），没有年份命中的候选才放宽。
+/** 从候选页里挑最优。**只在最高档位内挑**——年份只是同档内的消歧信号。
+ *  年份命中的候选若全在低档位，宁可降档也不跨档取（跨档取就是本次线上
+ *  错图的成因：tier1「日常幻想指南」摘要带 2021、还有封面，于是压过
+ *  tier2 里真正的作品页）。
+ *  年份是用户清单格式「标题 - 游戏 (年)」里最硬的消歧信号——动物森友会实测：
+ *  系列页/2001 首作都不带 2020，2020 正作带。
  *  只分「摘要提到用户年份」一档，不再按「条目自身首个年份 == 用户年份」细分：
  *  角色页「傑克 (動物森友會)」首年正是 2020，2020 正作「集合啦！動物森友會」
  *  首年却是 2018（公布年），按首年细档会把正作压下去、让角色页夺冠。 */
-function pickBest(
-  candidates: Array<{ page: WikiPage; score: number }>,
-  year?: string,
-): { page: WikiPage; score: number } | null {
-  if (!candidates.length) return null;
-  if (!year) return candidates[0];
-  const mentions = candidates.filter((entry) => {
-    const text = `${entry.page.extract ?? ""} ${entry.page.description ?? ""}`;
-    return text.includes(year);
-  });
-  return (mentions.length ? mentions : candidates)[0];
+/** 候选的摘要/描述里是否提到用户年份——年份是清单格式里最硬的消歧信号
+ *  （动物森友会实测：系列页与 2001 首作都不带 2020，2020 正作带）。 */
+function mentionsYear(entry: OtherCandidate, year?: string): boolean {
+  if (!year) return false;
+  const text = `${entry.page.extract ?? ""} ${entry.page.description ?? ""}`;
+  return text.includes(year);
+}
+
+/** 这条候选有没有资格参与择优。
+ *  hintRescued 的条目标题与用户标题**零字重合**，只因为维基在「<标题> 电子游戏」
+ *  轮把它返了回来才被放行到 tier 1——它一个字面证据都没有，光靠「有缩略图 /
+ *  摘要够长」这类弱信号就能夺冠。2026-10-02 实测「故事FM 电子游戏」轮返的是
+ *  SCP基金会（带缩略图），当封面就成了 SCP 徽标。
+ *  所以额外要求它**自证是用户要的那一年**：風之旅人摘要写明 2012，而 SCP基金会 /
+ *  伊苏序章 / 王国之心列表的摘要里都没有 2017。缺年份证据就宁可不返图。
+ *  消歧页自列的别名（Journey → 風之旅人）走 titleMatchTier 的别名分支拿到
+ *  tier 1 且不算 hintRescued，因此不受这条限制。 */
+function usableForPick(entry: OtherCandidate, year?: string): boolean {
+  return !entry.hintRescued || mentionsYear(entry, year);
+}
+
+/** 从候选页里挑最优。**只在最高档位内挑**——年份只是同档内的消歧信号。
+ *  年份命中的候选若全在低档位，宁可降档也不跨档取（跨档取就是本次线上
+ *  错图的成因：tier1「日常幻想指南」摘要带 2021、还有封面，于是压过
+ *  tier2 里真正的作品页）。 */
+function pickBest(candidates: OtherCandidate[], year?: string): OtherCandidate | null {
+  const usable = candidates.filter((entry) => usableForPick(entry, year));
+  if (!usable.length) return null;
+  const topTier = usable[0].tier;
+  const pool = usable.filter((entry) => entry.tier === topTier);
+  if (!year) return pool[0];
+  const mentions = pool.filter((entry) => mentionsYear(entry, year));
+  return (mentions.length ? mentions : pool)[0];
 }
 
 async function toWork(page: WikiPage, lang: "zh" | "en"): Promise<OtherWork | null> {
@@ -469,12 +732,15 @@ export async function wikiPageImageAny(
   const candidates = Object.values(pages).filter(
     (page) => !page.missing && (page.title ?? "").trim() && !isDisambiguation(page),
   );
-  // 优先选「页标题含原题全部字词」的条目（游戏条目而非同名城市/概念）。
-  // 比较时把页标题里的分隔符（空格/全角冒号/中点）一并剥掉——否则
-  // 「底特律：变人」永远不 includes「底特律变人」。
-  const page =
-    candidates.find((page) => compactTitle(page.title ?? "").includes(compactBase)) ??
-    candidates[0];
+  // 只认「页标题与原题真的吻合」的条目。比较时把页标题里的分隔符（空格/全角
+  // 冒号/中点）一并剥掉——否则「底特律：变人」永远不 includes「底特律变人」。
+  // 曾经这里是 `find(...) ?? candidates[0]`：只要精确标题那几条都没命中就回落到
+  // 首个候选，等于把标题闸门整个绕过去——线上「日常幻想」就是这样取到
+  // 日常幻想指南这篇文章里的签名照的。宁可返回 null，交给上层兜底。
+  const page = candidates
+    .map((entry) => ({ entry, tier: titleMatchTier(compactBase, entry.title ?? "") }))
+    .filter((hit) => hit.tier > 0)
+    .sort((a, b) => b.tier - a.tier)[0]?.entry;
   if (!page) return null;
   await fillPageImageUrls(lang, [page]);
   if (page.fileUrl) return page.fileUrl;
@@ -515,7 +781,14 @@ export async function resolveOtherCover(
     const ranked = await resolveOtherPages(lang, base, queries, yearText);
     const best = pickBest(ranked, yearText);
     if (!best) continue;
-    const top = [best, ...ranked.slice(ranked.indexOf(best) + 1, ranked.indexOf(best) + 3)];
+    // 补图范围：最优条目 + 它后面 2 名，**且不跨「有没有字面证据」这道界**
+    // （hintRescued，见 pickBest 注释）。2026-10-02 实测 故事FM 命中的是 zh 维基
+    // 那个零字面证据的真条目，封面只能往上层兜底档要，绝不能顺藤摸到 SCP 徽标。
+    const start = ranked.indexOf(best);
+    const sameEvidence = ranked
+      .slice(start + 1, start + 3)
+      .filter((entry) => Boolean(entry.hintRescued) === Boolean(best.hintRescued));
+    const top = [best, ...sameEvidence];
     await fillPageImageUrls(
       lang,
       top.map((entry) => entry.page),
@@ -542,37 +815,56 @@ export async function otherDetail(name: string, year?: number): Promise<OtherWor
   const base = name.trim().slice(0, 120);
   if (!base) return null;
   const yearText = year && year >= 1500 && year <= 2100 ? String(year) : undefined;
+  const compactBase = compactTitle(base);
+  // 同档位内评分高者优先（tier 已由 scoreOtherPage 保证 ≥1）
+  const byRank = (a: OtherCandidate, b: OtherCandidate) =>
+    b.tier - a.tier || b.score - a.score;
   for (const lang of ["zh", "en"] as const) {
     // ① 精确标题（含分隔符变体）直查
     const exactPages = await wikiTitlePages(lang, titleVariants(base));
-    let exactScore = -Infinity;
+    let exactRank: OtherCandidate | null = null;
     let exactWork: OtherWork | null = null;
+    let exactAliases: string[] = [];
     if (exactPages?.length) {
-      const scored = exactPages
-        .map((page) => ({ page, score: scoreOtherPage(page, compactTitle(base), yearText) }))
-        .filter((entry) => entry.score > -Infinity)
-        .sort((a, b) => b.score - a.score);
+      const scored: OtherCandidate[] = [];
+      exactAliases = disambiguationAliases(exactPages, compactBase);
+      for (const page of exactPages) {
+        const hit = scoreOtherPage(page, compactBase, yearText, exactAliases);
+        if (hit) scored.push({ page, score: hit.score, tier: hit.tier });
+      }
+      scored.sort(byRank);
       const best = pickBest(scored, yearText);
       if (best) {
-        exactScore = best.score;
+        exactRank = best;
         await fillPageImageUrls(lang, [best.page]);
         exactWork = await toWork(best.page, lang);
       }
     }
-    // 够好就直接返回：有类型词/限定词/封面这类作品特征；给了年份时还要求
-    // 条目本身就说的是那一年（否则按「系列页/同类条目」继续往下择优）
+    // 够好就直接返回：作品页（tier 2）、评分 ≥6（有类型词/限定词/封面这类
+    // 作品特征）；给了年份时还要求条目本身就说的是那一年（否则按「系列页/
+    // 同类条目」继续往下择优）。
     const exactText = exactWork
       ? `${exactWork.content_intro ?? ""} ${exactWork.subtitle ?? ""}`
       : "";
-    if (exactWork && exactScore >= 6 && (!yearText || exactText.includes(yearText)))
+    if (
+      exactWork &&
+      exactRank?.tier === 2 &&
+      exactRank.score >= 6 &&
+      (!yearText || exactText.includes(yearText))
+    )
       return exactWork;
     // ② 精确页是系列页/同名概念页/无封面（评分不够）时，gsrsearch 评分择优
-    const searched = await resolveOtherPages(lang, base, [base], yearText);
+    const searched = await resolveOtherPages(lang, base, [base], yearText, exactAliases);
     const searchBest = pickBest(searched, yearText);
     if (searchBest) {
       await fillPageImageUrls(lang, [searchBest.page]);
       const searchWork = await toWork(searchBest.page, lang);
-      if (searchWork && searchBest.score > (exactWork ? exactScore : -Infinity)) return searchWork;
+      if (
+        searchWork &&
+        (!exactRank || searchBest.tier > exactRank.tier ||
+          (searchBest.tier === exactRank.tier && searchBest.score > exactRank.score))
+      )
+        return searchWork;
     }
     if (exactWork) return exactWork;
   }

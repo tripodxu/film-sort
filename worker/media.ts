@@ -5,11 +5,13 @@ import { generationOf, registerPurger } from "./cachePurge";
 import { posterKeySegment, posterMediaKey } from "../shared/posterKey";
 import {
   otherDetail,
+  resetWikiDegraded,
   resolveOtherCover,
   toSimplified,
   wikiEnTitle,
   wikiFileThumbUrls,
   wikiPageImageAny,
+  wikiWasDegraded,
 } from "./other";
 
 export interface DoubanWork {
@@ -1367,6 +1369,38 @@ function scoreWikiImage(
   return score;
 }
 
+/** 「其他」维度专用闸门：条目标题必须真的对应用户写的那件作品。
+ *  覆盖两种「真的对应」：
+ *  ① 页标题（含剥括号限定词后）与用户中文标题吻合——en wiki 上的中文作品
+ *     条目名可能是本地化名（「阈限空间」），靠 toSimplified 归一后包含；
+ *  ② 页标题直接命中用户给的英文标题（纯 ASCII 作品：Journey/Inside/
+ *     Liminal Space 在 en wiki 上的正名），简繁/大小写归一后比较。
+ *  页标题自带年份且与用户年份不符时额外否决——「道奇Journey」的条目名
+ *  就带年份，(汽车) 也不在 OTHER_TYPE_WORDS 里，2012/2009 两年都对不上，
+ *  这一刀比任何文本相似度都硬。
+ *  任何一条不成立 → 返回 false → 这一档不产出图（宁可不返图也不返错图）。 */
+function wikiTitleMatchesUserTitle(
+  page: WikiImagePage,
+  match: { title: string; english: string },
+  year?: string,
+): boolean {
+  const raw = (page.title ?? "").trim();
+  if (!raw) return false;
+  const bare = raw.replace(/[（(【[][^）)】\]]*[）)】\]]/g, "");
+  const compact = (value: string) =>
+    toSimplified(value.normalize("NFKC").replace(/[\s：:·・、，,。.．!！?？"'“”‘’()（）[\]【】{}_-]/g, "").toLowerCase());
+  const candidates = [raw, bare].map(compact).filter(Boolean);
+  const wants = [match.title, match.english]
+    .map((value) => (value ?? "").trim())
+    .filter(Boolean)
+    .map(compact);
+  if (!wants.length || !candidates.length) return false;
+  const hit = candidates.some((c) => wants.some((w) => c === w || c.includes(w) || w.includes(c)));
+  if (!hit) return false;
+  const pageYear = (raw.match(/(?:1[5-9]|20)\d{2}/) ?? [])[0];
+  return !(year && pageYear && pageYear !== year);
+}
+
 async function queryWikiImages(
   lang: "zh" | "en",
   params: URLSearchParams,
@@ -1374,6 +1408,7 @@ async function queryWikiImages(
   english: string,
   type?: "movie" | "book" | "music",
   year?: string,
+  requireTitleMatch?: { title: string; english: string },
 ): Promise<string[]> {
   try {
     const response = await fetch(`https://${lang}.wikipedia.org/w/api.php?${params}`, {
@@ -1399,6 +1434,14 @@ async function queryWikiImages(
             !wikiIsDisambiguation(entry.page) &&
             !!wikiPagePoster(entry.page, fileUrls),
         )
+        // 「其他」维度的标题闸门（见 other.ts titleMatchTier 的同款理由）：
+        // scoreWikiImage 只要求页标题与任一查询词互相包含，蹭词的条目照样
+        // 达标——Journey/2012 拿到的就是「道奇Journey」那张 NHTSA 照片。
+        .filter(
+          (entry) =>
+            !requireTitleMatch ||
+            wikiTitleMatchesUserTitle(entry.page, requireTitleMatch, year),
+        )
         .sort((a, b) => b.score - a.score)
         .map((entry) => wikiPagePoster(entry.page, fileUrls)!)
         .filter((url, index, urls) => urls.indexOf(url) === index)
@@ -1414,6 +1457,9 @@ async function searchWikiPoster(
   english: string,
   type?: "movie" | "book" | "music",
   year?: number,
+  /** 「其他」维度专用：命中这些标题之一的条目才可取图（标题闸门）。
+   *  不传 = 旧行为（只做包含匹配），movie/book/music 维度沿用旧行为。 */
+  requireTitleMatch?: { title: string; english: string },
 ): Promise<string[]> {
   const queries = [title, english].map((value) => value.trim()).filter(Boolean);
   for (const lang of ["zh", "en"] as const) {
@@ -1446,6 +1492,7 @@ async function searchWikiPoster(
       english,
       type,
       year ? String(year) : undefined,
+      requireTitleMatch,
     );
     if (exact.length) return exact;
 
@@ -1473,6 +1520,7 @@ async function searchWikiPoster(
         english,
         type,
         year ? String(year) : undefined,
+        requireTitleMatch,
       );
       if (found.length) return found;
     }
@@ -1654,6 +1702,7 @@ async function computePosters(
     // ⑤ searchWikiPoster 评分匹配（pageimages 自由图：名画/摄影/公共版权作品）。
     //    type 必须以 undefined 参与评分——TYPE_WORDS 无 other 词表，带着
     //    "other" 时 declareType 推断出的 movie/book/music 会误杀正确条目。
+    resetWikiDegraded();
     const detailCover = await otherDetail(title, year).catch(() => null);
     if (detailCover?.poster_url) return { urls: [detailCover.poster_url], outcome: "found" };
     const gameCover = await resolveOtherCover(title, english, year);
@@ -1671,15 +1720,23 @@ async function computePosters(
       const directEn = await wikiPageImageAny("en", enTitle, prefer);
       if (directEn) return { urls: [directEn], outcome: "found" };
     }
-    const wiki = await searchWikiPoster(title, english, undefined, year);
+    // ⑤ searchWikiPoster 只在「英文标题与 zh 条目对应得上」时才跑。
+    // 这一档的评分链（scoreWikiImage）与 other.ts 的标题闸门**毫无关系**，
+    // 只做「页标题包含任一查询词」——把 zh 标题丢进去时，任何蹭到词的页面
+    // 都能拿分。线上实测两个真实翻车都在这里：
+    //   Journey/2012 → 「道奇Journey (汽车)」→ `2012_Dodge_Journey_--_NHTSA_3.jpg`
+    //   看理想/2016 → 「勇者斗恶龙 (游戏)」→ `Doragon_Kuesuto_Boxart.png`
+    // 覆盖条件由 wikiTitleMatchesTitle 保证：en 条目名（换算成 zh 对应名后）
+    // 必须与用户标题吻合，或精确命中英文标题本身。
+    const wiki = enTitle
+      ? await searchWikiPoster(enTitle, english || enTitle, undefined, year, { title, english })
+      : [];
     if (wiki.length) return { urls: wiki, outcome: "found" };
-    if (enTitle) {
-      const enWiki = await searchWikiPoster(enTitle, enTitle, undefined, year);
-      if (enWiki.length) return { urls: enWiki, outcome: "found" };
-    }
     // otherDetail 已作为第一档跑过（有详情但没封面时下面几档补图），
-    // 兜底链全部跑完仍无图就认缺
-    return { urls: [], outcome: throttled ? "throttled" : "absent" };
+    // 兜底链全部跑完仍无图就认缺——**宁可不返图也不返错图**。
+    // 但如果这一轮维基请求本身出了故障（超时/限流），那是瞬时失败：
+    // 记成 absent 会被 24 小时负缓存固化成空白，用户刷新多少次都不再重试。
+    return { urls: [], outcome: throttled || wikiWasDegraded() ? "throttled" : "absent" };
   } else {
     const [suggestion, imdb, search] = await Promise.allSettled([
       doubanSuggest(title),

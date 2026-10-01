@@ -2,9 +2,12 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   otherDetail,
   otherSearch,
+  resetWikiDegraded,
   resolveOtherCover,
+  titleMatchTier,
   toSimplified,
   wikiPageImageAny,
+  wikiWasDegraded,
 } from "./other";
 
 // ===== 其他类别维基管线的离线回归测试 =====
@@ -533,6 +536,268 @@ describe("other wiki pipeline", () => {
     expect(await wikiPageImageAny("zh", "纪念碑谷", ["Monument Valley"])).toBeNull();
   });
 
+  // ===== 标题吻合闸门（2026-10-02 线上错图修复） =====
+  // 旧算法只要求条目名「蹭到」用户标题的任一查询词，就让「有 infobox 封面 /
+  // 摘要够长 / 命中类型词」这些弱信号堆分夺冠，线上留下三张错图。
+  // 闸门之后：标题零重合的条目一律淘汰，除非（a）消歧页自己列了它的名字，
+  // 或（b）它被「<用户标题> 电子游戏」这一轮返且自述确实是游戏。
+
+  describe("标题吻合闸门", () => {
+    /** 线上 gsrsearch 实录：搜「日常幻想」回来的候选池 */
+    it("日常幻想：日常幻想指南（同前缀+描述性后缀）不能夺冠", async () => {
+      const pages = {
+        query: {
+          pages: {
+            guide: {
+              title: "日常幻想指南",
+              pageprops: {},
+              extract:
+                "《日常幻想指南》是2021年上映的中国大陆喜剧电影，由一部讲述性幻想题材的作品衍生。",
+              images: [{ title: "File:Kenneth_Tsang_autograph.png" }],
+            },
+            // 正确项：条目名把原名裹在末尾（中文本地化常见），且真的没有封面
+            real: {
+              title: "日常幻想",
+              extract: "日常幻想是一档关于性幻想的摄影系列，收录了摄影师本人的作品。",
+            },
+          },
+        },
+      };
+      installFetch([
+        { match: /gsrsearch=日常幻想/, body: pages },
+        { match: /titles=日常幻想/, body: { query: { pages: { real: pages.query.pages.real } } } },
+      ]);
+      const detail = await otherDetail("日常幻想", 2021);
+      // 宁可不返图也不返错图：签名照那张必须拿不到
+      expect(detail?.poster_url ?? "").not.toContain("Kenneth_Tsang");
+      expect(detail?.title).not.toBe("日常幻想指南");
+    });
+
+    /** 线上 gsrsearch 实录：搜「看理想」回来的是游戏与演员页 */
+    it("看理想：勇者斗恶龙 (游戏) 不能夺冠", async () => {
+      installFetch([
+        {
+          match: /gsrsearch=看理想/,
+          body: {
+            query: {
+              pages: {
+                game: {
+                  title: "勇者斗恶龙 (游戏)",
+                  pageprops: { page_image: "Doragon_Kuesuto_Boxart.png" },
+                  extract: "《勇者斗恶龙》是1986年日本史克威尔艾尼克斯推出的角色扮演电子游戏。",
+                },
+                actor: {
+                  title: "井柏然",
+                  extract: "井柏然是中国内地男演员。",
+                },
+              },
+            },
+          },
+        },
+        { match: /titles=File:Doragon_Kuesuto_Boxart\.png/, body: IMAGE_INFO },
+      ]);
+      expect(await resolveOtherCover("看理想", "", 2016)).toBeNull();
+    });
+
+    /** 线上 gsrsearch 实录：搜「故事FM」回来的是同义专辑 */
+    it("故事FM：我們的故事 (專輯) 不能夺冠", async () => {
+      installFetch([
+        {
+          match: /gsrsearch=故事FM/,
+          body: {
+            query: {
+              pages: {
+                album: {
+                  title: "我們的故事 (專輯)",
+                  pageprops: { page_image: "Louis_Francois-Dantes_sur_son_rocher.jpg" },
+                  extract: "《我們的故事》是蕭煌奇2006年發行的專輯。",
+                },
+              },
+            },
+          },
+        },
+        { match: /titles=File:Louis_Francois/, body: IMAGE_INFO },
+      ]);
+      expect(await resolveOtherCover("故事FM", "", 2017)).toBeNull();
+    });
+
+    it("Journey：消歧页自列的「風之旅人」要能穿过闸门（零字重合也放行）", async () => {
+      // 线上 zh.wikipedia.org/wiki/Journey 的 extract 原样照抄（2026-10-02 抓）：
+      // 每行一项，行尾带描述。「風之旅人」与用户标题零字重合，全靠这份名单放行。
+      const pages = {
+        query: {
+          pages: {
+            disambig: {
+              title: "Journey",
+              pageprops: { disambiguation: "" },
+              extract:
+                "Journey可以指：\n旅行者合唱團，美國搖滾樂團\n風之旅人，2012年电子游戏",
+              ...noFreeImage,
+            },
+            game: {
+              title: "風之旅人",
+              pageprops: { page_image: "Journey_PSN_Cover.png" },
+              extract: "《風之旅人》是thatgamecompany開發的2012年電子遊戲。",
+            },
+          },
+        },
+      };
+      installFetch([
+        { match: /titles=Journey/, body: pages },
+        { match: /gsrsearch=Journey/, body: pages },
+        {
+          match: /titles=File:Journey_PSN_Cover\.png/,
+          body: {
+            query: {
+              pages: {
+                file: {
+                  title: "File:Journey PSN Cover.png",
+                  imageinfo: [{ thumburl: `${UP}/2/2b/600px-Journey_PSN_Cover.png` }],
+                },
+              },
+            },
+          },
+        },
+      ]);
+      const detail = await otherDetail("Journey", 2012);
+      expect(detail?.title).toBe("風之旅人");
+      expect(detail?.poster_url).toBe(`${UP}/2/2b/600px-Journey_PSN_Cover.png`);
+    });
+
+    it("故事FM：「故事FM 电子游戏」轮召回的 SCP基金会 不能当播客封面", async () => {
+      // 线上 zh.wikipedia.org/wiki/故事FM 实录：**没有**该条目（missing），
+      // extract 为空、无图。真正的救援全靠「故事FM 电子游戏」那一轮——但那一轮
+      // 返的是 SCP基金会（带缩略图）、伊苏 失落的伊苏古国 序章、王国之心系列
+      // 作品列表，标题与「故事FM」零重合。旧逻辑只按 tier+score 排，SCP 基金会
+      // 靠「有缩略图 + 摘要够长」压过真条目，播客封面就成了 SCP 徽标。
+      // 正确结果：宁可不返图，也不返一张错图。
+      const hintPages = {
+        query: {
+          pages: {
+            scp: {
+              title: "SCP基金会",
+              thumbnail: { source: `${UP}/e/ec/960px-SCP_Foundation_(emblem).svg.png` },
+              extract:
+                "SCP基金会是一个虚构的特工组织，作为同名互联网接龙小说创作项目中的主要要素。衍生作品如恐怖电子游戏《SCP：收容失效》。",
+            },
+            ys: {
+              title: "伊苏 失落的伊苏古国 序章",
+              pageprops: { page_image: "Ys_Ancient_Ys_Vanished_Cover.jpg" },
+              extract: "《伊苏 失落的伊苏古国 序章》是日本Falcom动作角色扮演游戏系列伊苏的第一作，于1987年推出。",
+            },
+            kh: {
+              title: "王国之心系列作品列表",
+              pageprops: { page_image: "Kingdom_Hearts_media.jpg" },
+              extract: "《王国之心》是由日本游戏开发商史克威尔艾尼克斯开发并发行的一系列动作角色扮演游戏。",
+            },
+          },
+        },
+      };
+      const emptyExact = { query: { pages: { "-1": { title: "故事FM", missing: "" } } } };
+      // 注意 installFetch 先 decodeUrl（%XX 与 + 都会还原）再匹配，所以这里写
+      // 明文 + 空格，不要写百分号编码——否则所有路由都落空、测试会永远绿。
+      installFetch([
+        { match: /titles=故事FM/, body: emptyExact },
+        { match: /gsrsearch=故事FM 电子游戏/, body: hintPages },
+        { match: /gsrsearch=故事FM video game/, body: { query: { pages: {} } } },
+        { match: /gsrsearch=故事FM/, body: { query: { pages: {} } } },
+        { match: /titles=File:/, body: { query: { pages: {} } } },
+      ]);
+      // 三个候选都不提 2017 → hintRescued 的年份佐证不成立 → 一律不返图
+      expect(await resolveOtherCover("故事FM", "故事FM", 2017)).toBeNull();
+      // 无年份时更不能靠「有缩略图」这条弱信号夺冠
+      expect(await resolveOtherCover("故事FM", "故事FM")).toBeNull();
+    });
+
+    it("Journey：道奇Journey（汽车）不能靠末尾命中冒充作品页", async () => {
+      // 线上 gsrsearch("Journey 电子游戏") 实录：道奇Journey 条目名以原名结尾，
+      // titleMatchTier 只能给到 tier2 —— 标题层分不出「本地化游戏名」和
+      // 「同名的车」。它的首句以自己的名字领起（isSelfDescribed 判为本人），
+      // 分不出车与游戏的是 declaresWorkTopic：首句里连一个作品类型词都没有。
+      // 摘要与 pageprops 都按线上响应照抄（2009 车型 + 无 infobox 封面）。
+      const pages = {
+        query: {
+          pages: {
+            dodge: {
+              title: "道奇Journey",
+              pageprops: {},
+              extract:
+                "道奇Journey是克莱斯勒品牌旗下的一款中型SUV，2009年推出，2012年款为第二代车型。",
+            },
+            // 同轮还带回来的真实游戏页：只有它该赢
+            game: {
+              title: "風之旅人",
+              pageprops: { page_image: "Journey_PSN_Cover.png" },
+              extract: "《風之旅人》是thatgamecompany開發的2012年電子遊戲。",
+            },
+          },
+        },
+      };
+      installFetch([
+        { match: /gsrsearch=Journey 电子游戏/, body: pages },
+        {
+          match: /gsrsearch=Journey$/,
+          body: {
+            query: {
+              pages: {
+                dodge: pages.query.pages.dodge,
+              },
+            },
+          },
+        },
+        {
+          match: /titles=Journey/,
+          body: {
+            query: {
+              pages: {
+                disambig: {
+                  title: "Journey",
+                  pageprops: { disambiguation: "" },
+                  extract:
+                    "Journey可以指：\n旅行者合唱團，美國搖滾樂團\n風之旅人，2012年电子游戏",
+                  ...noFreeImage,
+                },
+              },
+            },
+          },
+        },
+        {
+          match: /titles=File:Journey_PSN_Cover\.png/,
+          body: {
+            query: {
+              pages: {
+                file: {
+                  title: "File:Journey PSN Cover.png",
+                  imageinfo: [{ thumburl: `${UP}/2/2b/600px-Journey_PSN_Cover.png` }],
+                },
+              },
+            },
+          },
+        },
+      ]);
+      const detail = await otherDetail("Journey", 2012);
+      // 那台车必须被挡掉，正确的是游戏页
+      expect(detail?.title ?? "").not.toContain("道奇");
+      expect(detail?.title).toBe("風之旅人");
+    });
+
+    it("闸门不能反过来放行同前缀蹭词页（日常幻想 vs 日常幻想指南）", () => {
+      // 直接验证分档：同前缀 + 描述性后缀必须落在被淘汰的一侧
+      expect(titleMatchTier("日常幻想", "日常幻想指南")).toBe(0);
+      expect(titleMatchTier("故事fm", "我們的故事 (專輯)")).toBe(0);
+      expect(titleMatchTier("看理想", "勇者斗恶龙 (游戏)")).toBe(0);
+      // 正常作品页仍要放行
+      expect(titleMatchTier("纪念碑谷", "紀念碑谷 (遊戲)")).toBe(2);
+      // 正作包住原名（本地化名）算作品页；角色页只在括号里蹭到，弱一档
+      expect(titleMatchTier("动物森友会", "集合啦！動物森友會")).toBe(2);
+      expect(titleMatchTier("动物森友会", "傑克 (動物森友會)")).toBe(1);
+      // 消歧页自列的别名放行到 tier 1 而不是 2（仍需年份佐证）。
+      // 别名要和 disambiguationAliases 的输出口径一致：已过 compactTitle
+      // （简繁归一 + 去分隔符 + 小写），不是原始条目名。
+      expect(titleMatchTier("journey", "風之旅人", ["风之旅人"])).toBe(1);
+    });
+  });
+
   // ===== 繁简失配回归（2026-09-30 线上翻车的根因） =====
   // zh 维基条目名是繁体、用户输入简体，不归一时「标题命中」信号永不亮，
   // 作品页/角色页/系列页同分，谁排前全看 gsrsearch 抖动。
@@ -588,5 +853,62 @@ describe("other wiki pipeline", () => {
       expect(detail?.title).toBe("集合啦！動物森友會");
       expect(detail?.poster_url).toBe(`${UP}/6/6b/600px-Animal_Crossing_New_Horizons.png`);
     });
+  });
+});
+
+describe("上游降级信号", () => {
+  /** 上游确实答复了「没有这个条目」——不是故障，不该记降级。 */
+  function installStatusFetch(status: number | "throw"): void {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => {
+        if (status === "throw") throw new Error("connection reset");
+        return new Response("{}", { status, headers: { "content-type": "application/json" } });
+      }),
+    );
+  }
+
+  it("httpJson 200 但无结果：不算降级（上游明确答复没有图）", async () => {
+    installFetch([{ match: /./, body: { query: { pages: {} } } }]);
+    resetWikiDegraded();
+    await resolveOtherCover("不存在的条目", "no such thing", 1999);
+    expect(wikiWasDegraded()).toBe(false);
+  });
+
+  it("上游 429：记为降级，避免空结果被 24 小时负缓存固化", async () => {
+    installStatusFetch(429);
+    resetWikiDegraded();
+    await resolveOtherCover("纪念碑谷", "纪念碑谷", 2014);
+    expect(wikiWasDegraded()).toBe(true);
+  });
+
+  it("上游 503：记为降级", async () => {
+    installStatusFetch(503);
+    resetWikiDegraded();
+    await resolveOtherCover("纪念碑谷", "纪念碑谷", 2014);
+    expect(wikiWasDegraded()).toBe(true);
+  });
+
+  it("连接被重置（throw）：记为降级——线上 8 次连打有 4 次是这种", async () => {
+    installStatusFetch("throw");
+    resetWikiDegraded();
+    await resolveOtherCover("纪念碑谷", "纪念碑谷", 2014);
+    expect(wikiWasDegraded()).toBe(true);
+  });
+
+  it("上游 404（明确无此条目）：不算降级", async () => {
+    installStatusFetch(404);
+    resetWikiDegraded();
+    await resolveOtherCover("纪念碑谷", "纪念碑谷", 2014);
+    expect(wikiWasDegraded()).toBe(false);
+  });
+
+  it("resetWikiDegraded 清掉上一条的标记（批量里不串味）", async () => {
+    installStatusFetch(503);
+    resetWikiDegraded();
+    await resolveOtherCover("纪念碑谷", "纪念碑谷", 2014);
+    expect(wikiWasDegraded()).toBe(true);
+    resetWikiDegraded();
+    expect(wikiWasDegraded()).toBe(false);
   });
 });
