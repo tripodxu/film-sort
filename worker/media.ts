@@ -5,6 +5,7 @@ import { generationOf, registerPurger } from "./cachePurge";
 import {
   otherDetail,
   resolveOtherCover,
+  toSimplified,
   wikiEnTitle,
   wikiFileThumbUrls,
   wikiPageImageAny,
@@ -1327,6 +1328,11 @@ function wikiImageUrl(page: WikiImagePage): string | undefined {
   return raw ? raw.replace(/^http:/, "https:") : undefined;
 }
 
+/** 维基标题归一：key() 之外再补简繁归一。zh 维基条目名是繁体、用户输入简体，
+ *  不归一时「页标题命中用户标题」的判定对繁体条目永不成立——动物森友会
+ *  （= 動物森友會）、塞尔达传说 王国之泪（= 薩爾達傳說 王國之淚）实测全灭。 */
+const wikiKey = (value: string) => toSimplified(value.normalize("NFKC").trim().toLowerCase());
+
 function scoreWikiImage(
   page: WikiImagePage,
   title: string,
@@ -1334,16 +1340,20 @@ function scoreWikiImage(
   type?: "movie" | "book" | "music",
   year?: string,
 ): number {
-  const pageTitle = key(page.title ?? "");
-  const base = key(title);
-  const englishKey = key(english);
+  const pageTitle = wikiKey(page.title ?? "");
+  const base = wikiKey(title);
+  const englishKey = wikiKey(english);
+  // 括号限定词剥掉再比：「傑克 (動物森友會)」这类次级页把作品名放括号里，
+  // 不剥会被 startsWith/endsWith 误判成作品页（与真作品页同分，实测交替夺冠）
+  const bareTitle = wikiKey((page.title ?? "").replace(/[（(【[][^）)】\]]*[）)】\]]/g, ""));
   if (!pageTitle) return -1;
   const text = `${page.extract ?? ""} ${page.description ?? ""}`.trim();
   const declared = text ? declareType(text) : null;
   const hasTypeWord = !!type && !!text && !!TYPE_WORDS[type]?.test(text);
   let score = 0;
   if (pageTitle === base || pageTitle === englishKey) score += 4;
-  else if (pageTitle.includes(base) || base.includes(pageTitle)) score += 2;
+  else if (bareTitle && (bareTitle.startsWith(base) || bareTitle.endsWith(base))) score += 3;
+  else if (base && (pageTitle.includes(base) || base.includes(pageTitle))) score += 2;
   else if (englishKey && (pageTitle.includes(englishKey) || englishKey.includes(pageTitle)))
     score += 1;
   else return -1;

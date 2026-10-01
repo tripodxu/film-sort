@@ -1,5 +1,11 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { otherDetail, otherSearch, resolveOtherCover, wikiPageImageAny } from "./other";
+import {
+  otherDetail,
+  otherSearch,
+  resolveOtherCover,
+  toSimplified,
+  wikiPageImageAny,
+} from "./other";
 
 // ===== 其他类别维基管线的离线回归测试 =====
 // 用录像级 fixture 驱动 fetch 桩，验证三条链路的选页逻辑：
@@ -525,5 +531,62 @@ describe("other wiki pipeline", () => {
       },
     ]);
     expect(await wikiPageImageAny("zh", "纪念碑谷", ["Monument Valley"])).toBeNull();
+  });
+
+  // ===== 繁简失配回归（2026-09-30 线上翻车的根因） =====
+  // zh 维基条目名是繁体、用户输入简体，不归一时「标题命中」信号永不亮，
+  // 作品页/角色页/系列页同分，谁排前全看 gsrsearch 抖动。
+
+  describe("简繁归一", () => {
+    it("toSimplified 覆盖标题高频字", () => {
+      expect(toSimplified("動物森友會")).toBe("动物森友会");
+      expect(toSimplified("薩爾達傳說 王國之淚")).toBe("萨尔达传说 王国之泪");
+      expect(toSimplified("蒙娜麗莎")).toBe("蒙娜丽莎");
+      expect(toSimplified("隻狼：暗影雙死")).toBe("只狼：暗影双死");
+      expect(toSimplified("底特律：變人")).toBe("底特律：变人");
+      expect(toSimplified("紀念碑谷")).toBe("纪念碑谷");
+      expect(toSimplified("艾爾登法環")).toBe("艾尔登法环");
+      expect(toSimplified("Inside")).toBe("Inside");
+    });
+
+    it("标题分级：作品页(结尾命中)压过角色页(括号里包含)", async () => {
+      const pages = {
+        query: {
+          pages: {
+            jack: {
+              title: "傑克 (動物森友會)",
+              pageprops: { page_image: "Jack_cat_animal_crossing.png" },
+              extract: "傑克是2020年遊戲《集合啦！動物森友會》的貓咪角色。",
+              ...noFreeImage,
+            },
+            horizon: {
+              title: "集合啦！動物森友會",
+              pageprops: { page_image: "Animal_Crossing_New_Horizons.png" },
+              extract: "《集合啦！動物森友會》是2020年任天堂發售的生活模擬遊戲。",
+              ...noFreeImage,
+            },
+          },
+        },
+      };
+      installFetch([
+        { match: /gsrsearch=动物森友会/, body: pages },
+        {
+          match: /titles=File:Animal_Crossing_New_Horizons\.png/,
+          body: {
+            query: {
+              pages: {
+                file: {
+                  title: "File:Animal Crossing New Horizons.png",
+                  imageinfo: [{ thumburl: `${UP}/6/6b/600px-Animal_Crossing_New_Horizons.png` }],
+                },
+              },
+            },
+          },
+        },
+      ]);
+      const detail = await otherDetail("动物森友会", 2020);
+      expect(detail?.title).toBe("集合啦！動物森友會");
+      expect(detail?.poster_url).toBe(`${UP}/6/6b/600px-Animal_Crossing_New_Horizons.png`);
+    });
   });
 });
