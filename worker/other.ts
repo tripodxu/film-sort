@@ -264,11 +264,16 @@ function scoreOtherPage(page: WikiPage, compactBase: string, year?: string): num
   if (extract.length >= 80) score += 1;
   if (/(系列|以下条目|可以指|可指|消歧义|消歧義)/.test(`${title} ${extract}`)) score -= 3;
   if (year && text.includes(year)) score += 2;
-  // 条目自身的首个年份 ≠ 用户年份时降权（「摘要里提到 2012」的同名异作，
-  // 典型：西遊記 extract 带 2012，条目本体是 1996 电视剧）
+  // 条目名自带年份且与用户年份不符 → 强降权。典型：西遊記 (無綫1996年電視劇)
+  // 摘要有「2012年凌晨重播」，条目本体却是 1996 年电视剧——与风之旅人同分时
+  // 全靠这一刀压下去（其余信号 6.5:5.5，差 1 分不够）。
+  // 注意**不能**改用「摘要首个年份」：动物森友会 2020 正作的摘要首年是 2018
+  // （公布年），而角色页「傑克 (動物森友會)」的首年才是 2020——按首年判会把
+  // 正作压下去、让角色页夺冠（线上实测翻车）。
+  // 年份正则不带 \b：中文标题里数字前后是汉字，\b 永远不成立。
   if (year) {
-    const own = (extract.match(YEAR_RE) ?? [])[0];
-    if (own && own !== year) score -= 2;
+    const titleYear = (title.match(/(?:1[5-9]|20)\d{2}/) ?? [])[0];
+    if (titleYear && titleYear !== year) score -= 4;
   }
   return score;
 }
@@ -326,7 +331,9 @@ async function resolveOtherPages(
 /** 从候选页里挑最优：给了年份就优先摘述命中该年份的条目（用户清单格式是
  *  「标题 - 游戏 (年)」，年份是消歧的最硬信号——动物森友会实测：系列页/
  *  2001 首作都不带 2020，2020 正作带），没有年份命中的候选才放宽。
- *  分三档：条目自身年份 == 用户年份 > 摘要提到用户年份 > 全体第一。 */
+ *  只分「摘要提到用户年份」一档，不再按「条目自身首个年份 == 用户年份」细分：
+ *  角色页「傑克 (動物森友會)」首年正是 2020，2020 正作「集合啦！動物森友會」
+ *  首年却是 2018（公布年），按首年细档会把正作压下去、让角色页夺冠。 */
 function pickBest(
   candidates: Array<{ page: WikiPage; score: number }>,
   year?: string,
@@ -337,8 +344,7 @@ function pickBest(
     const text = `${entry.page.extract ?? ""} ${entry.page.description ?? ""}`;
     return text.includes(year);
   });
-  const exact = mentions.filter((entry) => (entry.page.extract ?? "").match(YEAR_RE)?.[0] === year);
-  return (exact.length ? exact : mentions.length ? mentions : candidates)[0];
+  return (mentions.length ? mentions : candidates)[0];
 }
 
 async function toWork(page: WikiPage, lang: "zh" | "en"): Promise<OtherWork | null> {
