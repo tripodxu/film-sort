@@ -144,6 +144,10 @@
 - **4.57 红队全绿有两种原因，排查顺序不能反：先问「变异有没有语义」，再问「断言够不够强」** —— 我把 `mergeCoverRecall` 里 `if (x) A; else B;` 改写成 `if (!x) B; else A;`，测试全绿。我第一反应是「断言不够强」⇒ 去加测试；加了**还是绿**，才回头发现这是**同一个函数**，变异本身没改行为。加测试这条路上多绕了一圈。**有效的红队变异必须改变可观测行为**。本轮的正确变异是「让精确行的图和继承行的图**不是同一张**」（用两张不同的 url），以及「让精确行退化成按继承处理」。配套：写红队时先写下「**这个变异会让哪个具体输入产生哪个具体不同输出**」，写不出来就别跑。
 - **4.58 上界淘汰写在 `setItem` 之前 ⇒ 整份持久化只活在内存副本里** —— `persist()` 写成 `if (keys.length < COVER_MEMORY_MAX) return; sessionStorage.setItem(...)`。页内一切正常（`memo` 缓存命中），刷新全丢，**零信号**——比崩溃难查得多，因为它完全符合「内存里有就够用」的直觉。正确顺序是**先写、再淘汰**（`setItem` 永远执行，满了才删最旧的一半）。通则：**任何「只在容量允许时才落盘」的写法都要逐字读一遍，确认 `return` 不在写操作之前**；对称地，`vi.resetModules()` + 重新 `import` 才能验「刷新后还在」，用 `clearCoverMemory()` 验的是删除不是持久化。
 - **4.59 lint 的 baseline warning 数是一张网，别拖到收尾** —— 我提取了 `writeRows` 辅助函数却忘了改调用处，`npm run lint` 从 29 变 30（`no-unused-vars`），当场没管。基线（本仓 0 errors / 29 warnings）的作用不是「不炸就行」而是**差分告警**：任何一次新增 warning 都应当场处理，否则收尾时它已经混在 30 条里，分不清是哪一轮引入的。同类：`npm run format:check` 报 4 files 未格式化也是当场跑 `npm run format`，不要攒到最后。
+- **4.60 「测试全绿」和「线上没变化」可以同时成立，只要两者量的不是同一段代码** —— 计划点名三处 `page_image` 直取，实测发现带 year 的 other 请求在 `worker/media.ts:1727` 第一档就被 `otherDetail` 的返回值截住，**`resolveOtherCover` 压根没跑**。于是我改的那三处一个都没生效，而 `worker/other.test.ts` 69 条**全绿**。核对办法：`.tmp/which10.mjs` 花**一次线上请求**确认「主路径上真正跑的是哪一行」，比读一百行源码便宜。通则：**修复前先定位调用链上第一个会 return 的地方**，它上面的修改全是空转。
+- **4.61 填进去的形状和读出来的形状不一致，最强的静态检查也看不见** —— `fillArticleImageNames` 把 `page.images` 写成**裸字符串数组**，而 `articleImageNames` / `wikiPageImageAny` 按 **`{title}` 对象**读。两边各自 `as WikiPage & { images?: Array<{title?: string}> }` cast 成自己那套类型 ⇒ **`tsc` 零报错、69 条测试全绿、线上静默取不到图**。这是 4.51 的反面：**4.51 是「我以为的结构没 dump 看过」，这里是「结构对了但形状转述时变了」**。判据：新写的测试必须**让被测的填充器真的跑一次**——原先那条用例把 `images` 直接挂在 fixture 上，恰好绕过了出问题的那一层，于是它测的不是被测代码。配套：补一条专门走填充路径的用例，并在回填处留注释写明「存回 api 的形状 `{title}`，不是裸字符串」——这个不变量离代码太远，注释是唯一的绑定。
+- **4.62 判「这不是作品封面」时，别用尺寸，用文件名** —— 直觉是「icon 封面是正方形」。实测 `Animal_Crossing_New_Horizons.png` 只有 **248×402**，比 `Monument_Valley_icon_unrounded.jpg` 的 316×316 **更窄**；且正确封面出 `utm_content=thumbnail_unscaled` 是常态 ⇒ **任何宽高规则都会误杀当前正确的封面**。文件名侧则干净：`icon|logo|logotype|wordmark|banner|avatar|flag|placeholder|mascot|edit|symbol|star full` 在四个样本页里命中全部非作品图、**零个作品图**（含 `Monument Valley, Utah, USA (23611451292).jpg` 这类来自 Commons 但完全正确的文件）。**但要把「判掉」和「回退」分开验证**：实测 `纪念碑谷 (游戏)` 的 `thumbnail`/`original`/`pageimages` **三者全空**（app 图标是非自由文件），只做「不采用」会把「错图」换成「没图」。⇒ **「回退到下一档」必须验证那一档真有东西。**
+- **4.63 fixture 的路由顺序有语义，命中第一个匹配** —— `worker/other.test.ts` 的 `installFetch` 用 `routes.find(...)`，而 `/titles=纪念碑谷/` 会**前缀匹配**吃掉 `titles=纪念碑谷 (游戏)&prop=images` 那次请求（该请求的 `titles` 是归一后的页面名）。结果：填充器收到一个没有 `images` 的页面，**看起来像修复没生效**。本轮因此白查三轮。同族 4.51：**fixture 与真实响应的偏差会以「代码没修好」的形态出现**。配套：`installFetch` 的路由按「越具体越靠前」排，并在大 fixture 上留注释写明为什么这条必须在前。
 
 
 - **4.14 emoji 要 `aria-hidden`**，图标统一收编 lucide 并带 `aria-label` / `aria-pressed`。
@@ -222,3 +226,8 @@
 | 「刷新后记得的东西丢了」且页内一直正常 | 写入口拿不到与服务端同源的键（组件自己拼 `title\|year`），或上界淘汰的 `return` 挡在 `setItem` 之前（4.56 / 4.58） |
 | 红队变异跑完测试还是绿的 | 先确认变异**改变行为**（4.57）。`if (x) A else B` → `if (!x) B else A` 是同一个函数，加断言也救不回来 |
 | 线上 bundle 里搜得到新代码 ⇒ 功能成立 | 搜得到只证明「发上去的等于我审过的」，不证明运行时行为；浏览器行为必须浏览器里验（迭代 7/9 两次留红） |
+| 测试全绿 ⇒ 改动生效了 | 两者可能量的不是同一段代码：修复点没在主路径上（4.60） |
+| `tsc` 过了 + 测试全绿 ⇒ 形状对得上 | 填的形状和读的形状可以各自 cast 到自己那套类型，运行期静默全空（4.61） |
+| icon 封面是正方形 ⇒ 用宽高判 | 正确封面 248×402 比 316×316 的 icon 更窄；`thumbnail_unscaled` 对正确封面是常态（4.62） |
+| 「判掉图标」⇒ 下一档总有东西 | 该页 `thumbnail`/`original`/`pageimages` 三者全空，「不采用」会把错图换成没图（4.62） |
+| 线上没变化 = 修复没生效 | 先排 fixture 路由顺序：`/titles=X/` 会前缀吃掉 `titles=X (…)&prop=images`（4.63） |

@@ -35,6 +35,8 @@ interface WikiPage {
   pageprops?: Record<string, string>;
   /** pageprops.page_image 换出的 URL（fillPageImageUrls 填入） */
   fileUrl?: string;
+  /** 正文图片文件名（只有带 prop=images 的查询才会带这个字段） */
+  images?: Array<{ title?: string }>;
   thumbnail?: { source?: string };
   original?: { source?: string };
   url?: string;
@@ -256,6 +258,51 @@ function hintTopicConfirmed(page: WikiPage, lang: "zh" | "en"): boolean {
     ? /電子遊戲|电子游戏|電視遊戲|电子遊戲|電玩遊戲/.test(text)
     : /\bvideo\s?games?\b/i.test(text);
 }
+/** 这个文件名像不像「作品封面本身」。
+ *
+ *  2026-10-02 实测逼出来的这把尺：zh 维基「纪念碑谷 (游戏)」的
+ *  `pageprops.page_image` 就是 `Monument_Valley_icon_unrounded.jpg`——app 图标。
+ *  真正的游戏截图 `File:Monument Valley screenshot.jpg` 就在同一页 images 里排第 7。
+ *  旧代码把 `SKIP` 正则只用在 images 分支，而 page_image 直取完全无检查，
+ *  于是**优先级最高的那条取图路径毫无防护**（见 resolveOtherCover 与 wikiPageImageAny）。
+ *
+ *  为什么不用文件尺寸判：**实测 `Animal_Crossing_New_Horizons.png` 只有 248×402**，
+ *  比那个 316×316 的 icon 还窄；正确封面出 `thumbnail_unscaled`（原图小于
+ *  桶宽 500）也是常态。任何「太窄太小 ⇒ 不是封面」的规则都会误杀当前的正确封面。
+ *  ⇒ 唯一站得住的判据是**文件名**：这些词在维基里专指应用图标、界面图标、
+ *  系列 logo、维基自身的 UI 素材，作品图一个都不带。
+ *
+ *  刻意不收的三个词（旧 SKIP 有、本尺没有）：
+ *  · `disambig` —— 那是 `pageprops.disambiguation` 的键名，不是文件名特征
+ *  · `commons` —— `Monument Valley, Utah, USA (23611451292).jpg` 来自 Commons 且完全正确
+ *  · `question` —— 只命中 `File:Question book-icon.svg` 一类，icon 已覆盖
+ *
+ *  两处被离线黑线逼出来（或推翻）的取舍：
+ *  ① 分隔符类必须含 `.` `,` `:` `;` `&` —— 否则「Monument Valley 3
+ *     logotype.svg」因为 logotype 后面跟的是扩展名点而逃过判定，
+ *     而它恰恰是本轮要抓的那类 Series logo。
+ *  ② `icon` 两侧必须是分隔符（`Monument Valley icon unrounded` 命中，
+ *     `Iconic` / `Iconf` / `Monica` 不命中）。代价：`Icon Man.jpg`
+ *     （Albert Watson 1968 摄影系列）会被误判。选多数，因为 Commons 上
+ *     「作品名 + icon 修饰词」远比「封面恰好叫 Icon …」常见，且两类错代价
+ *     不对称——误判 artifact 只是少一张候选封面，误判 artwork 是把 app
+ *     图标当封面发给用户。
+ *  ③ 已知漏网：2010 年代那套 `Crystal Clear app package games.svg` /
+ *     `Future film2.svg` / `Symbol support vote.svg` 条目模板图标。故意不收
+ *     它们的模板名（commons 上没有作品封面叫这个，加词只会让正则更长而不
+ *     改变任何真实结果）——兜底在调用点：`articleImageNames` 按
+ *     /\.(jpe?g|png)$/i 过滤，svg 一律进不到「选封面」这一步。
+ *     （同页的 `Star full.svg` 是个例外，由 star full/empty/half 命中。） */
+const ARTIFACT_FILE_RE =
+  /(^|[\s_\-()[\].,:;&])(?:icon|logo|logotype|wordmark|banner|avatar|flag|placeholder|mascot)(?=$|[\s_\-)\].,:;&])|edit[-_ ]|(?:^|[\s_])star (?:full|empty|half)/i;
+
+export type ArtworkFileVerdict = "artwork" | "artifact";
+
+/** 纯函数，便于离线穷举（见 worker/other.test.ts 的黑线用例）。 */
+export function classifyArtworkFile(name: string): ArtworkFileVerdict {
+  return ARTIFACT_FILE_RE.test(name) ? "artifact" : "artwork";
+}
+
 /** pageprops.page_image 是文件名（无 File: 前缀），imageinfo 才能换 URL */
 function normFile(value: string): string {
   return value
@@ -383,6 +430,95 @@ async function fillPageImageUrls(
     const url = file ? map.get(file) : undefined;
     if (url) page.fileUrl = url;
   }
+}
+
+/** 这一页的 infobox 封面文件名是不是「像作品封面」。 */
+function isArtworkPageImage(page: WikiPage): boolean {
+  const file = page.pageprops?.page_image ?? "";
+  return !!file && classifyArtworkFile(file) === "artwork";
+}
+
+/** 页面正文里的图片文件名（prop=images 才带这个字段）。 */
+function articleImageNames(page: WikiPage): string[] {
+  return ((page as WikiPage & { images?: Array<{ title?: string }> }).images ?? [])
+    .map((image) => image.title ?? "")
+    .filter(
+      (name) =>
+        name.startsWith("File:") &&
+        /\.(jpe?g|png)$/i.test(name) &&
+        classifyArtworkFile(name) === "artwork",
+    );
+}
+
+/** 单独给这几页补 prop=images（wikiTitlePages/wikiSearchOnce 都不带这个 prop，
+ *  因为其它调用点不需要——2026-10-02 实测 gsrsearch 加它每轮 +2746 B、
+ *  一条 other 最坏跑 4 轮 ⇒ +11 KB）。只在 infobox 封面被判掉后才发，
+ *  实测 titles 两页 +1969 B。 */
+async function fillArticleImageNames(
+  lang: "zh" | "en",
+  pages: readonly OtherCandidate[],
+  probe: WikiProbe,
+): Promise<void> {
+  const titles = pages.map((entry) => (entry.page.title ?? "").trim()).filter(Boolean);
+  if (!titles.length) return;
+  const q = new URLSearchParams({
+    action: "query",
+    titles: [...new Set(titles)].join("|"),
+    prop: "images",
+    imlimit: "50",
+    redirects: "1",
+    format: "json",
+  });
+  const listed = await wikiJson(lang, q, 8000, probe);
+  if (!listed) return;
+  for (const entry of pages) {
+    const title = (entry.page.title ?? "").trim();
+    // api 用 titles 查回来时 key 可能是 pageid，也可能是归一后的标题
+    const found =
+      Object.values(listed).find((page) => (page.title ?? "").trim() === title) ?? listed[title];
+    if (!found) continue;
+    const names = ((found as WikiPage & { images?: Array<{ title?: string }> }).images ?? []).map(
+      (image) => image.title ?? "",
+    );
+    if (!names.length) continue;
+    const page = entry.page as WikiPage & { images?: Array<{ title?: string }> };
+    // 存回 api 的形状（{title}），不是裸字符串：`articleImageNames` /
+    // `wikiPageImageAny` 都按对象读，写成字符串时它们静默全空——而且
+    // TypeScript 不报错，因为两边各自 cast 成自己那一套类型。
+    page.images = [...(page.images ?? []), ...names.map((name) => ({ title: name }))];
+  }
+}
+
+/** 文件名里带这些词 = 大概率在讲「这件作品本身」，而不是风景照/人物照/
+ *  截图之外的花絮。与语言无关，所以不需要先花一次 langlinks 换英文标题。
+ *  实测锚点：File:Monument Valley screenshot.jpg（纪念碑谷 (游戏) 里唯一的
+ *  作品图，而同页还有 Ken wong - game developers conference cropped.jpg
+ *  这类人物花絮）。 */
+const ARTWORK_NAME_HINT_RE =
+  /\b(screenshot|cover|box ?art|boxart|poster|key ?art|title ?screen|game ?play|capture|gameplay)\b/i;
+
+/** 这个正文图文件名像不像在讲用户要的那件作品。沿用 wikiPageImageAny 的
+ *  归一口径（剥分隔符 + 小写 + 去空格），不发明第二套相似度。 */
+function articleNameMatchesWork(fileName: string, works: readonly string[]): boolean {
+  const name = fileName.slice(5);
+  // ① 作品词命中：与语言无关，一次请求都不用多发。实测纪念碑谷那一页
+  //    唯一的作品图就靠这条捞到（中文条目 + 英文文件名 + 没有英文对应标题
+  //    可查时，这是唯一可判的信号）。
+  if (ARTWORK_NAME_HINT_RE.test(name)) return true;
+  const compact = name
+    .replace(/[\s_]/g, "")
+    .replace(/[\s：:·・（）()]/g, "")
+    .toLowerCase();
+  return works
+    .map((work) =>
+      work
+        .trim()
+        .replace(/[\s_]/g, "")
+        .replace(/[\s：:·・（）()]/g, "")
+        .toLowerCase(),
+    )
+    .filter(Boolean)
+    .some((work) => compact.includes(work));
 }
 
 /** 「以用户标题开头 + 描述性后缀」= 另一件作品，不是作品本体。
@@ -713,19 +849,58 @@ function pickBest(candidates: OtherCandidate[], year?: string): OtherCandidate |
   return (mentions.length ? mentions : pool)[0];
 }
 
-async function toWork(page: WikiPage, lang: "zh" | "en"): Promise<OtherWork | null> {
+/** 条目作品的主图：infobox 封面文件（pageprops.page_image）优先，其次
+ *  pageimages 缩略图，再次 original，最后同页正文图。
+ *
+ *  2026-10-02：page_image 指名的文件**可能根本不是封面**——zh 维基
+ *  「纪念碑谷 (游戏)」的 page_image 就是 `Monument_Valley_icon_unrounded.jpg`
+ *  （app 图标）。该文件名判为 artifact 时不采用。
+ *
+ *  线上实测（iter10 A3 首轮验收）：那一页**既没有 thumbnail 也没有 original**
+ *  （app 图标是非自由文件，pageimages 因此为空），也就是说「判掉之后往下落」
+ *  这条梯子在这页上是空的 —— 结果是封面从「图标」变成「没有」，而真正的
+ *  游戏截图就躺在同页 images 列表里。所以这里必须自己把那一档补上，
+ *  否则「不采用图标」只是把一个错误换成了另一个错误。 */
+async function toWork(
+  page: WikiPage,
+  lang: "zh" | "en",
+  probe: WikiProbe = newWikiProbe(),
+): Promise<OtherWork | null> {
   const title = (page.title ?? "").trim();
   const extract = (page.extract ?? "").trim();
   if (!title || !extract || page.missing || extract.length < 20) return null;
   // 消歧页（「X 可以指：…」）不是作品介绍，机械剔除
   if (isDisambiguation(page)) return null;
   const year = extract.match(YEAR_RE)?.[0];
-  // 缩略图优先于 original：original 是 Commons 全尺寸扫描件（数十 MB），
-  // infobox 封面文件（fileUrl，600px）最后兜底
-  const poster = (page.thumbnail?.source ?? page.original?.source ?? page.fileUrl)?.replace(
+  // 缩略图优先于 original：original 是 Commons 全尺寸扫描件（数十 MB）
+  const pageImage = page.pageprops?.page_image ?? "";
+  const infobox =
+    page.fileUrl && classifyArtworkFile(pageImage) === "artwork" ? page.fileUrl : undefined;
+  let poster = (infobox ?? page.thumbnail?.source ?? page.original?.source)?.replace(
     /^http:/,
     "https:",
   );
+  if (!poster) {
+    // 兜底档：infobox 被判掉（或压根没换到 URL）且 pageimages 为空 ⇒ 问同一页
+    // 要 images 列表，找文件名对得上这件作品的图。只在这一档发，所以
+    // page_image 正常的条目一次都不多付。
+    //
+    // 关键词只带本页标题：2026-10-02 线上实测中文条目正文里的文件名是英文的
+    // （File:Monument Valley screenshot.jpg 挂在 zh 页面「纪念碑谷 (游戏)」里），
+    // 所以**没有**在这里花钱查 langlinks 换英文标题——那条路会让每个 icon
+    // 页多付一次请求，而 ARTWORK_NAME_HINT_RE（screenshot/cover/boxart…）
+    // 与语言无关，是这一档够用的判据。
+    await fillArticleImageNames(lang, [{ page, score: 0, tier: 0 }], probe);
+    const works = [...new Set([title, ...titleVariants(title)])];
+    for (const name of articleImageNames(page)) {
+      if (!articleNameMatchesWork(name, works)) continue;
+      const url = await wikiFileThumbUrl(lang, name, probe);
+      if (url) {
+        poster = url;
+        break;
+      }
+    }
+  }
   return {
     id: `wiki-${lang}-${encodeURIComponent(title)}`,
     title,
@@ -777,7 +952,7 @@ export async function otherSearch(
     if (!scored.length) continue;
     const pages = scored.slice(0, 6).map((entry) => entry.page);
     await fillPageImageUrls(lang, pages, probe);
-    const works = (await Promise.all(pages.map((page) => toWork(page, lang)))).filter(
+    const works = (await Promise.all(pages.map((page) => toWork(page, lang, probe)))).filter(
       (work): work is OtherWork => !!work,
     );
     if (works.length) return works;
@@ -854,16 +1029,24 @@ export async function wikiPageImageAny(
     .sort((a, b) => b.tier - a.tier)[0]?.entry;
   if (!page) return null;
   await fillPageImageUrls(lang, [page], probe);
-  if (page.fileUrl) return page.fileUrl;
+  // infobox 封面名指向 app 图标时不采用（2026-10-02 实测：纪念碑谷 (游戏) 的
+  // page_image 就是 icon），但**不就此返回 null**——往下还有同页 images 分支，
+  // 真正的游戏截图就躺在那儿。
+  const pageImage = page.pageprops?.page_image ?? "";
+  if (page.fileUrl && classifyArtworkFile(pageImage) === "artwork") return page.fileUrl;
   const images = (page as WikiPage & { images?: Array<{ title?: string }> }).images ?? [];
-  const SKIP = /icon|logo|edit|commons|symbol|flag|question|placeholder|disambig/i;
   // 文件名含标题字词者优先：文章内相关画作按字母序会抢在主图前
   const prefers = [compactBase, ...preferTitles]
     .map((value) => value.replace(/[\s：:·・（）()]/g, "").toLowerCase())
     .filter(Boolean);
   const file = images
     .map((image) => image.title ?? "")
-    .filter((name) => name.startsWith("File:") && /\.(jpe?g|png)$/i.test(name) && !SKIP.test(name))
+    .filter(
+      (name) =>
+        name.startsWith("File:") &&
+        /\.(jpe?g|png)$/i.test(name) &&
+        classifyArtworkFile(name) === "artwork",
+    )
     .find((name) => {
       const compact = name.slice(5).replace(/[\s_]/g, "").toLowerCase();
       return prefers.some((prefer) => prefer && compact.includes(prefer));
@@ -1106,6 +1289,8 @@ export async function resolveOtherCover(
       .map((value) => (value ?? "").trim())
       .filter(Boolean);
     if (!queries.length) continue;
+    // 同页正文图要与「作品」对得上，判据的关键词就是这批查询词（去重去空）。
+    const works = [...new Set([base, ...queries, ...titleVariants(base)])];
     // 别名只认「精确标题轮」那张消歧页自列的名单——搜索轮混进来的旁支消歧页
     // （搜「日常幻想」会带回「性幻想」）会注入一堆无关别名。2026-10-02 线上实测：
     // 不传这批别名时，Journey 搜索轮里《风之旅人》拿不到唯一证据被判 tier0，
@@ -1130,11 +1315,34 @@ export async function resolveOtherCover(
       top.map((entry) => entry.page),
       probe,
     );
-    // 先按评分取前 3 名要 infobox 封面文件，都没有才退回 pageimages 缩略图
+    // ① infobox 封面文件优先（评分最高的先试），但**文件名判为 artifact
+    //    （app 图标 / 系列 logo / 界面素材）时不采用**。2026-10-02 实测：
+    //    纪念碑谷 (游戏) 的 page_image 就是 Monument_Valley_icon_unrounded.jpg。
     for (const entry of top) {
       const file = entry.page.pageprops?.page_image ?? "";
-      if (file && entry.page.fileUrl) return entry.page.fileUrl;
+      if (file && entry.page.fileUrl && classifyArtworkFile(file) === "artwork")
+        return entry.page.fileUrl;
     }
+    // ② 页级守卫：只有当整条链都拿不到「像封面」的 infobox 文件时，才付那次
+    //    带 prop=images 的额外查询。page_image 正常的条目一次都不发。
+    if (top.some((entry) => !entry.page.fileUrl || !isArtworkPageImage(entry.page))) {
+      await fillArticleImageNames(lang, top, probe);
+    }
+    // ③ 同页正文里文件名含作品关键词的图——纪念碑谷 (游戏) 的 icon 被判掉后，
+    //    真正的游戏截图（File:Monument Valley screenshot.jpg）靠这一档顶上来。
+    const articleNames = top.flatMap((entry) => articleImageNames(entry.page));
+    for (const name of articleNames) {
+      if (!articleNameMatchesWork(name, works)) continue;
+      const url = await wikiFileThumbUrl(lang, name, probe);
+      if (url) return url;
+    }
+    // ④ 同页 images 里第一张非 artifact。**只能落在已被 pickBest 确认的作品页上**
+    //    （top 的每一条都过了 tier/年份闸），所以「第一张」不会被地貌照片抢走。
+    for (const name of articleNames) {
+      const url = await wikiFileThumbUrl(lang, name, probe);
+      if (url) return url;
+    }
+    // ⑤ 最后才退回 pageimages 缩略图。
     for (const entry of top) {
       const url = entry.page.thumbnail?.source ?? entry.page.original?.source;
       if (url) return url.replace(/^http:/, "https:");
@@ -1176,7 +1384,7 @@ export async function otherDetail(name: string, year?: number): Promise<OtherWor
       if (best) {
         exactRank = best;
         await fillPageImageUrls(lang, [best.page], detailProbe);
-        exactWork = await toWork(best.page, lang);
+        exactWork = await toWork(best.page, lang, detailProbe);
       }
     }
     // 够好就直接返回：作品页（tier 2）、评分 ≥6（有类型词/限定词/封面这类
@@ -1204,7 +1412,7 @@ export async function otherDetail(name: string, year?: number): Promise<OtherWor
     const searchBest = pickBest(searched, yearText);
     if (searchBest) {
       await fillPageImageUrls(lang, [searchBest.page], detailProbe);
-      const searchWork = await toWork(searchBest.page, lang);
+      const searchWork = await toWork(searchBest.page, lang, detailProbe);
       if (
         searchWork &&
         (!exactRank ||

@@ -10,6 +10,49 @@
 
 ## 进行中 / 最近
 
+### T-20261002-11 · 迭代 10/20（优化类）· 封面文件名判别（infobox 指向 app 图标时改用正文作品图）
+
+**状态**：✅ 完成（门禁 + 红队 ×4 + 线上实测 2026-10-02；**A7 留 ⚠️ 原键受 24h 缓存**，见遗留 ①）
+
+- **任务类型**：§2.1 优化类（轮换位：9 创意 → 10 优化）
+- **最小上下文**：不需要读全仓。只需 `worker/other.ts`（`toWork` / `resolveOtherCover` / `wikiPageImageAny` / `fillArticleImageNames`）与 `worker/media.ts:1325 wikiPagePoster`。**`src/` 与 `shared/` 本轮零改动**（主包指纹逐字节不变可证）。
+- **改了什么**
+  - `worker/other.ts` 新增 `ARTIFACT_FILE_RE` + `export type ArtworkFileVerdict = "artwork" | "artifact"` + `export function classifyArtworkFile(name): ArtworkFileVerdict`：**判据只能是文件名**（宽高被实测钉死，见「为什么」②）。收窄到 `icon|logo|logotype|wordmark|banner|avatar|flag|placeholder|mascot|edit[-_ ]|star full/empty/half`，且**刻意不收**旧 `SKIP` 的 `disambig`（那是 pageprops 键名）、`commons`（Commons 来源但完全正确）、`question`。
+  - 新增 `ARTWORK_NAME_HINT_RE`（`screenshot|cover|boxart|poster|keyart|title screen|capture|gameplay`，**语言无关**）、`isArtworkPageImage`、`articleImageNames`（按 `jpe?g|png` 过滤 + artwork 判别）、`fillArticleImageNames`（**单独**发一次 `prop=images&imlimit=50` 的 titles 查询，**只在 artifact 判定后才发**）、`articleNameMatchesWork`。
+  - `toWork` 改成 `async`：`infobox` 判 artifact ⇒ 走 `thumbnail/original`，再没有则走同页 images 第四档（`articleNameMatchesWork` 命中先试，否则第一张）。
+  - `resolveOtherCover` / `wikiPageImageAny` / `media.ts:1325 wikiPagePoster` 三处 `page_image` 直取收口到同一把尺，**都不 `return null`**（它们后面本来就有下一档）。
+  - 测试：改写 1 条（旧的 `it("…infobox 封面（而非真实地貌照片）")` 断言的正是本轮要修的 bug）、新增 8 条（写回形状的端到端用例、`wikiPageImageAny` 不返回 icon、`toWork` 退回缩略图而不丢条目、`classifyArtworkFile` 5 例、tripwire 5 例），迭代 8 的记账 tripwire 由 5 改 6。
+- **为什么（4 条）**
+  1. **台账的因果写错了，动手前的实测推翻了它**：`year` 不参与任何选图判断，它做的是换一道分支（`media.ts:1727` 第一档 `otherDetail(title, year)`）。不带 year 返回地貌页（`page_image` 空 ⇒ 落到缩略图那张 500px 地貌照）；带 year 返回 `纪念碑谷 (游戏)`（tier 2 / score 13.5 / band `exact`，**条目选得是对的**）。⇒ 题眼是「infobox 封面名指向 app 图标」，不是 year。
+  2. **宽高判据被实测钉死**：`Animal_Crossing_New_Horizons.png` 只有 **248×402**，比 316×316 的 icon **更窄**；正确封面出 `thumbnail_unscaled` 是常态 ⇒ 任何「太窄/太小 ⇒ 不是封面」的规则都会误杀**当前正确**的封面。
+  3. **「判掉」不等于「修好」**：实测 `纪念碑谷 (游戏)` 的 `thumbnail`/`original`/`pageimages` **三者全空**（app 图标是非自由文件）⇒ 只做「不采用」会把错图换成**没图**。真正的游戏截图躺在同页 images 里，必须自己补那一档。
+  4. **收口点决定代价**：加 `prop=images` 到 `wikiSearchOnce` 每轮 +2746 B、一条 other 最坏 4 轮 ⇒ +11 KB；只查 `top` 那 1–3 页则 +1969 B。
+- **验证状态**
+  - 门禁：`tsc -b` exit 0；`lint` **29 problems (0 errors, 29 warnings)** = 基线；`format:check` All matched files；`vitest` **674 passed / 9 skipped (683)**（基线 660 ⇒ **+14**）；`build` ✓ **零前端改动** ⇒ `index-CGd3gcxH.js` 本地 410498 B / 线上 410498 B，与迭代 9 **同一指纹**，`ce=br`、`immutable`、`modulepreload` 计数 0。
+  - 红队 ×4 **全红**：R-1 删 `toWork` 守卫（1 failed）/ R-2 改成 `return null`（2 failed，`条目被整个丢掉了（不该发生）`）/ R-3 删正则扩展分隔符（2 failed，`expected 'artwork' to be 'artifact'`）/ **R-4 删 `fillArticleImageNames` 存回 `{title}` 的 `.map`（1 failed，精准命中新加的那条端到端用例）**。
+  - 线上 Version ID **`28126578-420f-4547-a179-4c182edb5ee3**，`✅ No migrations to apply!`（零迁移仍是设计目标）。
+  - A3 ✅ batch：`other|纪念碑谷(游戏)|monument valley|2014|4` ⇒ **`Monument_Valley_screenshot.jpg`**；detail `poster_url` 同值、标题仍是 `纪念碑谷 (游戏)`。
+  - A4 ✅ 三轮逐字稳定 4/4 `found`：风之旅人 `Journey_PSN_Cover.png`、动物森友会 `Animal_Crossing_New_Horizons.png`、Journey `Journey_PSN_Cover.png`、Inside `INSIDE_Cover.jpg`。
+- **实测发现并修掉的真 bug（4 条）**
+  1. **`fillArticleImageNames` 写裸字符串、`articleImageNames`/`wikiPageImageAny` 按 `{title}` 对象读** ⇒ 静默全空，`tsc` 零报错、69 条测试全绿、线上取不到图。改为存回 `{title}` 并补一条**必须走过填充器**的端到端用例（PITFALLS 4.61）。
+  2. **计划点名错了修复点**：以为主路径是 `resolveOtherCover`，实测带 year 的请求在 `media.ts:1727` 就被 `otherDetail` 截住 ⇒ 只改它的话测试全绿而线上零变化（PITFALLS 4.60）。真正修 bug 的是 `toWork`。
+  3. **「判 artifact ⇒ return null」是回归**：该函数同时当过滤器用，undefined 会把整条候选从详情/搜索里抹掉，比拿错图更糟。由红队 R-2 逼出，并补了「退回缩略图而不是丢掉整条条目」的行为用例。
+  4. **中文条目正文里的文件名是英文的**：只拿中文标题去 `includes` 永远匹配不上（第一次验收白跑一轮）⇒ 加与语言无关的 `ARTWORK_NAME_HINT_RE`；**刻意不查 `langlinks`**，因为那会让每个 icon 页多付一次请求。
+- **遗留风险**
+  1. **A7 留 ⚠️**：原键 `other|纪念碑谷|monument valley|2014|4` **今天仍返 icon**（24h TTL 未过）。A3 的证据建立在另一个键（换**输入形态** `纪念碑谷(游戏)` 半角括号，真实用户写法）上。**加盐会破坏维基消歧**（PITFALLS 4.54），所以换的是形态不是内容。原键修复待 TTL 过期后复测。
+  2. **A6 只核到「取图层之外零改动」**：`git diff` 逐行读过，但没有自动化断言钉住「评分/档位/别名一行不动」⇒ 下一轮若碰 `other.ts` 应补形状 tripwire。
+  3. **正则有已知漏网**（诚实记账）：`Crystal Clear app package games.svg`、`Future film2.svg`、`Symbol support vote.svg` 这类条目模板图标不共享特征词，靠 `jpe?g|png` 过滤兜住；png/jpg 模板图标仍可能漏网。
+  4. **`icon` 按词边界命中** ⇒ `File:Icon Man.jpg` 会被判 artifact。实测无此真封面，但这是明确取舍。
+  5. **`toWork` 改 async 是签名变更**（三个调用点都传了 probe）。`otherSearch` 的 `Promise.all` 并发度未变（确认过没变），但**未测量它对总时长的影响**。
+  6. **迭代 9 遗留 ①（浏览器 E2E）与迭代 8 遗留（A7/A8 需网络恢复）仍未解**，见下一步。
+- **下一步（迭代 11 起）**
+  1. **浏览器 E2E 缺口**（迭代 7/9/10 连续三次留红）：一次性 Playwright 脚本，覆盖「会话内同名继承」「重试按钮」「三态渲染」。
+  2. **补 A6 的形状 tripwire**：钉住 `other.ts` 的评分/档位/别名零改动。
+  3. **第 5 档运行时用例**：迭代 8 遗留的「超时但前 4 档成功 ⇒ absent」目前只有源码形状断言。
+  4. 24h TTL 过期后复测原键 `other|纪念碑谷|monument valley|2014|4`；网络恢复后复测迭代 8 的 A7/A8。
+  5. per-user 封面覆盖（新表 + scope 大）、把「让用户选」扩展到 29 处 `<Poster>` 的直出封面位。
+  6. `docs/PLAN-OPTIMIZATION-SPRINT.md` Phase 8 PWA、ROADMAP Phase 3/4 仍 ⬜。
+
 ### T-20261002-10 · 迭代 9/20（创意类）· 消歧记忆（一次「让用户选」升级成「记住这个名字指哪部作品」）
 
 **状态**：✅ 完成（门禁 + 红队 + 线上实测 2026-10-02；**A8 留 ❌ 需浏览器**，见遗留 ①）

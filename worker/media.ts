@@ -4,6 +4,7 @@ import { fetchBounded, parseAllowedUrl, readBoundedText, type OutboundPolicy } f
 import { generationOf, registerPurger } from "./cachePurge";
 import { posterKeySegment, posterMediaKey } from "../shared/posterKey";
 import {
+  classifyArtworkFile,
   newWikiProbe,
   otherDetail,
   resolveOtherCover,
@@ -1318,10 +1319,16 @@ function wikiIsDisambiguation(page: WikiImagePage): boolean {
 }
 
 /** 候选页取图：infobox 封面文件（pageprops.page_image，非自由封面也有值）优先，
- *  其次 pageimages 缩略图。fileUrls 由 wikiFileThumbUrls 预先批量换好。 */
+ *  其次 pageimages 缩略图。fileUrls 由 wikiFileThumbUrls 预先批量换好。
+ *  infobox 文件名判为 artifact（app 图标 / 系列 logo / 界面素材）时不采用——
+ *  见 other.ts classifyArtworkFile 的注释与 PLAN-COVER-ARTIFACT-FILTER §1.2。 */
 function wikiPagePoster(page: WikiImagePage, fileUrls: Map<string, string>): string | undefined {
   const file = (page.pageprops ?? {}).page_image ?? "";
-  return (file ? fileUrls.get(file) : undefined) ?? wikiImageUrl(page);
+  const infobox = file && classifyArtworkFile(file) === "artwork" ? fileUrls.get(file) : undefined;
+  // artifact（app 图标 / 系列 logo / 界面素材）一律不采用；artwork 但 imageinfo
+  // 没换到 URL（超时/上游 429）时**仍要**回落缩略图——这个函数同时当过滤器用，
+  // 返回 undefined 等于把整条候选丢掉，比拿错图更糟。
+  return infobox ?? wikiImageUrl(page);
 }
 
 function wikiImageUrl(page: WikiImagePage): string | undefined {

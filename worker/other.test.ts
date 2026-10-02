@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { readFileSync } from "node:fs";
 import {
+  classifyArtworkFile,
   newWikiProbe,
   otherCandidateReport,
   otherConfidence,
@@ -401,7 +402,25 @@ describe("other wiki pipeline", () => {
     ]);
   });
 
-  it("纪念碑谷：2014 游戏页的 infobox 封面（而非真实地貌照片）", async () => {
+  // 2026-10-02 线上实录形状：纪念碑谷 (游戏) 的 infobox 里填的是 app 图标，
+  // 真正的游戏截图在同一页正文里排第 7（旧代码取到 icon，本轮取到 screenshot）。
+  const MONUMENT_VALLEY_GAME = {
+    title: "纪念碑谷 (游戏)",
+    pageprops: { page_image: "Monument_Valley_icon_unrounded.jpg" },
+    extract: "《紀念碑谷》是2014年由ustwo開發的益智遊戲。",
+    images: [
+      { title: "File:Crystal Clear app package games.svg" },
+      { title: "File:Future film2.svg" },
+      { title: "File:Ken wong - game developers conference cropped.jpg" },
+      { title: "File:MobiusJoshDif.jpg" },
+      { title: "File:Monument Valley icon unrounded.jpg" },
+      { title: "File:Monument Valley screenshot.jpg" },
+      { title: "File:OOjs UI icon edit-ltr-progressive.svg" },
+      { title: "File:Penrose-dreieck.svg" },
+    ],
+  };
+
+  it("纪念碑谷：infobox 是 app 图标时改用正文里的游戏截图（而不是图标）", async () => {
     installFetch([
       {
         match: /gsrsearch=纪念碑谷/,
@@ -413,10 +432,137 @@ describe("other wiki pipeline", () => {
                 extract: "紀念碑谷是位於美國亞利桑那州的荒漠地貌。",
                 ...noFreeImage,
               },
+              game: MONUMENT_VALLEY_GAME,
+            },
+          },
+        },
+      },
+      {
+        match: /titles=File:Monument_Valley_icon_unrounded\.jpg/,
+        body: {
+          query: {
+            pages: {
+              file: {
+                title: "File:Monument Valley icon unrounded.jpg",
+                imageinfo: [{ thumburl: `${UP}/1/1a/600px-Monument_Valley_icon_unrounded.jpg` }],
+              },
+            },
+          },
+        },
+      },
+      // 补 prop=images 的那次查询（page_image 被判 artifact 才发）。
+      // 文件名里的空格在 URL 里编码成 +，installFetch 已解码，故这里用空格。
+      { match: /prop=images/, body: { query: { pages: {} } } },
+      {
+        match: /titles=File:Monument Valley screenshot\.jpg/,
+        body: {
+          query: {
+            pages: {
+              file: {
+                title: "File:Monument Valley screenshot.jpg",
+                imageinfo: [{ thumburl: `${UP}/c/cd/600px-Monument_Valley_screenshot.jpg` }],
+              },
+            },
+          },
+        },
+      },
+    ]);
+    // 红线：绝不能再是 icon_unrounded
+    const cover = await resolveOtherCover("纪念碑谷", "", 2014);
+    expect(cover).not.toContain("icon_unrounded");
+    expect(cover).toBe(`${UP}/c/cd/600px-Monument_Valley_screenshot.jpg`);
+  });
+
+  it("纪念碑谷：infobox 是 app 图标时，详情退回缩略图而不是丢掉整条条目", async () => {
+    // 红队 R2 逼出来的用例：「artifact ⇒ return null」看起来更干净，
+    // 实际上会把**整个条目**从详情/搜索结果里抹掉——比拿错图更糟。
+    // 钉住的行为：poster 换掉，但 title/extract 一字不少。
+    installFetch([
+      // 精确标题轮先命中（titles=），thumbnail 挂在这一轮返回的页面上
+      {
+        match: /titles=纪念碑谷/,
+        body: {
+          query: {
+            pages: {
               game: {
-                title: "紀念碑谷 (遊戲)",
-                pageprops: { page_image: "Monument_Valley_icon_unrounded.jpg" },
-                extract: "《紀念碑谷》是2014年由ustwo開發的益智遊戲。",
+                ...MONUMENT_VALLEY_GAME,
+                thumbnail: { source: `${UP}/c/cd/500px-Monument_Valley_screenshot.jpg` },
+              },
+            },
+          },
+        },
+      },
+      { match: /gsrsearch=纪念碑谷/, body: { query: { pages: {} } } },
+      {
+        match: /titles=File:Monument_Valley_icon_unrounded\.jpg/,
+        body: {
+          query: {
+            pages: {
+              file: {
+                title: "File:Monument Valley icon unrounded.jpg",
+                imageinfo: [
+                  {
+                    thumburl: `${UP}/1/1a/600px-Monument_Valley_icon_unrounded.jpg`,
+                    url: "https://upload.wikimedia.org/wikipedia/commons/1/1a/x.jpg",
+                  },
+                ],
+              },
+            },
+          },
+        },
+      },
+    ]);
+    const detail = await otherDetail("纪念碑谷", 2014);
+    expect(detail, "条目被整个丢掉了（不该发生）").not.toBeNull();
+    expect(detail?.title).toBe("纪念碑谷 (游戏)");
+    expect(detail?.content_intro).toContain("2014");
+    expect(detail?.poster_url ?? "").not.toContain("icon_unrounded");
+    expect(detail?.poster_url).toBe(`${UP}/c/cd/500px-Monument_Valley_screenshot.jpg`);
+  });
+
+  // 上一条把 images 直接挂在 gsrsearch 的返回上，于是**根本没走过
+  // fillArticleImageNames**——2026-10-02 那天整个 worker/other.test.ts 全绿而
+  // 线上取不到图，根因就在这儿：填 images 的那个函数写的是裸字符串，读它的
+  // 两个函数按 {title} 对象读，TypeScript 因为两边各自 cast 而全程不报错。
+  // 所以这条必须让 images **只从 prop=images 那次查询回来**，其余全空。
+  it("fillArticleImageNames：正文图列表从 prop=images 查询回来后仍能选出游戏截图", async () => {
+    const gameNoImages = {
+      title: "纪念碑谷 (游戏)",
+      pageprops: { page_image: "Monument_Valley_icon_unrounded.jpg" },
+      extract: "《紀念碑谷》是2014年由ustwo開發的益智遊戲。",
+    };
+    installFetch([
+      // 顺序要紧（installFetch 取第一个匹配的路由）：prop=images 的那次请求
+      // titles 是归一后的页面名「纪念碑谷 (游戏)」，会被下面 /titles=纪念碑谷/
+      // 前缀匹配吃掉，返回一个没有 images 的页面 ⇒ 看起来像修复没生效。
+      // 2026-10-02 在本文件里因此白查三轮。
+      {
+        match: /prop=images/,
+        body: {
+          query: {
+            pages: {
+              "-7621": {
+                pageid: 7621,
+                ns: 0,
+                title: "纪念碑谷 (游戏)",
+                images: [
+                  { title: "File:Ken wong - game developers conference cropped.jpg" },
+                  { title: "File:Monument Valley icon unrounded.jpg" },
+                  { title: "File:Monument Valley screenshot.jpg" },
+                ],
+              },
+            },
+          },
+        },
+      },
+      {
+        match: /titles=File:Monument Valley screenshot\.jpg/,
+        body: {
+          query: {
+            pages: {
+              file: {
+                title: "File:Monument Valley screenshot.jpg",
+                imageinfo: [{ thumburl: `${UP}/c/cd/500px-Monument_Valley_screenshot.jpg` }],
               },
             },
           },
@@ -429,15 +575,22 @@ describe("other wiki pipeline", () => {
             pages: {
               file: {
                 title: "File:Monument Valley icon unrounded.jpg",
-                imageinfo: [{ thumburl: `${UP}/4/4c/600px-Monument_Valley_icon_unrounded.jpg` }],
+                imageinfo: [{ thumburl: `${UP}/1/1a/600px-Monument_Valley_icon_unrounded.jpg` }],
               },
             },
           },
         },
       },
+      {
+        match: /titles=纪念碑谷/,
+        body: { query: { pages: { game: gameNoImages } } },
+      },
+      { match: /gsrsearch=纪念碑谷/, body: { query: { pages: {} } } },
     ]);
-    expect(await resolveOtherCover("纪念碑谷", "", 2014)).toBe(
-      `${UP}/4/4c/600px-Monument_Valley_icon_unrounded.jpg`,
+    const detail = await otherDetail("纪念碑谷", 2014);
+    expect(detail?.poster_url ?? "").not.toContain("icon_unrounded");
+    expect(detail?.poster_url, "prop=images 回填的正文图没被选上").toBe(
+      `${UP}/c/cd/500px-Monument_Valley_screenshot.jpg`,
     );
   });
 
@@ -539,6 +692,45 @@ describe("other wiki pipeline", () => {
       },
     ]);
     expect(await wikiPageImageAny("zh", "纪念碑谷", ["Monument Valley"])).toBeNull();
+  });
+
+  it("wikiPageImageAny：infobox 封面是 app 图标时不返回（不拿图标当封面）", async () => {
+    // iter10：page_image 直取这条「优先级最高」的取图路径此前毫无防护。
+    // 判掉之后**不能 return null**——要继续走 images 分支，那里有真封面。
+    installFetch([
+      {
+        match: /titles=纪念碑谷/,
+        body: {
+          query: {
+            pages: {
+              game: {
+                title: "纪念碑谷 (游戏)",
+                pageprops: { page_image: "Monument_Valley_icon_unrounded.jpg" },
+                images: [
+                  { title: "File:OOjs_UI_icon_edit-ltr-progressive.svg" },
+                  { title: "File:Monument Valley screenshot.jpg" },
+                ],
+              },
+            },
+          },
+        },
+      },
+      {
+        match: /titles=File:Monument Valley screenshot\.jpg/,
+        body: {
+          query: {
+            pages: {
+              file: {
+                title: "File:Monument Valley screenshot.jpg",
+                imageinfo: [{ thumburl: `${UP}/c/cd/600px-Monument_Valley_screenshot.jpg` }],
+              },
+            },
+          },
+        },
+      },
+    ]);
+    const got = await wikiPageImageAny("zh", "纪念碑谷", ["Monument Valley"]);
+    expect(got).toBe(`${UP}/c/cd/600px-Monument_Valley_screenshot.jpg`);
   });
 
   // ===== 标题吻合闸门（2026-10-02 线上错图修复） =====
@@ -1317,13 +1509,20 @@ describe("降级信号作用域（PLAN-WIKI-DEGRADED-SCOPE tripwire）", () => {
 
   it("**每一处维基请求都记账**（计划风险 R1：漏传 probe = 那一档的失败不算数）", () => {
     // wikiJson 的每一个调用点都必须把 probe 传下去。计数式断言：漏一处就少一个。
-    // 基线 5 处是 other.ts 内的直接调用点：wikiFileThumbUrls / wikiSearchOnce ×2
-    // / wikiTitlePages / wikiEnTitle / wikiPageImageAny。硬编码 5 而不是「≥N」：
-    // 将来有人**新增**一个 wikiJson 调用点却忘了传 probe 时，这条必须红。
+    // 基线 6 处（2026-10-02 迭代 10 从 5 增加到 6）：wikiFileThumbUrls /
+    // wikiSearchOnce ×2 / wikiTitlePages / wikiEnTitle / wikiPageImageAny /
+    // **fillArticleImageNames**（iter10 新增的「补 prop=images」查询——它是在
+    // infobox 封面被判 artifact 后才发的那次，漏传 probe 的话，这次失败不计数，
+    // 「上游超时」会被误判成「这一页没有别的图」）。
+    // 硬编码 6 而不是「≥N」：将来有人**新增**一个 wikiJson 调用点却忘了传 probe 时，
+    // 这条必须红。迭代 10 就是被它逼着显式记账的，不是顺手改的数字。
     const wikiJsonCalls = code.match(/await wikiJson\(/g) ?? [];
     const wikiJsonWithProbe = code.match(/await wikiJson\([^;]*?, probe\)/g) ?? [];
-    expect(wikiJsonCalls).toHaveLength(5);
+    expect(wikiJsonCalls).toHaveLength(6);
     expect(wikiJsonWithProbe).toHaveLength(wikiJsonCalls.length);
+    // iter10 新增的那次查询必须记账，且只在 artifact 判定之后才发
+    expect(code).toMatch(/prop: "images"/);
+    expect(code).toMatch(/await wikiJson\(lang, q, 8000, probe\)/);
     // 判决链的四个出口必须接收调用方传进来的探针
     for (const call of [
       /resolveOtherCover\(title, english, year, probe\)/,
@@ -1409,5 +1608,206 @@ describe("维基桶宽接线（PLAN-THUMBNAIL-SIZING tripwire）", () => {
     const wired = code.match(/pickThumbBucket\(OTHER_THUMB_MAX_WIDTH\)/g) ?? [];
     // 三处：wikiFileThumbUrls 的 iiurlwidth + 两个 pithumbsize
     expect(wired).toHaveLength(3);
+  });
+});
+
+// ===== 封面文件名判别（PLAN-COVER-ARTIFACT-FILTER 迭代 10/20） =====
+// 旧代码把 SKIP 正则只用在 wikiPageImageAny 的 images 分支，而
+// **优先级最高的 pageprops.page_image 直取完全无检查**——纪念碑谷 (游戏)
+// 的 infobox 里填的就是 app 图标，于是被原样当封面发给用户。
+// 下面五条是防回归锁：任何一条退回「无脑直取 page_image」，都必红。
+describe("artifact 过滤的覆盖面（PLAN-COVER-ARTIFACT-FILTER tripwire）", () => {
+  const source = readFileSync(new URL("./other.ts", import.meta.url), "utf8");
+  const mediaSource = readFileSync(new URL("./media.ts", import.meta.url), "utf8");
+  const code = source.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^[^\S\n]*\/\/.*$/gm, "");
+  const mediaCode = mediaSource.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^[^\S\n]*\/\/.*$/gm, "");
+
+  it("toWork：infobox 封面被判 artifact 时不采用（iter10 真正修 bug 的那处）", () => {
+    // toWork 是 otherDetail 内部的取图口，media.ts:1727-1728 第一档就返回它，
+    // **resolveOtherCover 根本没机会跑**。所以这一处漏判＝线上必然发错图。
+    const toWork = code.match(/function toWork\([\s\S]*?\n\}/)?.[0] ?? "";
+    expect(toWork, "找不到 toWork 函数体").toBeTruthy();
+    // 判据必须落在 infobox 分支上，而不是把整个 poster 判死
+    expect(toWork).toMatch(
+      /const infobox =\s*page\.fileUrl\s*&&\s*classifyArtworkFile\(pageImage\) === "artwork"\s*\?\s*page\.fileUrl\s*:\s*undefined;/,
+    );
+    // 兜底顺序：artwork 的 infobox → pageimages 缩略图 → original → **同页正文图**
+    expect(toWork).toMatch(
+      /let poster = \(infobox \?\? page\.thumbnail\?\.source \?\? page\.original\?\.source\)/,
+    );
+    // 第四档是 iter10 线上验收补的：那页既无 thumbnail 也无 original（app 图标
+    // 是非自由文件 ⇒ pageimages 空），没有这一档就只是把「图标」换成「没有」。
+    expect(toWork.replace(/\s+/g, " ")).toMatch(
+      /if \(!poster\) \{ await fillArticleImageNames\(lang, \[\{ page, score: 0, tier: 0 \}\], probe\);/,
+    );
+    // 绝不接受「artifact 直接 return undefined/null」——那会把整条候选丢掉，
+    // 比拿错图更糟（正确图就在同页 images 里）
+    expect(toWork).not.toMatch(/classifyArtworkFile\([^)]*\)\s*!==\s*"artwork"[\s\S]*?return null/);
+    // toWork 现在也发维基请求了，probe 必须由调用方传进来。
+    // 三个调用点：otherSearch 的 Promise.all、otherDetail 的精确页、搜索页。
+    // 用「去掉定义行后，剩下的 toWork( 调用必须都带 probe」来断言——
+    // 别用 /await toWork\(/，它会漏掉 Promise.all 里那个，让「三处都传了」
+    // 被误判成两处，测试自己撒谎（iter10 踩过）。
+    const body = code.replace(
+      /async function toWork\([\s\S]*?\n\): Promise<OtherWork \| null> \{/,
+      "",
+    );
+    const toWorkCalls = body.match(/toWork\([^;]*?\)/g) ?? [];
+    expect(toWorkCalls.length, "toWork 调用点数量").toBe(3);
+    for (const call of toWorkCalls) {
+      expect(call, `toWork 调用点漏传 probe：${call}`).toMatch(/, (?:detailProbe|probe)\)/);
+    }
+  });
+
+  it("resolveOtherCover：page_image 直取那条路也装了判别（并继续往下走）", () => {
+    expect(code).toMatch(
+      /if \(file && entry\.page\.fileUrl && classifyArtworkFile\(file\) === "artwork"\)\s*return entry\.page\.fileUrl;/,
+    );
+    // 判掉之后不是 return null，而是付一次 prop=images 查询取同页正文图
+    expect(code).toMatch(
+      /if \(top\.some\(\(entry\) => !entry\.page\.fileUrl \|\| !isArtworkPageImage\(entry\.page\)\)\)/,
+    );
+    expect(code).toMatch(/await fillArticleImageNames\(lang, top, probe\);/);
+    // 兜底只能落在已被 pickBest 确认的作品页上
+    expect(code).toMatch(
+      /for \(const name of articleNames\) \{\s*if \(!articleNameMatchesWork\(name, works\)\) continue;/,
+    );
+  });
+
+  it("wikiPageImageAny：判掉 page_image 后**不 return null**，继续走 images 分支", () => {
+    // 这是本轮最容易写错的地方：返回 null 会把纪念碑谷从「图标」变成「没图」，
+    // 而真封面就在同页 images 里。断言必须钉住「没有 return null」。
+    const fn = code.match(/export async function wikiPageImageAny\([\s\S]*?\n\}/)?.[0] ?? "";
+    expect(fn, "找不到 wikiPageImageAny 函数体").toBeTruthy();
+    const guarded = fn.indexOf('classifyArtworkFile(pageImage) === "artwork"');
+    expect(guarded).toBeGreaterThan(-1);
+    const after = fn.slice(guarded);
+    expect(
+      after.slice(0, after.indexOf("images")),
+      "判掉 page_image 之后出现了 return null，真封面会被一起丢掉",
+    ).not.toMatch(/return null/);
+    // images 分支也改用同一把尺，不再维护第二套 SKIP 正则
+    expect(code).not.toMatch(/const SKIP = \//);
+  });
+
+  it("media.ts 的评分链同样用这把尺（它是过滤器，不能因判 artifact 就丢候选）", () => {
+    expect(mediaCode).toMatch(/classifyArtworkFile/);
+    expect(mediaCode.replace(/\s+/g, " ")).toMatch(
+      /const infobox = file && classifyArtworkFile\(file\) === "artwork" \? fileUrls\.get\(file\) : undefined;/,
+    );
+    expect(mediaCode).toMatch(/return infobox \?\? wikiImageUrl\(page\);/);
+  });
+
+  it("prop=images 只在 artifact 判定后发（page_image 正常的条目一次都不发）", () => {
+    // 代价证据（计划 §1 F-11）：gsrsearch 加 prop=images 每轮 +2746 B，
+    // 一条 other 最坏跑 4 轮 ⇒ +11 KB。所以它**不能**挂进常规查询。
+    const wikiTitlePages = code.match(/async function wikiTitlePages\([\s\S]*?\n\}/)?.[0] ?? "";
+    const wikiSearchOnce = code.match(/async function wikiSearchOnce\([\s\S]*?\n\}/)?.[0] ?? "";
+    for (const [name, fn] of [
+      ["wikiTitlePages", wikiTitlePages],
+      ["wikiSearchOnce", wikiSearchOnce],
+    ] as const) {
+      expect(fn, `找不到 ${name} 函数体`).toBeTruthy();
+      expect(fn, `${name} 把 prop=images 挂进了常规查询（会让每次查询 +2.7 KB）`).not.toMatch(
+        /prop: "images"/,
+      );
+      expect(fn).toMatch(/prop: "extracts\|pageimages\|pageprops\|info"/);
+    }
+  });
+});
+
+// ===== 封面文件名判别（PLAN-COVER-ARTIFACT-FILTER） =====
+// 判据只能是文件名，不能是宽高：2026-10-02 实测正确封面
+// Animal_Crossing_New_Horizons.png 只有 248×402，比被误用的
+// Monument_Valley_icon_unrounded.jpg（316×316）还窄；而正确封面带
+// utm_content=thumbnail_unscaled 是常态，不构成「没缩放过」的证据。
+describe("classifyArtworkFile（封面文件名判别）", () => {
+  // 黑线：线上实录的**真封面**文件名一个都不能误判。列全 8 个，来源见计划 §1 F-6。
+  const REAL_COVERS = [
+    "Monument Valley screenshot.jpg",
+    "Journey_PSN_Cover.png",
+    "INSIDE_Cover.jpg",
+    "Florence_Preview_Image.jpg",
+    "500px-Mona_Lisa,_by_Leonardo_da_Vinci,_from_C2RMF_retouched.jpg",
+    "Doubutsu_No_Mori_Boxart.jpg",
+    "Monument Valley, Utah, USA (23611451292).jpg",
+    "Animal_Crossing_New_Horizons.png",
+  ];
+
+  it("线上实录的 8 个真封面全部判为 artwork（误判=把真封面踢掉）", () => {
+    for (const name of REAL_COVERS) {
+      expect(classifyArtworkFile(name), name).toBe("artwork");
+    }
+  });
+
+  it("线上实录的 artifact 全部判掉（app 图标 / 系列 logo / 维基 UI 素材）", () => {
+    // 来源：纪念碑谷 (游戏) 与 紀念碑谷 两页 prop=images 的实测名
+    for (const name of [
+      "Monument_Valley_icon_unrounded.jpg",
+      "OOjs UI icon edit-ltr-progressive.svg",
+      "Zh conversion icon m.svg",
+      "Star full.svg",
+      "Monument Valley logo.svg",
+      "Monument Valley 3 logotype.svg",
+      "Pillars of Eternity logo.png",
+      "Nier, logo.jpg",
+      "Monument Valley icon unrounded.jpg",
+    ]) {
+      expect(classifyArtworkFile(name), name).toBe("artifact");
+    }
+  });
+
+  it("已知漏网（诚实记账）：带模板名的 .svg 图标本尺按名抓不到，且有意不收", () => {
+    // 纪念碑谷 (游戏) 那页 images 里剩下的三个 svg——Crystal Clear app package
+    // games / Future film2 / Symbol support vote ——都是 2010 年代那套条目类型
+    // 模板图标（32px 拼接图），文件名**不共享** icon/logo/star 之外的任何
+    // 特征词，所以纯按文件名判必然漏。（同页的 `Star full.svg` 是例外，
+    // 它由 star full/empty/half 那条词命中，所以归在上面的判掉用例里。）
+    // 本轮刻意不加 `template`/`film2`/`support vote` 这类词：commons 上没有
+    // 作品封面叫这个，加它只会让正则更长而不改变任何真实结果。
+    // 真正的兜底在调用点，不在正则里：
+    //  ① articleImageNames 按 /\.(jpe?g|png)$/i 过滤 —— **svg 一律进不来**，
+    //     所以它们永远到不了「选封面」这一步（上面四个全是 svg）；
+    //  ② page_image 侧实测两页都不是此类（一个是 app 图标已被 icon 词抓到，
+    //     另一个空）。
+    // 记在这里是为了将来有人翻到这批名字时知道这是**有意不收**。
+    for (const name of [
+      "Crystal Clear app package games.svg",
+      "Future film2.svg",
+      "Symbol support vote.svg",
+    ]) {
+      expect(classifyArtworkFile(name), name).toBe("artwork");
+    }
+  });
+
+  it("分隔符含扩展名点与逗号：logotype.svg / logo.png 这类带后缀的也判掉", () => {
+    // 踩坑记录：分隔符类里**漏了 `.` 和 `,`**，于是
+    // 「Monument Valley 3 logotype.svg」因为 logotype 后面跟的是 `.`
+    // 而逃过判定 —— 正是本轮要抓的那类 Series logo。
+    // 补 `.` `,` `:` `;` `&` 后重跑本用例。
+    expect(classifyArtworkFile("Monument Valley 3 logotype.svg")).toBe("artifact");
+    expect(classifyArtworkFile("Pillars of Eternity logo.png")).toBe("artifact");
+    expect(classifyArtworkFile("Nier, logo.jpg")).toBe("artifact");
+  });
+
+  it("「icon」只在词边界命中（不误伤 Iconic / Iconf 这类真标题）", () => {
+    for (const name of ["Iconic.jpg", "Iconf.png", "Monica.png", "Icons_of_Hope.jpg"]) {
+      expect(classifyArtworkFile(name), name).toBe("artwork");
+    }
+    // 「icon」按分隔符两侧成词判定。取舍：`Icon Man.jpg`（Albert Watson
+    // 1968 摄影系列）会被判 artifact，而 `Monument Valley icon unrounded.jpg`
+    // 这类「作品名 icon 修饰词」在 Commons 上远比前者常见。选多数。
+    // 判错的代价不对称：误判 artifact ⇒ 少一张候选封面；
+    // 误判 artwork ⇒ 把 app 图标当封面发给用户（这正是 iter10 要修的 bug）。
+    expect(classifyArtworkFile("Icon Man.jpg")).toBe("artifact");
+    expect(classifyArtworkFile("Monument Valley icon unrounded.jpg")).toBe("artifact");
+  });
+
+  it("「edit-」只命中编辑界面素材（不误伤 Edited / Editor）", () => {
+    for (const name of ["Edited_Cover.jpg", "Editor's_Cut.jpg", "Edit.png"]) {
+      expect(classifyArtworkFile(name), name).toBe("artwork");
+    }
+    expect(classifyArtworkFile("OOjs UI icon edit-ltr-progressive.svg")).toBe("artifact");
+    expect(classifyArtworkFile("edit-marker.jpg")).toBe("artifact");
   });
 });

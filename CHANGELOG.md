@@ -1,5 +1,35 @@
 # Changelog
 
+## 2026-10-02 · 迭代 10/20：封面文件名判别（infobox 指向 app 图标时改用正文作品图）
+
+**改了什么**
+
+- **新增 `classifyArtworkFile(name)`**（`worker/other.ts`，纯函数）：判一个维基文件名
+  「像不像作品封面本身」。判据**只能是文件名**——实测 `Animal_Crossing_New_Horizons.png`
+  只有 248×402，比那个 316×316 的 icon 更窄，任何宽高规则都会误杀**当前正确**的封面。
+  收窄到 `icon|logo|logotype|wordmark|banner|avatar|flag|placeholder|mascot|edit|star full`，
+  且刻意不收旧 `SKIP` 的 `commons`（`Monument Valley, Utah, USA (…).jpg` 来自 Commons 但完全正确）。
+- **四处 `page_image` 直取收口到同一把尺**，且**都不 `return null`**——它们后面本来就有下一档：
+  `toWork`（真正生效的那处）、`resolveOtherCover`、`wikiPageImageAny`、`media.ts` 的 `wikiPagePoster`。
+- **补上原本空着的那一档**：实测 `纪念碑谷 (游戏)` 的 `thumbnail`/`original`/`pageimages`
+  **三者全空**（app 图标是非自由文件），只做「不采用图标」会把错图换成没图。新增
+  `fillArticleImageNames`——**只在判定为 artifact 之后**单独发一次 `prop=images` 查询，
+  从同页正文图里找文件名含作品词的候选（`Monument Valley screenshot.jpg`）。
+  代价实测 +1969 B / 1–3 页；其它条目零多付。
+
+**修好的现象**：`纪念碑谷` + `year=2014` 原本拿到 `Monument_Valley_icon_unrounded.jpg`（app 图标），
+现在拿到 `Monument_Valley_screenshot.jpg`。
+
+**顺手改掉的**：`year` 并**不**参与选图，它只是换了一道分支（`otherDetail(title, year)`）。
+条目本来就选对了（band `exact`），错的只是那张图——所以这轮一个字的权重和档位都没动。
+
+**验证**：`tsc -b` 0 · lint 29 problems（= 基线）· vitest **674 passed / 9 skipped**（+14）·
+红队 ×4 全红 · 线上 Version `28126578-420f-4547-a179-4c182edb5ee3` · 零迁移 ·
+主包 **逐字节不变**（410498 B，纯服务端改动）。四个对照 other 封面三轮逐字稳定。
+
+**诚实记账**：原键 `other|纪念碑谷|monument valley|2014|4` 仍受 24h 边缘缓存保护，
+今天还返图标 —— 证据取自换输入形态（`纪念碑谷(游戏)`）的新键，**加盐会破坏维基消歧**。
+
 ## 2026-10-02 · 迭代 9/20：消歧记忆（一次「让用户选」升级成「记住这个名字指哪部作品」）
 
 **改了什么**
