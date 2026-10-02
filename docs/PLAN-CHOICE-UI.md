@@ -159,7 +159,7 @@ band ∈ {shaky, weak}  &&  poolSize >= 2  &&  候选里至少一条 hasCover
 | A7 | 线上 | 无 token → 401；非维基 URL → 400；`Origin` 不匹配 → 403 | ✅ 无 `Origin` → `403 {"error":"cross_origin_forbidden"}`；`Origin: https://evil.example` → 403；仅同源无 token → `401 {"error":"auth_required"}`；非维基域由 `worker/coverChoice.test.ts` 12 例钉住（含形似域 `upload.wikimedia.org.evil.example`） |
 | A8 | 线上 | 合法写入后 `/api/posters/batch` 对该 key 返回**用户选的那张** | ✅ `POST /api/other/cover-choice` → `200 {"ok":true,"key":"other|journey|journey|2012|4","wikiTitle":"道奇Journey"}`；紧接 `/api/posters/batch` 同 key → `500px-2012_Dodge_Journey_--_NHTSA_3.jpg`（用户选的那张，非系统原本给的 PSN 封面） |
 | A9 | 线上 | 判决链路零改动 | ✅ `worker/index.ts` 唯一改动是 +42 行新端点，`worker/other.ts` 本轮 **0 改动**；`/api/other/candidates?name=Journey&year=2012` → `picked=风之旅人 band=weak pool=3`，与迭代 4 逐字相同 |
-| **A10** | **线上** | **9 条 other 封面逐字回归** | ⚠️ 蒙娜丽莎 / 纪念碑谷 / 动物森友会 / inside / Liminal Space 5 条与迭代 3 逐字相同 ✅；**Journey 见 §7.2——不是本轮引入的回归，但也没被本轮修掉** |
+| **A10** | **线上** | **9 条 other 封面逐字回归** | ⚠️→✅ 蒙娜丽莎 / 纪念碑谷 / 动物森友会 / inside / Liminal Space 5 条与迭代 3 逐字相同；**Journey 见 §7.2——初稿据「在正确/错误封面之间交替」推出的「同判不同图」已在收尾阶段被 6/6 取证推翻并撤回，Journey 实测 6/6 全对 `Journey_PSN_Cover.png`** |
 
 **A8 的收尾**：验证用的一次性账号（`coverchoice-probe-*@example.com`）与它写的
 `poster_urls` 行**都已删净**（`DELETE` 三条各 changes=1，回查 `LIKE '%journey%'` 只剩
@@ -227,24 +227,37 @@ band ∈ {shaky, weak}  &&  poolSize >= 2  &&  候选里至少一条 hasCover
 教训：**「复用限流桶」这件事本身就是一个架构决定**，但它在读代码时长得像一行参数
 （`allowUpstreamRequest(request, "other", 20)`），不数调用点就看不见。
 
-### 7.2 判决链路一行没动，却在线上发现它并不总是确定的
+### 7.2 ⚠️ 撤回一个我自己下的错误结论：「同判不同图」不存在
 
-验收时连打 8 次 Journey（每次先删 D1 缓存行强迫真回源），出现两种结果交替：
-`Journey_PSN_Cover.png` 与 `500px-Zatsu_Tabi_That's_Journey_Logo.webp`（2006 年漫画 logo）。
-而同一时刻 `/api/other/candidates` 的判决**稳定地**返回 `picked=风之旅人`。
+**先说结论：上面那条「判决链路不稳定」是我自己的探针造出来的假象，代码没有这个缺陷。**
+写完初稿后我做了三组取证，全部推翻了我自己的假设：
 
-也就是说：**诊断端点与取图链路用的是同一套评分与同一份别名，但结果不同**。
-`resolveOtherCover`（`worker/other.ts:1056`）除了评分还多两步：
-① 补图范围 `sameEvidence` 会**按分数取前 3 名**，② infobox 优先、`pageimages` 兜底。
-这两步依赖 `page_image` / `pageimages` 两个字段，而这两个字段的填充是**并发的上游请求**——
-一旦某个字段这一轮没回来，`pickBest` 选中的条目就可能落到「无 infobox 图」的分支，
-于是名次靠后的漫画像顶上来。
+1. **上游搜索结果 8/8 逐字稳定**（`gsrsearch=Journey` 与 `Journey 电子游戏` 各打 8 次，
+   候选标题顺序完全一致）⇒ 候选池不会因为搜索排序抖动而变。
+   而且 **`隨興旅 -That's Journey-` 压根不在 zh 轮的前 6 名里**。
+2. **en 轮池子**（`Journey` / `Journey video game` 各 6 条）：`Journey (2012 video game)`
+   带 `page_image=Journey_Title_Poster.png`，其余是乐队/专辑/西游记/1983 街机——**没有漫画像**。
+3. **`imageinfo` 单文件查询 6/6 稳定**：`File:Journey_PSN_Cover.png` 每次都回同一个
+   `thumburl`，从不落空。
 
-**这暴露了一个迭代 3 就该发现、但被 D1 缓存掩盖了的事实**：
-`otherDetail`（详情弹窗用的那条链路）与 `resolveOtherCover`（海报用的那条链路）
-虽然共用 `pickBest`，但**补图阶段的容错不对称**。这不是本轮该修的（会动判决链路，
-违反 R5「一行 `pickBest` 都不碰」），但它必须被记下来：
-**「同判不同图」比「完全判错」更难发现，因为诊断端点会替你担保它是对的。**
+然后我把线上那条链路完整重打了 6 次（每次先 DELETE `other|journey|journey|2012|4` 强迫真回源）：
+**6/6 返回 `Journey_PSN_Cover.png`**，零抖动。
+
+**那两条漫画像 D1 行是怎么来的？** 回看时间线：它们是**迭代 3 部署之后、本轮部署之前**写进去的，
+即「`resolveOtherCover` 的别名传递修复已上线、但那把 D1 键尚未被重新写对」的窗口期产物——
+`updated_at` 停在 `2026-10-02T00:54:11Z` 正说明它是**一次性的陈旧行**，不是会反复复发的活 bug。
+
+**三个错误是怎么串起来的**（比结论本身更值得记）：
+① 我**先下结论再找机制**——看到交替就编了一套「并发字段填充会掉」的故事；
+② 那套故事**听起来非常合理**（`page_image`/`pageimages` 确实是并发上游请求，确实可能落空）；
+③ 最致命的是 **我的验证手段和我的结论互相掩护**：我用「诊断端点稳定说 `picked=风之旅人`」
+来证明「判决没问题、出图有问题」，而诊断端点与取图链路**共用同一套评分和同一份别名**，
+它俩一致完全在预期之内——**一致并不能证明任何一方正确**。
+
+**留下的真结论只有一句，仍然成立**：
+「诊断端点会替你担保它是对的」——所以判决必须用 `/api/posters/batch` 实取图来验，
+不能只看 `picked`。但**推论方向反了**：它不是「掩盖缺陷的帮凶」，
+而是「只在与取图链路一致时才有担保力」。这条已写进 PITFALLS 4.41（措辞已按本次取证修正）。
 
 ### 7.3 判据也踩了一次「看起来对其实不对」
 
@@ -284,4 +297,6 @@ band ∈ {shaky, weak}  &&  poolSize >= 2  &&  候选里至少一条 hasCover
   §5.2 绊线第 2 条因此从「有 `=== "other"` 字面量」变成「判定在弹窗里、不在组件里」。
 - **计划里写了但没做**：`.poster-loading` 骨架（`Poster.tsx` 里有现成的，
   但候选取图走的是裸 `<img>`，套骨架要多引一个 CSS 类，收益不抵复杂度，改成灰底 `<span>`）。
-- **本轮没碰、但已经知道的债**：§7.2 的「同判不同图」；`shaky` 档至今线上从未触发。
+- **本轮没碰、但已经知道的债**：`shaky` 档至今线上从未触发（承 T-20261002-03 遗留风险②）；
+  「让用户选」只在作品详情弹窗里，29 处 `<Poster>` 调用点都不弹（台账 T-20261002-06 遗留风险①）。
+- **⚠️ 初稿里写下的「同判不同图」已在 §7.2 整段撤回**，不要把它当成待查项传下去。
