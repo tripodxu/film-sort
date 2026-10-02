@@ -1,6 +1,8 @@
 import { useState } from "react";
 import { Music2, Play, X } from "lucide-react";
 import { Poster } from "./Poster";
+import { CoverChoice } from "./CoverChoice";
+import { choiceAppliesToKind } from "../lib/coverChoice";
 import { IconButton } from "../views/IconButton";
 import {
   gdPlay,
@@ -29,11 +31,18 @@ export function ArtworkDetail({
   label,
   t,
   onClose,
+  onCoverChange,
 }: {
   detail: ArtworkDetailInfo;
   label: (kind: MediaKind) => string;
   t: (zh: string, en: string) => string;
   onClose: () => void;
+  /**
+   * 用户在「让用户选」里换封面后回调（PLAN-CHOICE-UI）。
+   * 只有一个出口：App 收到后把 work.posterUrls 换成本次选择，
+   * 于是这个弹窗的 `<Poster>` 与所有已经渲染过该作品的地方同时生效。
+   */
+  onCoverChange?: (url: string) => void;
 }) {
   const [playUrl, setPlayUrl] = useState("");
   const [playBusy, setPlayBusy] = useState(false);
@@ -128,6 +137,15 @@ export function ArtworkDetail({
         <div className="detail-body">
           <Poster work={detail.work} kind={detail.kind} large />
           <div className="detail-copy">
+            {choiceAppliesToKind(detail.kind) && onCoverChange && (
+              <CoverChoice
+                title={detail.work.title}
+                english={detail.work.subtitle}
+                year={detail.work.year}
+                t={t}
+                onPicked={onCoverChange}
+              />
+            )}
             {isMusic && (
               <div className="music-preview">
                 <button

@@ -1669,6 +1669,11 @@ export default function App() {
           label={label}
           t={t}
           onClose={() => setDetailWork(null)}
+          onCoverChange={(url) =>
+            setDetailWork((current) =>
+              current ? { ...current, work: { ...current.work, posterUrls: [url] } } : current,
+            )
+          }
         />
       )}
       {shareModal && (

@@ -1548,6 +1548,53 @@ body[data-theme=classic]{
 /* 路由懒加载占位:与页面等高的最小骨架,脉冲节奏复用 plaza-pulse */
 .route-loading{min-height:60vh}
 
+/* ===== 消歧出口「换一个封面」（PLAN-CHOICE-UI） =====
+   位置在 detail-copy 内、其余文案之上，是弹窗里唯一「主动认错」的东西，
+   所以语气与排版都不能像错误提示：极窄的一行小字 + 一排竖版缩略图。
+   缩略图尺寸刻意贴近 .poster-large 的宽度（对话弹窗里并排两张最舒服），
+   且固定 2/3 比例，避免没取到图时整行高度塌掉。 */
+.cover-choice{
+  margin:0 0 16px;padding:12px 14px;
+  border:1px solid color-mix(in srgb,var(--other) 28%,transparent);
+  border-radius:12px;
+  background:color-mix(in srgb,var(--other) 5%,transparent)
+}
+.cover-choice-hint{
+  display:flex;align-items:flex-start;gap:6px;margin:0 0 10px;
+  color:var(--muted);font-size:12px;line-height:1.5
+}
+.cover-choice-hint svg{flex-shrink:0;margin-top:3px;color:var(--other)}
+.cover-choice-row{display:flex;flex-wrap:wrap;gap:10px}
+.cover-choice-item{
+  display:flex;flex-direction:column;align-items:center;gap:4px;
+  width:76px;padding:6px 4px 7px;
+  border:1px solid transparent;border-radius:10px;
+  background:none;color:inherit;cursor:pointer;text-align:center;
+  transition:border-color .15s ease,background .15s ease
+}
+.cover-choice-item:hover:not(:disabled){background:color-mix(in srgb,var(--other) 9%,transparent)}
+.cover-choice-item:disabled{cursor:default;opacity:.5}
+/* 键盘可达：<button> 的默认 outline 已被全局重置，这里显式还回来 */
+.cover-choice-item:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.cover-choice-item.is-active{border-color:color-mix(in srgb,var(--accent) 55%,transparent);background:color-mix(in srgb,var(--accent) 7%,transparent)}
+.cover-choice-thumb{
+  position:relative;display:block;width:100%;aspect-ratio:2/3;
+  border-radius:6px;overflow:hidden;background:color-mix(in srgb,var(--text) 8%,transparent)
+}
+.cover-choice-thumb img{width:100%;height:100%;object-fit:cover;display:block}
+.cover-choice-thumb-blank{display:block;width:100%;height:100%}
+.cover-choice-check{
+  position:absolute;right:3px;bottom:3px;display:grid;place-items:center;
+  width:15px;height:15px;border-radius:50%;
+  background:var(--accent);color:var(--surface-1)
+}
+.cover-choice-name{
+  font-size:11px;line-height:1.3;word-break:break-word;
+  display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden
+}
+.cover-choice-year{font-family:var(--font-mono);font-size:10px;color:var(--muted)}
+.cover-choice-msg{display:block;margin-top:8px;color:var(--muted);font-size:11px;line-height:1.5}
+
 /* AI 代判标注:mono 微字 + accent,置于 progress-meta 与对战区之间 */
 .assist-marker{
   display:flex;align-items:center;gap:6px;margin:-6px 0 12px;

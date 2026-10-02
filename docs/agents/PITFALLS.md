@@ -121,6 +121,11 @@
 - **4.35 SPA fallback 要求 `Accept: text/html`，用 `Invoke-WebRequest` 探路由必假 404** —— `worker/index.ts:1726-1736` `serveAssets` 的回退分支判 `request.headers.get("accept")?.includes("text/html")`，而 `Invoke-WebRequest` 默认发 `*/*`，于是 `/catalog/setup` `/plaza` `/myself` `/encounter` `/share` 全部 404。**看起来像「lazy 化把路由搞坏了」的严重回归，实际只是探针不像浏览器。** 加上 `-Headers @{ Accept = "text/html,application/xhtml+xml" }` 后七个路由全 200。任何 SPA 路由的线上验证都必须带这个 header。
 - **4.36 计划内部数字不一致，比计划本身的错更消耗时间** —— `docs/PLAN-ROUTE-EAGER.md` §3.1 表里列了 5 个模块，表头却写「六个」（第六个 `ArtworkDetail` 在正文被划掉），而 §0 与 §3.3 的收益数字是按 6 个算的。**验收时人是照着错误的数字去判的**，所以正文与表格必须一起改。`ArtworkDetail` 最终明确不做：它导出的 `ArtworkDetailInfo` 是类型（`import type` 会被擦除，技术上可 lazy），但被 `openArtworkDetail` 在多种视图里触发，会多出一条 chunk 依赖边，而实测归属只有 0.62 KB。
 - **4.37 少做也要有硬依据** —— `HomeView` 实测再省 5.53 KB gzip（384.79 / 128.77），**不 lazy**：它是落地视图，lazy 化会让首屏多一次模块往返 + 一次 fallback 闪烁，而本项目用户抱怨的正是「有点卡」（m00079）——**闪烁比 5 KB 更容易被感知**。这条决定用源码扫描绊线锁死（`MUST_STAY_EAGER`），防止下一个人「顺手优化」掉。
+- **4.38 你自己新增的诊断端点，也是它所依赖的那个限流桶的消耗方** —— 给「其他」维度的作品详情弹窗挂上消歧 UI 后，每开一次弹窗就发 **1 次 `/api/other/candidates` + 最多 3 次 `/api/other/detail`**，而这三者**共用 `other` 桶 20 次/10min**（承 T-20261002-05 遗留风险④、T-20261002-03 遗留风险⑤）。**开 20 次弹窗就能让 `/api/other/detail` 自己开始 429——为了「帮用户」而加的功能，会把它要服务的功能打挂。** 修法是**会话内缓存**（判「不打扰」连请求都不发；判「要展示」连字段一起缓存），不是加配额（配额是全局的，救不了自己人）。任何「顺手加个诊断请求」的动作，都要先算一遍 `次数 × 每次的开销` 落在哪个桶上。
+- **4.39 一条证明不了任何事的测试，比没有测试更糟** —— 给 `shouldOfferChoice` 写「判定只看 band 与两个计数、不看 `score`」这条用例时，我用了两个**只差 `score`** 的输入去构造反例——**而 `ChoiceInput` 里根本没有 `score` 字段**，两个输入字面完全相同，断言恒真且不测任何东西，还给人虚假的安全感（"这条用例在保护我"）。正确姿势是**结构性证明**：断言字段名用 `typeof … === "boolean"` 检查，并在类型层面保证 `score` 不存在。同类自检：`npx tsc` 下若把 `score` 加进 `ChoiceInput` 而用例仍绿，说明用例是摆设。
+- **4.40 假 DB 会让整张表红成另一种含义** —— worker 测试的 fake D1 若不实现 `batch` 逐条 `await statement.run()`，`saveResolvedPosters` 走 `db.batch([...])` 时**一条都没写**，端点的「写后回读校验」就返 500 `write_verify_failed`。**排查时极易误判成端点逻辑错**（其实只是 fake 少实现了 `batch`）。配套：`worker/index.ts` 的 `route` **未导出**，测试只能走 `worker.fetch(request, env, ctx)`；`send` 助手的第三参里 `origin === null` 表示「刻意不带 Origin」。
+- **4.41 同判不同图，比完全判错更难发现** —— `resolveOtherCover` 与 `/api/other/candidates` 共用评分与别名，但出图多两步：`sameEvidence` 按分数取前 3 名、infobox `page_image` 优先 `pageimages` 兜底——而这两个字段由**并发的上游请求**填充，某轮某字段没回来时名次靠后的条目就顶上来。线上实测 Journey 在对（`Journey_PSN_Cover.png`）与错（`500px-Zatsu_Tabi_That's_Journey_Logo.webp`，2006 年漫画 logo）之间**交替**，而**同一时刻诊断端点稳定返回 `picked=风之旅人`**。**诊断端点会替你担保它是对的**——所以线上验证判决必须用 `/api/posters/batch` 实取图，不能只看 `/api/other/candidates` 的 picked。
+- **4.42 逐条循环调 `/api/posters/batch` 极慢，应该一次批量发** —— 单条 `items` 也是一次维基真回源，逐条循环 + 25s 间隔测 8 次跑满 5 分钟还没完，被迫 kill。**一次 body 发完全部 items**，`{items:[…], retry:true}`，响应读 `j.results[j.keys[0]]`（结果是 map 不是数组，见 T-20261002-05 误判记录）。
 
 
 **可访问性 / 交互类**：
@@ -179,3 +184,8 @@
 | `/catalog/setup` 404 = lazy 化把路由搞坏了 | SPA fallback 要求 `Accept: text/html`，`Invoke-WebRequest` 默认 `*/*` 必假 404（4.35） |
 | 计划表里有 5 个模块，表头写 6 个没关系 | 验收时人是照着错误的数字去判的，正文与表格必须一起改（4.36） |
 | HomeView 再省 5.53 KB，没理由不做 | 落地视图 lazy 化换一次首屏闪烁，闪烁比 5 KB 更被感知（4.37） |
+| 诊断端点只读、只发给前端看，加它不花钱 | 它与主链路共用 `other` 桶 20/10min，20 次弹窗就能让 `/api/other/detail` 自己 429（4.38） |
+| 这条用例测了「判定不看 score」 | 两个输入字面相同、`ChoiceInput` 里根本没有 `score`，断言恒真（4.39） |
+| 端点返 500 `write_verify_failed`，逻辑写错了 | fake D1 的 `batch` 没逐条 `run`，`saveResolvedPosters` 一条都没写（4.40） |
+| 判决层没问题，诊断端点也说对了，图就该对 | 出图多两步（top3 + `page_image`/`pageimages` 兜底），字段并发填充会掉，会「同判不同图」（4.41） |
+| 逐条循环调 batch 更直观 | 单条也是一次真回源，8 次跑 5 分钟没完，要一次发完整批（4.42） |

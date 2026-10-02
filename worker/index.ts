@@ -12,12 +12,14 @@ import {
   resolvePosters,
   resolvePostersBatch,
   posterMediaKey,
+  allowedImage,
   type PosterBatchRequest,
 } from "./media";
 import {
   loadPosterUrls,
   normalizePosterItem,
   normalizeYear,
+  posterKeyFor,
   resolveStoredPosterUrls,
   saveResolvedPosters,
 } from "./posterStore";
@@ -2628,6 +2630,46 @@ async function route(request: Request, env: Env): Promise<Response> {
         "cache-control": "public, max-age=60",
       });
     }
+  }
+  if (url.pathname === "/api/other/cover-choice" && request.method === "POST") {
+    // 用户的封面选择写进 poster_urls —— 不新增表、不加列，直接 UPSERT 同一张表，
+    // 于是前端 <Poster> 零改动就能吃到它（PLAN-CHOICE-UI §3.3）。
+    //
+    // 三道闸门，缺一不可：
+    //  ① assertSameOrigin —— 挡跨站表单/跨源脚本写入。
+    //  ② getUserFromToken —— 必须登录：这是**全站封面位**的写入口，匿名可写等于
+    //     任何人都能改别人看到的封面。/api/poster-errors/client 那类匿名写端点
+    //     只写 poster_errors 错误日志，不碰展示数据，性质不同。
+    //  ③ allowedImage + 维基域白名单 —— allowedImage 管「能不能取图」，
+    //     白名单管「能不能把一个地址塞进封面位」：只收 upload/thumb.wikimedia.org。
+    assertSameOrigin(request);
+    if (!(await allowUpstreamRequest(request, "other", 20)))
+      return json({ error: "rate_limited" }, 429, { "retry-after": "60" });
+    if (!env.DB) return json({ error: "database_unavailable" }, 503);
+    const user = await getUserFromToken(request, env.DB);
+    if (!user) return json({ error: "auth_required" }, 401);
+    const body = await readJson(request);
+    const title = cleanString(body.title, "title", 160);
+    // english 缺省回落到标题：Poster.tsx 的 batchKey 就是这个口径（subtitle ?? title），
+    // 少了这个回落就会算出一个前端永远取不到的键。
+    const english = cleanOptionalString(body.english, "english", 160) ?? title;
+    const wikiTitle = cleanString(body.wikiTitle, "wiki_title", 160);
+    const rawUrl = cleanString(body.url, "url", 1200);
+    const parsed = allowedImage(rawUrl);
+    // 维基之外一律拒绝：这条写入会直接变成用户看到的封面位。
+    if (!parsed || !/^(?:upload|thumb)\.wikimedia\.org$/.test(parsed.hostname))
+      return json({ error: "invalid_url" }, 400);
+    const key = posterKeyFor({ title, english, year: body.year, type: "other" });
+    if (!key) return json({ error: "invalid_title" }, 400);
+    const storedUrl = parsed.href;
+    await saveResolvedPosters(env.DB, [{ key, urls: [storedUrl] }]);
+    // 回读确认：poster_urls 无 TTL，一次写错就是永久的一行。
+    // 注意这只能证明「写进去又读得回来」，证明不了「键与前端要的那把一致」——
+    // 那条不变量由 worker/coverChoice.test.ts 用前端公式 posterMediaKey 钉住。
+    const stored = await loadPosterUrls(env.DB, [key]);
+    const urls = stored.get(key) ?? [];
+    if (!urls.includes(storedUrl)) return json({ error: "write_verify_failed" }, 500);
+    return json({ ok: true, key, url: storedUrl, wikiTitle }, 200);
   }
   if (url.pathname === "/api/ai/jev/test" && request.method === "POST") {
     assertSameOrigin(request);

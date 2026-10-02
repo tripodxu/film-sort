@@ -488,3 +488,59 @@ describe("首屏依赖图绊线（PLAN-ROUTE-EAGER）", () => {
     expect(code).toContain("<Suspense fallback={null}>");
   });
 });
+
+/**
+ * 消歧出口 UI 绊线（PLAN-CHOICE-UI）。
+ *
+ * 迭代 2 建好了诊断端点但没人消费，迭代 5 补上消费方。这个 UI 最有价值的性质
+ * 不是「长什么样」，而是**它知道什么时候不该出现**——线上抽样里 exact/strong 全判对、
+ * weak 里有相当一部分 poolSize=0（zh-wiki 根本没这个条目）。一旦触发条件被放松，
+ * 用户就会在最不该被打扰的地方被打扰，而且这种退化没有任何报错。
+ */
+describe("消歧出口 UI（PLAN-CHOICE-UI）", () => {
+  const app = readFileSync("src/App.tsx", "utf8");
+  const detail = readFileSync("src/components/ArtworkDetail.tsx", "utf8");
+  const choice = readFileSync("src/components/CoverChoice.tsx", "utf8");
+  const cssSource = readFileSync("src/styles.css", "utf8");
+
+  it("触发条件里 poolSize>=2 与 coverCount>0 都在（weak+pool=0 不许弹空列表）", () => {
+    const lib = readFileSync("src/lib/coverChoice.ts", "utf8");
+    expect(lib).toContain("export function shouldOfferChoice");
+    expect(lib).toMatch(/poolSize < 2/);
+    expect(lib).toMatch(/coverCount > 0/);
+    // exact/strong 必须在第一道就被挡掉，不能靠后面的计数兜。
+    const body = lib.slice(lib.indexOf("export function shouldOfferChoice"));
+    expect(body).toMatch(/band !== "shaky" && input\.band !== "weak"/);
+  });
+
+  it("只挂在「其他」维度上（其余媒介没有同名异作问题）", () => {
+    expect(detail).toContain("choiceAppliesToKind(detail.kind)");
+    // 判定放在弹窗里而不是组件里：组件被别的维度复用时会顺手带上打扰。
+    expect(detail).toMatch(/\{choiceAppliesToKind\(detail\.kind\) && onCoverChange && \(/);
+    expect(choice).not.toContain("choiceAppliesToKind");
+  });
+
+  it("点击即生效：选择先落到弹窗的 work 上，写端点只是补一条云端记录", () => {
+    // 视觉生效不依赖服务端——否则用户点了却要等一次网络往返才看到变化。
+    expect(choice.indexOf("onPicked(")).toBeLessThan(choice.indexOf('cover-choice"'));
+    expect(choice).toContain('method: "POST"');
+    expect(choice).toContain('"/api/other/cover-choice"');
+    // 匿名也必须能用：只是不落库。
+    expect(choice).toContain("art-rank:account-token");
+    expect(choice).toMatch(/if \(!token\)/);
+    expect(app).toContain("onCoverChange={(url) =>");
+  });
+
+  it("缩略图地址仍走维基白名单，CSS 类名全部有定义", () => {
+    expect(choice).toContain("isWikiImageUrl(url)");
+    const classes = [...choice.matchAll(/className="(cover-choice[^"]*)"/g)].map((m) => m[1]);
+    const alsoClasses = [...choice.matchAll(/className=\{`cover-choice\$\{[^}]*`\}/g)].map(
+      () => "cover-choice is-active",
+    );
+    for (const name of [...classes, ...alsoClasses]) {
+      expect(cssSource, `${name} 没有 CSS 定义`).toContain(`.${name.split(" ")[0]}`);
+    }
+    // 取图失败的候选不许被点：disabled 绑在「有没有拿到地址」上。
+    expect(choice).toContain("disabled={!url ||");
+  });
+});
