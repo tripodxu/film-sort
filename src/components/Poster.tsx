@@ -3,6 +3,13 @@ import { BookOpen, Film, Library, Music2, RotateCcw } from "lucide-react";
 import type { Artwork, MediaKind } from "../data/media";
 import { mediaTypeForKind, posterMediaKey } from "../../shared/posterKey";
 import { emptyPosterState, type PosterOutcome } from "../lib/posterOutcome";
+import {
+  memorySuppliesCover,
+  mergeCoverRecall,
+  recallCoverChoice,
+  rememberCoverChoice,
+  type CoverChoiceRecall,
+} from "../lib/coverMemory";
 
 // ===== 并发闸门 =====
 // 单次 flush 只发一个请求，但多份榜单可能同时触发；把在途请求限制在 8 个以内。
@@ -61,6 +68,41 @@ let retryForced = false;
  */
 function batchKey(work: Artwork, kind: MediaKind): string {
   return posterMediaKey(work.title, work.subtitle ?? work.title, TYPE_BY_KIND(kind), work.year);
+}
+
+/**
+ * 用户在「让用户选」里裁决过的封面（PLAN-COVER-MEMORY）。
+ *
+ * 与 `work.posterUrls` 分开存：后者是作品数据（会跟着榜单导出、profile 同步），
+ * 而这一条是**这一页的用户裁决**——它是会话记忆，不该被写进作品里带去别处。
+ * 只有 other 维度需要（消歧出口只挂在 other 上，见 choiceAppliesToKind）。
+ */
+function recalledCover(work: Artwork, kind: MediaKind): CoverChoiceRecall | null {
+  if (mediaTypeForKind(kind) !== "other") return null;
+  // 键与 batchKey 逐字同源：这里必须与刚发给服务端的那个键一致，否则读不到自己刚写的记忆。
+  return recallCoverChoice(batchKey(work, kind), work.title);
+}
+
+/**
+ * 写入口：用户裁决了一张封面之后，把这个事实记下来（PLAN-COVER-MEMORY）。
+ *
+ * 与读入口 `recalledCover` 放在同一处、共用同一条 other 维度闸：
+ * 一对读写分居两个文件时，最典型的故障就是「写进去了、读的是另一个键」。
+ */
+export function rememberPickedCover(
+  work: Artwork,
+  kind: MediaKind,
+  url: string,
+  wikiTitle?: string,
+): void {
+  if (mediaTypeForKind(kind) !== "other") return;
+  rememberCoverChoice({
+    title: work.title,
+    english: work.subtitle ?? work.title,
+    year: work.year,
+    url,
+    wikiTitle,
+  });
 }
 
 function flushBatch(): void {
@@ -305,10 +347,15 @@ export function Poster({
   const [imgLoaded, setImgLoaded] = useState(false);
   // 服务端已持久化海报地址的条目不再发起解析请求——这正是「每次浏览都现解析」的根治。
   const hasStoredPosters = (work.posterUrls?.length ?? 0) > 0;
+  // 用户已经对**这一件**亲自裁决过时同样不必问上游：问回来的至多是同一答案的
+  // 上游版本，而它会把用户选的那张挤到候选第二位（PLAN-COVER-MEMORY）。
+  const recalled = recalledCover(work, kind);
+  const userDecided = memorySuppliesCover(recalled);
   useEffect(() => {
     let active = true;
     if (
       !hasStoredPosters &&
+      !userDecided &&
       (kind === "film" || kind === "book" || kind === "music" || kind === "other")
     ) {
       void resolve(work, kind).then((urls) => {
@@ -319,12 +366,14 @@ export function Poster({
     return () => {
       active = false;
     };
-  }, [work.id, work.title, kind, large, hasStoredPosters]);
+  }, [work.id, work.title, kind, large, hasStoredPosters, userDecided]);
   // 候选顺序 = 尝试顺序。**作品自带的封面排在前面**：导入网易云时拿到的是
   // `p*.music.126.net`（CSP 已放行、浏览器直连、不经 Worker、不占豆瓣抓取配额），
   // 比"解析出来的"豆瓣封面（必须走 /api/image 补 Referer，否则 418）更快也更稳；
   // 自带封面加载失败时，后面解析来的候选会依次顶上。
-  const urls = [...new Set([...(work.posterUrls ?? []), ...resolved])];
+  // 消歧记忆插在两者之间：用户亲自裁决的排最前，同名继承的垫底——
+  // 继承**只在候选为空时**补位，所以它永远换不掉一张已经判对的封面。
+  const urls = mergeCoverRecall([...new Set([...(work.posterUrls ?? []), ...resolved])], recalled);
   const url = urls.find((candidate) => !failed.has(candidate));
   const src =
     url === undefined ? undefined : proxyRetry.has(url) ? proxiedImageUrl(url) : imageUrl(url);

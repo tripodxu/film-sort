@@ -1,5 +1,47 @@
 # Changelog
 
+## 2026-10-02 · 迭代 9/20：消歧记忆（一次「让用户选」升级成「记住这个名字指哪部作品」）
+
+**改了什么**
+
+- **新建 `src/lib/coverMemory.ts`**（纯函数，零迁移）：把用户裁决过的事实记进 `sessionStorage`
+  （`art-rank:cover-choice`，上限 100 条，**先写再淘汰**）。双键设计——精确键
+  `posterMediaKey(title, english, "other", year)` 与名字键 `other-name|<title>`，
+  于是「这一件我裁决过」与「同名的那几件」都能取到同一张图。`validRow` 用维基域名白名单校验
+  sessionStorage（它是非可信输入）。
+- **`Poster.tsx` 收口处接入**（29 处 `<Poster>` 调用点**一行不改**）：候选顺序变为
+  **记忆(精确) → 作品自带 → 解析结果 → 记忆(同名继承)**。继承是**非破坏**的——只在候选全空时补位，
+  所以结构上不可能把一张判对的封面换成猜的。`memorySuppliesCover` 让**裁决过的那一件不必再问上游**
+  （省一次维基回源，而 other 桶只有 20/10min）。
+- **接线修正**：`CoverChoice.onPicked` 签名 `(url)` → `(url, wikiTitle)`，记忆改由 `ArtworkDetail` 写。
+  组件手里的键是自己拼的，与服务端 `posterMediaKey` 不同源——**写入口必须归属持有完整对象的那一层**。
+- **文案跟着机制改**：旧句「已保存，之后都用你选的这一张。」在页内其实是假话（只 patch 一个对象），
+  改为「这一页里所有《X》都用这一张」/「on this page now uses this cover」。
+
+**为什么**
+
+「消歧」原本被实现成「往一个 state 对象上打补丁」，补丁只活在被补丁的对象上：榜单、画廊、对比视图
+各持自己的 `work` 拷贝，**一个都不更新**，而 UI 的注释与文案都承诺了「所有渲染过的地方同时生效」。
+修法不是逐处通知（29 处），而是**记事实 + 唯一收口处读**。
+
+**验证**
+
+- 五道门禁 ✅：`tsc -b` exit 0 / `lint` 0 errors·29 warnings（= 基线）/ `format:check` / `vitest`
+  **660 passed·9 skipped**（+24）/ `build` 410.40 kB（gzip 137.05，+1.32 raw）
+- 红队 ×5 **全红**（含一个自曝的**空变异**：把 `if (x) A else B` 改写成 `if (!x) B else A` 是同一个函数，
+  跑完才发现——详见 PITFALLS 4.57）
+- 线上 ✅ Version `13a3eece`，**零迁移**；`worker/` 与 `shared/` **零改动**；
+  A5 五个 other 封面三轮逐字稳定 5/5；写端点三闸顺序实测 403 → 401 与上一轮一致
+- ❌ **A8 留红**：会话内继承只能在浏览器里验，需要 Playwright（已进台账 P1）
+
+**已知限制**
+
+同名不同作品仍会互相继承（用户为 `Journey` 选了 2012 版，另一件无封面的同名 `Journey` 会拿到这张图）——
+缓解是「只在 `shouldOfferChoice` 本就开口时传播」+「继承只填空格」。根治要比较维基条目，
+而 `wikiEntry` 从来没下发给前端。记忆只在本次会话有效，跨会话靠服务端 `poster_urls`。
+
+---
+
 ## 2026-09-30 · 修复续二：错图不靠 SQL 双清也能作废（other 键带解析器代数）
 
 上一条的「已知限制」说旧键错图必须 `DELETE FROM poster_urls WHERE media_key LIKE 'other|%'` 才能治，

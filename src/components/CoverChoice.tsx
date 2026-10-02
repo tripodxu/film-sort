@@ -53,7 +53,12 @@ export function CoverChoice({
   english?: string;
   /** 与 Work 同形：年份是数字，缺失时留 undefined。 */
   year?: number;
-  onPicked: (url: string) => void;
+  /**
+   * 用户选定了封面。第二个参数是他确认的**维基条目标题**——
+   * 它是「这个名字指的是哪部作品」这个事实的一部分，
+   * 调用方用它写消歧记忆（PLAN-COVER-MEMORY），组件自己不存。
+   */
+  onPicked: (url: string, wikiTitle: string) => void;
   t: (zh: string, en: string) => string;
 }) {
   const key = reportCacheKey(title, year);
@@ -164,7 +169,9 @@ export function CoverChoice({
   async function pick(choice: { title: string; url: string }) {
     setChosen(choice.title);
     setSaveError("");
-    onPicked(choice.url);
+    // 视觉生效与写端点都在下面；**记忆由调用方在 ArtworkDetail 里记**
+    // （它手里有完整的 work 对象，键与服务端那一把同源）。
+    onPicked(choice.url, choice.title);
     const token = (() => {
       try {
         return localStorage.getItem("art-rank:account-token") ?? "";
@@ -197,7 +204,10 @@ export function CoverChoice({
       });
       setSaveError(
         response.ok
-          ? t("已保存，之后都用你选的这一张。", "Saved — this cover is used from now on.")
+          ? t(
+              `已保存，这一页里所有《${title}》都用这一张。`,
+              `Saved — every "${title}" on this page now uses this cover.`,
+            )
           : t("没能保存到云端，本页仍然生效。", "Couldn't save to cloud; still applied here."),
       );
     } catch {

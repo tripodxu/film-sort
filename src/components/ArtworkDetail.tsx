@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Music2, Play, X } from "lucide-react";
-import { Poster } from "./Poster";
+import { Poster, rememberPickedCover } from "./Poster";
 import { CoverChoice } from "./CoverChoice";
 import { choiceAppliesToKind } from "../lib/coverChoice";
 import { IconButton } from "../views/IconButton";
@@ -40,7 +40,10 @@ export function ArtworkDetail({
   /**
    * 用户在「让用户选」里换封面后回调（PLAN-CHOICE-UI）。
    * 只有一个出口：App 收到后把 work.posterUrls 换成本次选择，
-   * 于是这个弹窗的 `<Poster>` 与所有已经渲染过该作品的地方同时生效。
+   * 于是**这个弹窗**的 `<Poster>` 立即生效（网络往返之前的第一枪）。
+   *
+   * 同一个弹窗之外的同名作品（榜单里、画廊里的其它卡片）由消歧记忆负责，
+   * 见 ArtworkDetail 里的 rememberPickedCover 接线与 PLAN-COVER-MEMORY。
    */
   onCoverChange?: (url: string) => void;
 }) {
@@ -143,7 +146,12 @@ export function ArtworkDetail({
                 english={detail.work.subtitle}
                 year={detail.work.year}
                 t={t}
-                onPicked={onCoverChange}
+                onPicked={(url, wikiTitle) => {
+                  // 先记事实，再走视觉：记忆是这一页所有同名作品的真相来源，
+                  // 而 onPicked 只 patch 当前弹窗那一个 work 对象（PLAN-COVER-MEMORY）。
+                  rememberPickedCover(detail.work, detail.kind, url, wikiTitle);
+                  onCoverChange(url);
+                }}
               />
             )}
             {isMusic && (

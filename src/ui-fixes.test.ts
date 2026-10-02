@@ -576,6 +576,79 @@ describe("消歧出口 UI（PLAN-CHOICE-UI）", () => {
 });
 
 /**
+ * 消歧记忆（PLAN-COVER-MEMORY）。
+ *
+ * 这份断言守的是一次「一次裁决只作用于一个对象」的回归：迭代 5 的
+ * `onCoverChange` 只 patch `detailWork` 一个 React state，而「处处生效」
+ * 意味着几十个各自持有 `work` 拷贝的对象。修复方式不是去改那几十处，
+ * 而是把裁决记成一个**事实**，存在 `Poster.tsx` 构造候选数组的唯一收口处读。
+ */
+describe("消歧记忆绊线（PLAN-COVER-MEMORY）", () => {
+  const poster = readFileSync("src/components/Poster.tsx", "utf8");
+  const choice = readFileSync("src/components/CoverChoice.tsx", "utf8");
+  const app = readFileSync("src/App.tsx", "utf8");
+  const stripComments = (source: string) =>
+    source.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^[^\S\n]*\/\/.*$/gm, "");
+  const posterCode = stripComments(poster);
+  const choiceCode = stripComments(choice);
+
+  it("事实存在唯一收口处：29 处 <Poster> 一行不改就全都生效", () => {
+    // 判据必须在构造 urls 的那一行读记忆，而不是在 useState 初值里
+    // （初值只在首帧跑一次，翻页后新挂载的实例读不到）。
+    expect(posterCode).toMatch(/const urls = mergeCoverRecall\(/);
+    expect(posterCode).toMatch(
+      /const urls = mergeCoverRecall\(\s*\[\.\.\.new Set\(\[\.\.\.\(work\.posterUrls \?\? \[\]\)/,
+    );
+    // 记忆只接 other：其余三个维度的名字没有同名异作问题。
+    expect(posterCode).toContain('if (mediaTypeForKind(kind) !== "other") return null;');
+  });
+
+  it("记事实先于视觉生效，且写入点只有一个", () => {
+    // 记忆必须由**持有 work 对象**的那一层写（ArtworkDetail → Poster 的
+    // rememberPickedCover），否则它拿不到与服务端同源的那个键。
+    expect(readFileSync("src/components/ArtworkDetail.tsx", "utf8")).toMatch(
+      /rememberPickedCover\(detail\.work, detail\.kind, url, wikiTitle\);\s*\n\s*onCoverChange\(url\);/,
+    );
+    // onPicked 把 wikiTitle 一并交出去：它是「这个名字指哪部作品」的一半。
+    expect(choiceCode).toContain("onPicked(choice.url, choice.title)");
+    // 视觉那条路不许被删掉：它是网络往返之前的第一枪。
+    expect(app).toContain("onCoverChange={(url) =>");
+    // 记忆不许被写进作品数据：它会跟着榜单导出 / profile 同步带去别处。
+    expect(choice).not.toContain("rememberCoverChoice");
+  });
+
+  it("文案不许再承诺比机制更多的事（原句在页内是假话）", () => {
+    // 原句「之后都用你选的这一张」在本页其实不成立（其余同名卡片不更新）。
+    expect(choiceCode).not.toContain("之后都用你选的这一张");
+    expect(choiceCode).toContain("这一页里所有《${title}》都用这一张");
+    expect(choiceCode).toContain("on this page now uses this cover");
+  });
+
+  it("被裁决过的那一件不必再问上游（省一次维基回源）", () => {
+    // 缺这一段时用户选的那张会被上游返回的同一答案挤到候选第二位：
+    // 图还是对的，但白烧一次配额，而 other 桶只有 20 次 / 10min。
+    expect(posterCode).toContain("const userDecided = memorySuppliesCover(recalled)");
+    expect(posterCode).toMatch(/!hasStoredPosters &&\s*!userDecided &&/);
+    // 依赖数组必须跟着变，否则 userDecided 翻转后 effect 不会重跑。
+    expect(posterCode).toMatch(
+      /\}, \[work\.id, work\.title, kind, large, hasStoredPosters, userDecided\]\)/,
+    );
+  });
+
+  it("纪律：非破坏闸与安全阀不许被摘掉", () => {
+    const lib = readFileSync("src/lib/coverMemory.ts", "utf8");
+    // 继承只填空格（urls 非空时原样返回）——不许改成无条件覆盖。
+    expect(lib).toMatch(/return urls\.length \? \[\.\.\.urls\] : \[recalled\.url\]/);
+    // 安全阀仍是迭代 5 那道：exact/strong 根本不会产生记忆。
+    expect(readFileSync("src/lib/coverChoice.ts", "utf8")).toMatch(
+      /band !== "shaky" && input\.band !== "weak"/,
+    );
+    // 记忆地址仍走维基白名单：sessionStorage 不是可信输入。
+    expect(lib).toContain("isWikiImageUrl(url)");
+  });
+});
+
+/**
  * 空封面三态（PLAN-EMPTY-COVER-STATE）。
  *
  * 这份断言守的是一次「信息在服务端算好、却在最后半米被丢掉」的回归：

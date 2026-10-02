@@ -10,6 +10,50 @@
 
 ## 进行中 / 最近
 
+### T-20261002-10 · 迭代 9/20（创意类）· 消歧记忆（一次「让用户选」升级成「记住这个名字指哪部作品」）
+
+**状态**：✅ 完成（门禁 + 红队 + 线上实测 2026-10-02；**A8 留 ❌ 需浏览器**，见遗留 ①）
+
+- **任务类型**：§2.6 创意类（轮换位：8 优化 → 9 创意）
+- **最小上下文**：不需要读全仓。只需 `src/components/Poster.tsx`（`urls` 收口处）、`src/components/ArtworkDetail.tsx`（唯一挂载点）、`src/components/CoverChoice.tsx`（裁决入口）、`shared/posterKey.ts`（键口径）。**`worker/` 与 `shared/` 本轮零改动。**
+- **改了什么**
+  - 新建 `src/lib/coverMemory.ts`（纯函数）：`COVER_MEMORY_KEY="art-rank:cover-choice"`、`COVER_MEMORY_MAX=100`、模块级 `let memo` 一次解析、`validRow` 用 `isWikiImageUrl` 白名单校验 sessionStorage（非可信输入）、`rememberCoverChoice` / `recallCoverChoice`（精确键优先，返回 `exact` 标志）/ `mergeCoverRecall` / `memorySuppliesCover` / `clearCoverMemory`。**双键**：`coverMemoryKey = posterMediaKey(t,e,"other",y)` 与 `coverNameKey = "other-name|" + posterKeySegment(title)`（前缀保证不与精确行相撞）。
+  - `src/components/Poster.tsx`：新增 `recalledCover(work,kind)`（读）与导出 `rememberPickedCover(work,kind,url,wikiTitle?)`（写），**两者同处一个文件、共用 `mediaTypeForKind(kind) !== "other"` 闸**；`urls` 收口处改为 `mergeCoverRecall([...new Set([...(work.posterUrls ?? []), ...resolved])], recalled)`；useEffect 加 `!userDecided &&` 与同名依赖项。
+  - `src/components/CoverChoice.tsx`：`onPicked` 签名 `(url) => void` → `(url, wikiTitle) => void`，`pick()` 里传 `choice.title`；**删掉它自己的记忆写入**（组件拿不到同源键）。
+  - `src/components/ArtworkDetail.tsx`：`onPicked` 接线先 `rememberPickedCover(detail.work, detail.kind, url, wikiTitle)` 再 `onCoverChange(url)`；`onCoverChange` 的文档注释改成「只 patch 这个弹窗，其余同名作品由消歧记忆负责」。
+  - 文案：旧句「已保存，之后都用你选的这一张。」**是假话**（只 patch 一个对象）⇒ 改为「这一页里所有《X》都用这一张」/「on this page now uses this cover」。
+  - 测试：`src/lib/coverMemory.test.ts` 19 例（新建）、`src/ui-fixes.test.ts` 新 `describe("消歧记忆绊线（PLAN-COVER-MEMORY）")` 5 例。
+- **为什么（4 条）**
+  1. `ArtworkDetail.tsx:41-44` 的注释与 `CoverChoice.tsx:200` 的文案都承诺「所有渲染过的地方同时生效」，而 `App.tsx:1672-1676` 只 patch `detailWork` **一个对象**——榜单/画廊/对比视图各持自己的 `work` 拷贝（`HomeView.tsx:492`、`GalleryWall.tsx:95`、`ProfileView.tsx:697` 直接读 `work.posterUrls`），一个都不更新 ⇒ **UI 在承诺一件代码没做的事**。
+  2. 根因一句话：消歧被实现成「往一个 state 对象上打补丁」而不是「记下一个事实」，补丁只活在被补丁的对象上。修法不是逐处通知（29 处 `<Poster>`），而是**记事实 + 唯一收口处读**。
+  3. 记忆放在 `Poster.tsx` 收口处 ⇒ **29 处调用点一行不改**；放在组件里则要改 29 处。
+  4. 继承设为**非破坏**（只在 `urls` 为空时补位）⇒ 结构上不可能把一张判对的封面换成猜的；`memorySuppliesCover` 只认精确行 ⇒ 裁决过的那一件不必再问上游（省一次维基回源，而 other 桶只有 20/10min）。
+- **验证状态**
+  - 门禁：`tsc -b` exit 0；`lint` **29 problems (0 errors, 29 warnings)** = 基线；`format:check` All matched files；`vitest` **660 passed / 9 skipped (669)**（基线 636 ⇒ **+24**）；`build` ✓ `index-BV_vjOsd.js` **410.40 kB / gzip 137.05**（+1.32 raw / +0.51 gzip ≤ 1.5 KB 预算）。线上产物 `index-CGd3gcxH.js` 410.50 kB / gzip 137.09，`ce=br`，`public, max-age=31536000, immutable`，`modulepreload` 计数 **0**。
+  - 红队 ×5 **全红**：删 `mergeCoverRecall` 收口位（1 failed）/ 删 `!userDecided &&`（1 failed）/ 删 `ArtworkDetail` 接线（1 failed）/ 删 `recallCoverChoice` 精确行分支（2 failed）/ 把 `mergeCoverRecall` 的 `exact` 分支整体退化（2 failed）。
+  - 线上 Version ID **`13a3eece-269c-4c48-93cc-b44f38f85fac**，`✅ No migrations to apply!`（零迁移是本轮的设计目标）。
+  - A5 五个 other 封面 **三轮逐字稳定 5/5 `found`**：Journey=`Journey_PSN_Cover.png`、蒙娜丽莎=`500px-Mona_Lisa%2C_by_…`、纪念碑谷=`500px-Monument_Valley,_Utah,_USA_(23611451292).jpg`、动物森友会=`Doubutsu_No_Mori_Boxart.jpg`、INSIDE=`INSIDE_Cover.jpg`。
+  - A7 三闸顺序实测：无 `origin` 头 ⇒ **403 `cross_origin_forbidden`**；带 `origin` 未登录 ⇒ **401 `auth_required`**（与迭代 5 一致）。
+- **实测发现并修掉的真 bug（4 条）**
+  1. **`persist()` 的上界 `return` 挡在 `setItem` 之前** ⇒ 整份记忆只活在内存副本：页内正常、刷新全丢、**零报错**。改为先写再淘汰。被「两行并存」测试抓出。
+  2. **写入口归属错误**：第一版放在 `CoverChoice.pick()`，其键是自己拼的 `title|year`，与服务端 `posterMediaKey(…, "other", …)` 不同源 ⇒ 页内碰巧对、刷新丢。搬到 `ArtworkDetail` + `onPicked` 加传 `wikiTitle`。
+  3. **`writeRows` 提取后忘了改调用处** ⇒ lint 多出第 30 个 warning。当场修掉。
+  4. **计划里的绊线写错了层**（§5.2 第 2 条原写「`CoverChoice` 里 `rememberCoverChoice` 在 `onPicked` 之前」）⇒ 执行时改为**反向断言 `CoverChoice` 不含 `rememberCoverChoice`**。计划的错、代码的没错，但说明计划阶段就该读一遍调用链。
+- **遗留风险**
+  1. **A8 留 ❌**：会话内继承只能在浏览器里验。浏览器外最强证据是线上 bundle 里四个源码痕迹全在（等于「发上去的等于我审过的」），**不等于功能成立**。需要一次性 Playwright 脚本（导入含两件同名 `other` 作品的清单 → 裁决一件 → 断言第二格）——**独立一轮**。
+  2. **同名不同作品误继承（R-1）未根治**：为 `Journey` 选了 2012 版后，榜单里另一件无封面的同名 `Journey` 会拿到这张图。缓解只有「`shouldOfferChoice` 只在判不准时开口」+「继承只填空格」。根治要比较 wiki 条目，而 `wikiEntry` 从来没下发给前端。
+  3. **`sessionStorage` 记忆无 per-user 隔离**：同浏览器换账号仍在（与 `poster_urls` 全站共享同性质）。文案已按「这一页」而非「已保存」措辞。
+  4. **收益是个位数**：`shaky|weak ∧ poolSize≥2 ∧ coverCount>0` 一次典型使用影响个位数格子 ⇒ 是「让迭代 5 不白费」的修复，**不进 FEATURES 主表**，只记 CHANGELOG。
+  5. **只在本次会话有效**：跨会话靠 `poster_urls`（服务端缓存，本轮未碰语义），同名继承不跨会话（有意：跨会话传播 = 替未来用户做决定）。
+  6. **迭代 8 归因出的 `year` → icon 误选仍未修**（`/api/other/detail?name=纪念碑谷&year=2014` → `Monument_Valley_icon_unrounded.jpg`），**仍是最高优先级遗留**。本轮零改 `worker/`，该行为原样保留。
+- **下一步（迭代 10 起）**
+  1. **修 `year` → icon 误选**（最高优先：是「真的选错图」）：给 year 加权重上限，或对 icon/系列页主图降权。
+  2. **浏览器 E2E 缺口**（迭代 7/9 连续三次留红的那一项）：一次性 Playwright 脚本，覆盖「会话内同名继承」「重试按钮」「三态渲染」。
+  3. **第 5 档运行时用例**：迭代 8 遗留的「超时但前 4 档成功 ⇒ absent」目前只有源码形状断言。
+  4. A7/A8 依赖上游健康，**网络恢复后复测**迭代 8 的三条。
+  5. per-user 封面覆盖（新表 + scope 大）、把「让用户选」扩展到 29 处 `<Poster>` 的直出封面位。
+  6. `docs/PLAN-OPTIMIZATION-SPRINT.md` Phase 8 PWA、ROADMAP Phase 3/4 仍 ⬜。
+
 ### T-20261002-09 · 迭代 8/20（优化类）· 上游降级信号逐条化（模块级全局 → 逐条记账探针）
 
 - **状态**：✅ 完成（**636 passed·9 skipped**·46 files + **线上实测** 2026-10-02，**A7/A8 留 ❌ 见验证状态**）｜ **负责人**：本 agent｜ **上级**：迭代计划（用户 m01265）；承接 T-20261002-08 下一步①
@@ -237,6 +281,21 @@
 ---
 
 ## 待办队列（按优先级）
+
+### ⬜ P0 · `year` 参数导致 icon 文件被选为封面（预存缺陷，危害高于任何"多一个按钮"）
+- **任务类型**：§2.1（判决链路）
+- **最小上下文**：`worker/other.ts` 的 `otherDetail(name, year?)` + `titleMatchTier` + `scoreOtherPage` + `pickBest`
+- **要点**：实测 `/api/other/detail?name=纪念碑谷&year=2014` → `Monument_Valley_icon_unrounded.jpg`，**不带 year** 才是 `500px-Monument_Valley,_Utah,_USA_(23611451292).jpg`。`year` 进入标题评分后把作品判到了 icon 文件。候选修法：给 year 加权重上限；或对 icon/系列页主图降权。**这是真的选错图，用户直接看到错封面。**
+- **证据**：迭代 8 的 `.tmp/attr8.mjs` 归因实验（带 year → icon，不带 → 作品页），`git diff` 确认与迭代 8 的改动无关
+
+### ⬜ P1 · 浏览器 E2E 缺口（迭代 7/9 连续两次因此留红）
+- **任务类型**：§2.5（验证基建）
+- **最小上下文**：`src/components/Poster.tsx`、`src/components/CoverChoice.tsx`、`vitest.config.ts`（现为 `environment:"node"`、无 jsdom）
+- **要点**：一次性 Playwright 脚本，覆盖「导入含两件同名 `other` 作品的清单 → 在弹窗裁决一件 → 断言第二格拿到同一张图」「`degraded` 态重试按钮」「三态空格子文案」。**两轮验收都因为"只能浏览器里验"而把 A 留红，这是本仓最大的结构性测试债。**
+
+### ⬜ P1 · 第 5 档兜底的运行时用例（迭代 8 遗留）
+- **最小上下文**：`worker/media.ts` 的 other 五档 fallback + `WikiProbe`
+- **要点**：「前 4 档成功、第 5 档超时 ⇒ `absent`」目前**只有源码形状断言**，没有真正的运行时用例。判据：probe 记到了成功答复 ⇒ 不判 `throttled`。
 
 ### ⬜ 优化冲刺 Phase 6 · 相遇页「预测分歧」洞察（Jev）
 - **任务类型**：§2.1（排序/比较）+ §2.7（AI）
