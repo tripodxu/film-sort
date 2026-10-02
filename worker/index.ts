@@ -1725,6 +1725,40 @@ async function getChallenge(id: string, env: Env): Promise<Response> {
   }
 }
 
+/** 静态资源里「内容哈希文件名」的形态：`index-Cix8RSlz.js` / `three.module-YZZFkaN9.js`。
+ *  vite 的 `[hash]` 是 base64url 字母表（大小写、数字、`-`、`_`），长度 8 位起；
+ *  这里只认「连字符 + 至少 8 位哈希 + 扩展名」的收尾形态，避免把 `orbit-zoom.png`
+ * 之类纯词法文件名误判成不可变资源。 */
+const CONTENT_HASHED_ASSET = /-[A-Za-z0-9_-]{8,}\.[a-z0-9]{2,8}$/;
+
+/**
+ * 内容哈希产物 = 不可变资源：内容变则文件名变，一年后再取字节完全一样。
+ * Workers 静态资源默认给所有响应挂 `max-age=0, must-revalidate`（那是 HTML 该有的语义），
+ * 于是每次冷启动都要为 134 KB（br）主包 + 28 KB（br）样式重传一遍并等一趟 RTT。
+ * 2026-10-02 线上实测：Hashed 资源 ETag 齐备、边缘 `cf-cache-status: HIT`，
+ * 服务端完全具备长期缓存的能力，只是没告诉浏览器可以用。
+ *
+ * 只按**文件名特征**判，不按目录白名单：`/assets/` 下还有 favicon、字体等无哈希文件，
+ * 一刀切会把它们也钉成一年，那才是真的发不出去。
+ * `index.html` 必须继续 `must-revalidate` —— 它是部署切换的入口。
+ */
+function withAssetCachePolicy(response: Response, request: Request): Response {
+  if (response.status !== 200 && response.status !== 304) return response;
+  let pathname: string;
+  try {
+    pathname = new URL(request.url).pathname;
+  } catch {
+    return response;
+  }
+  const immutable = pathname.startsWith("/assets/") && CONTENT_HASHED_ASSET.test(pathname);
+  const next = new Response(response.body, response);
+  next.headers.set(
+    "cache-control",
+    immutable ? "public, max-age=31536000, immutable" : "public, max-age=0, must-revalidate",
+  );
+  return next;
+}
+
 async function serveAssets(request: Request, env: Env): Promise<Response> {
   let response = await env.ASSETS.fetch(request);
   if (response.status === 404 && request.method === "GET") {
@@ -1734,7 +1768,7 @@ async function serveAssets(request: Request, env: Env): Promise<Response> {
       response = await env.ASSETS.fetch(new Request(indexUrl, request));
     }
   }
-  return withSecurityHeaders(response);
+  return withSecurityHeaders(withAssetCachePolicy(response, request));
 }
 
 /**

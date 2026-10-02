@@ -497,6 +497,36 @@ describe("首屏依赖图绊线（PLAN-ROUTE-EAGER）", () => {
  * weak 里有相当一部分 poolSize=0（zh-wiki 根本没这个条目）。一旦触发条件被放松，
  * 用户就会在最不该被打扰的地方被打扰，而且这种退化没有任何报错。
  */
+describe("静态资源缓存策略绊线（PLAN-ASSET-CACHE）", () => {
+  const source = readFileSync("worker/index.ts", "utf8");
+  // 剥掉注释再扫：解释性注释里会原样引用这些字面量。
+  const code = source.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^[^\S\n]*\/\/.*$/gm, "");
+
+  it("哈希产物的判定靠文件名形态，且不按目录一刀切", () => {
+    expect(code).toContain("max-age=31536000, immutable");
+    expect(code).toMatch(/const CONTENT_HASHED_ASSET = \/-\[A-Za-z0-9_-\]\{8,\}/);
+    expect(code).toContain(
+      'pathname.startsWith("/assets/") && CONTENT_HASHED_ASSET.test(pathname)',
+    );
+  });
+
+  it("非哈希分支保留 must-revalidate：index.html 是部署切换的入口", () => {
+    expect(code).toContain('"public, max-age=0, must-revalidate"');
+    expect(code).toMatch(
+      /immutable \? "public, max-age=31536000, immutable" : "public, max-age=0, must-revalidate"/,
+    );
+  });
+
+  it("withSecurityHeaders 里绝不能出现 cache-control", () => {
+    // 一旦把缓存头塞进安全头表，所有 json() 响应都会被钉成一年 —— API 数据会冻住。
+    const start = code.indexOf("function withSecurityHeaders");
+    expect(start).toBeGreaterThan(-1);
+    const body = code.slice(start, code.indexOf("}", code.indexOf("return result;", start)));
+    expect(body).not.toContain("cache-control");
+    expect(body).toContain("SECURITY_HEADERS");
+  });
+});
+
 describe("消歧出口 UI（PLAN-CHOICE-UI）", () => {
   const app = readFileSync("src/App.tsx", "utf8");
   const detail = readFileSync("src/components/ArtworkDetail.tsx", "utf8");

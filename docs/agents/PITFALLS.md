@@ -126,6 +126,10 @@
 - **4.40 假 DB 会让整张表红成另一种含义** —— worker 测试的 fake D1 若不实现 `batch` 逐条 `await statement.run()`，`saveResolvedPosters` 走 `db.batch([...])` 时**一条都没写**，端点的「写后回读校验」就返 500 `write_verify_failed`。**排查时极易误判成端点逻辑错**（其实只是 fake 少实现了 `batch`）。配套：`worker/index.ts` 的 `route` **未导出**，测试只能走 `worker.fetch(request, env, ctx)`；`send` 助手的第三参里 `origin === null` 表示「刻意不带 Origin」。
 - **4.41 诊断端点与取图链路一致，不能证明任何一方正确** —— 迭代 5 曾据「`/api/other/candidates` 稳定返回 `picked=风之旅人`，而 `/api/posters/batch` 在正确/错误封面之间交替」推出「判决对、出图错（并发字段填充会掉）」。**取证后结论撤回**：gsrsearch 8/8 逐字稳定、`隨興旅` 压根不在前 6 名、en 轮池子无漫画像、`imageinfo` 单查 6/6 稳定、线上重打 **6/6 全对**。那两条错图 D1 行是**迭代 3 修复已上线但该键尚未被重写**的时间窗产物（`updated_at` 停在 `00:54:11Z`）。教训是三层的：① **先下结论再找机制**——那个「并发字段填充会掉」的机制听起来完全合理，但不是真的；② **我的验证手段与结论互相掩护**——诊断端点与取图链路共用同一套评分和同一份别名，它俩一致本就在预期之内，一致性零信息量。判决必须用 `/api/posters/batch` 实取图来验；③ **「N 次里出现了错图」要先问那 N 次是不是同一个版本/同一份缓存状态**，否则把时间窗当成了随机故障。
 - **4.42 逐条循环调 `/api/posters/batch` 极慢，应该一次批量发** —— 单条 `items` 也是一次维基真回源，逐条循环 + 25s 间隔测 8 次跑满 5 分钟还没完，被迫 kill。**一次 body 发完全部 items**，`{items:[…], retry:true}`，响应读 `j.results[j.keys[0]]`（结果是 map 不是数组，见 T-20261002-05 误判记录）。
+- **4.43 量「传输量」之前，先确认你的探针没有自动解压** —— `Invoke-WebRequest` 会自动解 br，用它量 `/assets/index-*.js` 出来是 **407 KB**，我盯着这个数字推理出「线上根本没压缩，这才是『有点卡』的根因」——**结论完全错**，真实传输 **134 804 B**（br）。任何带宽/压缩相关的结论必须用 `node:https` 原样请求看 `content-encoding` 和落盘字节。配套两个同源坑：`curl.exe --compressed` 在本机不可用（`the installed libcurl version doesn't support this`），PowerShell 直传 `$r.Headers['etag']` 报 `The format of value 'System.String[]' is invalid.`（头部是多值数组，要先 `.Get(0)` 或 `($r.Headers['etag'])[0]`）。**工具报错极易被误读成线上异常，先分清是探针坏了还是服务坏了。**
+- **4.44 守卫短路在前，断言就在后面空转** —— 测「无哈希文件不得被判成 immutable」时断言路径 `/assets/favicon.svg`，但假 `env.ASSETS` 没登记该路径 ⇒ 返 404 ⇒ 策略在 `if (status !== 200 && status !== 304) return response;` 处短路 ⇒ **被测函数一次都没被调用**，断言照样绿。**它保护的是一个它从没执行到的分支。**（4.39 是「断言恒真」，4.44 是「断言没执行」，两个方向都给人虚假的安全感。）识别方法：断言用的输入必须先确认走到了被测点；假 env / mock 要为**每个**断言路径提供响应。
+- **4.45 一个接口把「上游全挂」和「确实没有」返回成同一个值，等于把判断成本转嫁给每个消费者** —— `/api/other/candidates` 在上游维基间歇性失败时返回 `{candidates:[], picked:null, confidence:{score:0,band:"weak",evidence:"none",poolSize:0}}`，与「维基真没这个条目」**逐字相同**，唯一线索是 `lang: null`（`worker/other.ts:1018`）。实测同一 URL 10 次出现 3 种结果（zh 3 / en 3 / 空 4）。消费者（`CoverChoice`）只能靠 `poolSize < 2` 静默不渲染，**用户看到的是无图，不知道是「没搜到」还是「系统挂了」**。诚实的数据接口必须**让失败可区分**（`502` + `fallback` 字段，或显式 `upstream_unavailable` 标记）——这比「多返回一个字段」贵，但比每个消费者各自猜便宜。
+- **4.46 缓存头的收益看头的值，不看墙钟** —— 改 `cache-control` 后首访收益**是 0**（浏览器手上什么都没有），收益在第二次访问同一 URL 才兑现。拿「首页快了多少」当验收会得到 0 然后误判改动无效。验收要**断言头的值 + 产物指纹**（`index-<hash>.js` 哈希名与字节数是否逐字不变，后者证明「只改头、零首屏影响」），墙钟只用来量 RTT 波动范围。
 
 
 **可访问性 / 交互类**：
@@ -189,3 +193,8 @@
 | 端点返 500 `write_verify_failed`，逻辑写错了 | fake D1 的 `batch` 没逐条 `run`，`saveResolvedPosters` 一条都没写（4.40） |
 | 判决层没问题，诊断端点也说对了，图就该对 | 它俩共用同一套评分与别名，一致性零信息量；判决要用 batch 实取图验（4.41） |
 | 逐条循环调 batch 更直观 | 单条也是一次真回源，8 次跑 5 分钟没完，要一次发完整批（4.42） |
+| 线上没压缩，这就是卡的原因 | `Invoke-WebRequest` 自动解 br，量出 407 KB 其实是 br 后的 134 804 B（4.43） |
+| `curl --compressed` 报错 = 线上不支持压缩 | 本机 libcurl 版本太老；PowerShell 传 ETag 报多值数组格式错（4.43） |
+| 断言绿了说明「无哈希文件不被冻」这条被覆盖了 | 假 ASSETS 没登记该路径 ⇒ 404 短路 ⇒ 被测函数没被调用（4.44） |
+| 空候选池 = 系统没搜到这个作品 | 也可能是上游维基间歇性全挂，两者响应逐字相同（4.45） |
+| 改完 cache-control 首页快了多少 = 收益 | 首访收益是 0，收益在第二次访问；验收看头的值和产物指纹（4.46） |
