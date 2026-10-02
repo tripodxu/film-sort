@@ -2224,7 +2224,9 @@ async function route(request: Request, env: Env): Promise<Response> {
     }
     // 真正的 1 天缓存发生在服务端（L1 isolate + L2 Edge Cache）；
     // 这里只是顺带声明新鲜度，浏览器通常不缓存 POST 响应。
-    return json({ results, keys }, 200, { "cache-control": "private, max-age=86400" });
+    // outcomes 一并发出：found / absent / throttled 是本文件上一段算出来的，
+    // 不发出去的话前端只能把「维基没这个条目」和「维基现在取不到」渲染成同一个空格子。
+    return json({ results, keys, outcomes }, 200, { "cache-control": "private, max-age=86400" });
   }
   if (url.pathname === "/api/image" && request.method === "GET")
     return withSecurityHeaders(await proxyImage(url.searchParams.get("url") ?? ""));

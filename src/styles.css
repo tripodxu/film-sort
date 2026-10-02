@@ -1548,6 +1548,37 @@ body[data-theme=classic]{
 /* 路由懒加载占位:与页面等高的最小骨架,脉冲节奏复用 plaza-pulse */
 .route-loading{min-height:60vh}
 
+/* ===== 空封面三态（PLAN-EMPTY-COVER-STATE） =====
+   服务端一直分得清「确实没有」(absent) 和「暂时取不到」(throttled)，
+   但历史上没把分类发到前端，于是两者都长成同一个静默图标。
+   degraded 是唯一一档该说话、也该给动作的：文案一行 + 一枚 44px 的重试按钮。
+   排版刻意收窄——它出现在整页几十个格子里，任何加粗都会变成噪音。 */
+.cover-fallback-retry{gap:12px}
+.cover-retry-hint{
+  margin:0;max-width:30ch;
+  color:var(--muted);font-size:11px;line-height:1.5;text-align:center
+}
+.cover-retry{
+  display:inline-flex;align-items:center;gap:5px;
+  min-height:44px;padding:0 12px;
+  border:1px solid var(--border-2);border-radius:8px;
+  background:var(--surface-1);color:var(--text-2);
+  font-size:12px;line-height:1;white-space:nowrap;
+  transition:color .15s,border-color .15s
+}
+.cover-retry:hover:not(:disabled){color:var(--accent);border-color:var(--accent)}
+.cover-retry:disabled{opacity:.55}
+.cover-retry svg{animation:none}
+.cover-retry:disabled svg{animation:coverRetrySpin .9s linear infinite}
+/* 贴纸卡一行只 40px 高，重试按钮塞不进去也不该塞：那里保持静默图标，
+   与 .collection-row .cover-fallback 的既有约定一致。 */
+.collection-row .cover-retry{display:none}
+/* 小格子（榜单行 / 排名卡 / 维度片，最小 26×38）放不下文案，按钮也不给。 */
+.poster-small .cover-retry{display:none}
+.poster-small .cover-retry-hint{display:none}
+@keyframes coverRetrySpin{to{transform:rotate(360deg)}}
+@media(prefers-reduced-motion:reduce){.cover-retry:disabled svg{animation:none}}
+
 /* ===== 消歧出口「换一个封面」（PLAN-CHOICE-UI） =====
    位置在 detail-copy 内、其余文案之上，是弹窗里唯一「主动认错」的东西，
    所以语气与排版都不能像错误提示：极窄的一行小字 + 一排竖版缩略图。

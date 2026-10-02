@@ -574,3 +574,81 @@ describe("消歧出口 UI（PLAN-CHOICE-UI）", () => {
     expect(choice).toContain("disabled={!url ||");
   });
 });
+
+/**
+ * 空封面三态（PLAN-EMPTY-COVER-STATE）。
+ *
+ * 这份断言守的是一次「信息在服务端算好、却在最后半米被丢掉」的回归：
+ * `/api/posters/batch` 一直返回 outcomes（found/absent/throttled），
+ * 路由却只发 results + keys，前端于是把「确实没有」和「暂时取不到」
+ * 渲染成同一个静默图标。这三处一旦回退，用户就永远卡在空格子。
+ */
+describe("空封面三态绊线（PLAN-EMPTY-COVER-STATE）", () => {
+  const workerIndex = readFileSync("worker/index.ts", "utf8");
+  const poster = readFileSync("src/components/Poster.tsx", "utf8");
+  const stripComments = (source: string) =>
+    source.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^[^\S\n]*\/\/.*$/gm, "");
+  // Poster 的三态断言一律扫**剥掉注释后**的源码：否则我写的解释性注释
+  // 本身就会把断言喂绿（PITFALLS：断言被注释喂绿 = 假绿）。
+  const posterCode = stripComments(poster);
+  const batchRoute = stripComments(workerIndex).slice(
+    stripComments(workerIndex).indexOf("/api/posters/batch"),
+  );
+
+  it("批次响应必须带上服务端算好的 outcomes（不发出去就没有三态）", () => {
+    expect(batchRoute).toMatch(/json\(\s*\{\s*results,\s*keys,\s*outcomes\s*\}/);
+    // 反向断言：老形状 json({ results, keys }) 不许悄悄回来。
+    expect(batchRoute).not.toMatch(/json\(\s*\{\s*results,\s*keys\s*\}/);
+  });
+
+  it("前端真的接住了分类，并且只对 throttled 给重试", () => {
+    expect(posterCode).toContain("outcomes?: Record<string, PosterOutcome>");
+    expect(posterCode).toContain("outcomes[key]");
+    // 判据集中在纯函数里，组件不得自己再写一套三态判断。
+    expect(posterCode).toMatch(/emptyPosterState\(\s*urls\.filter/);
+    expect(posterCode).toContain('const retryable = emptyState === "degraded"');
+  });
+
+  it("重试入口必须可访问：用真 button、带可访问名、点击不外泄", () => {
+    expect(posterCode).toContain('className="cover-retry"');
+    expect(posterCode).toContain("aria-label={readRetryLabel()}");
+    // .collection-row 的整卡是 <button>，冒泡出去会把「重试」变成「打开详情」。
+    expect(posterCode).toContain("event.stopPropagation()");
+    // 触控目标不小于 44px。
+    expect(css).toMatch(/\.cover-retry\{[^}]*min-height:44px/);
+    // 光秃秃一个按钮是「只有视觉变化」——必须有一行能解释「为什么是空的」，
+    // 且它得能被读屏播报（ui-ux-pro-max：错误消息不许只靠视觉）。
+    expect(posterCode).toMatch(/<p className="cover-retry-hint" role="status">/);
+    expect(posterCode).toContain("{retryable && large && (");
+    expect(css).toMatch(/\.poster-small \.cover-retry-hint\{display:none\}/);
+  });
+
+  it("重试按钮在小格子与贴纸卡里不渲染（44px 塞不进去也不该塞）", () => {
+    expect(css).toMatch(/\.poster-small \.cover-retry\{display:none\}/);
+    expect(css).toMatch(/\.collection-row \.cover-retry\{display:none\}/);
+  });
+
+  it("「重试」必须真的重试：forceRetry 要走到 dispatchBatch 的 retry 判定", () => {
+    // 这是本轮最容易做假的一处：dispatchBatch 只在**本次加载的第一批**带 retry，
+    // 所以按钮若只调 resolve()，服务端会用 15 秒负缓存原样回上一轮的结果，
+    // 用户点多少次看到的都是同一个空格子——按钮存在但没有作用。
+    expect(posterCode).toContain("const retry = retryForced || !firstBatchDispatched");
+    expect(posterCode).toContain("void resolve(work, kind, { retry: true })");
+    expect(posterCode).toContain("retryForced = true");
+  });
+
+  it("空态判据喂的是过滤掉加载失败之后的候选（拿到地址但没画出来 ≠ 上游没有）", () => {
+    // 一张加载失败的图若被算进「有图」，emptyPosterState 就返回 null，
+    // 这一格永远不会有重试入口——而它恰恰最需要重试。
+    expect(posterCode).toMatch(
+      /emptyPosterState\(\s*urls\.filter\(\(candidate\) => !failed\.has\(candidate\)\)/,
+    );
+  });
+
+  it("文案跟随 <html lang>，不为两句提示给 29 处调用点加 t", () => {
+    // <Poster> 有 29 处调用点，一处都没传 t；语言真相在 document.documentElement.lang。
+    expect(posterCode).toContain('document.documentElement.lang === "en"');
+    // 反向断言：别把 <Poster> 又挂回需要 t 的形状。
+    expect(posterCode).not.toMatch(/t:\s*\(zh:\s*string,\s*en:\s*string\)\s*=>\s*string/);
+  });
+});
