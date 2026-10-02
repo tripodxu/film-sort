@@ -51,28 +51,37 @@ export const OTHER_HINT: Record<"zh" | "en", string> = { zh: "电子游戏", en:
 
 const YEAR_RE = /\b(?:1[5-9]|20)\d{2}\b/;
 
-/** 本轮取图里「上游没给出有效响应」发生过（超时/限流/5xx）。
- *  与「上游明确答复：这件作品没有封面」必须分开——前者是瞬时故障，
- *  若记成 absent 会被 24 小时负缓存固化，用户刷新多少次都是空白。
- *  2026-10-02 线上实测：同一请求连打 8 次（换 english 造新键）拿到
- *  2 正确 + 2 en 封面 + 4 空，后 4 次全是上游超时。 */
-let wikiDegraded = false;
-/** 每条 other 海报解析**开始前**调用：降级标记是逐条判定的，
- *  批量请求里上一条的故障不该把这一条判成 absent。 */
-export function resetWikiDegraded(): void {
-  wikiDegraded = false;
+/** 单条作品解析期间的上游健康记账，取代 2026-10-02 前的模块级 `wikiDegraded`
+ *  全局布尔（迭代 8/20 移除）。两处缺陷叠在一起才造成线上误判：
+ *  ① **作用域错**：全局 ≠ 逐条，Cloudflare 同一 isolate 内并发批次共享这一份，
+ *     `resolvePostersBatch` 默认 concurrency=8 ⇒ 一条超时把它并发跑的 8 条
+ *     全染成降级。2026-10-02 线上实测：确实不存在的「日常幻想」单发得 absent、
+ *     同批得 throttled、下一轮同批又得 absent——**分类随批次大小改变**。
+ *  ② **语义错**：旧标记只有置位没有复位、且只记失败不记成功，
+ *     「上游曾经失败过」被当成了「这一次我什么都没问到」。
+ *  现在改成显式传参的探针：`ok` 是「上游对我有反应」的次数（**成功/4xx 都算**），
+ *  `failed` 是「这次没问到」的次数（429/5xx/超时/连接重置）。 */
+export interface WikiProbe {
+  ok: number;
+  failed: number;
 }
-export function noteWikiDegraded(): void {
-  wikiDegraded = true;
+export function newWikiProbe(): WikiProbe {
+  return { ok: 0, failed: 0 };
 }
-export function wikiWasDegraded(): boolean {
-  return wikiDegraded;
+
+/** 单条作品的判决：只要上游**有过一次答复**就是「确实没有」而非「暂时取不到」。
+ *  刻意用「至少一次成功」而不是「最后一次成功」：一条 other 的兜底链有 5 档串行，
+ *  若第 1 档成功、第 5 档超时，这一条其实已经用掉了前 4 档的答复 ⇒ 应判 absent。
+ *  反过来「以最后一次为准」等于「上游慢比上游快更不可信」，方向反了。 */
+export function wikiProbeVerdict(probe: WikiProbe): "absent" | "throttled" {
+  return probe.ok > 0 ? "absent" : "throttled";
 }
 
 async function wikiJson(
   lang: "zh" | "en",
   params: URLSearchParams,
   timeoutMs: number,
+  probe: WikiProbe,
 ): Promise<Record<string, WikiPage> | null> {
   try {
     const r = await fetch(`https://${lang}.wikipedia.org/w/api.php?${params}`, {
@@ -80,15 +89,19 @@ async function wikiJson(
       signal: AbortSignal.timeout(timeoutMs),
     });
     if (!r.ok) {
-      // 429/5xx 是「再试一次可能就好了」；4xx（如无此条目）则是明确答复。
-      if (r.status === 429 || r.status >= 500) wikiDegraded = true;
+      // 429/5xx 是「再试一次可能就好了」；4xx（如无此条目）则是明确答复，
+      // 记 ok 而不是 failed——维基对不存在的条目返 200+missing，4xx 极少见，
+      // 但真出现时它同样是「上游对我有反应」，不能算成故障。
+      if (r.status === 429 || r.status >= 500) probe.failed++;
+      else probe.ok++;
       return null;
     }
     const d = (await r.json()) as { query?: { pages?: Record<string, WikiPage> } };
+    probe.ok++;
     return d.query?.pages ?? null;
   } catch {
-    // 超时/连接被重置：一律记成上游降级，不当「确实没有图」。
-    wikiDegraded = true;
+    // 超时/连接被重置：这次没问到，记 failed。
+    probe.failed++;
     return null;
   }
 }
@@ -309,6 +322,7 @@ const OTHER_THUMB_MAX_WIDTH = 500;
 export async function wikiFileThumbUrls(
   lang: "zh" | "en",
   files: readonly string[],
+  probe: WikiProbe,
 ): Promise<Map<string, string>> {
   const out = new Map<string, string>();
   if (!files.length) return out;
@@ -330,7 +344,7 @@ export async function wikiFileThumbUrls(
       iiurlwidth: String(pickThumbBucket(OTHER_THUMB_MAX_WIDTH)),
       format: "json",
     });
-    const pages = await wikiJson(lang, q, 8000);
+    const pages = await wikiJson(lang, q, 8000, probe);
     for (const page of Object.values(pages ?? {})) {
       const infos = (page as WikiPage & { imageinfo?: Array<{ url?: string; thumburl?: string }> })
         .imageinfo;
@@ -344,18 +358,26 @@ export async function wikiFileThumbUrls(
 }
 
 /** 单个封面文件名换 URL（wikiPageImageAny 用） */
-async function wikiFileThumbUrl(lang: "zh" | "en", file: string): Promise<string | null> {
-  const map = await wikiFileThumbUrls(lang, [file]);
+async function wikiFileThumbUrl(
+  lang: "zh" | "en",
+  file: string,
+  probe: WikiProbe,
+): Promise<string | null> {
+  const map = await wikiFileThumbUrls(lang, [file], probe);
   return map.get(file) ?? null;
 }
 
 /** 给候选页批量补 pageprops.page_image 的 URL（一次 imageinfo，不逐个打） */
-async function fillPageImageUrls(lang: "zh" | "en", pages: WikiPage[]): Promise<void> {
+async function fillPageImageUrls(
+  lang: "zh" | "en",
+  pages: WikiPage[],
+  probe: WikiProbe,
+): Promise<void> {
   const files = pages
     .map((page) => page.pageprops?.page_image ?? "")
     .filter((value): value is string => !!value.trim());
   if (!files.length) return;
-  const map = await wikiFileThumbUrls(lang, files);
+  const map = await wikiFileThumbUrls(lang, files, probe);
   for (const page of pages) {
     const file = page.pageprops?.page_image ?? "";
     const url = file ? map.get(file) : undefined;
@@ -566,7 +588,11 @@ export interface OtherCandidate {
 
 /** gsrsearch 候选 + pageprops 摘要/图片（generator=search 会顺带回
  *  系列页与消歧页，必须靠评分把作品条目顶上来） */
-async function wikiSearchOnce(lang: "zh" | "en", query: string): Promise<WikiPage[]> {
+async function wikiSearchOnce(
+  lang: "zh" | "en",
+  query: string,
+  probe: WikiProbe,
+): Promise<WikiPage[]> {
   const q = new URLSearchParams({
     action: "query",
     generator: "search",
@@ -583,7 +609,7 @@ async function wikiSearchOnce(lang: "zh" | "en", query: string): Promise<WikiPag
     redirects: "1",
     format: "json",
   });
-  const pages = await wikiJson(lang, q, 9000);
+  const pages = await wikiJson(lang, q, 9000, probe);
   return pages ? Object.values(pages) : [];
 }
 
@@ -599,6 +625,7 @@ async function resolveOtherPages(
    *  搜索轮自己看不到——Journey 实测就是因此选了 1996 电视剧（Journey 实测：
    *  gsrsearch 轮里没有消歧页，只有《西遊記》和《風之旅人》）。 */
   extraAliases: readonly string[] = [],
+  probe: WikiProbe = newWikiProbe(),
 ): Promise<OtherCandidate[]> {
   const compactBase = compactTitle(baseTitle);
   const seen = new Set<string>();
@@ -613,7 +640,7 @@ async function resolveOtherPages(
       [query, false],
       [`${query} ${OTHER_HINT[lang]}`, true],
     ] as const) {
-      for (const page of await wikiSearchOnce(lang, search)) {
+      for (const page of await wikiSearchOnce(lang, search, probe)) {
         const title = (page.title ?? "").trim();
         if (!title || seen.has(title)) continue;
         seen.add(title);
@@ -717,6 +744,7 @@ async function toWork(page: WikiPage, lang: "zh" | "en"): Promise<OtherWork | nu
 async function wikiTitlePages(
   lang: "zh" | "en",
   titles: readonly string[],
+  probe: WikiProbe = newWikiProbe(),
 ): Promise<WikiPage[] | null> {
   const q = new URLSearchParams({
     action: "query",
@@ -731,21 +759,24 @@ async function wikiTitlePages(
     converttitles: "1",
     format: "json",
   });
-  const pages = await wikiJson(lang, q, 9000);
+  const pages = await wikiJson(lang, q, 9000, probe);
   return pages ? Object.values(pages) : null;
 }
 
 /** 其他类作品搜索：gsrsearch 评分择优（替代 opensearch——实测 opensearch
  *  对「动物森友会」只回 6 个简体错页，且会把 Journey(EP專輯) 这类同名
  *  音乐页排到游戏页前面）。 */
-export async function otherSearch(query: string): Promise<OtherWork[]> {
+export async function otherSearch(
+  query: string,
+  probe: WikiProbe = newWikiProbe(),
+): Promise<OtherWork[]> {
   const trimmed = query.trim().slice(0, 80);
   if (!trimmed) return [];
   for (const lang of ["zh", "en"] as const) {
-    const scored = await resolveOtherPages(lang, trimmed, [trimmed]);
+    const scored = await resolveOtherPages(lang, trimmed, [trimmed], undefined, [], probe);
     if (!scored.length) continue;
     const pages = scored.slice(0, 6).map((entry) => entry.page);
-    await fillPageImageUrls(lang, pages);
+    await fillPageImageUrls(lang, pages, probe);
     const works = (await Promise.all(pages.map((page) => toWork(page, lang)))).filter(
       (work): work is OtherWork => !!work,
     );
@@ -756,7 +787,10 @@ export async function otherSearch(query: string): Promise<OtherWork[]> {
 
 /** zh 条目的英文对应标题（langlinks）：en wiki 的封面链与 zh 不同，
  *  zh 查不到图时的第二机会。 */
-export async function wikiEnTitle(title: string): Promise<string | null> {
+export async function wikiEnTitle(
+  title: string,
+  probe: WikiProbe = newWikiProbe(),
+): Promise<string | null> {
   const q = new URLSearchParams({
     action: "query",
     titles: title.trim().slice(0, 120),
@@ -767,7 +801,7 @@ export async function wikiEnTitle(title: string): Promise<string | null> {
     converttitles: "1",
     format: "json",
   });
-  const pages = await wikiJson("zh", q, 7000);
+  const pages = await wikiJson("zh", q, 7000, probe);
   if (!pages) return null;
   for (const page of Object.values(pages)) {
     const langlinks = page as WikiPage & { langlinks?: Array<{ "*": string }> };
@@ -789,6 +823,7 @@ export async function wikiPageImageAny(
   /** 文件名匹配的优先关键词（用户标题 + 英文标题——zh 简繁变体会让标题评分
    *  失败落到这里，而条目内文件名常是英文，如 Mona Lisa）。 */
   preferTitles: readonly string[] = [],
+  probe: WikiProbe = newWikiProbe(),
 ): Promise<string | null> {
   const base = title.trim().slice(0, 120);
   if (!base) return null;
@@ -802,7 +837,7 @@ export async function wikiPageImageAny(
     converttitles: "1",
     format: "json",
   });
-  const pages = await wikiJson(lang, list, 8000);
+  const pages = await wikiJson(lang, list, 8000, probe);
   if (!pages) return null;
   const compactBase = compactTitle(base);
   const candidates = Object.values(pages).filter(
@@ -818,7 +853,7 @@ export async function wikiPageImageAny(
     .filter((hit) => hit.tier > 0)
     .sort((a, b) => b.tier - a.tier)[0]?.entry;
   if (!page) return null;
-  await fillPageImageUrls(lang, [page]);
+  await fillPageImageUrls(lang, [page], probe);
   if (page.fileUrl) return page.fileUrl;
   const images = (page as WikiPage & { images?: Array<{ title?: string }> }).images ?? [];
   const SKIP = /icon|logo|edit|commons|symbol|flag|question|placeholder|disambig/i;
@@ -834,7 +869,7 @@ export async function wikiPageImageAny(
       return prefers.some((prefer) => prefer && compact.includes(prefer));
     });
   if (!file) return null;
-  return wikiFileThumbUrl(lang, file);
+  return wikiFileThumbUrl(lang, file, probe);
 }
 
 /** 置信度分档。命名对应「证据有多硬」，不是「分数有多高」。 */
@@ -1019,6 +1054,10 @@ export async function otherCandidateReport(
   };
   if (!base) return empty;
   const compactBase = compactTitle(base);
+  // 诊断端点自带一个**用完即弃**的探针：它的上游健康不参与任何判决，
+  // 也不许写进任何共享状态（迭代 8/20 之前它共享模块级 wikiDegraded，等于
+  // 「用户点开一次让用户选弹窗就会改变后面海报的分类」）。
+  const diagProbe = newWikiProbe();
   for (const lang of ["zh", "en"] as const) {
     const queries = (lang === "zh" ? [base, english] : [english, base])
       .map((value) => (value ?? "").trim())
@@ -1026,9 +1065,9 @@ export async function otherCandidateReport(
     if (!queries.length) continue;
     // 诊断端点必须与真链路同一份别名，否则「候选池报告」会描述一个
     // 真实判决里不存在的池子（迭代 3 线上实测踩过）。
-    const diagExact = await wikiTitlePages(lang, titleVariants(base));
+    const diagExact = await wikiTitlePages(lang, titleVariants(base), diagProbe);
     const diagAliases = disambiguationAliases(diagExact ?? [], compactTitle(base));
-    const ranked = await resolveOtherPages(lang, base, queries, yearText, diagAliases);
+    const ranked = await resolveOtherPages(lang, base, queries, yearText, diagAliases, diagProbe);
     const best = pickBest(ranked, yearText);
     if (!best) continue;
     // 别名由同一批候选反推：与评分时用的是同一份 allPages。
@@ -1057,6 +1096,7 @@ export async function resolveOtherCover(
   title: string,
   english: string,
   year?: number,
+  probe: WikiProbe = newWikiProbe(),
 ): Promise<string | null> {
   const base = title.trim().slice(0, 120);
   if (!base) return null;
@@ -1072,9 +1112,9 @@ export async function resolveOtherCover(
     // 只剩 tier2 的《隨興旅 -That's Journey-》（2006 年漫画）与《道奇Journey》
     // 同池，靠 0.5 分之差把漫画 logo 当成了游戏封面。otherDetail 早就传了，
     // 这里是唯一一处漏掉的调用点。
-    const coverExact = await wikiTitlePages(lang, titleVariants(base));
+    const coverExact = await wikiTitlePages(lang, titleVariants(base), probe);
     const coverAliases = disambiguationAliases(coverExact ?? [], compactTitle(base));
-    const ranked = await resolveOtherPages(lang, base, queries, yearText, coverAliases);
+    const ranked = await resolveOtherPages(lang, base, queries, yearText, coverAliases, probe);
     const best = pickBest(ranked, yearText);
     if (!best) continue;
     // 补图范围：最优条目 + 它后面 2 名，**且不跨「有没有字面证据」这道界**
@@ -1088,6 +1128,7 @@ export async function resolveOtherCover(
     await fillPageImageUrls(
       lang,
       top.map((entry) => entry.page),
+      probe,
     );
     // 先按评分取前 3 名要 infobox 封面文件，都没有才退回 pageimages 缩略图
     for (const entry of top) {
@@ -1112,11 +1153,14 @@ export async function otherDetail(name: string, year?: number): Promise<OtherWor
   if (!base) return null;
   const yearText = year && year >= 1500 && year <= 2100 ? String(year) : undefined;
   const compactBase = compactTitle(base);
+  // 详情链**不参与封面判决**（封面判决走 resolveOtherCover），所以它用自己
+  // 的用完即弃探针：签名不变 ⇒ worker/index.ts 零改动，诊断与判决彻底解耦。
+  const detailProbe = newWikiProbe();
   // 同档位内评分高者优先（tier 已由 scoreOtherPage 保证 ≥1）
   const byRank = (a: OtherCandidate, b: OtherCandidate) => b.tier - a.tier || b.score - a.score;
   for (const lang of ["zh", "en"] as const) {
     // ① 精确标题（含分隔符变体）直查
-    const exactPages = await wikiTitlePages(lang, titleVariants(base));
+    const exactPages = await wikiTitlePages(lang, titleVariants(base), detailProbe);
     let exactRank: OtherCandidate | null = null;
     let exactWork: OtherWork | null = null;
     let exactAliases: string[] = [];
@@ -1131,7 +1175,7 @@ export async function otherDetail(name: string, year?: number): Promise<OtherWor
       const best = pickBest(scored, yearText);
       if (best) {
         exactRank = best;
-        await fillPageImageUrls(lang, [best.page]);
+        await fillPageImageUrls(lang, [best.page], detailProbe);
         exactWork = await toWork(best.page, lang);
       }
     }
@@ -1149,10 +1193,17 @@ export async function otherDetail(name: string, year?: number): Promise<OtherWor
     )
       return exactWork;
     // ② 精确页是系列页/同名概念页/无封面（评分不够）时，gsrsearch 评分择优
-    const searched = await resolveOtherPages(lang, base, [base], yearText, exactAliases);
+    const searched = await resolveOtherPages(
+      lang,
+      base,
+      [base],
+      yearText,
+      exactAliases,
+      detailProbe,
+    );
     const searchBest = pickBest(searched, yearText);
     if (searchBest) {
-      await fillPageImageUrls(lang, [searchBest.page]);
+      await fillPageImageUrls(lang, [searchBest.page], detailProbe);
       const searchWork = await toWork(searchBest.page, lang);
       if (
         searchWork &&

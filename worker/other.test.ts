@@ -1,17 +1,17 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { readFileSync } from "node:fs";
 import {
+  newWikiProbe,
   otherCandidateReport,
   otherConfidence,
   otherDetail,
   otherSearch,
   pickThumbBucket,
-  resetWikiDegraded,
   resolveOtherCover,
   titleMatchTier,
   toSimplified,
   wikiPageImageAny,
-  wikiWasDegraded,
+  wikiProbeVerdict,
   type OtherCandidate,
 } from "./other";
 
@@ -1166,8 +1166,8 @@ describe("otherCandidateReport（候选池诊断）", () => {
   });
 });
 
-describe("上游降级信号", () => {
-  /** 上游确实答复了「没有这个条目」——不是故障，不该记降级。 */
+describe("上游降级信号（逐条记账 PLAN-WIKI-DEGRADED-SCOPE）", () => {
+  /** 上游确实答复了「没有这个条目」——不是故障，该记 ok 不该记 failed。 */
   function installStatusFetch(status: number | "throw"): void {
     vi.stubGlobal(
       "fetch",
@@ -1178,48 +1178,164 @@ describe("上游降级信号", () => {
     );
   }
 
-  it("httpJson 200 但无结果：不算降级（上游明确答复没有图）", async () => {
+  it("httpJson 200 但无结果：算 ok（上游明确答复没有图）⇒ absent", async () => {
     installFetch([{ match: /./, body: { query: { pages: {} } } }]);
-    resetWikiDegraded();
-    await resolveOtherCover("不存在的条目", "no such thing", 1999);
-    expect(wikiWasDegraded()).toBe(false);
+    const probe = newWikiProbe();
+    await resolveOtherCover("不存在的条目", "no such thing", 1999, probe);
+    expect(probe.ok).toBeGreaterThan(0);
+    expect(probe.failed).toBe(0);
+    expect(wikiProbeVerdict(probe)).toBe("absent");
   });
 
-  it("上游 429：记为降级，避免空结果被 24 小时负缓存固化", async () => {
+  it("上游 429：记 failed ⇒ throttled，避免空结果被 24 小时负缓存固化", async () => {
     installStatusFetch(429);
-    resetWikiDegraded();
-    await resolveOtherCover("纪念碑谷", "纪念碑谷", 2014);
-    expect(wikiWasDegraded()).toBe(true);
+    const probe = newWikiProbe();
+    await resolveOtherCover("纪念碑谷", "纪念碑谷", 2014, probe);
+    expect(probe.failed).toBeGreaterThan(0);
+    expect(probe.ok).toBe(0);
+    expect(wikiProbeVerdict(probe)).toBe("throttled");
   });
 
-  it("上游 503：记为降级", async () => {
+  it("上游 503：记 failed ⇒ throttled", async () => {
     installStatusFetch(503);
-    resetWikiDegraded();
-    await resolveOtherCover("纪念碑谷", "纪念碑谷", 2014);
-    expect(wikiWasDegraded()).toBe(true);
+    const probe = newWikiProbe();
+    await resolveOtherCover("纪念碑谷", "纪念碑谷", 2014, probe);
+    expect(wikiProbeVerdict(probe)).toBe("throttled");
   });
 
-  it("连接被重置（throw）：记为降级——线上 8 次连打有 4 次是这种", async () => {
+  it("连接被重置（throw）：记 failed ⇒ throttled——线上 8 次连打有 4 次是这种", async () => {
     installStatusFetch("throw");
-    resetWikiDegraded();
-    await resolveOtherCover("纪念碑谷", "纪念碑谷", 2014);
-    expect(wikiWasDegraded()).toBe(true);
+    const probe = newWikiProbe();
+    await resolveOtherCover("纪念碑谷", "纪念碑谷", 2014, probe);
+    expect(wikiProbeVerdict(probe)).toBe("throttled");
   });
 
-  it("上游 404（明确无此条目）：不算降级", async () => {
+  it("上游 404（明确答复）：算 ok ⇒ absent——不能把明确答复当故障", async () => {
     installStatusFetch(404);
-    resetWikiDegraded();
-    await resolveOtherCover("纪念碑谷", "纪念碑谷", 2014);
-    expect(wikiWasDegraded()).toBe(false);
+    const probe = newWikiProbe();
+    await resolveOtherCover("纪念碑谷", "纪念碑谷", 2014, probe);
+    expect(probe.ok).toBeGreaterThan(0);
+    expect(probe.failed).toBe(0);
+    expect(wikiProbeVerdict(probe)).toBe("absent");
   });
 
-  it("resetWikiDegraded 清掉上一条的标记（批量里不串味）", async () => {
-    installStatusFetch(503);
-    resetWikiDegraded();
-    await resolveOtherCover("纪念碑谷", "纪念碑谷", 2014);
-    expect(wikiWasDegraded()).toBe(true);
-    resetWikiDegraded();
-    expect(wikiWasDegraded()).toBe(false);
+  it("**本轮核心语义**：有过一次成功就抵消之前的全部失败 ⇒ absent", async () => {
+    // 线上实测过「第 1 档成功、第 5 档超时」的长链；以「一次成功为准」才不会
+    // 把已经用掉的答复作废。反向判据（以最后一次为准）在这里会得 throttled。
+    expect(wikiProbeVerdict({ ok: 1, failed: 5 })).toBe("absent");
+    expect(wikiProbeVerdict({ ok: 0, failed: 5 })).toBe("throttled");
+  });
+
+  it("一次都没问到 ⇒ throttled（哪怕只发了一次请求）", () => {
+    expect(wikiProbeVerdict({ ok: 0, failed: 0 })).toBe("throttled");
+    expect(wikiProbeVerdict({ ok: 0, failed: 1 })).toBe("throttled");
+  });
+
+  it("**并发不串味**：一条全失败 + 一条全成功，两个独立探针各判各的", async () => {
+    // 这条是线上 F1（分类随批次大小改变）的离线版：两个 resolveOtherCover
+    // 真的并发跑、各拿各的探针。旧的模块级全局在这里必然串味。
+    // 两个坑都是我先写出来才发现的：
+    // ① 路由**不能按调用次序**——两条链交错，「第 N 次调用」会让它们互相
+    //    吃到对方的响应；
+    // ② 路由**不能只靠中文标题**——en 轮的 query 走的是 english 参数，
+    //    URL 里根本不含中文标题，于是「全失败」这一侧会混进 200 答复、
+    //    探针被记成 ok。所以让 title == english（ASCII），
+    //    这样**这条链发出去的每一个 URL 都带标记**。
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: string) => {
+        const url = decodeURIComponent(String(input));
+        if (url.includes("probe-fail-side")) return new Response("{}", { status: 503 });
+        return new Response(JSON.stringify({ query: { pages: {} } }), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        });
+      }),
+    );
+    const probeA = newWikiProbe();
+    const probeB = newWikiProbe();
+    await Promise.all([
+      resolveOtherCover("probe-fail-side", "probe-fail-side", 1999, probeA),
+      resolveOtherCover("probe-ok-side", "probe-ok-side", 1999, probeB),
+    ]);
+    expect(probeA.failed).toBeGreaterThan(0);
+    expect(probeA.ok).toBe(0);
+    expect(wikiProbeVerdict(probeA)).toBe("throttled");
+    expect(probeB.failed).toBe(0);
+    expect(wikiProbeVerdict(probeB)).toBe("absent");
+  });
+
+  it("诊断端点不污染判决：otherCandidateReport 用完即弃自己的探针", async () => {
+    installFetch([{ match: /./, body: { query: { pages: {} } } }]);
+    await otherCandidateReport("纪念碑谷", "纪念碑谷", 2014);
+    // 旧实现里这一行会把模块级 wikiDegraded 置位/复位，从而改变后面海报的
+    // 判决；新实现下诊断与判决之间没有任何共享状态可污染。
+    const probe = newWikiProbe();
+    await resolveOtherCover("纪念碑谷", "纪念碑谷", 2014, probe);
+    expect(wikiProbeVerdict(probe)).toBe("absent");
+  });
+
+  it("默认参数自给探针：不传也能跑（诊断端点 worker/index.ts 零改动）", async () => {
+    installFetch([{ match: /./, body: { query: { pages: {} } } }]);
+    await expect(resolveOtherCover("纪念碑谷", "纪念碑谷", 2014)).resolves.toBeNull();
+    await expect(otherSearch("动物森友会")).resolves.toBeDefined();
+  });
+});
+
+// ===== 上游降级信号：作用域回归（PLAN-WIKI-DEGRADED-SCOPE tripwire） =====
+// 模块级 wikiDegraded 是本轮移除的对象：它在 Cloudflare 同一 isolate 内被并发
+// 批次共享，导致「同一个确实不存在的条目，单发 absent / 同批 throttled」。
+// 下面三条是防回归锁：这几个符号一旦复活，绊线必红。
+describe("降级信号作用域（PLAN-WIKI-DEGRADED-SCOPE tripwire）", () => {
+  const source = readFileSync(new URL("./other.ts", import.meta.url), "utf8");
+  const mediaSource = readFileSync(new URL("./media.ts", import.meta.url), "utf8");
+  // 先剥注释再扫：解释性注释里会引用旧名字（迁移说明），那是给人看的不是代码
+  const code = source.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^[^\S\n]*\/\/.*$/gm, "");
+  const mediaCode = mediaSource.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^[^\S\n]*\/\/.*$/gm, "");
+
+  it("模块级 wikiDegraded 全局布尔不再存在", () => {
+    expect(code).not.toMatch(/let\s+wikiDegraded\b/);
+    expect(code).not.toMatch(/export function resetWikiDegraded/);
+    expect(code).not.toMatch(/export function wikiWasDegraded/);
+    expect(code).not.toMatch(/export function noteWikiDegraded/);
+  });
+
+  it("media.ts 不再读全局降级标记，改用逐条探针的判决", () => {
+    expect(mediaCode).not.toMatch(/resetWikiDegraded|wikiWasDegraded|noteWikiDegraded/);
+    expect(mediaCode).toMatch(/const probe = newWikiProbe\(\);/);
+    expect(mediaCode).toMatch(/wikiProbeVerdict\(probe\)/);
+  });
+
+  it("判据方向是「有过一次答复 ⇒ absent」而不是「有过失败 ⇒ throttled」", () => {
+    const verdict = source.match(
+      /export function wikiProbeVerdict\(probe: WikiProbe\): "absent" \| "throttled" \{\s*return ([^;]+);/,
+    );
+    expect(verdict, "找不到 wikiProbeVerdict 的返回表达式").toBeTruthy();
+    // 源码里用的是双引号，别在断言里写单引号（prettier 不会改字符串内容）
+    expect(verdict![1].replace(/\s/g, "")).toBe('probe.ok>0?"absent":"throttled"');
+  });
+
+  it("**每一处维基请求都记账**（计划风险 R1：漏传 probe = 那一档的失败不算数）", () => {
+    // wikiJson 的每一个调用点都必须把 probe 传下去。计数式断言：漏一处就少一个。
+    // 基线 5 处是 other.ts 内的直接调用点：wikiFileThumbUrls / wikiSearchOnce ×2
+    // / wikiTitlePages / wikiEnTitle / wikiPageImageAny。硬编码 5 而不是「≥N」：
+    // 将来有人**新增**一个 wikiJson 调用点却忘了传 probe 时，这条必须红。
+    const wikiJsonCalls = code.match(/await wikiJson\(/g) ?? [];
+    const wikiJsonWithProbe = code.match(/await wikiJson\([^;]*?, probe\)/g) ?? [];
+    expect(wikiJsonCalls).toHaveLength(5);
+    expect(wikiJsonWithProbe).toHaveLength(wikiJsonCalls.length);
+    // 判决链的四个出口必须接收调用方传进来的探针
+    for (const call of [
+      /resolveOtherCover\(title, english, year, probe\)/,
+      /wikiEnTitle\(title, probe\)/,
+      /wikiPageImageAny\("zh", title, prefer, probe\)/,
+      /wikiPageImageAny\("en", enTitle, prefer, probe\)/,
+    ]) {
+      expect(mediaCode, `media.ts 的判决出口漏传 probe：${call}`).toMatch(call);
+    }
+    // 第 5 档自带 fetch，也必须记账（漏掉它 = 「前 4 档成功、第 5 档超时」被错判）
+    expect(mediaCode).toMatch(/if \(probe\) \{[\s\S]*?probe\.ok\+\+;/);
+    expect(mediaCode).toMatch(/probe\.failed\+\+;\s*else probe\.ok\+\+;/);
   });
 });
 

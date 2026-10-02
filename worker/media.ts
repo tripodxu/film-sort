@@ -4,14 +4,15 @@ import { fetchBounded, parseAllowedUrl, readBoundedText, type OutboundPolicy } f
 import { generationOf, registerPurger } from "./cachePurge";
 import { posterKeySegment, posterMediaKey } from "../shared/posterKey";
 import {
+  newWikiProbe,
   otherDetail,
-  resetWikiDegraded,
   resolveOtherCover,
   toSimplified,
   wikiEnTitle,
   wikiFileThumbUrls,
   wikiPageImageAny,
-  wikiWasDegraded,
+  wikiProbeVerdict,
+  type WikiProbe,
 } from "./other";
 
 export interface DoubanWork {
@@ -1414,12 +1415,21 @@ async function queryWikiImages(
   type?: "movie" | "book" | "music",
   year?: string,
   requireTitleMatch?: { title: string; english: string },
+  probe?: WikiProbe,
 ): Promise<string[]> {
   try {
     const response = await fetch(`https://${lang}.wikipedia.org/w/api.php?${params}`, {
       headers: { "user-agent": USER_AGENTS[0], accept: "application/json" },
       signal: AbortSignal.timeout(8000),
     });
+    // 这一档自带 fetch（不走 other.ts 的 wikiJson），所以**它自己也要记账**：
+    // 漏掉它 = 「第 5 档全超时但前 4 档成功」会被错判成 throttled。
+    if (probe) {
+      if (!response.ok) {
+        if (response.status === 429 || response.status >= 500) probe.failed++;
+        else probe.ok++;
+      } else probe.ok++;
+    }
     if (!response.ok) return [];
     const data = (await response.json()) as { query?: { pages?: Record<string, WikiImagePage> } };
     const pages = Object.values(data.query?.pages ?? {});
@@ -1428,6 +1438,7 @@ async function queryWikiImages(
     const fileUrls = await wikiFileThumbUrls(
       lang,
       pages.map((page) => (page.pageprops ?? {}).page_image ?? ""),
+      probe ?? newWikiProbe(),
     );
     return (
       pages
@@ -1464,6 +1475,7 @@ async function searchWikiPoster(
   /** 「其他」维度专用：命中这些标题之一的条目才可取图（标题闸门）。
    *  不传 = 旧行为（只做包含匹配），movie/book/music 维度沿用旧行为。 */
   requireTitleMatch?: { title: string; english: string },
+  probe?: WikiProbe,
 ): Promise<string[]> {
   const queries = [title, english].map((value) => value.trim()).filter(Boolean);
   for (const lang of ["zh", "en"] as const) {
@@ -1497,6 +1509,7 @@ async function searchWikiPoster(
       type,
       year ? String(year) : undefined,
       requireTitleMatch,
+      probe,
     );
     if (exact.length) return exact;
 
@@ -1525,6 +1538,7 @@ async function searchWikiPoster(
         type,
         year ? String(year) : undefined,
         requireTitleMatch,
+        probe,
       );
       if (found.length) return found;
     }
@@ -1706,22 +1720,25 @@ async function computePosters(
     // ⑤ searchWikiPoster 评分匹配（pageimages 自由图：名画/摄影/公共版权作品）。
     //    type 必须以 undefined 参与评分——TYPE_WORDS 无 other 词表，带着
     //    "other" 时 declareType 推断出的 movie/book/music 会误杀正确条目。
-    resetWikiDegraded();
+    // 上游健康逐条记账（迭代 8/20）：这个探针只属于**本条作品**，
+    // 不再是模块级全局 ⇒ 并发批次之间不会互相染色
+    // （2026-10-02 实测「日常幻想」单发 absent、同批 throttled、下一轮同批 absent）。
+    const probe = newWikiProbe();
     const detailCover = await otherDetail(title, year).catch(() => null);
     if (detailCover?.poster_url) return { urls: [detailCover.poster_url], outcome: "found" };
-    const gameCover = await resolveOtherCover(title, english, year);
+    const gameCover = await resolveOtherCover(title, english, year, probe);
     if (gameCover) return { urls: [gameCover], outcome: "found" };
     // 简繁变体会让标题评分失败（用户「蒙娜丽莎」vs 条目「蒙娜麗莎」），
     // langlinks 英文标题同时服务 en 匹配与文件名优选
-    const enTitle = await wikiEnTitle(title);
+    const enTitle = await wikiEnTitle(title, probe);
     const prefer = enTitle ? [title, enTitle] : [title];
     // en 条目主图直取先于 en 评分匹配：pageimages 默认 free 档下，en 的
     // 「相关自由图」（塞尔达实测命中系列 logo svg）会抢在 infobox 封面前，
     // 而非自由封面（作品本体）只能从 images→imageinfo 直取拿到
-    const directZh = await wikiPageImageAny("zh", title, prefer);
+    const directZh = await wikiPageImageAny("zh", title, prefer, probe);
     if (directZh) return { urls: [directZh], outcome: "found" };
     if (enTitle) {
-      const directEn = await wikiPageImageAny("en", enTitle, prefer);
+      const directEn = await wikiPageImageAny("en", enTitle, prefer, probe);
       if (directEn) return { urls: [directEn], outcome: "found" };
     }
     // ⑤ searchWikiPoster 只在「英文标题与 zh 条目对应得上」时才跑。
@@ -1733,14 +1750,24 @@ async function computePosters(
     // 覆盖条件由 wikiTitleMatchesTitle 保证：en 条目名（换算成 zh 对应名后）
     // 必须与用户标题吻合，或精确命中英文标题本身。
     const wiki = enTitle
-      ? await searchWikiPoster(enTitle, english || enTitle, undefined, year, { title, english })
+      ? await searchWikiPoster(
+          enTitle,
+          english || enTitle,
+          undefined,
+          year,
+          { title, english },
+          probe,
+        )
       : [];
     if (wiki.length) return { urls: wiki, outcome: "found" };
     // otherDetail 已作为第一档跑过（有详情但没封面时下面几档补图），
     // 兜底链全部跑完仍无图就认缺——**宁可不返图也不返错图**。
-    // 但如果这一轮维基请求本身出了故障（超时/限流），那是瞬时失败：
+    // 但如果这一轮**一次都没问到**维基（429/5xx/超时），那是瞬时失败：
     // 记成 absent 会被 24 小时负缓存固化成空白，用户刷新多少次都不再重试。
-    return { urls: [], outcome: throttled || wikiWasDegraded() ? "throttled" : "absent" };
+    // 判定方向是「**有过一次答复** ⇒ absent」而不是「有过一次失败 ⇒ throttled」：
+    // 兜底链有 5 档串行，若第 1 档成功、第 5 档超时，这一条其实已经用掉了
+    // 前 4 档的答复，应当按「确实没有」记账。
+    return { urls: [], outcome: throttled ? "throttled" : wikiProbeVerdict(probe) };
   } else {
     const [suggestion, imdb, search] = await Promise.allSettled([
       doubanSuggest(title),
