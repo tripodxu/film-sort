@@ -148,6 +148,10 @@
 - **4.61 填进去的形状和读出来的形状不一致，最强的静态检查也看不见** —— `fillArticleImageNames` 把 `page.images` 写成**裸字符串数组**，而 `articleImageNames` / `wikiPageImageAny` 按 **`{title}` 对象**读。两边各自 `as WikiPage & { images?: Array<{title?: string}> }` cast 成自己那套类型 ⇒ **`tsc` 零报错、69 条测试全绿、线上静默取不到图**。这是 4.51 的反面：**4.51 是「我以为的结构没 dump 看过」，这里是「结构对了但形状转述时变了」**。判据：新写的测试必须**让被测的填充器真的跑一次**——原先那条用例把 `images` 直接挂在 fixture 上，恰好绕过了出问题的那一层，于是它测的不是被测代码。配套：补一条专门走填充路径的用例，并在回填处留注释写明「存回 api 的形状 `{title}`，不是裸字符串」——这个不变量离代码太远，注释是唯一的绑定。
 - **4.62 判「这不是作品封面」时，别用尺寸，用文件名** —— 直觉是「icon 封面是正方形」。实测 `Animal_Crossing_New_Horizons.png` 只有 **248×402**，比 `Monument_Valley_icon_unrounded.jpg` 的 316×316 **更窄**；且正确封面出 `utm_content=thumbnail_unscaled` 是常态 ⇒ **任何宽高规则都会误杀当前正确的封面**。文件名侧则干净：`icon|logo|logotype|wordmark|banner|avatar|flag|placeholder|mascot|edit|symbol|star full` 在四个样本页里命中全部非作品图、**零个作品图**（含 `Monument Valley, Utah, USA (23611451292).jpg` 这类来自 Commons 但完全正确的文件）。**但要把「判掉」和「回退」分开验证**：实测 `纪念碑谷 (游戏)` 的 `thumbnail`/`original`/`pageimages` **三者全空**（app 图标是非自由文件），只做「不采用」会把「错图」换成「没图」。⇒ **「回退到下一档」必须验证那一档真有东西。**
 - **4.63 fixture 的路由顺序有语义，命中第一个匹配** —— `worker/other.test.ts` 的 `installFetch` 用 `routes.find(...)`，而 `/titles=纪念碑谷/` 会**前缀匹配**吃掉 `titles=纪念碑谷 (游戏)&prop=images` 那次请求（该请求的 `titles` 是归一后的页面名）。结果：填充器收到一个没有 `images` 的页面，**看起来像修复没生效**。本轮因此白查三轮。同族 4.51：**fixture 与真实响应的偏差会以「代码没修好」的形态出现**。配套：`installFetch` 的路由按「越具体越靠前」排，并在大 fixture 上留注释写明为什么这条必须在前。
+- **4.64 JSDoc 里写路径通配符会提前终止整个文件的解析** —— 在块注释里写 `` `/api/*/detail` ``，其中的 `*/` 立刻闭合注释，剩下的正文被当代码解析 ⇒ esbuild 报 `Unterminated string literal`，**而报错位置在文件末行**（离真错 180 行以上），完全指不到地方。定位法：逐行前缀二分，对每个前缀跑 `esbuild.transform`，找**第一条硬错误**（本例报 `Expected "*/" to terminate multi-line comment` 于第 7 行）。通则：**「报错行号离错误很远」的第一反应是「我写的注释里有注释终止符」**，而不是去查语法树完整性；写路由通配符改用 `api/<kind>/detail` 或加引号说明。
+- **4.65 判空必须在 stringify 之前，这两步的顺序是语义不是风格** —— 我把旧 `.filter(([, value]) => value && …)` 翻译成「先 `String(value)` 再 `!text.trim()` 判空」，看着更统一，结果 `country: null` 变成界面上可见的「地区: null」（`String(null) === "null"`，`String(undefined) === "undefined"`，`[].join() === ""` 三种「缺失」都长得像值）。修法：新增 `isPresent(value)` 在 `stringifyValue()` 之前判，并**数组元素也要滤**——`["", null, "徐凯鑫"]` 直接 join 出 `、null、徐凯鑫`（前导顿号 + 字面量 null）。配套：`isPresent` 里 `0` 与 `false` 必须算**存在**，它们是有意义的值不是缺失。
+- **4.66 翻译后的标签会撞车，`key` 与 `label` 必须是两个字段** —— `author` 译成「作者」，而书籍接口的原始键就叫 `作者`（保底照印）⇒ 两个 `<dt>` 文本相同，`key={field.label}` 触发 React 重复 key，**错位复用 DOM**（表现为字段值串行、点错行）。这类撞车**只在保留「未知键保底」的设计下才可能出现**，也就是自己引入的。修法：`DetailField.key` 用**原始键名**（唯一），`label` 只给人看。通则：**任何「标签经过翻译的列表」，渲染用的 key 一律回原始标识**。
+- **4.67 可访问性属性是「声明」，不是「行为」** —— `role="dialog" aria-modal="true"` 写了两行，读屏软件据此宣布「这是一个模态」，但它**不产生任何行为**：焦点仍在触发按钮上、Tab 会走到弹窗背后的页面、Esc 什么也不会发生。写这两行的人以为自己在写「可访问的弹窗」，实际写的是「**可访问的弹窗的自我声明**」。本仓 `src/components/FocusTrap.tsx` 已实现 Esc / Tab 循环 / 首焦点三件事，而 `ArtworkDetail` 是全站**唯一**没接的模态（另两处 `src/App.tsx:2278` / `src/components/AiConfigDialog.tsx:166` 已接）⇒ 这不是「缺一个功能」，是「**已经有的东西漏接了**」。判据：**看到一个 a11y 属性时追问「它背后是谁在干活」**，答不上来它就是一句空话——而且是最容易骗过 review 的那种空话。同理「零浏览器可验」时要拆成「接线形状 ✅（离线可判）」+「行为 ❌（留红）」两栏，**不许合并成一行 ✅**。
 
 
 - **4.14 emoji 要 `aria-hidden`**，图标统一收编 lucide 并带 `aria-label` / `aria-pressed`。
@@ -231,3 +235,8 @@
 | icon 封面是正方形 ⇒ 用宽高判 | 正确封面 248×402 比 316×316 的 icon 更窄；`thumbnail_unscaled` 对正确封面是常态（4.62） |
 | 「判掉图标」⇒ 下一档总有东西 | 该页 `thumbnail`/`original`/`pageimages` 三者全空，「不采用」会把错图换成没图（4.62） |
 | 线上没变化 = 修复没生效 | 先排 fixture 路由顺序：`/titles=X/` 会前缀吃掉 `titles=X (…)&prop=images`（4.63） |
+| 测试文件报语法错、位置在文件末行 | 块注释里写了含 `*/` 的路径通配符（`/api/*/detail`），注释提前闭合（4.64）。逐行前缀二分跑 `esbuild.transform` 找第一条硬错误 |
+| 「先 `String(v)` 再判空」比「先判空再 `String(v)`」更统一 | `String(null)` 是 `"null"`：缺失会以字面量漏到界面上；数组还要逐元素滤（4.65） |
+| 列表渲染用 `key={字段.label}` 就行 | 翻译后标签会撞车（`author`→「作者」与原始键「作者」），React 重复 key 错位复用 DOM；`key` 必须是原始标识（4.66） |
+| 写了 `role="dialog" aria-modal="true"` 就是可访问弹窗了 | 那是**声明**不是行为：焦点、Tab 循环、Esc 都要组件来实现，仓里 `FocusTrap` 已有，漏接的才是真缺陷（4.67） |
+| 无浏览器可验 ⇒ 这一栏标 ✅ | 拆成「接线形状 ✅（离线可判）」+「行为 ❌（留红）」两栏，合并成一行 ✅ 是把没测的说成测过了（4.67） |

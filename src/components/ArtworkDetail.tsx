@@ -3,6 +3,8 @@ import { Music2, Play, X } from "lucide-react";
 import { Poster, rememberPickedCover } from "./Poster";
 import { CoverChoice } from "./CoverChoice";
 import { choiceAppliesToKind } from "../lib/coverChoice";
+import { detailFields, splitDetailFields } from "../lib/detailFields";
+import { FocusTrap } from "./FocusTrap";
 import { IconButton } from "../views/IconButton";
 import {
   gdPlay,
@@ -118,146 +120,165 @@ export function ArtworkDetail({
     }
   }
   return (
-    <div className="modal-backdrop" style={{ zIndex: 60 }} onClick={onClose}>
-      <section
-        className="detail-dialog"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="detail-heading"
-        onClick={(event) => event.stopPropagation()}
-      >
-        <div className="section-heading">
-          <div>
-            <span className="eyebrow">
-              {label(detail.kind)} / {t("作品详情", "WORK DETAIL")}
-            </span>
-            <h2 id="detail-heading">{detail.work.title}</h2>
+    // 焦点与键盘：role="dialog" + aria-modal 只是给 AT 的一行**声明**，
+    // 声明本身不产生行为——焦点仍留在打开它的那个按钮上、Tab 会走到弹窗背后去、
+    // 读屏用户按 Esc 什么也不会发生。FocusTrap 把 Esc / Tab 循环 / 首焦点都实现了，
+    // 这里只是**接上**（全站唯一漏接的模态，PLAN-DETAIL-DIALOG-A11Y §3.1）。
+    <FocusTrap onEscape={onClose}>
+      <div className="modal-backdrop" style={{ zIndex: 60 }} onClick={onClose}>
+        <section
+          className="detail-dialog"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="detail-heading"
+          onClick={(event) => event.stopPropagation()}
+        >
+          <div className="section-heading">
+            <div>
+              <span className="eyebrow">
+                {label(detail.kind)} / {t("作品详情", "WORK DETAIL")}
+              </span>
+              <h2 id="detail-heading">{detail.work.title}</h2>
+            </div>
+            <IconButton title={t("关闭", "Close")} onClick={onClose}>
+              <X size={18} />
+            </IconButton>
           </div>
-          <IconButton title={t("关闭", "Close")} onClick={onClose}>
-            <X size={18} />
-          </IconButton>
-        </div>
-        <div className="detail-body">
-          <Poster work={detail.work} kind={detail.kind} large />
-          <div className="detail-copy">
-            {choiceAppliesToKind(detail.kind) && onCoverChange && (
-              <CoverChoice
-                title={detail.work.title}
-                english={detail.work.subtitle}
-                year={detail.work.year}
-                t={t}
-                onPicked={(url, wikiTitle) => {
-                  // 先记事实，再走视觉：记忆是这一页所有同名作品的真相来源，
-                  // 而 onPicked 只 patch 当前弹窗那一个 work 对象（PLAN-COVER-MEMORY）。
-                  rememberPickedCover(detail.work, detail.kind, url, wikiTitle);
-                  onCoverChange(url);
-                }}
-              />
-            )}
-            {isMusic && (
-              <div className="music-preview">
-                <button
-                  className="button secondary"
-                  disabled={playBusy}
-                  onClick={() => void playMusic()}
-                >
-                  <Play size={15} />
-                  {playBusy ? t("准备试听…", "Preparing…") : t("试听", "Listen")}
-                </button>
-                <button
-                  className="button secondary"
-                  disabled={lyricBusy}
-                  onClick={() => void loadLyric()}
-                >
-                  <Music2 size={15} />
-                  {lyricBusy
-                    ? t("加载歌词…", "Loading…")
-                    : lyrics === null
-                      ? t("歌词", "Lyrics")
-                      : t("收起歌词", "Hide lyrics")}
-                </button>
-                {playUrl && <audio controls autoPlay src={playUrl} />}
-                {playError && <small className="music-panel-msg">{playError}</small>}
-                {isCover && playUrl && (
-                  <small className="music-panel-msg" style={{ color: "var(--warn)" }}>
-                    {t(
-                      "未找到原版，仅提供翻唱试听",
-                      "Original not found — playing a cover version",
-                    )}
-                  </small>
-                )}
-                {lyricError && <small className="music-panel-msg">{lyricError}</small>}
-                {lyrics && (
-                  <div className="music-lyric">
-                    {buildLyricLines(lyrics.lyric, lyrics.tlyric).map((line, index) => (
-                      <p key={index} className="music-lyric-line">
-                        {line.text ? <span>{line.text}</span> : null}
-                        {line.translation ? (
-                          <small className="music-lyric-translation">{line.translation}</small>
-                        ) : null}
-                      </p>
-                    ))}
-                  </div>
-                )}
-              </div>
-            )}
-            {detail.loading ? (
-              <p className="empty-state">
-                {isMusic
-                  ? t("正在读取歌曲信息…", "Loading song details…")
-                  : t("正在读取作品信息…", "Loading work details…")}
-              </p>
-            ) : detail.data ? (
-              <>
-                <div className="detail-meta">
-                  <span>{detail.work.creator ?? ""}</span>
-                  <span>{detail.work.year ?? ""}</span>
-                  <span>{String(detail.data.rating ?? "")}</span>
+          <div className="detail-body">
+            <Poster work={detail.work} kind={detail.kind} large />
+            <div className="detail-copy">
+              {choiceAppliesToKind(detail.kind) && onCoverChange && (
+                <CoverChoice
+                  title={detail.work.title}
+                  english={detail.work.subtitle}
+                  year={detail.work.year}
+                  t={t}
+                  onPicked={(url, wikiTitle) => {
+                    // 先记事实，再走视觉：记忆是这一页所有同名作品的真相来源，
+                    // 而 onPicked 只 patch 当前弹窗那一个 work 对象（PLAN-COVER-MEMORY）。
+                    rememberPickedCover(detail.work, detail.kind, url, wikiTitle);
+                    onCoverChange(url);
+                  }}
+                />
+              )}
+              {isMusic && (
+                <div className="music-preview">
+                  <button
+                    className="button secondary"
+                    disabled={playBusy}
+                    onClick={() => void playMusic()}
+                  >
+                    <Play size={15} />
+                    {playBusy ? t("准备试听…", "Preparing…") : t("试听", "Listen")}
+                  </button>
+                  <button
+                    className="button secondary"
+                    disabled={lyricBusy}
+                    onClick={() => void loadLyric()}
+                  >
+                    <Music2 size={15} />
+                    {lyricBusy
+                      ? t("加载歌词…", "Loading…")
+                      : lyrics === null
+                        ? t("歌词", "Lyrics")
+                        : t("收起歌词", "Hide lyrics")}
+                  </button>
+                  {playUrl && (
+                    // 无障碍名称：裸 <audio> 对读屏用户只是一个「控件」，
+                    // 播的是谁的歌、能不能听，全靠这一个 label 传达（PLAN-DETAIL-DIALOG-A11Y §3.4）。
+                    <audio
+                      controls
+                      autoPlay
+                      src={playUrl}
+                      aria-label={t("歌曲试听", "Audio preview")}
+                    />
+                  )}
+                  {playError && <small className="music-panel-msg">{playError}</small>}
+                  {isCover && playUrl && (
+                    <small className="music-panel-msg" style={{ color: "var(--warn)" }}>
+                      {t(
+                        "未找到原版，仅提供翻唱试听",
+                        "Original not found — playing a cover version",
+                      )}
+                    </small>
+                  )}
+                  {lyricError && <small className="music-panel-msg">{lyricError}</small>}
+                  {lyrics && (
+                    <div className="music-lyric">
+                      {buildLyricLines(lyrics.lyric, lyrics.tlyric).map((line, index) => (
+                        <p key={index} className="music-lyric-line">
+                          {line.text ? <span>{line.text}</span> : null}
+                          {line.translation ? (
+                            <small className="music-lyric-translation">{line.translation}</small>
+                          ) : null}
+                        </p>
+                      ))}
+                    </div>
+                  )}
                 </div>
-                {typeof detail.data.content_intro === "string" && detail.data.content_intro ? (
-                  <div className="detail-synopsis">
-                    <h3>{t("简介", "Synopsis")}</h3>
-                    <p>{detail.data.content_intro}</p>
-                    {typeof detail.data.content_source === "string" && (
-                      <span className="detail-source">— {detail.data.content_source}</span>
-                    )}
+              )}
+              {detail.loading ? (
+                <p className="empty-state">
+                  {isMusic
+                    ? t("正在读取歌曲信息…", "Loading song details…")
+                    : t("正在读取作品信息…", "Loading work details…")}
+                </p>
+              ) : detail.data ? (
+                <>
+                  <div className="detail-meta">
+                    <span>{detail.work.creator ?? ""}</span>
+                    <span>{detail.work.year ?? ""}</span>
+                    <span>{String(detail.data.rating ?? "")}</span>
                   </div>
-                ) : (
-                  <p style={{ fontSize: 13, color: "var(--muted)", marginTop: 12 }}>
-                    {t("暂无简介，数据来源暂未收录该作品。", "No synopsis available yet.")}
-                  </p>
-                )}
-                <dl>
-                  {Object.entries(detail.data)
-                    .filter(
-                      ([key, value]) =>
-                        value &&
-                        ![
-                          "title",
-                          "pic",
-                          "rating",
-                          "imgs",
-                          "content_intro",
-                          "content_source",
-                        ].includes(key),
-                    )
-                    .slice(0, 8)
-                    .map(([key, value]) => (
-                      <div key={key}>
-                        <dt>{key}</dt>
-                        <dd>{Array.isArray(value) ? value.join("、") : String(value)}</dd>
-                      </div>
-                    ))}
-                </dl>
-              </>
-            ) : (
-              <p className="empty-state">
-                {t("暂时没有更多资料，仍可保留这件作品。", "No additional details were found.")}
-              </p>
-            )}
+                  {typeof detail.data.content_intro === "string" && detail.data.content_intro ? (
+                    <div className="detail-synopsis">
+                      <h3>{t("简介", "Synopsis")}</h3>
+                      <p>{detail.data.content_intro}</p>
+                      {typeof detail.data.content_source === "string" && (
+                        <span className="detail-source">— {detail.data.content_source}</span>
+                      )}
+                    </div>
+                  ) : (
+                    <p style={{ fontSize: 13, color: "var(--muted)", marginTop: 12 }}>
+                      {t("暂无简介，数据来源暂未收录该作品。", "No synopsis available yet.")}
+                    </p>
+                  )}
+                  {(() => {
+                    // 「后端返回了什么」不等于「界面该显示什么」：API 有内部键
+                    // （id / matchedTitle）、有裸 URL（poster_url / detail_url）、
+                    // 有长文本（author_intro 实测 389 字符）。detailFields 负责翻译，
+                    // splitDetailFields 负责把长文本摘出来走块级排版
+                    // （PLAN-DETAIL-DIALOG-A11Y §3.2 / §3.3）。
+                    const { rows, blocks } = splitDetailFields(detailFields(detail.data, t));
+                    return (
+                      <>
+                        <dl>
+                          {rows.map((field) => (
+                            <div key={field.key}>
+                              <dt>{field.label}</dt>
+                              <dd>{field.value}</dd>
+                            </div>
+                          ))}
+                        </dl>
+                        {blocks.map((field) => (
+                          <div className="detail-synopsis" key={field.key}>
+                            <h3>{field.label}</h3>
+                            <p>{field.value}</p>
+                          </div>
+                        ))}
+                      </>
+                    );
+                  })()}
+                </>
+              ) : (
+                <p className="empty-state">
+                  {t("暂时没有更多资料，仍可保留这件作品。", "No additional details were found.")}
+                </p>
+              )}
+            </div>
           </div>
-        </div>
-      </section>
-    </div>
+        </section>
+      </div>
+    </FocusTrap>
   );
 }

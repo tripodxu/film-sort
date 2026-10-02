@@ -725,3 +725,91 @@ describe("空封面三态绊线（PLAN-EMPTY-COVER-STATE）", () => {
     expect(posterCode).not.toMatch(/t:\s*\(zh:\s*string,\s*en:\s*string\)\s*=>\s*string/);
   });
 });
+
+/**
+ * 作品详情弹窗的可访问性与字段翻译（PLAN-DETAIL-DIALOG-A11Y）。
+ *
+ * 这份断言守两件相邻的事：
+ * 1. `role="dialog" aria-modal="true"` 是写给 AT 的一行**声明**，声明不产生行为。
+ *    FocusTrap 已经把 Esc / Tab 循环 / 首焦点都实现了，这个弹窗是全站唯一
+ *    漏接的模态——接线一旦被摘掉，键盘用户就再也关不掉它。
+ * 2. 「后端返回了什么」不等于「界面该显示什么」。2026-10-02 线上实测，这个弹窗
+ *    把 44 字符的内部缓存键、150 字符的裸 URL、389 字符的作者生平一起印成了表格行。
+ */
+describe("详情弹窗可访问性与字段翻译（PLAN-DETAIL-DIALOG-A11Y）", () => {
+  const detail = readFileSync("src/components/ArtworkDetail.tsx", "utf8");
+  const lib = readFileSync("src/lib/detailFields.ts", "utf8");
+  const stripComments = (source: string) =>
+    source.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^[^\S\n]*\/\/.*$/gm, "");
+  // 一律扫剥掉注释后的源码：我写的解释性注释本身会把断言喂绿。
+  const code = stripComments(detail);
+
+  it("焦点与键盘：模态必须真的接上 FocusTrap（不是只声明 role=dialog）", () => {
+    // Esc 能关、Tab 出不去、焦点有落点——这三件事 FocusTrap 全都实现了。
+    expect(code).toMatch(/<FocusTrap onEscape=\{onClose\}>/);
+    // FocusTrap 必须在 <section role="dialog"> **外层**，包住整个弹窗；
+    // 写在里层的话背景上的元素仍可被 Tab 到。
+    const trap = code.indexOf("<FocusTrap onEscape={onClose}>");
+    const dialog = code.indexOf('role="dialog"');
+    expect(trap).toBeGreaterThan(-1);
+    expect(dialog).toBeGreaterThan(trap);
+    // 反向断言：声明不许单独存在（这正是本轮之前的状态）。
+    expect(code).not.toMatch(/^\s*<div className="modal-backdrop"[\s\S]{0,80}role="dialog"/m);
+  });
+
+  it("<audio> 必须有可访问名称（裸控件对读屏用户只是一个「控件」）", () => {
+    expect(code).toMatch(/<audio[\s\S]{0,200}aria-label=\{t\(/);
+  });
+
+  it("表格不再直接打印后端键名：走 detailFields 翻译层", () => {
+    // 反向断言是这个断言的主体：老实现 `Object.entries(detail.data)` + `slice(0, 8)`
+    // 一旦回来，44 字符内部键和 150 字符裸 URL 就又回到界面上了。
+    expect(code).not.toContain("Object.entries(detail.data)");
+    expect(code).not.toContain("slice(0, 8)");
+    expect(code).toContain("splitDetailFields(detailFields(detail.data, t))");
+  });
+
+  it("内部键有逐条理由，且 title 不许被弄丢（旧实现也在 SKIP 里）", () => {
+    // 用「键出现在 INTERNAL_KEYS 的声明块里」而不是「键出现在整个文件里」断言：
+    // 注释里逐条解释理由是这份清单的价值所在，不能因为剥注释就丢掉覆盖。
+    const block = lib.slice(
+      lib.indexOf("const INTERNAL_KEYS"),
+      lib.indexOf("]);", lib.indexOf("const INTERNAL_KEYS")),
+    );
+    for (const key of [
+      "id",
+      "title",
+      "poster_url",
+      "detail_url",
+      "matchedTitle",
+      "content_intro",
+      "content_source",
+      "rating",
+    ]) {
+      expect(block).toContain(`"${key}"`);
+    }
+    // 每个内部键都必须有理由注释，否则下一个人会顺手把它删掉。
+    // 数的是**键**不是理由条数：`pic` / `imgs` 共用一条理由是合理的合并。
+    const reasonLines = (lib.match(/ \* - `/g) ?? []).length;
+    const keyLines = (block.match(/^ {2}"[a-zA-Z_]+",$/gm) ?? []).length;
+    expect(keyLines).toBeGreaterThanOrEqual(9);
+    expect(reasonLines).toBeGreaterThanOrEqual(7);
+  });
+
+  it("判空在 stringify 之前（String(null) 是 'null'，先转再判会漏到界面上）", () => {
+    // 本模块第一版真实踩过：先 stringify 再 `!text.trim()` 判空，
+    // 结果 null / undefined 以字面量出现在详情表格里。
+    expect(code).not.toContain("Object.entries(detail.data)");
+    expect(lib).toContain("if (!isPresent(value)) continue;");
+    expect(lib).toMatch(/if \(value === null \|\| value === undefined\) return false;/);
+  });
+
+  it("纪律：不许自己重写第二份焦点陷阱，也不许为了「统一」删掉已有组件", () => {
+    // 全站三处已有调用点（App 引导、AI 配置、主题导入）都依赖同一份实现，
+    // 复制第二份会让三处行为开始漂移。
+    const trap = readFileSync("src/components/FocusTrap.tsx", "utf8");
+    expect(trap).toContain('e.key === "Escape"');
+    expect(trap).toMatch(/document\.activeElement === last/);
+    expect(detail).toContain('import { FocusTrap } from "./FocusTrap";');
+  });
+});

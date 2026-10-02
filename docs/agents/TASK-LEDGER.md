@@ -10,6 +10,61 @@
 
 ## 进行中 / 最近
 
+### T-20261002-12 · 迭代 11/20（前端类）· 作品详情弹窗接上焦点陷阱 + 字段翻译层（后端键不再直接印给人看）
+
+**状态**：✅ 完成 —— 门禁 5/5（`tsc -b` exit 0 ｜ lint **29 problems (0 errors, 29 warnings)** = 基线 ｜ format:check All matched files ｜ vitest **701 passed / 9 skipped (710)**（基线 674 ⇒ **+27**，47 files + 1 skipped）｜ build 通过）｜ 红队 ×4 全红 ｜ 线上 Version **`bcbd52d4-5054-42df-a8fb-885bcd046597`**，A3/A8 ✅ 线上四类响应键覆盖实测通过。
+
+**任务类型**：§2 前端打磨（ROADMAP §二 P2 待办池 A13 / A12 / E1 三项合并，全落 `src/components/ArtworkDetail.tsx`）。轮换位：10 优化 → **11 前端**。题源由用户 m05616「继续，做到优化轮次停止」排到本轮。
+
+**最小上下文**（接手需读的四个文件）：
+`src/components/ArtworkDetail.tsx`（唯一改动点）｜ `src/lib/detailFields.ts`（**新建**纯函数翻译层）｜ `src/components/FocusTrap.tsx`（**已有**组件，本轮只是接线，零改动）｜ `src/ui-fixes.test.ts`（接线绊线所在，用既有 `stripComments` 先剥注释再扫源码）。
+
+**改了什么**：
+1. `ArtworkDetail.tsx` 返回根元素由 `<div className="modal-backdrop">` 改为 `<FocusTrap onEscape={onClose}>` **包住** backdrop 与 `<section role="dialog" aria-modal="true">`（FocusTrap 必须在**外层**，写里层则背景元素仍可被 Tab 到）。
+2. `<audio controls autoPlay src={playUrl} />` 加 `aria-label={t("歌曲试听", "Audio preview")}`。
+3. `<dl>` 改用 `splitDetailFields(detailFields(detail.data, t))`：`rows` 出表格行、**`blocks`（长文本）走既有 `.detail-synopsis` 块级排版**挂在 `<dl>` 之后 ⇒ **`styles.css` 零改动**。
+4. 新建 `src/lib/detailFields.ts`（纯函数，node 环境无 jsdom 才测得了）：`INTERNAL_KEYS`（9 键 / 7 条逐键理由）、`KNOWN_FIELDS`（11 键中英双语，**顺序 = 显示顺序，不跟响应插入序**）、`LONG_VALUE_CHARS = 80`、`isPresent()`（**先判空再 stringify**）、`detailFields(data, t)`、`splitDetailFields(fields)`。
+5. 测试：`src/lib/detailFields.test.ts` **21 例**（四份 fixture 是**线上实录形状**）；`src/ui-fixes.test.ts` 新 `describe("详情弹窗可访问性与字段翻译（PLAN-DETAIL-DIALOG-A11Y）")` **6 例**。
+
+**为什么**（四条，都不是「更好看」）：
+1. `role="dialog" aria-modal="true"` 是写给 AT 的**声明**，声明不产生行为 ⇒ 焦点仍在触发按钮上、Tab 会走到弹窗背后、**Esc 无效**。`ArtworkDetail` 是全站**唯一**没接 `FocusTrap` 的模态（另两处 `src/App.tsx:2278` / `src/components/AiConfigDialog.tsx:166` 已接）。
+2. 旧实现 `Object.entries(detail.data)` **把「后端返回了什么」当成了「界面该显示什么」**，`slice(0, 8)` 是在这层缺失上打的补丁——用一个数字掩盖「从来没选过」，还让顺序跟着响应 JSON 插入序变。
+3. 线上实测（`.tmp/dl11.mjs`）该补丁的代价：`other` 类印出 **44 字符 percent-encoded 内部键 `id`** 与 **150 字符裸 URL `poster_url`**；`book` 类把 **389 字符 `author_intro`** 挤在表格行里；`music` 类印纯内部字段 `matchedTitle`；`movie` 类在中文界面下是一片 `year: 2025`。
+4. 裸 `<audio>` 对读屏用户只是一个没有名字的控件。
+
+**验证状态**：
+- 五道门禁全过（A1 ✅）；vitest **701 passed / 9 skipped (710)**。
+- **红队 ×4 全红**（每次都删字面量，见 `docs/PLAN-DETAIL-DIALOG-A11Y.md` §5.2）：R-1 `<FocusTrap onEscape={onClose}>` → `<div>`（1 failed）｜ R-2 删 `audio` 的 `aria-label`（1 failed）｜ R-3 `splitDetailFields(detailFields(detail.data, t))` → 旧实现 `Object.entries(detail.data).filter(([, v]) => v).slice(0, 8)`（**2 failed**）｜ R-4 `INTERNAL_KEYS` 少 `"matchedTitle",` 一个字符串（1 failed）。R-4 与迭代 9 的空变异 R-5 构成对照：**那次变异没有语义，这次有语义且被咬住**。
+- A3/A8 线上四类响应键覆盖实测（`.tmp/a3v11.mjs`）：`movie` 8 键（排除 3/翻译 5/保底 0）、`book` 20 键（排除 5/翻译 3/保底 12）、`music` 6 键（排除 4/翻译 2/保底 0）、`other` 7 键（排除 6/翻译 1/保底 0）⇒ **「未翻译即未排除」的键为 0**，无键带着字面量 `null` 漏到界面。
+- A6 ✅：`git status --porcelain` 5 个条目全在前端与文档，`src/styles.css` / `worker/` / `shared/` **零条目**；线上 CSS 148114 B。
+- 线上 bundle：411823 B（与本地逐字节相同）、`ce=br` + `public, max-age=31536000, immutable`、`modulepreload` 计数 0；`歌曲试听` / `art-rank:cover-choice` / `other-name|` 三痕迹均 true（迭代 9 未被破坏）。
+
+**实测发现并修掉的真 bug 4 条**（三条来自我自己写的「更干净」的重写）：
+1. **`title` 没搬进 `INTERNAL_KEYS`** —— 重写旧 SKIP 列表时漏了，`other` 类多出一行 `title`。被新测试当场抓住。
+2. **`String(null)` 是 `"null"` ⇒ null/undefined 漏到界面** —— 我把旧 `.filter(([, value]) => value && …)` 翻译成「先 stringify 再 `!text.trim()` 判空」，看着更统一，结果 `country: null` 变成可见的「地区: null」。**判空必须在 stringify 之前**——这两步的顺序是语义，不是风格。修法：新增 `isPresent()` 在 `stringifyValue()` 之前判。
+3. **数组元素未过滤 ⇒ `"、null、徐凯鑫"`** —— `["", null, "徐凯鑫"]` 直接 join 出前导顿号 + 字面量 `null`。修法 `value.filter(isPresent).map(String).join("、")`，并补 `[null, undefined]` 整段为空的用例。
+4. **`label` 当 React key 会撞车** —— `author`→「作者」与原始中文键 `作者`（保底照印）标签相同 ⇒ React 重复 key 错位复用 DOM。**这条只有在保留保底键的设计下才可能出现，是我引入的**。修法：`DetailField.key` 用原始键名，`label` 只给人看；调用点两处 `key={field.label}` → `key={field.key}`。
+- 附带修掉一个测试环境坑：**JSDoc 里写 `/api/*/detail` 会提前终止块注释**，esbuild 报 `Unterminated string literal` 于**文件末行**（离真错 180 行）；定位法＝逐行前缀二分跑 `esbuild.transform` 找第一条硬错误（报 `Expected "*/" to terminate multi-line comment` 于第 7 行）。
+
+**遗留风险 7 条**：
+1. **A4 的浏览器行为与 A7 的界面渲染两栏留红**（未标 ✅）：环境无可驱动浏览器——`npx playwright --version` 有 1.60.0，但 `%LOCALAPPDATA%\ms-playwright` 只有 `chromium_headless_shell-1223` / `chromium-1223` **残留目录、无可执行文件**；本机唯一浏览器是 Edge 且未纳入 Playwright 通道。**同一处连续第三次留红**（迭代 7、9、11）。
+2. **A5 超预算**：实测 **+1325 B**，超 1 KB 预算 325 B，**经复核判定接受**（压回 1 KB 只能删真实字段 = 为数字删功能）。教训：**预算应先量一次空实现的体积，而不是猜**。
+3. **`book` 仍有 12 个保底键未翻译**（`作者`/`译者`/`校注`/`出版社`/`出版年`/`ISBN`/`页数`/`装帧`/`定价`/`丛书`/`dirs`）——它们**本来就是中文键名**（后端如此），非本轮引入；修它要改后端字段名 ⇒ 后续轮的独立题目。
+4. **焦点归还仍未做**：`FocusTrap` 不把焦点还给触发按钮，属**仓级组件语义**，改它影响另两处已有调用点 ⇒ 本轮明确不做。
+5. **`IconButton` 只传 `title` 不传 `aria-label`**（ROADMAP §二 P2 全局项）仍有 20+ 调用点 ⇒ 全局重构，另开一轮。
+6. 线上 `other|纪念碑谷|monument valley|2014|4` 仍返 `Monument_Valley_icon_unrounded.jpg` —— **迭代 10 的 24h 边缘缓存**（PITFALLS 2.21 / 4.51），非回归；本轮**零后端改动**，不做任何缓存动作。
+7. 零迁移：deploy 报 `✅ No migrations to apply!`；`worker/` 与 `shared/` 全程未动。
+
+**下一步 6 条**（优先级序）：
+1. **P0（遗留自迭代 7/9）浏览器 E2E 缺口** —— 已连续三轮卡在同一处（环境无浏览器）。**建议本轮内解决环境**（装 `chromium` 或把 Edge 纳入通道），否则后续所有「视觉/交互类」迭代都只能留红一半。
+2. **P1 `book` 类后端字段名中文化**（12 个中文键 ⇒ 统一英文字段 + i18n 标签），修 A7 的 `book` 分支。
+3. **P1 `IconButton` 全局补 `aria-label`**（20+ 调用点）。
+4. **P2 `FocusTrap` 焦点归还**（仓级语义，影响三处调用点）。
+5. **P2 第 5 档「超时但前 4 档成功 ⇒ absent」运行时用例**（遗留自迭代 8）。
+6. P3 per-user 封面覆盖（新表、scope 大）；`docs/PLAN-OPTIMIZATION-SPRINT.md` Phase 8 PWA、ROADMAP Phase 3/4 仍 ⬜。
+
+---
+
 ### T-20261002-11 · 迭代 10/20（优化类）· 封面文件名判别（infobox 指向 app 图标时改用正文作品图）
 
 **状态**：✅ 完成（门禁 + 红队 ×4 + 线上实测 2026-10-02；**A7 留 ⚠️ 原键受 24h 缓存**，见遗留 ①）
