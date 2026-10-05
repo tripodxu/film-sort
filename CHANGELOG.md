@@ -15,7 +15,8 @@
 
 **测试**：`src/ui-fixes.test.ts` 新增 describe「懒加载失败与迟到响应守卫（回归审查 2026-10）」6 例绊线。
 
-**验证**：门禁 5/5（本地）。**未线上验证**——按规矩不标 ✅。
+**验证**：门禁 5/5（本地），两批共 +10 用例（701 ⇒ **711 passed / 9 skipped (720)**）。
+**线上验证 2026-10-05 ✅（HTTP 层）**：push 触发自动部署后线上冒烟 5/5——主包哈希与本地 dbeae79 构建逐字节同（`index-Bsgh-aaO.js`）、`english` 超长线上 400 `invalid_english`（该字符串仅存在于本批 ⇒ 新代码确认在跑）、正常请求 200 不误伤、新 chunk `immutable` 头在位、HTML 仍 `must-revalidate`。**浏览器行为项留红**（无驱动浏览器，连续第四次）：焦点手感与旧标签页跨部署不白屏需要真浏览器。
 审查同时确认的「没回归」清单：八次封面链迭代的关键机制在 HEAD 全部在位且互相叠加；posterKey 换代边界干净（movie/book/music 逐字节同键，仅 other 换代）；资产缓存 matcher 收得准；fetchBounded/allowedImage/storedItem 白名单无新增绕过。worker 侧另有 3 个结构性风险（`otherDetail` 第一档短路使消歧救援变死代码、`ARTIFACT_FILE_RE` 误杀「标题即敏感词」作品、other 链上游请求量翻倍）**本轮未修**，建议先补线上观测，见台账同日条目。
 
 **低危清单（同日顺手清掉的五项，全部零行为或纯收紧）**

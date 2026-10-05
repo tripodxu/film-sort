@@ -12,7 +12,7 @@
 
 ### T-20261005-01 · 回归审查修复 · 最近 30 次提交整体审查出的 1 高 + 4 中缺陷（前端五处）+ 低危清单五项
 
-**状态**：👀 待审 —— 门禁 5/5 本地全绿（修复批 commit `8e58816`：vitest 707 passed / 9 skipped (716)，基线 701 ⇒ +6；低危批再 +3 用例）；**未到 sort.logicc.top 线上实机验证，不标 ✅**。
+**状态**：👀 待审（HTTP 层线上验证 ✅，浏览器行为项留红）—— 门禁 5/5 本地全绿；修复批 commit `8e58816`（vitest 707，+6）、低危批 `dbeae79`（再 +4 ⇒ **711 passed / 9 skipped (720)**）。**线上验证 2026-10-05**：推送触发自动部署后，`GET /` 引用的主包 `assets/index-Bsgh-aaO.js` 与本地 dbeae79 构建逐字节同哈希，且 `GET /api/other/candidates?english=<121字符>` 线上返回 **400 `invalid_english`**（该字符串仅存在于 dbeae79 ⇒ 前后端新代码确认在跑）；线上冒烟 5/5（english 上限 400 ✓ / 正常请求 200 ✓ / 新 chunk `immutable` 头 ✓ / HTML `must-revalidate` ✓ / 同批 CSS 就位 ✓）。**浏览器行为项留红**（无驱动浏览器，连续第四次）：焦点不被抢回的手感、部署换代旧标签页点齿轮/AI设置/榜单海报不白屏——需要真浏览器。注意：本轮经 push 自动部署，`wrangler deployments list` 仍显示 10-02 的旧 Version（自动部署通道不在本地 wrangler 视图内），验证证据以「bundle 哈希吻合 + invalid_english 探针」为准，下一棒别被旧 Version 迷惑。
 
 **任务类型**：回归审查 + 修复（用户指派「审查最近 30 次提交会不会有回归 → 修复」）。审查用三路并行深读（worker 封面链 / worker 接口与存储 / 前端），范围 `5faea92..HEAD`（30 commits，+10764/−451）。
 
@@ -31,7 +31,7 @@
 **审查确认「没回归」的方面**（下一棒不必重查）：八次封面链迭代的关键机制（繁简归一/tier 闸门/年份 −4/类型词轮保底/详情链短路/桶宽白名单/逐条探针/artifact 尺）在 HEAD 全部在位且互相叠加；posterKey 换代 movie/book/music 逐字节同键、仅 other 换代；资产缓存 matcher 不误伤 HTML/API；fetchBounded/allowedImage/storedItem 白名单/Key 不落盘/管理面转义/读侧不删数据全部无新增违规；bf936bc 后无模块级跨请求状态。
 
 **下一步 / 遗留（按优先级）**：
-1. **线上实机验证两批修复后标 ✅**（重点：部署换代后旧标签页点齿轮/AI 设置/榜单海报不再白屏；详情弹窗数据到达时焦点不被抢走）。
+1. **浏览器行为项线上复验**（HTTP 层已 ✅，见状态栏五项冒烟）：部署换代后旧标签页点齿轮/AI 设置/榜单海报不白屏、详情弹窗数据到达时焦点不被抢走——需要真浏览器，本机连续第四次缺此环境。
 2. **动闸门前先补线上观测（4 项）**：① `otherDetail` 第一档把「裸标题同名条目」钉死并短路整套消歧救援（`worker/other.ts:1424` + `worker/media.ts:1734`，维基结构一变就错图直出）；② `ARTIFACT_FILE_RE` 误杀「标题即敏感词」作品（`worker/other.ts:296`，Avatar/Banner/Flag 类真海报被杀且连正文兜底一起失效，2d962d2 引入的回退）；③ other 链上游请求量翻倍（otherDetail+resolveOtherCover 同链重跑，429→15s 负缓存→批次变灰）；④ 「标题即年份」作品（《2012》/《1984》）被年份否决刀 −4 误伤——修它没有干净的离线测试缝（做有区分度的夹具得反推整套评分词表），按「动闸门先观测」纪律与 ①②③ 同批。观测点：cover-choice 前后 key 命中分布、poster_errors 里 throttled 占比、标题含 icon/avatar/flag 条目抽样。
 3. 已知取舍不动：cover-choice 允许任意登录用户改全站封面位（端点注释已声明的产品决策，留意滥用面）；FocusTrap 焦点落在 trap 外时 Tab 可逃逸（实际暴露面极小）。
 
