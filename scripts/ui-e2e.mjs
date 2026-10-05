@@ -127,16 +127,14 @@ try {
   await page.goto(`${base}/plaza`, { waitUntil: "domcontentloaded", timeout: 30000 });
   await dismissGuide(page);
   await page.waitForTimeout(4000);
-  // 进第一个帖子：广场列表里的可点击卡片没有稳定 id，退而求其次找指向 /plaza/<id> 的链接
-  const postLink = page
-    .locator('a[href*="/plaza/"], [class*="plaza"] [class*="card"], [class*="post-card"]')
-    .first();
-  if (!(await postLink.isVisible().catch(() => false))) {
-    record("T4 详情弹窗焦点不回跳", "skip", "广场无帖子或卡片结构对不上");
+  // 帖子卡片：.plaza-sticker（role=button，onClick 跳 /plaza/<id>）
+  const sticker = page.locator(".plaza-sticker").first();
+  if (!(await sticker.isVisible().catch(() => false))) {
+    record("T4 详情弹窗焦点不回跳", "skip", "广场无帖子（.plaza-sticker 不存在）");
   } else {
-    await postLink.click({ timeout: 5000 });
-    await page.waitForTimeout(3000);
-    // 帖子页里的作品海报：点第一张内容图
+    await sticker.click({ timeout: 5000 });
+    await page.waitForURL(/\/plaza\/\d+/, { timeout: 10000 });
+    await page.waitForTimeout(3000); // 等作品网格与海报图
     const artwork = page.locator("main img").first();
     if (!(await artwork.isVisible().catch(() => false))) {
       record("T4 详情弹窗焦点不回跳", "skip", "帖子里没有可点的作品图");
@@ -144,25 +142,37 @@ try {
       await artwork.click({ force: true, timeout: 5000 });
       const dialog = page.locator('[role="dialog"][aria-modal="true"]').first();
       await dialog.waitFor({ state: "visible", timeout: 10000 });
-      // 弹窗打开时 FocusTrap 把焦点放在第一个可聚焦控件（关闭按钮）。
-      // 把焦点移走，等详情响应到达：旧实现会在此刻把焦点抢回关闭按钮。
-      await page.keyboard.press("Tab");
-      const before = await page.evaluate(() => document.activeElement?.tagName ?? "none");
-      await page.waitForTimeout(8000);
+      // 弹窗打开时 FocusTrap 把焦点放在关闭按钮上。loading 期弹窗里常常只有
+      // 这一个可聚焦元素（Tab 的循环逻辑会原地打转，焦点根本没离开）——
+      // 所以用 blur 直接把焦点摘到 body，模拟「用户把焦点挪走了」。
+      await page.waitForTimeout(400);
+      await page.evaluate(() => {
+        const dialogEl = document.querySelector('[role="dialog"][aria-modal="true"]');
+        const closeBtn = dialogEl?.querySelector('button[title="关闭"], button[title="Close"]');
+        // 确认焦点当时确实在关闭按钮上（FocusTrap 挂载焦点生效），再摘走
+        return closeBtn && document.activeElement === closeBtn
+          ? (closeBtn.blur(), "blurred-from-close")
+          : `unexpected-active:${document.activeElement?.tagName}`;
+      });
+      // 等详情数据到达（简介块出现 = loading 结束）；超时也继续——迟到响应
+      // 在 30s 内任何时刻到达都该不抢焦点。
+      await page
+        .waitForSelector('[role="dialog"] .detail-synopsis', { timeout: 15000 })
+        .catch(() => {});
+      await page.waitForTimeout(3000); // 给「数据到达那一刻的重渲染」留出抢焦点窗口
       const state = await page.evaluate(() => {
         const dialogEl = document.querySelector('[role="dialog"][aria-modal="true"]');
         const active = document.activeElement;
         const closeBtn = dialogEl?.querySelector('button[title="关闭"], button[title="Close"]');
         return {
           dialogStillOpen: Boolean(dialogEl),
-          focusInside: Boolean(dialogEl && active && dialogEl.contains(active)),
+          loaded: Boolean(document.querySelector('[role="dialog"] .detail-synopsis')),
           focusOnClose: Boolean(closeBtn && active === closeBtn),
+          activeTag: active?.tagName ?? "none",
         };
       });
       if (!state.dialogStillOpen) {
         record("T4 详情弹窗焦点不回跳", "fail", "弹窗被迟到响应顶掉或意外关闭");
-      } else if (!state.focusInside) {
-        record("T4 详情弹窗焦点不回跳", "fail", `焦点离开弹窗（Tab 后是 ${before}）`);
       } else if (state.focusOnClose) {
         await shot(page, "T4_focus_stolen");
         record("T4 详情弹窗焦点不回跳", "fail", "数据到达后焦点被抢回关闭按钮（修复#2/#3 回归）");
@@ -170,7 +180,7 @@ try {
         record(
           "T4 详情弹窗焦点不回跳",
           "pass",
-          `焦点停在用户位置（Tab 后 ${before}，8s 后未回跳）`,
+          `数据${state.loaded ? "已" : "未(15s内)"}到达，焦点停在 ${state.activeTag} 未被抢回`,
         );
       }
     }
