@@ -1,5 +1,23 @@
 # Changelog
 
+## 2026-10-05 · 回归审查修复：懒加载失败兜底与迟到响应守卫（1 高 + 4 中）
+
+**背景**：对最近 30 次提交（`5faea92..HEAD`，两条主线：worker 封面链十次迭代 + 前端拆包/消歧交互）做整体回归审查。
+审查结论：**无「前修复被后重构撤销」类回归，八条硬规则无新增违规，门禁 5/5**；另查出 5 个真实缺陷（1 高 + 4 中），本轮全部修掉。五个缺陷的共性是都活在「不常走的路径」上——没有绊线就一定会复发。
+
+**改了什么**
+
+- **[高] 界外三处 Suspense 各包一层静默 ErrorBoundary**（`src/App.tsx`：顶栏 SettingsMenu、AiConfigDialog、RankingDetail）。此前全站唯一的 ErrorBoundary 只包住 `<main>` 里的路由树；这三处 lazy chunk 加载失败（发版换代后旧 hash 404 / 弱网）会让 React 卸掉整棵根 → **白屏整站**。现在失败退化为「当没渲染/没点开」，失败半径止步于该组件。
+- **[中] `openArtworkDetail` 加迟到响应守卫**（硬规则 7 漏网）：详情链超时最长 30s，此前三处无条件 `setDetailWork`——开着 A 关掉再开 B，A 的迟到响应会把弹窗整个换成 A（还会把已关闭的弹窗重新打开）。现在落结果前比对「当前弹窗仍是这一部」，并保住等待期间经 CoverChoice 换过的封面。
+- **[中] FocusTrap 焦点只在挂载时取一次**（`src/components/FocusTrap.tsx`）：`onEscape` 改走 ref 桥接、监听 effect 依赖清空。此前依赖 `[onEscape]`（App 传内联箭头，每次渲染换新身份）→ 详情数据到达那一刻，用户焦点被确定性弹回关闭按钮。
+- **[中] CoverChoice 候选取图按 ref 记账**（`src/components/CoverChoice.tsx`）：此前实现与自己的注释相反（`covers` 实际写进了依赖数组），每张候选图到达都重跑 effect、把在途候选再发一遍——一个候选最多被请求 3 次，白烧与主链路共享的 `other` 限流桶（20 次/10min）。现改为 `requestedRef` 记账，依赖收回 `[memo, year]`。
+- **[中] OrbScene/特效 chunk 失败有兜底**（`src/components/OrbScene.tsx` + `DeferredOrb.tsx`）：`createOrbEffectById` 包 try/catch，失败退回 CSS 兜底背景（不再 unhandled rejection + 透明空洞）；DeferredOrb 加 `SilentChunkBoundary` 静默边界，`aria-hidden` 装饰组件的失败不再沿 HomeView 冒泡到路由级边界、把整个首页换成报错页。附带修掉卸载竞态：cleanup 递增 `mountToken`，在途挂载的迟到结果自行 dispose。
+
+**测试**：`src/ui-fixes.test.ts` 新增 describe「懒加载失败与迟到响应守卫（回归审查 2026-10）」6 例绊线。
+
+**验证**：门禁 5/5（本地）。**未线上验证**——按规矩不标 ✅。
+审查同时确认的「没回归」清单：八次封面链迭代的关键机制在 HEAD 全部在位且互相叠加；posterKey 换代边界干净（movie/book/music 逐字节同键，仅 other 换代）；资产缓存 matcher 收得准；fetchBounded/allowedImage/storedItem 白名单无新增绕过。worker 侧另有 3 个结构性风险（`otherDetail` 第一档短路使消歧救援变死代码、`ARTIFACT_FILE_RE` 误杀「标题即敏感词」作品、other 链上游请求量翻倍）**本轮未修**，建议先补线上观测，见台账同日条目。
+
 ## 2026-10-02 · 迭代 11/20：作品详情弹窗接上焦点陷阱 + 字段翻译层
 
 **改了什么**

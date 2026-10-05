@@ -2,15 +2,22 @@ import { useEffect, useRef, type ReactNode } from "react";
 
 export function FocusTrap({ children, onEscape }: { children: ReactNode; onEscape?: () => void }) {
   const ref = useRef<HTMLDivElement>(null);
+  // onEscape 走 ref 桥接：调用方（App）传的多是内联箭头，每次渲染换新身份。
+  // 若把它放进监听 effect 的依赖，弹窗内容每次更新（详情数据到达是确定性的
+  // 一次）都会重建监听并把焦点重新抢回第一个控件——用户焦点被弹回关闭按钮。
+  const onEscapeRef = useRef(onEscape);
+  useEffect(() => {
+    onEscapeRef.current = onEscape;
+  }, [onEscape]);
 
   useEffect(() => {
     const el = ref.current;
     if (!el) return;
 
     function handleKeyDown(e: KeyboardEvent) {
-      if (e.key === "Escape" && onEscape) {
+      if (e.key === "Escape" && onEscapeRef.current) {
         e.preventDefault();
-        onEscape();
+        onEscapeRef.current();
         return;
       }
       if (e.key !== "Tab") return;
@@ -36,7 +43,7 @@ export function FocusTrap({ children, onEscape }: { children: ReactNode; onEscap
       }
     }
 
-    // Focus first focusable element
+    // Focus first focusable element —— 只在挂载时取一次焦点，之后不抢用户的焦点
     const firstFocusable = el.querySelector<HTMLElement>(
       'button:not([disabled]), [href], input:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
     );
@@ -44,7 +51,7 @@ export function FocusTrap({ children, onEscape }: { children: ReactNode; onEscap
 
     el.addEventListener("keydown", handleKeyDown);
     return () => el.removeEventListener("keydown", handleKeyDown);
-  }, [onEscape]);
+  }, []);
 
   return <div ref={ref}>{children}</div>;
 }

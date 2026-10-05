@@ -68,15 +68,25 @@ export function OrbScene() {
       scene.clear();
       const effectId = readOrbEffectId();
       const palette = readOrbPalette();
-      const next = await createOrbEffectById(
-        effectId,
-        { scene, camera, renderer, host, reducedMotion: mediaQuery.matches },
-        palette,
-      );
+      let next: OrbInstance;
+      try {
+        next = await createOrbEffectById(
+          effectId,
+          { scene, camera, renderer, host, reducedMotion: mediaQuery.matches },
+          palette,
+        );
+      } catch {
+        // 特效 chunk 加载失败（弱网 / 发版换代旧 hash 失效）不能变成
+        // unhandled rejection，也不能让光球区剩一块透明空洞——退回 CSS 兜底背景，
+        // 下次切换特效时自然重试。
+        host.classList.add("orb-scene-fallback");
+        return;
+      }
       if (token !== mountToken) {
         next.dispose();
         return;
       }
+      host.classList.remove("orb-scene-fallback");
       instance = next;
       currentEffectId = effectId;
       if (width > 0) instance.resize(width, height);
@@ -144,6 +154,9 @@ export function OrbScene() {
     mediaQuery.addEventListener("change", onMotionChange);
 
     return () => {
+      // 作废在途的 mountInstance：它 resolve 后走 token 失配分支自行 dispose，
+      // 不会把实例赋进已卸载的闭包（否则那份实例永远没人 dispose）。
+      mountToken += 1;
       cancelAnimationFrame(frame);
       observer.disconnect();
       mediaQuery.removeEventListener("change", onMotionChange);

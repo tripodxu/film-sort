@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { AlertCircle, Check } from "lucide-react";
 import {
   cacheReport,
@@ -77,6 +77,10 @@ export function CoverChoice({
   });
   const [failed, setFailed] = useState(false);
   const [covers, setCovers] = useState<Record<string, string>>({});
+  // 已发起取图的候选标题记账。此前用 covers 当「已取过」判据且把它写进依赖
+  // （与当时的注释相反）：每张图到达都重跑 effect、把在途候选再发一遍，
+  // 一个候选最多被请求 3 次，白烧与主链路共享的 other 限流桶。
+  const requestedRef = useRef<Set<string>>(new Set());
   const [chosen, setChosen] = useState("");
   const [saving, setSaving] = useState("");
   const [saveError, setSaveError] = useState("");
@@ -127,12 +131,14 @@ export function CoverChoice({
   // 只给前三条带图的候选取图：每条是一次维基回源，而 other 桶只有 20 次 / 10min。
   useEffect(() => {
     if (!memo) return;
+    // 新一份诊断报告 = 换了候选池，记账清零（year 变化同理，按新年份重取）。
+    requestedRef.current = new Set();
     const need = memo.report.candidates
       .filter((candidate) => candidate.hasCover)
       .slice(0, MAX_CANDIDATE_COVERS)
       .map((candidate) => candidate.title)
-      // covers 只作为「已取过」的判据参与：展开后再取不会重复请求。
-      .filter((candidateTitle) => !(candidateTitle in covers));
+      .filter((candidateTitle) => !requestedRef.current.has(candidateTitle));
+    need.forEach((candidateTitle) => requestedRef.current.add(candidateTitle));
     if (!need.length) return;
     let active = true;
     void Promise.all(
@@ -160,9 +166,7 @@ export function CoverChoice({
     return () => {
       active = false;
     };
-    // covers 已在上面读成 need（只作「已取过」判据），故意不进依赖：
-    // 把它写进依赖会让每取到一张图就重跑一次本 effect。
-  }, [memo, year, covers]);
+  }, [memo, year]);
 
   if (failed || silentlySilent || !memo) return null;
 

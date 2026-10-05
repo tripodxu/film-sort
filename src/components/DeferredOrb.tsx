@@ -1,4 +1,4 @@
-import { Suspense, lazy, useEffect, useState } from "react";
+import { Component, type ReactNode, Suspense, lazy, useEffect, useState } from "react";
 
 const OrbScene = lazy(() => import("./OrbScene").then((module) => ({ default: module.OrbScene })));
 
@@ -7,6 +7,26 @@ const OrbScene = lazy(() => import("./OrbScene").then((module) => ({ default: mo
  * 因此等待期间布局不跳动（无 CLS）。
  */
 const placeholder = <div className="orb-scene orb-scene-fallback" aria-hidden="true" />;
+
+/**
+ * OrbScene 自身 chunk 加载失败时不许沿组件树往外抛：它是 aria-hidden 的纯装饰，
+ * 失败半径必须止步于「留在占位背景」，而不是沿 HomeView 冒泡到路由级
+ * ErrorBoundary、把整个首页换成报错页。
+ */
+class SilentChunkBoundary extends Component<
+  { children: ReactNode; fallback: ReactNode },
+  { failed: boolean }
+> {
+  state = { failed: false };
+
+  static getDerivedStateFromError() {
+    return { failed: true };
+  }
+
+  render() {
+    return this.state.failed ? this.props.fallback : this.props.children;
+  }
+}
 
 /**
  * Three.js 光球是首屏最大的一块 JS（约 522KB 原始 / 128KB gzip，占落地页
@@ -29,7 +49,11 @@ export function DeferredOrb() {
   }, []);
 
   if (!ready) return placeholder;
-  return <Suspense fallback={placeholder}>{<OrbScene />}</Suspense>;
+  return (
+    <SilentChunkBoundary fallback={placeholder}>
+      <Suspense fallback={placeholder}>{<OrbScene />}</Suspense>
+    </SilentChunkBoundary>
+  );
 }
 
 /** 省流 / 慢网用户不该为一张装饰背景付 128KB gzip。 */

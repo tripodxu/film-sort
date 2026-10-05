@@ -692,6 +692,19 @@ export default function App() {
   }
   async function openArtworkDetail(work: RankedArtwork, detailKind: MediaKind) {
     setDetailWork({ work, kind: detailKind, data: null, loading: true });
+    // 迟到响应守卫（硬规则 7）：详情链最长 20-30s，期间用户可能已经关掉弹窗
+    // 或换开了另一部作品。响应回来时只有「当前弹窗仍是这一部」才落结果——
+    // 绝不顶掉后来那份，也不把已关闭的弹窗重新打开。
+    const applyIfCurrent = (data: Record<string, unknown> | null, resolved: RankedArtwork) => {
+      setDetailWork((current) => {
+        if (!current || current.kind !== detailKind || current.work.id !== work.id) return current;
+        // 等待期间用户经 CoverChoice 换过的封面也是用户动作，不许被响应冲掉。
+        const posterUrls = current.work.posterUrls?.length
+          ? current.work.posterUrls
+          : resolved.posterUrls;
+        return { work: { ...resolved, posterUrls }, kind: detailKind, data, loading: false };
+      });
+    };
     try {
       if (detailKind === "other") {
         // 维基 zh→en→百科兜底链实测冷缓存可超 25s：20s 会把本可成功的详情掐成
@@ -713,7 +726,7 @@ export default function App() {
           data?.poster_url && !work.posterUrls?.length
             ? { ...work, posterUrls: [String(data.poster_url)] }
             : work;
-        setDetailWork({ work: merged, kind: detailKind, data, loading: false });
+        applyIfCurrent(data, merged);
         return;
       }
       const apiType = detailKind === "film" ? "movie" : detailKind;
@@ -726,9 +739,9 @@ export default function App() {
         { signal: AbortSignal.timeout(20000) },
       );
       const payload = (await response.json()) as { data?: Record<string, unknown> | null };
-      setDetailWork({ work, kind: detailKind, data: payload.data ?? null, loading: false });
+      applyIfCurrent(payload.data ?? null, work);
     } catch {
-      setDetailWork({ work, kind: detailKind, data: null, loading: false });
+      applyIfCurrent(null, work);
     }
   }
   async function exportWrapped() {
@@ -1477,14 +1490,19 @@ export default function App() {
           )}
         </nav>
         <div className="header-tools">
-          <Suspense fallback={null}>
-            <SettingsMenu
-              zh={locale === "zh"}
-              cap={importCap}
-              onCap={setImportCap}
-              onNotice={setNotice}
-            />
-          </Suspense>
+          {/* 拆包 chunk 加载失败（发版换代旧 hash 404 / 弱网）不许白屏整站：
+              main 里的路由树有 ErrorBoundary，这三处挂在边界之外，各包一层静默
+              边界——失败就当没渲染/没点开，绝不拖垮页面其余部分。 */}
+          <ErrorBoundary fallback={null}>
+            <Suspense fallback={null}>
+              <SettingsMenu
+                zh={locale === "zh"}
+                cap={importCap}
+                onCap={setImportCap}
+                onNotice={setNotice}
+              />
+            </Suspense>
+          </ErrorBoundary>
           <ThemeSwitcher zh={locale === "zh"} onNotice={setNotice} />
           <IconButton title={t("使用说明", "Guide")} onClick={() => setShowGuide(true)}>
             ?
@@ -1585,9 +1603,11 @@ export default function App() {
         </button>
       )}
       {aiConfigOpen && (
-        <Suspense fallback={<LazySpot />}>
-          <AiConfigDialog t={t} onClose={() => setAiConfigOpen(false)} />
-        </Suspense>
+        <ErrorBoundary fallback={null}>
+          <Suspense fallback={<LazySpot />}>
+            <AiConfigDialog t={t} onClose={() => setAiConfigOpen(false)} />
+          </Suspense>
+        </ErrorBoundary>
       )}
       {cloudConflict && (
         <div className="modal-backdrop" onClick={() => setCloudConflict(null)}>
@@ -1922,31 +1942,33 @@ export default function App() {
             }}
           >
             {compareRankDetail.ranking ? (
-              <Suspense fallback={<LazySpot />}>
-                <RankingDetail
-                  kind={compareRankDetail.ranking.kind}
-                  collectionTitle={compareRankDetail.collectionTitle}
-                  items={compareRankDetail.ranking.items}
-                  notes={compareRankDetail.side === "peer" ? peerNotes : notes}
-                  kindLabel={label}
-                  eyebrow={`${compareRankDetail.side === "own" ? t("我的索引", "MY INDEX") : t("对方索引", "THEIR INDEX")} / ${label(compareRankDetail.ranking.kind)}`}
-                  headerExtra={
-                    <IconButton
-                      title={t("关闭", "Close")}
-                      onClick={() => setCompareRankDetail(null)}
-                    >
-                      <X size={18} />
-                    </IconButton>
-                  }
-                  onNoteView={(title, text, posterUrls) => {
-                    openNoteView(title, text, posterUrls);
-                  }}
-                  onArtworkClick={(work, kind) => {
-                    void openArtworkDetail(work, kind);
-                  }}
-                  highlightId={compareRankDetail.highlightId}
-                />
-              </Suspense>
+              <ErrorBoundary fallback={null}>
+                <Suspense fallback={<LazySpot />}>
+                  <RankingDetail
+                    kind={compareRankDetail.ranking.kind}
+                    collectionTitle={compareRankDetail.collectionTitle}
+                    items={compareRankDetail.ranking.items}
+                    notes={compareRankDetail.side === "peer" ? peerNotes : notes}
+                    kindLabel={label}
+                    eyebrow={`${compareRankDetail.side === "own" ? t("我的索引", "MY INDEX") : t("对方索引", "THEIR INDEX")} / ${label(compareRankDetail.ranking.kind)}`}
+                    headerExtra={
+                      <IconButton
+                        title={t("关闭", "Close")}
+                        onClick={() => setCompareRankDetail(null)}
+                      >
+                        <X size={18} />
+                      </IconButton>
+                    }
+                    onNoteView={(title, text, posterUrls) => {
+                      openNoteView(title, text, posterUrls);
+                    }}
+                    onArtworkClick={(work, kind) => {
+                      void openArtworkDetail(work, kind);
+                    }}
+                    highlightId={compareRankDetail.highlightId}
+                  />
+                </Suspense>
+              </ErrorBoundary>
             ) : (
               <div className="section-heading">
                 <h2>{compareRankDetail.collectionTitle}</h2>

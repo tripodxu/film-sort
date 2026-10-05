@@ -813,3 +813,73 @@ describe("详情弹窗可访问性与字段翻译（PLAN-DETAIL-DIALOG-A11Y）",
     expect(detail).toContain('import { FocusTrap } from "./FocusTrap";');
   });
 });
+
+/**
+ * 懒加载失败与迟到响应守卫（回归审查 2026-10，评审出 1 高 + 4 中）。
+ *
+ * 五个缺陷的共性：都在「不常走的路径」上——chunk 加载失败只在发版换代/弱网时
+ * 显形，迟到响应只在用户手速快过 30s 详情链时显形，候选取图重复只烧后台配额
+ * 不报错。这类缺陷没有绊线就一定会复发。
+ */
+describe("懒加载失败与迟到响应守卫（回归审查 2026-10）", () => {
+  const stripComments = (source: string) =>
+    source.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^[^\S\n]*\/\/.*$/gm, "");
+  const app = readFileSync("src/App.tsx", "utf8");
+  const code = stripComments(app);
+
+  it("界外三处 Suspense 必须各自包着静默 ErrorBoundary（chunk 失败不许白屏整站）", () => {
+    // main 内的路由树有边界（PLAN-ROUTE-EAGER 那条断言锁着）；顶栏 SettingsMenu、
+    // AI 设置弹窗、榜单详情弹窗挂在边界之外，必须各自有 fallback=null 的边界——
+    // 失败就当没渲染/没点开，绝不能让 React 卸掉整棵根。
+    expect(code.match(/<ErrorBoundary fallback=\{null\}>/g) ?? []).toHaveLength(3);
+    for (const name of ["SettingsMenu", "AiConfigDialog", "RankingDetail"]) {
+      const lazyAt = code.indexOf(`<${name}`);
+      expect(lazyAt, `${name} 必须以 JSX 挂载`).toBeGreaterThan(-1);
+      const boundaryAt = code.lastIndexOf("<ErrorBoundary fallback={null}>", lazyAt);
+      expect(boundaryAt, `${name} 外层必须先有 ErrorBoundary`).toBeGreaterThan(-1);
+      const closeAt = code.indexOf("</ErrorBoundary>", lazyAt);
+      expect(closeAt, `${name} 的 ErrorBoundary 必须包住它`).toBeGreaterThan(lazyAt);
+    }
+  });
+
+  it("openArtworkDetail 落结果必须是条件更新（迟到响应不许顶掉用户后来的选择/重开已关弹窗）", () => {
+    // 缺陷形态：三处无条件 setDetailWork——开着 A 关掉再开 B，A 的 30s
+    // 迟到响应把整个弹窗换成 A。守卫必须比对「当前弹窗仍是这一部」。
+    expect(code).toContain("current.work.id !== work.id");
+    expect(code).not.toMatch(/setDetailWork\(\{ work: (merged|work), kind: detailKind, data/);
+    // 等待期间用户经 CoverChoice 换过的封面也是用户动作，守卫必须保住它。
+    expect(code).toContain("current.work.posterUrls?.length");
+  });
+
+  it("FocusTrap 的焦点与监听只挂在挂载时（onEscape 换身份不许再抢焦点）", () => {
+    const trap = stripComments(readFileSync("src/components/FocusTrap.tsx", "utf8"));
+    expect(trap).toContain("onEscapeRef");
+    // 监听 effect 必须是挂载一次：依赖里出现 onEscape 就会每次重跑并重新 focus。
+    expect(trap).toMatch(
+      /el\.addEventListener\("keydown", handleKeyDown\);[\s\S]{0,80}return \(\) =>\s*el\.removeEventListener\("keydown", handleKeyDown\);\s*\}, \[\]\);/,
+    );
+  });
+
+  it("CoverChoice 候选取图按 ref 记账（covers 不许再出现在该 effect 依赖里）", () => {
+    // 缺陷形态：注释说「covers 故意不进依赖」，依赖数组却写着 [memo, year, covers]
+    // ——每个候选被重复请求 2-3 次，白烧与主链路共享的 other 限流桶。
+    const choice = stripComments(readFileSync("src/components/CoverChoice.tsx", "utf8"));
+    expect(choice).toContain("requestedRef");
+    expect(choice).toMatch(/\}, \[memo, year\]\);/);
+  });
+
+  it("OrbScene 特效加载失败有兜底，卸载时作废在途挂载", () => {
+    const scene = stripComments(readFileSync("src/components/OrbScene.tsx", "utf8"));
+    // chunk 失败退回 CSS 兜底背景，不许 unhandled rejection / 透明空洞。
+    expect(scene).toMatch(/try \{[\s\S]{0,200}await createOrbEffectById/);
+    expect(scene).toMatch(/catch \{[\s\S]{0,200}orb-scene-fallback/);
+    // 卸载竞态：cleanup 必须递增 token，让在途 mount 的迟到结果走 dispose 分支。
+    expect(scene).toMatch(/return \(\) => \{\s*mountToken \+= 1;/);
+  });
+
+  it("DeferredOrb 自带静默边界（装饰组件的失败半径不许波及路由）", () => {
+    const deferred = readFileSync("src/components/DeferredOrb.tsx", "utf8");
+    expect(deferred).toContain("getDerivedStateFromError");
+    expect(deferred).toMatch(/<SilentChunkBoundary fallback=\{placeholder\}>/);
+  });
+});
