@@ -10,9 +10,24 @@
 
 ## 进行中 / 最近
 
+### T-20261005-02 · 观测基建 + 浏览器 E2E（第一档两件）· ✅ 完成（线上验证过）
+
+**状态**：✅ 完成 —— 门禁 5/5（vitest **714 passed / 9 skipped (723)**，711 ⇒ +3）；迁移 0026 已应用远程 D1；线上部署 `index-B8c95rz-.js` 后 **E2E 6/6 全绿** + `invalid_english` 探针 400。提交 `92393be`（ErrorBoundary null 语义，E2E 抓到的真 bug）/ `9c40ad2`（观测基建 + E2E）/ `70c6d51`（E2E 真实化）。
+
+**改了什么**：
+1. `migrations/0026_poster_batch_stats.sql`：每批量请求一行 `total/found/absent/throttled` —— 封面链四个「动闸门前先观测」项改为查表判断。
+2. `worker/index.ts`：批量端点火后不管写一行统计；管理台 Promise.all + 响应新增 `poster_batch_stats` 键 + 「海报错误聚合」卡渲染近 7 天汇总（含 throttled 占比）。
+3. `scripts/ui-e2e.mjs`（`npm run e2e [url]`）+ `playwright` devDep：T1 菜单开合 / T2·T3 chunk 拦截不白屏 / T4 详情焦点不回跳；浏览器启动回退链（自带 → 残留 chromium-1223 → msedge → chrome，本机下载通道不通）。
+4. `src/components/ErrorBoundary.tsx`：`fallback ?? 默认` → `fallback !== undefined`（`??` 把显式 null 求值成默认报错块，E2E 首跑抓到）+ 绊线。
+5. `worker/posterBatchStats.test.ts` ×2（45s 超时：全挂路径走满豆瓣退避链是真成本）。
+
+**诚实备注**：T4 的「旧代码会真实失败」按机制推断，未做真旧 bundle 变异验证；T4 第一版 Tab 方案在 loading 期会误报（弹窗只有一个可聚焦元素，Tab 原地打转），已写进脚本注释。
+
+**给下一棒**：四个观测项现在可以动手了——`SELECT SUM(throttled), SUM(total), created_at FROM poster_batch_stats WHERE created_at >= ...` 直接出占比；标题抽样配 `poster_errors WHERE title LIKE ...`。低危剩余：lint 29 warnings 清零、`npm run gates` 聚合脚本、cover-choice 写审计、FocusTrap Tab 逃逸补丁、Poster imgLoaded 重置。
+
 ### T-20261005-01 · 回归审查修复 · 最近 30 次提交整体审查出的 1 高 + 4 中缺陷（前端五处）+ 低危清单五项
 
-**状态**：👀 待审（HTTP 层线上验证 ✅，浏览器行为项留红）—— 门禁 5/5 本地全绿；修复批 commit `8e58816`（vitest 707，+6）、低危批 `dbeae79`（再 +4 ⇒ **711 passed / 9 skipped (720)**）。**线上验证 2026-10-05**：推送触发自动部署后，`GET /` 引用的主包 `assets/index-Bsgh-aaO.js` 与本地 dbeae79 构建逐字节同哈希，且 `GET /api/other/candidates?english=<121字符>` 线上返回 **400 `invalid_english`**（该字符串仅存在于 dbeae79 ⇒ 前后端新代码确认在跑）；线上冒烟 5/5（english 上限 400 ✓ / 正常请求 200 ✓ / 新 chunk `immutable` 头 ✓ / HTML `must-revalidate` ✓ / 同批 CSS 就位 ✓）。**浏览器行为项留红**（无驱动浏览器，连续第四次）：焦点不被抢回的手感、部署换代旧标签页点齿轮/AI设置/榜单海报不白屏——需要真浏览器。注意：本轮经 push 自动部署，`wrangler deployments list` 仍显示 10-02 的旧 Version（自动部署通道不在本地 wrangler 视图内），验证证据以「bundle 哈希吻合 + invalid_english 探针」为准，下一棒别被旧 Version 迷惑。
+**状态**：👀 待审（HTTP 层线上验证 ✅，浏览器行为项留红）—— 门禁 5/5 本地全绿；修复批 commit `8e58816`（vitest 707，+6）、低危批 `dbeae79`（再 +4 ⇒ **711 passed / 9 skipped (720)**）。**线上验证 2026-10-05**：推送触发自动部署后，`GET /` 引用的主包 `assets/index-Bsgh-aaO.js` 与本地 dbeae79 构建逐字节同哈希，且 `GET /api/other/candidates?english=<121字符>` 线上返回 **400 `invalid_english`**（该字符串仅存在于 dbeae79 ⇒ 前后端新代码确认在跑）；线上冒烟 5/5（english 上限 400 ✓ / 正常请求 200 ✓ / 新 chunk `immutable` 头 ✓ / HTML `must-revalidate` ✓ / 同批 CSS 就位 ✓）。**浏览器行为项已补验关闭（同日 T-20261005-02）**：E2E T2/T3 拦截产物请求（= 发版换代 404 的确定性模拟）证明 chunk 失败不白屏；T4 证明详情数据到达后焦点停在 body 不被抢回——6/6 全绿，见 `npm run e2e`。注意：本轮经 push 自动部署，`wrangler deployments list` 仍显示 10-02 的旧 Version（自动部署通道不在本地 wrangler 视图内），验证证据以「bundle 哈希吻合 + invalid_english 探针」为准，下一棒别被旧 Version 迷惑。
 
 **任务类型**：回归审查 + 修复（用户指派「审查最近 30 次提交会不会有回归 → 修复」）。审查用三路并行深读（worker 封面链 / worker 接口与存储 / 前端），范围 `5faea92..HEAD`（30 commits，+10764/−451）。
 

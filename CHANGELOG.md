@@ -1,5 +1,20 @@
 # Changelog
 
+## 2026-10-05 · 观测基建 + 浏览器 E2E（第一档两件，E2E 顺手抓到一个真 bug）
+
+**改了什么**
+
+- **`poster_batch_stats` 表（迁移 0026）**：每个批量解析请求落一行 `total/found/absent/throttled`。`poster_errors` 只有失败行、没有分母——「throttled 占比」必须靠这行才算得出来，封面链四个「动闸门前先观测」项（otherDetail 第一档短路 / ARTIFACT 误杀 / 上游请求量翻倍 / 《2012》年份误伤）以后**查表判断，不再线上探测**。管理台「海报错误聚合」卡新增近 7 天汇总行。写入是单行/请求、火后不管，失败静默（不影响主链路）。
+- **浏览器 E2E 冒烟 `scripts/ui-e2e.mjs`（`npm run e2e`）**：打破「无驱动浏览器连续留红四次」的死结。对目标站跑只读交互：T1 首页加载+设置菜单开合、T2 拦掉 SettingsMenu chunk 不许白屏、T3 拦掉 OrbScene chunk 不许拖死首页、T4 广场帖子点作品→详情数据到达后焦点不许被抢回。`playwright` 进 devDependencies；浏览器下载在这台机器走不通（直连与 npmmirror 镜像都失败），脚本回退链 `自带 chromium → 本地残留 chromium-1223 → msedge → chrome`。
+- **E2E 首跑抓到真 bug**：`ErrorBoundary` 用 `this.props.fallback ?? 默认UI` 判断——`fallback={null}`（「失败渲染空」）被 `??` 求值成**默认报错块**，顶栏 chunk 失败时会显示一段 "Something went wrong."。已改为 `fallback !== undefined` 语义并加绊线。这正是这批修复想防的「白屏」的弱化形态——页面活着但顶栏多了块报错——没有浏览器验证根本看不见。
+
+**验证**
+
+- 门禁 5/5：vitest **714 passed / 9 skipped (723)**（711 ⇒ +3：ErrorBoundary 绊线 ×1、poster_batch_stats 运行时用例 ×2）。
+- 迁移 0026 已应用到远程 D1（`wrangler d1 migrations apply --remote` ✅）。
+- **线上部署 + E2E 6/6 全绿**（对 sort.logicc.top 新构建 `index-B8c95rz-.js`）：T1/T2/T3/T4 全过，`invalid_english` 探针 400 确认新代码在跑。**上一批的两个浏览器留红项就此补验关闭**：chunk 失败不白屏（T2/T3，拦截产物请求 = 发版换代 404 的确定性模拟）、焦点不被抢回（T4，数据已到达、焦点停在 body 未被抢回）。
+- 诚实备注：T4 的「在旧代码上会真实失败」是按机制推断（旧 FocusTrap 依赖 `[onEscape]`，数据到达必重跑并重取焦点），没有在真旧 bundle 上做变异验证；第一版 Tab 方案的误报（loading 期弹窗只有一个可聚焦元素，Tab 原地打转）已写进脚本注释防复发。
+
 ## 2026-10-05 · 回归审查修复：懒加载失败兜底与迟到响应守卫（1 高 + 4 中）
 
 **背景**：对最近 30 次提交（`5faea92..HEAD`，两条主线：worker 封面链十次迭代 + 前端拆包/消歧交互）做整体回归审查。

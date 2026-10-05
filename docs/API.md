@@ -212,13 +212,14 @@ ART/RANK 后端 API 完整参考。所有接口由 Cloudflare Worker 处理，�
   "results": {
     "movie|龙猫|my neighbor totoro|1988": ["https://img9.doubanio.com/..."]
   },
-  "keys": ["movie|龙猫|my neighbor totoro|1988"]
+  "keys": ["movie|龙猫|my neighbor totoro|1988"],
+  "outcomes": { "movie|龙猫|my neighbor totoro|1988": "found" }
 }
 ```
 
-`keys` 与清洗后的条目一一对应、按位置对齐（同请求内重复条目只解析一次）；`results` 以 `type|title|english|year`（NFKC、去空白、小写）为键。空 `items`（或全部被丢弃）直接返回 `{ "results": {}, "keys": [] }`。缓存 `private, max-age=86400`（真正的 1 天缓存在服务端 L1/L2）。
+`keys` 与清洗后的条目一一对应、按位置对齐（同请求内重复条目只解析一次）；`results` 以 `type|title|english|year`（NFKC、去空白、小写）为键。`outcomes` 给每个键的三态分类（`found` / `absent` / `throttled`），前端据此渲染空封面三态。空 `items`（或全部被丢弃）直接返回 `{ "results": {}, "keys": [] }`。缓存 `private, max-age=86400`（真正的 1 天缓存在服务端 L1/L2）。
 
-**与单条接口的差异：** 批量多了独立限流桶、128 KB/300 条上限、`retry` 开关和 `results`/`keys` 结构；上游失败会批量写 `poster_errors`（`source=batch`，每请求最多 10 条），单条接口则写 `source=single`。
+**与单条接口的差异：** 批量多了独立限流桶、128 KB/300 条上限、`retry` 开关和 `results`/`keys` 结构；上游失败会批量写 `poster_errors`（`source=batch`，每请求最多 10 条），单条接口则写 `source=single`。每个批量请求另向 `poster_batch_stats` 落一行 outcome 分布（`total/found/absent/throttled`，迁移 0026）——`poster_errors` 只有失败行、没有分母，throttled 占比从这里算（管理台「海报错误聚合」卡展示近 7 天汇总）。
 
 ### POST /api/poster-errors/client
 

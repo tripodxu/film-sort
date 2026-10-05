@@ -385,7 +385,7 @@ Worker 模块划分：
 
 ### 5.2 数据库 Schema
 
-**权威定义在 `migrations/*.sql`**（共 25 个文件，编号 0001–0025，其中 0008 有两支）；下表只做索引，不复制 DDL。
+**权威定义在 `migrations/*.sql`**（共 26 个文件，编号 0001–0026，其中 0008 有两支）；下表只做索引，不复制 DDL。
 
 | 表 | 用途 | 迁移 |
 |----|------|------|
@@ -399,6 +399,7 @@ Worker 模块划分：
 | `user_profiles_v2` | 用户画像 + 批注（`profile` ≤512KB、`notes` 默认 `'{}'`，见 0010） | 0004 |
 | `user_oauth` | OAuth 关联 | 0004 / 0005 |
 | `poster_errors` | 海报错误日志（`source` 见 0017） | 0007 |
+| `poster_batch_stats` | 批量解析 outcome 分布（每请求一行 total/found/absent/throttled；封面链观测的分母，throttled 占比从这里算） | 0026 |
 | `user_collections` | 云端清单（0021 重建为 `user_collections_v2` 后改名：`item_count` 2–1000、`items` ≤512KB） | 0008 / 0021 |
 | `shared_links` | 分享短链（`code` 主键、`profile`、`notes` 见 0013、`expires_at`） | 0009 / 0013 |
 | `plaza_posts` | 广场帖子（`description` 见 0012） | 0011 |
