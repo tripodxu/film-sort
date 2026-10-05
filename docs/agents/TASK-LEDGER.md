@@ -12,7 +12,7 @@
 
 ### T-20261005-03 · 低危小项清账 · lint 清零 / gates 聚合 / cover-choice 审计 / 焦点圈回 / 加载态
 
-**状态**：👀 待审（本地 `npm run gates` 5/5 全绿；lint **0 problems**；vitest **715 passed / 9 skipped (724)**，714 ⇒ +1 审计用例）——随部署后由 E2E T4 补行为验证。
+**状态**：✅ 完成（线上验证过）—— 本地 `npm run gates` 5/5 全绿；lint **0 problems**；vitest **715 passed / 9 skipped (724)**，714 ⇒ +1 审计用例。部署 `index-COzEojF4.js` 后 **E2E 6/6 全绿**（T4 焦点行为无回归）。提交 `f7b095e` + `e9313f2` + `0e0e0a8`。
 
 **改了什么**（提交 `f7b095e` + `e9313f2`）：
 1. **lint 警告 29 → 0**：16 处未用导入/变量/参数删除或 `_` 前缀（App 解构 ×3、OrbScene 导入 ×2、SettingsMenu/ plasma/useAuth/useRouter/account/CompareView ×3/HomeView ×2/SourceView `_refreshed`）；12 处 `react-hooks/exhaustive-deps` **逐条带真实原因的定向抑制**（渲染期函数身份 / selections 进依赖会循环 / mount-once 消费 URL——盲目补依赖在无 jsdom 覆盖的视图上是回归风险，不是疏忽）。
