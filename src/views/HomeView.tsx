@@ -35,7 +35,6 @@ const railScroll = (el: Element | null | undefined, dx: number) =>
   });
 
 export function HomeView({
-  locale,
   t,
   accountEmail,
   setAccountOpen,
@@ -56,7 +55,6 @@ export function HomeView({
   renameRank,
   deleteRank,
   setActiveKind,
-  openCollection,
   importProfile,
 }: HomeViewProps) {
   // 「每个维度随机挑一件作品当封面」必须在顶层算好：原先它写在 kinds.map()

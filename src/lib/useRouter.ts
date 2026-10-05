@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect } from "react";
 
 export type View =
   "home" | "source" | "setup" | "sorting" | "profile" | "compare" | "share" | "plaza" | "plazaPost";

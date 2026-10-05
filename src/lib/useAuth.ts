@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from "react";
-import { parseProfile, LIBRARY_KEY, mergeProfiles, type ArtisticProfile } from "./profile";
+import { parseProfile, LIBRARY_KEY, type ArtisticProfile } from "./profile";
 import { readNotes, writeNotes } from "./notes";
 import { buildProfileSyncBody, isCurrentGeneration } from "./profileSync";
 import { stored } from "./utils";
@@ -309,7 +309,7 @@ export function useAuth(deps: Omit<AuthDeps, "setDraft"> & { setDraft?: (d: unkn
         setBusy(false);
       }
     },
-    [authEmail, authPassword, authNickname, authCode, authMode],
+    [authEmail, authPassword, authNickname, authCode],
   );
 
   const saveNickname = useCallback(async () => {

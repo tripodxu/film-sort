@@ -8,12 +8,8 @@ import {
   Vector2,
   WebGLRenderer,
 } from "three";
-import {
-  createOrbEffectById,
-  notifyOrbEffectChanged,
-  readOrbEffectId,
-} from "../lib/orbEffects/registry";
-import { readOrbPalette, type OrbInstance, type OrbPalette } from "../lib/orbEffects/types";
+import { createOrbEffectById, readOrbEffectId } from "../lib/orbEffects/registry";
+import { readOrbPalette, type OrbInstance } from "../lib/orbEffects/types";
 
 /**
  * 开场光球宿主：持有 renderer/camera/ResizeObserver/指针/reduced-motion 时钟，

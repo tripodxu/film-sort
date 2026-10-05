@@ -344,7 +344,9 @@ export function Poster({
   const [retrying, setRetrying] = useState(false);
   // 直连失败后改为走代理重试同一张图，再失败才换下一个候选。
   const [proxyRetry, setProxyRetry] = useState<Set<string>>(() => new Set());
-  const [imgLoaded, setImgLoaded] = useState(false);
+  // 加载态判据是「哪张图成功加载过」（loadedSrc === src）：候选切换 / 代理重试
+  // 会换 src，旧图的「已加载」不许带给新图——否则新图加载期间不显示占位。
+  const [loadedSrc, setLoadedSrc] = useState<string | null>(null);
   // 服务端已持久化海报地址的条目不再发起解析请求——这正是「每次浏览都现解析」的根治。
   const hasStoredPosters = (work.posterUrls?.length ?? 0) > 0;
   // 用户已经对**这一件**亲自裁决过时同样不必问上游：问回来的至多是同一答案的
@@ -366,6 +368,7 @@ export function Poster({
     return () => {
       active = false;
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- work 对象身份会因封面并入/裁决而变，按 id/title 等标量键控避免循环
   }, [work.id, work.title, kind, large, hasStoredPosters, userDecided]);
   // 候选顺序 = 尝试顺序。**作品自带的封面排在前面**：导入网易云时拿到的是
   // `p*.music.126.net`（CSP 已放行、浏览器直连、不经 Worker、不占豆瓣抓取配额），
@@ -377,6 +380,7 @@ export function Poster({
   const url = urls.find((candidate) => !failed.has(candidate));
   const src =
     url === undefined ? undefined : proxyRetry.has(url) ? proxiedImageUrl(url) : imageUrl(url);
+  const imgLoaded = loadedSrc === src;
   const Icon = { film: Film, book: BookOpen, music: Music2, other: Library }[kind];
   // 判据必须喂**过滤掉加载失败之后**的候选：一张拿到过地址但加载失败的图，
   // 是「有图但没画出来」，不是「上游没有」。喂全量 urls 会把它误判成 absent，
@@ -397,7 +401,7 @@ export function Poster({
             alt={`${work.title}${work.creator ? ` - ${work.creator}` : ""}${work.year ? ` (${work.year})` : ""}`}
             referrerPolicy="no-referrer"
             loading={large ? "eager" : "lazy"}
-            onLoad={() => setImgLoaded(true)}
+            onLoad={() => setLoadedSrc(src)}
             onError={() => {
               reportImageFailure(work, kind, url);
               // 直连失败：先用 worker 代理重试同一张图；代理也失败才换下一个候选。

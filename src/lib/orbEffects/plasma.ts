@@ -191,7 +191,7 @@ export function createPlasmaEffect(host: OrbHost, palette: OrbPalette): OrbInsta
       particles.rotation.y = elapsed * -0.018;
       particles.rotation.z = Math.sin(elapsed * 0.16) * 0.08;
     },
-    resize(width, height) {
+    resize(width, _height) {
       orb.position.x = width > 700 ? 0.68 : 0;
       orb.scale.setScalar(width > 700 ? 1 : 0.9);
       glow.position.x = orb.position.x;

@@ -41,7 +41,6 @@ export function CompareView({
   setCompareSortBy,
   compareSortBy,
   setCompareRankDetail,
-  shareSingleRanking,
   exportProfile,
   setFormat,
   busy,
@@ -55,9 +54,7 @@ export function CompareView({
   peerUrlBusy,
   importPeerFromUrl,
   importProfile,
-  setActiveKind,
   notes,
-  peerNotes,
   openShareModal,
 }: CompareViewProps) {
   const sharedKinds = kinds.filter(
@@ -101,6 +98,7 @@ export function CompareView({
     if (manualPeerSelections.size === 0 && peerRankings.length > 0) {
       setManualPeerSelections(new Set(peerRankings.map((_, i) => i)));
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- 只在维度/数量变化时补默认全选；selections 进依赖会在用户每次点选时重跑本 effect
   }, [compareKind, ownRankings.length, peerRankings.length]);
   const selectedOwn = useMemo(
     () =>

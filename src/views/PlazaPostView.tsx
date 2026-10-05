@@ -81,6 +81,7 @@ export function PlazaPostView({
 
   useEffect(() => {
     void loadPost();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- loadPost 是渲染期函数身份；按 postId 触发即可
   }, [postId]);
 
   async function loadPost() {

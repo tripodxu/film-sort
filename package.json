@@ -13,6 +13,7 @@
     "preview": "vite preview",
     "test": "vitest run",
     "test:watch": "vitest",
+    "gates": "node scripts/gates.mjs",
     "e2e": "node scripts/ui-e2e.mjs",
     "check": "tsc -b --pretty false",
     "lint": "eslint .",

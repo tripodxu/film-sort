@@ -286,7 +286,6 @@ export default function App() {
   });
   const {
     kind,
-    setKind,
     source,
     setSource,
     collection,
@@ -306,7 +305,6 @@ export default function App() {
     customItem,
     setCustomItem,
     customWorks,
-    setCustomWorks,
     customDeselected,
     setCustomDeselected,
     importProgress,
@@ -332,7 +330,6 @@ export default function App() {
     saveCustomWorks,
     clearCustomWorks,
     openCollection,
-    applyImportedWorks,
     importDoulist,
     importNeteasePlaylist,
     saveCollectionCloud,
@@ -353,6 +350,7 @@ export default function App() {
   // In an effect, not render: setDraft is a stable state setter, so this binds once.
   useEffect(() => {
     auth.updateSetDraft(setDraft as (d: unknown) => void);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- auth 身份随登录态变化；rebind 幂等，按 setDraft 变化触发即可
   }, [setDraft]);
 
   // Jev 辅助模式的品味上下文:画像变化时重建一次,排序中的每对预测共用
@@ -542,6 +540,7 @@ export default function App() {
         }
       }
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- 仅挂载时消费一次 URL 参数（分享导入等），处理的是挂载时快照
   }, []);
   useEffect(() => {
     document.documentElement.lang = locale === "zh" ? "zh-CN" : "en";

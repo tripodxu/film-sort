@@ -143,6 +143,7 @@ export function SourceView({
         setNeteaseConnected(false);
       }
     })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- 载入连接状态只在来源/登录变化时；loadMyPlaylists 是渲染期函数身份
   }, [source, kind, accountToken]);
 
   // 扫码轮询：每 3 秒一次；风控码（risk）需连续 3 次约 9 秒才判定失败，失败后展开 Cookie 降级卡
@@ -198,6 +199,7 @@ export function SourceView({
       }
     }, 3000);
     return () => clearInterval(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- 轮询器按 qr 状态重建；loadMyPlaylists 在 confirmed 分支内显式调用
   }, [qrOpen, qrUnikey, qrState, accountToken]);
 
   // 有效期倒计时：归零自动换码（上限 2 次，防风控加重）
@@ -213,9 +215,10 @@ export function SourceView({
       }
     }, 1000);
     return () => clearInterval(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- 倒计时按 qr 状态重建；autoRefreshQr 是渲染期函数身份，进依赖会反复重建定时器
   }, [qrOpen, qrState, qrImage, qrLeft]);
 
-  async function issueQr(refreshed: number) {
+  async function issueQr(_refreshed: number) {
     setQrImage("");
     setQrUnikey("");
     setQrState("waiting");
@@ -400,6 +403,7 @@ export function SourceView({
       }
     }, 3000);
     return () => clearInterval(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- 轮询器按 dbQr 状态重建；checkDbStatus/setNotice 是渲染期身份
   }, [dbQrOpen, dbQrCode, dbQrState, accountToken]);
 
   useEffect(() => {
@@ -414,6 +418,7 @@ export function SourceView({
       }
     }, 1000);
     return () => clearInterval(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- 倒计时按 dbQr 状态重建；autoRefreshDbQr 是渲染期函数身份
   }, [dbQrOpen, dbQrState, dbQrImage, dbQrLeft]);
 
   async function checkDbStatus() {

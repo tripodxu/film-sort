@@ -55,6 +55,7 @@ export function PlazaView({
 
   useEffect(() => {
     void loadPosts(1, kindFilter, sort, search);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- 只随 kindFilter 重拉；sort/search 由各自事件处理器显式带参调用
   }, [kindFilter]);
 
   async function loadPosts(
@@ -138,6 +139,7 @@ export function PlazaView({
     );
     observer.observe(el);
     return () => observer.disconnect();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- 观察器随 loading/page 重建已足够；loadPosts 是渲染期函数身份
   }, [hasMore, loading, initialLoading, page, kindFilter, sort, search]);
 
   function formatPlazaTime(value: string): string {

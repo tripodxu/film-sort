@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Bot, Check, Eraser, Settings2 } from "lucide-react";
+import { Bot, Eraser, Settings2 } from "lucide-react";
 import { AiConfigDialog } from "./AiConfigDialog";
 import { readAiConfig } from "../lib/aiInsight";
 import { markCachePurged } from "../lib/cacheBust";
