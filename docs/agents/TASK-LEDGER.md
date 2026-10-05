@@ -10,6 +10,20 @@
 
 ## 进行中 / 最近
 
+### T-20261005-04 · 线上全面安全与健壮性测试 · ✅ 完成（零漏洞，两条设计备注）
+
+**状态**：✅ 完成 —— 44 项 HTTP 探针 + 6 视图浏览器扫描 + 4 项补充检查，**零漏洞**。脚本在 `.tmp/sec-probe.sh` / `.tmp/views-sweep.mjs`（.tmp 不进库，重跑可照着重写）。
+
+**覆盖与结论**：
+- **安全响应头**：HTML/JS/API 三类响应全部带 CSP（frame-ancestors 'none）+ X-Frame-Options DENY + COOP + nosniff + referrer-policy + permissions-policy。
+- **鉴权边界**：admin 全家（dashboard/audit/reset/cache）未登录一律 401/400；`admin/reset` 防线是链式的（scope → 确认短语 → **管理员密码 401**），未登录无法执行；cover-choice 三道闸（跨源 403 / 无 token 401 / 假 token 401）✅；netease/douban 状态端点未登录 401 ✅；jev 无配置 400 ✅。
+- **SSRF 面**：`/api/image` 白名单正则严格——云元数据 IP / file 协议 / 非白名单域 / `userinfo@` 挟持 / 非常规端口全部 400；白名单内正常放行。
+- **注入与校验**：SQL 注入串、XSS 串进查询参数均被参数化查询与 JSON content-type 化解（无未转义反射、无 500）；batch 端点坏 JSON 400 / items 非数组 400 / **132KB 超大 payload 413** / `<script>` 标题安全处理；candidates name>120 与 english>120 均 400。
+- **泄漏面**：所有 4xx/5xx 响应无栈、无内部路径；`/assets/../../wrangler.jsonc` 不可达；health 只回最小信息。
+- **浏览器层**：6 个视图（首页/广场/我的索引/比较/分享/目录源）零 pageerror、零应用 console 错误、零 CSP 违规。唯一报错是 Cloudflare Insights 统计信标被**本机代理网络**拦断（环境问题，非应用）。
+
+**两条设计备注（非漏洞）**：① `admin/reset` 的参数校验跑在鉴权之前（未登录先见 415/400），且错误消息会向未登录者暴露确认短语「RESET」——密码闸在其后，无实际风险，若想收紧可把鉴权提到最前；② `/admin` HTML 壳是公开的登录表单，数据端点全部有会话闸，无信息泄漏。
+
 ### T-20261005-03 · 低危小项清账 · lint 清零 / gates 聚合 / cover-choice 审计 / 焦点圈回 / 加载态
 
 **状态**：✅ 完成（线上验证过）—— 本地 `npm run gates` 5/5 全绿；lint **0 problems**；vitest **715 passed / 9 skipped (724)**，714 ⇒ +1 审计用例。部署 `index-COzEojF4.js` 后 **E2E 6/6 全绿**（T4 焦点行为无回归）。提交 `f7b095e` + `e9313f2` + `0e0e0a8`。
