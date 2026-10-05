@@ -15,7 +15,6 @@ import {
   buildCodeGuardSql,
   classifyCodeFailure,
   consumeOAuthExchange,
-  consumeVerificationCode,
   parseGoogleUser,
   sha256Hex,
   CODE_MAX_ATTEMPTS,

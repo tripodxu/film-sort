@@ -855,9 +855,13 @@ describe("懒加载失败与迟到响应守卫（回归审查 2026-10）", () =>
     const trap = stripComments(readFileSync("src/components/FocusTrap.tsx", "utf8"));
     expect(trap).toContain("onEscapeRef");
     // 监听 effect 必须是挂载一次：依赖里出现 onEscape 就会每次重跑并重新 focus。
+    // 监听必须挂 document：焦点落在 trap 外（activeElement=body）时，
+    // 挂在 el 上的监听收不到 keydown，Tab 圈不住、Escape 也失效。
     expect(trap).toMatch(
-      /el\.addEventListener\("keydown", handleKeyDown\);[\s\S]{0,80}return \(\) =>\s*el\.removeEventListener\("keydown", handleKeyDown\);\s*\}, \[\]\);/,
+      /document\.addEventListener\("keydown", handleKeyDown\);[\s\S]{0,80}return \(\) =>\s*document\.removeEventListener\("keydown", handleKeyDown\);\s*\}, \[\]\);/,
     );
+    // 焦点在 trap 外时 Tab 必须圈回来（el.contains 守卫不许被摘）
+    expect(trap).toMatch(/!el!\.contains\(document\.activeElement\)/);
   });
 
   it("CoverChoice 候选取图按 ref 记账（covers 不许再出现在该 effect 依赖里）", () => {

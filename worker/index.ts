@@ -2738,6 +2738,14 @@ async function route(request: Request, env: Env): Promise<Response> {
     const stored = await loadPosterUrls(env.DB, [key]);
     const urls = stored.get(key) ?? [];
     if (!urls.includes(storedUrl)) return json({ error: "write_verify_failed" }, 500);
+    // 审计留痕：任何登录用户都能改全站封面位（注释已声明的产品取舍），
+    // 这笔写必须可追溯——与管理操作同表（admin_audit，看板渲染已过 esc）。
+    await recordAudit(
+      env,
+      "cover_choice",
+      JSON.stringify({ title, wikiTitle, url: storedUrl, userId: user.id, email: user.email }),
+      request,
+    );
     return json({ ok: true, key, url: storedUrl, wikiTitle }, 200);
   }
   if (url.pathname === "/api/ai/jev/test" && request.method === "POST") {

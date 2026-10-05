@@ -29,8 +29,13 @@ const VALID_BODY = {
   url: OK_URL,
 };
 
-function fakeDb(options: { token?: string } = {}): { db: D1Database; rows: Map<string, string> } {
+function fakeDb(options: { token?: string } = {}): {
+  db: D1Database;
+  rows: Map<string, string>;
+  auditRows: Array<unknown[]>;
+} {
   const rows = new Map<string, string>();
+  const auditRows: Array<unknown[]> = [];
   const db = {
     prepare(sql: string) {
       const bound = {
@@ -43,6 +48,9 @@ function fakeDb(options: { token?: string } = {}): { db: D1Database; rows: Map<s
         run: async () => {
           if (/INSERT INTO poster_urls/.test(sql)) {
             rows.set(String(boundArgs[0]), String(boundArgs[1]));
+          }
+          if (/INSERT INTO admin_audit/.test(sql)) {
+            auditRows.push([...boundArgs]);
           }
           return { success: true, meta: {} };
         },
@@ -72,7 +80,7 @@ function fakeDb(options: { token?: string } = {}): { db: D1Database; rows: Map<s
       return [];
     },
   };
-  return { db: db as unknown as D1Database, rows };
+  return { db: db as unknown as D1Database, rows, auditRows };
 }
 
 function send(
@@ -221,6 +229,19 @@ describe("POST /api/other/cover-choice · 合法写入", () => {
       },
     );
     expect([...rows.values()][0]).toBe('["https://upload.wikimedia.org/wikipedia/zh/a/ab/X.png"]');
+  });
+
+  it("成功写入会留一条 cover_choice 审计（全站封面位的写必须可追溯）", async () => {
+    const { db, auditRows } = fakeDb({ token: TOKEN });
+    const response = await send(db, VALID_BODY, { token: TOKEN, headers: sameOrigin });
+    expect(response.status).toBe(200);
+    expect(auditRows).toHaveLength(1);
+    const [action, detail] = auditRows[0] as [string, string];
+    expect(action).toBe("cover_choice");
+    const parsed = JSON.parse(detail) as { title?: string; wikiTitle?: string; email?: string };
+    expect(parsed.title).toBe(OK_TITLE);
+    expect(parsed.wikiTitle).toBe("风之旅人");
+    expect(parsed.email).toBe("reader@example.com");
   });
 });
 

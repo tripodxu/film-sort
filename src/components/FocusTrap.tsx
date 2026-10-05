@@ -15,6 +15,8 @@ export function FocusTrap({ children, onEscape }: { children: ReactNode; onEscap
     if (!el) return;
 
     function handleKeyDown(e: KeyboardEvent) {
+      // 监听挂 document 而非 el：焦点落在 trap 外（如点击了非按钮区域后
+      // activeElement=body）时，挂在 el 上的监听收不到 keydown，圈就漏了。
       if (e.key === "Escape" && onEscapeRef.current) {
         e.preventDefault();
         onEscapeRef.current();
@@ -30,6 +32,12 @@ export function FocusTrap({ children, onEscape }: { children: ReactNode; onEscap
       const first = focusable[0];
       const last = focusable[focusable.length - 1];
 
+      if (!document.activeElement || !el!.contains(document.activeElement)) {
+        // 焦点在 trap 外：把它圈回来
+        e.preventDefault();
+        (e.shiftKey ? last : first).focus();
+        return;
+      }
       if (e.shiftKey) {
         if (document.activeElement === first) {
           e.preventDefault();
@@ -49,8 +57,8 @@ export function FocusTrap({ children, onEscape }: { children: ReactNode; onEscap
     );
     firstFocusable?.focus();
 
-    el.addEventListener("keydown", handleKeyDown);
-    return () => el.removeEventListener("keydown", handleKeyDown);
+    document.addEventListener("keydown", handleKeyDown);
+    return () => document.removeEventListener("keydown", handleKeyDown);
   }, []);
 
   return <div ref={ref}>{children}</div>;
