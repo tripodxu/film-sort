@@ -563,6 +563,7 @@ function renderOverview(d, o) {
   apiErrorsHtml += '</tbody></table>';
 
   var posterErrors = d.poster_errors||[];
+  var batchStats = d.poster_batch_stats||{};
   document.getElementById('app').innerHTML = [
     '<div class="grid grid-4" style="margin-bottom:16px">',
       '<div class="card"><h3>总访问</h3><div class="value">',o.total_visits,'</div><div class="sub">今日 ',o.visits_today,' / 7日 ',o.visits_7d,'</div></div>',
@@ -587,6 +588,7 @@ function renderOverview(d, o) {
         '<div style="margin-top:10px"><button onclick="exportPosterErrors()" style="background:var(--card);border:1px solid var(--border);color:var(--text);padding:4px 10px;border-radius:6px;font-size:11px;cursor:pointer">导出CSV（近30天）</button></div>',
       '</div>',
       '<div class="card"><h3 style="margin-bottom:12px">海报错误聚合 / 近30天</h3>',
+        '<div style="margin-bottom:10px;font-size:12px;color:var(--muted)">批量解析近7天：共 '+(batchStats.total||0)+' 项 · found '+(batchStats.found||0)+' · absent '+(batchStats.absent||0)+' · throttled '+(batchStats.throttled||0)+(batchStats.total?'（占比 '+Math.round((batchStats.throttled||0)/batchStats.total*100)+'%）':'')+' <span title="throttled 占比持续偏高 = 上游限流；absent 突增 = 封面链判断变化。判断依据：poster_batch_stats 表。">ⓘ</span></div>',
         (d.poster_error_summary||[]).length ? '<table><thead><tr><th>媒介</th><th>错误类型</th><th>次数</th></tr></thead><tbody>' + (d.poster_error_summary||[]).map(function(e) { return '<tr><td><span class="badge badge-'+esc(e.media_type)+'">'+esc(e.media_type)+'</span></td><td>'+esc(e.error||'unknown')+'</td><td>'+e.count+'</td></tr>'; }).join('') + '</tbody></table>' : '<p style="color:var(--muted);font-size:13px">暂无聚合数据</p>',
       '</div>',
     '</div>',
@@ -1260,6 +1262,7 @@ const STORAGE_EXTENDED_TABLES = [
   "plaza_likes",
   "shared_links",
   "poster_errors",
+  "poster_batch_stats",
   "admin_sessions",
   "admin_audit",
   "oauth_exchanges",
@@ -1309,6 +1312,7 @@ async function getDashboard(env: Env): Promise<Response> {
       storageExtended,
       posterErrors,
       posterErrorSummary,
+      posterBatchStats,
     ] = await Promise.all([
       safe(
         env.DB.prepare(
@@ -1376,6 +1380,16 @@ async function getDashboard(env: Env): Promise<Response> {
           "SELECT media_type, source, error, COUNT(*) AS count FROM poster_errors WHERE created_at >= datetime('now', '-30 days') GROUP BY media_type, source, error ORDER BY count DESC LIMIT 30",
         ).all(),
       ),
+      // 批量解析 outcome 分布（近7天）：poster_errors 没有分母，throttled 占比
+      // 只能从这里算（migrations/0026）。表是本轮新增的，查不到时按空兜底。
+      safe(
+        env.DB.prepare(
+          `SELECT COALESCE(SUM(total), 0) AS total, COALESCE(SUM(found), 0) AS found,
+        COALESCE(SUM(absent), 0) AS absent, COALESCE(SUM(throttled), 0) AS throttled
+      FROM poster_batch_stats WHERE created_at >= datetime('now', '-7 days')`,
+        ).first(),
+        null,
+      ),
     ]);
 
     return json(
@@ -1411,6 +1425,7 @@ async function getDashboard(env: Env): Promise<Response> {
         storage_extended: (storageExtended as { results?: unknown[] })?.results ?? [],
         poster_errors: (posterErrors as { results?: unknown[] }).results ?? [],
         poster_error_summary: (posterErrorSummary as { results?: unknown[] }).results ?? [],
+        poster_batch_stats: (posterBatchStats as Record<string, unknown> | null) ?? null,
       },
       200,
       { "cache-control": "private, no-store" },
@@ -2221,6 +2236,20 @@ async function route(request: Request, env: Env): Promise<Response> {
           ),
         ).catch(() => undefined);
       }
+      // 每批一行 outcome 分布：poster_errors 只有失败行、没有分母，throttled 占比
+      // 必须有 total/found 才算得出来（migrations/0026）。单行/请求，火后不管。
+      const tally = { found: 0, absent: 0, throttled: 0 };
+      for (const key of keys) {
+        if (outcomes[key] === "throttled") tally.throttled += 1;
+        else if (outcomes[key] === "absent") tally.absent += 1;
+        else tally.found += 1;
+      }
+      void env.DB.prepare(
+        "INSERT INTO poster_batch_stats (total, found, absent, throttled) VALUES (?, ?, ?, ?)",
+      )
+        .bind(keys.length, tally.found, tally.absent, tally.throttled)
+        .run()
+        .catch(() => undefined);
     }
     // 真正的 1 天缓存发生在服务端（L1 isolate + L2 Edge Cache）；
     // 这里只是顺带声明新鲜度，浏览器通常不缓存 POST 响应。
