@@ -882,4 +882,13 @@ describe("懒加载失败与迟到响应守卫（回归审查 2026-10）", () =>
     expect(deferred).toContain("getDerivedStateFromError");
     expect(deferred).toMatch(/<SilentChunkBoundary fallback=\{placeholder\}>/);
   });
+
+  it("ErrorBoundary 必须区分「没传 fallback」与「fallback=null」（?? 会把 null 求值成默认UI）", () => {
+    // E2E 抓到的真 bug：`this.props.fallback ?? 默认UI` 在调用方显式传
+    // fallback={null}（失败渲染空）时仍然渲染默认报错块——顶栏会出现
+    // 一段 "Something went wrong."。语义必须是 undefined 才走默认。
+    const boundary = readFileSync("src/components/ErrorBoundary.tsx", "utf8");
+    expect(boundary).toContain("this.props.fallback !== undefined");
+    expect(boundary).not.toMatch(/this\.props\.fallback\s*\?\?/);
+  });
 });
