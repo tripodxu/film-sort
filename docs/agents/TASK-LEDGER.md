@@ -10,6 +10,19 @@
 
 ## 进行中 / 最近
 
+### T-20261005-03 · 低危小项清账 · lint 清零 / gates 聚合 / cover-choice 审计 / 焦点圈回 / 加载态
+
+**状态**：👀 待审（本地 `npm run gates` 5/5 全绿；lint **0 problems**；vitest **715 passed / 9 skipped (724)**，714 ⇒ +1 审计用例）——随部署后由 E2E T4 补行为验证。
+
+**改了什么**（提交 `f7b095e` + `e9313f2`）：
+1. **lint 警告 29 → 0**：16 处未用导入/变量/参数删除或 `_` 前缀（App 解构 ×3、OrbScene 导入 ×2、SettingsMenu/ plasma/useAuth/useRouter/account/CompareView ×3/HomeView ×2/SourceView `_refreshed`）；12 处 `react-hooks/exhaustive-deps` **逐条带真实原因的定向抑制**（渲染期函数身份 / selections 进依赖会循环 / mount-once 消费 URL——盲目补依赖在无 jsdom 覆盖的视图上是回归风险，不是疏忽）。
+2. **`npm run gates`**（`scripts/gates.mjs`）：五道门禁退出码正确聚合、失败即停（管道 `| tail` 吞退出码的假绿根治，2026-10-05 真实踩过）。
+3. **cover-choice 写审计**：写穿校验通过后 `recordAudit("cover_choice", {title,wikiTitle,url,userId,email})` 落 `admin_audit`——全站封面位的写现在可追溯，管理台零改动可见。+1 运行时用例（fakeDb 捕获 admin_audit INSERT）。
+4. **FocusTrap 监听上 document** + `el.contains(activeElement)` 守卫：焦点在 trap 外时 Tab 圈回、Escape 生效（原挂 el 上收不到 keydown）。绊线同步（document 监听 + contains 守卫都不许摘）。
+5. **Poster 加载态**：`imgLoaded` 布尔 → `loadedSrc === src` 派生，候选切换/代理重试换图时占位态正确恢复。
+
+**给下一棒**：低危清单到此清完。剩两条线：① 四个封面链观测项攒 `poster_batch_stats` 数据后裁夺（SQL 见 T-20261005-02）；② 产品向（ROADMAP Phase 3/4、PWA、per-user 封面、P2 待办池 B/C/D/E）。
+
 ### T-20261005-02 · 观测基建 + 浏览器 E2E（第一档两件）· ✅ 完成（线上验证过）
 
 **状态**：✅ 完成 —— 门禁 5/5（vitest **714 passed / 9 skipped (723)**，711 ⇒ +3）；迁移 0026 已应用远程 D1；线上部署 `index-B8c95rz-.js` 后 **E2E 6/6 全绿** + `invalid_english` 探针 400。提交 `92393be`（ErrorBoundary null 语义，E2E 抓到的真 bug）/ `9c40ad2`（观测基建 + E2E）/ `70c6d51`（E2E 真实化）。

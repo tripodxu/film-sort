@@ -1,5 +1,28 @@
 # Changelog
 
+## 2026-10-05 · 低危小项清账（lint 清零 / gates 聚合 / 审计 / 焦点圈回 / 加载态）
+
+**改了什么**
+
+- **lint 警告基线 29 → 0**：16 处未用导入/变量/参数删除或 `_` 前缀；12 处
+  `react-hooks/exhaustive-deps` 改为**逐条带真实原因的定向抑制**——这些 effect 都是
+  「只随关键输入触发」的有意设计（渲染期函数身份、selections 进依赖会循环），盲目补依赖
+  在无 jsdom 覆盖的视图上是回归风险。收益：以后新警告一出现就可见，不再淹没在基线里。
+- **`npm run gates`**（`scripts/gates.mjs`）：五道门禁一条命令、退出码正确聚合、失败即停。
+  动机是本次真实踩过的坑：`npm run format:check | tail && echo OK` 这类管道把非零退出码
+  吞掉打了假绿。
+- **cover-choice 写审计**（`worker/index.ts`）：写穿校验通过后 `recordAudit("cover_choice", …)`
+  落 `admin_audit`（title/wikiTitle/url/userId/email）。任何登录用户可改全站封面位是
+  已声明的产品取舍，现在这笔写有账可查，管理台既有审计渲染零改动可见。
+- **FocusTrap 监听上 document**：焦点落在 trap 外（点击非按钮区域后 activeElement=body）时，
+  挂在 trap 元素上的监听收不到 keydown——Tab 圈不住、Escape 失效。现在 document 级监听 +
+  `el.contains(activeElement)` 守卫把焦点圈回来。绊线同步更新。
+- **Poster 加载态随 src 重置**：`imgLoaded` 布尔态改为 `loadedSrc === src` 派生——候选切换/
+  代理重试换图时新图正确回到占位态，不再借旧图的「已加载」。
+
+**验证**：`npm run gates` 5/5 全绿（lint **0 problems**、vitest **715 passed / 9 skipped (724)**
++1 审计用例、build 过）。行为类改动 FocusTrap/Poster 随下次部署由 E2E T4 回归验证。
+
 ## 2026-10-05 · 观测基建 + 浏览器 E2E（第一档两件，E2E 顺手抓到一个真 bug）
 
 **改了什么**
