@@ -199,3 +199,17 @@ describe("detailFields · 相对旧实现的净收益（用线上实录值断言
     expect(rows.map((f) => f.label)).not.toContain("author_intro");
   });
 });
+
+describe("detailFields · 未知对象值不许印成 [object Object]", () => {
+  it("嵌套对象序列化成 JSON（后端形状升级时未知键照样可读）", () => {
+    const fields = detailFields({ extra_info: { director_cut: true, runtime_minutes: 162 } }, t);
+    expect(fields).toHaveLength(1);
+    expect(fields[0].value).toBe('{"director_cut":true,"runtime_minutes":162}');
+  });
+
+  it("数组里的对象元素同样序列化，数组前的空元素过滤仍然生效", () => {
+    const fields = detailFields({ awards: [{ year: 2010, prize: "奥斯卡" }, null, ""] }, t);
+    expect(fields).toHaveLength(1);
+    expect(fields[0].value).toBe('{"year":2010,"prize":"奥斯卡"}');
+  });
+});

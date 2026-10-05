@@ -223,3 +223,23 @@ describe("POST /api/other/cover-choice · 合法写入", () => {
     expect([...rows.values()][0]).toBe('["https://upload.wikimedia.org/wikipedia/zh/a/ab/X.png"]');
   });
 });
+
+describe("GET /api/other/candidates · 入参上限", () => {
+  // english 原样进上游查询 URL。当前前端不发这个参数，但别留一个无界的口子：
+  // 与 name 同口径 120，超长 400，且 400 必须发生在限流/回源之前（无需 D1）。
+  // 刻意不写「合法长度放行」的用例：那条路会真回源维基，离线测试不碰网络。
+  async function sendCandidates(english: string): Promise<Response> {
+    const env: Env = { ASSETS: {} as Fetcher, DB: undefined as unknown as D1Database };
+    const request = new Request(
+      `https://sort.logicc.top/api/other/candidates?name=2012&english=${encodeURIComponent(english)}`,
+    );
+    const ctx = { waitUntil: () => undefined } as unknown as ExecutionContext;
+    return worker.fetch(request, env, ctx);
+  }
+
+  it("english 超长 400 invalid_english（与 name 同口径）", async () => {
+    const response = await sendCandidates("e".repeat(121));
+    expect(response.status).toBe(400);
+    expect(((await response.json()) as { msg?: string }).msg).toBe("invalid_english");
+  });
+});

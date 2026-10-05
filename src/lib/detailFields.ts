@@ -89,14 +89,20 @@ const LONG_VALUE_CHARS = 80;
  * ⚠️ 连接前先滤掉空元素：`["", null, "徐凯鑫"]` 直接 join 会得到 `、null、徐凯鑫`，
  * 界面上就是一行带字面量 `null` 和前导顿号的文本。整段全空时返回空串，
  * 交给 `isPresent` 的上一步判定（调用方先判空再转）。
+ *
+ * ⚠️ 对象值必须序列化成 JSON：`String({a:1})` 是 `"[object Object]"`，
+ * 印在界面上等于乱码。序列化后超长的自然走 blocks 长文本档。
  */
 function stringifyValue(value: unknown): string {
   if (Array.isArray(value)) {
     return value
       .filter(isPresent)
-      .map((item) => String(item))
+      .map((item) =>
+        item !== null && typeof item === "object" ? JSON.stringify(item) : String(item),
+      )
       .join("、");
   }
+  if (value !== null && typeof value === "object") return JSON.stringify(value);
   return String(value);
 }
 

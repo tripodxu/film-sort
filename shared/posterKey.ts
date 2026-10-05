@@ -68,7 +68,7 @@ export function posterKeyYear(year?: number): number | undefined {
 
 /**
  * 海报条目的规范键：`type|title|english|year`，`other` 维度尾部多一段代数
- * （`other|title|english|year|2`）。
+ * （`other|title|english|year|<代数>`，代数值以 OTHER_POSTER_GENERATION 为准）。
  *
  * type 缺省按 `movie` 处理（与 sanitizePosterBatch 的兜底一致）。
  */

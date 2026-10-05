@@ -18,6 +18,28 @@
 **验证**：门禁 5/5（本地）。**未线上验证**——按规矩不标 ✅。
 审查同时确认的「没回归」清单：八次封面链迭代的关键机制在 HEAD 全部在位且互相叠加；posterKey 换代边界干净（movie/book/music 逐字节同键，仅 other 换代）；资产缓存 matcher 收得准；fetchBounded/allowedImage/storedItem 白名单无新增绕过。worker 侧另有 3 个结构性风险（`otherDetail` 第一档短路使消歧救援变死代码、`ARTIFACT_FILE_RE` 误杀「标题即敏感词」作品、other 链上游请求量翻倍）**本轮未修**，建议先补线上观测，见台账同日条目。
 
+**低危清单（同日顺手清掉的五项，全部零行为或纯收紧）**
+
+- `ARTIFACT_FILE_RE` 的 `edit[-_ ]` 补词首边界（`worker/other.ts`）：无边界版本会把
+  `Credit roll.jpg` 这类正文文件名里的子串 `edit ` 也判成 artifact，正文里合法存在的
+  文件名被误杀、整链从「有图」退化成「无图」。词首是分隔符的维基 UI 素材照判，
+  附 4 例黑线用例（`worker/other.test.ts`）。
+- `computePosters` other 分支的死三元（`worker/media.ts`）：该分支没有任何
+  `noteThrottle` 调用（豆瓣不在 other 回退链里），`throttled` 恒 false——直接返回
+  `wikiProbeVerdict(probe)`，并留注释防止抄回。
+- `shared/posterKey.ts` 注释里的代数示例过期（写 `|2`、实际已是 `"4"`）：改成
+  「以 `OTHER_POSTER_GENERATION` 为准」的不随换代漂移写法。
+- `GET /api/other/candidates` 的 `english` 参数补 120 字符上限（`worker/index.ts`）：
+  与 `name` 同口径，400 发生在限流/回源之前；附路由级用例（`worker/coverChoice.test.ts`，
+  刻意不写「合法放行」用例——那条路会真回源维基）。
+- `detailFields` 的未知对象值序列化成 JSON（`src/lib/detailFields.ts`）：此前
+  `String({a:1})` 印出 `[object Object]`；数组里的对象元素同样处理，附 2 例用例。
+
+**审查出但刻意不修的**：《2012》/《1984》类「标题即年份」作品被年份否决刀误伤——修它要动
+评分语义且没有干净的离线测试缝（做有区分度的夹具得反推整套评分词表），按「动闸门先观测」
+的纪律挪入台账观测清单，与三个结构性风险同批处理。
+
+
 ## 2026-10-02 · 迭代 11/20：作品详情弹窗接上焦点陷阱 + 字段翻译层
 
 **改了什么**

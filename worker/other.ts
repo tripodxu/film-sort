@@ -292,9 +292,11 @@ function hintTopicConfirmed(page: WikiPage, lang: "zh" | "en"): boolean {
  *     它们的模板名（commons 上没有作品封面叫这个，加词只会让正则更长而不
  *     改变任何真实结果）——兜底在调用点：`articleImageNames` 按
  *     /\.(jpe?g|png)$/i 过滤，svg 一律进不到「选封面」这一步。
- *     （同页的 `Star full.svg` 是个例外，由 star full/empty/half 命中。） */
+ *     （同页的 `Star full.svg` 是个例外，由 star full/empty/half 命中。）
+ *  ④ `edit` 与 icon 同样按「词首分隔符 + 词尾连接符」成词命中——无边界版本
+ *     会把 `Credit roll.jpg` 这类正文文件名里的子串 `edit ` 也判掉。 */
 const ARTIFACT_FILE_RE =
-  /(^|[\s_\-()[\].,:;&])(?:icon|logo|logotype|wordmark|banner|avatar|flag|placeholder|mascot)(?=$|[\s_\-)\].,:;&])|edit[-_ ]|(?:^|[\s_])star (?:full|empty|half)/i;
+  /(^|[\s_\-()[\].,:;&])(?:icon|logo|logotype|wordmark|banner|avatar|flag|placeholder|mascot)(?=$|[\s_\-)\].,:;&])|(?:^|[\s_\-()[\].,:;&])edit[-_ ]|(?:^|[\s_])star (?:full|empty|half)/i;
 
 export type ArtworkFileVerdict = "artwork" | "artifact";
 

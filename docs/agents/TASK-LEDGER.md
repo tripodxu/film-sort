@@ -10,9 +10,9 @@
 
 ## 进行中 / 最近
 
-### T-20261005-01 · 回归审查修复 · 最近 30 次提交整体审查出的 1 高 + 4 中缺陷（前端五处）
+### T-20261005-01 · 回归审查修复 · 最近 30 次提交整体审查出的 1 高 + 4 中缺陷（前端五处）+ 低危清单五项
 
-**状态**：👀 待审 —— 门禁 5/5 本地全绿（vitest 707 passed / 9 skipped (716)，基线 701 ⇒ +6）；**未到 sort.logicc.top 线上实机验证，不标 ✅**。
+**状态**：👀 待审 —— 门禁 5/5 本地全绿（修复批 commit `8e58816`：vitest 707 passed / 9 skipped (716)，基线 701 ⇒ +6；低危批再 +3 用例）；**未到 sort.logicc.top 线上实机验证，不标 ✅**。
 
 **任务类型**：回归审查 + 修复（用户指派「审查最近 30 次提交会不会有回归 → 修复」）。审查用三路并行深读（worker 封面链 / worker 接口与存储 / 前端），范围 `5faea92..HEAD`（30 commits，+10764/−451）。
 
@@ -23,16 +23,18 @@
 4. `src/components/OrbScene.tsx`：`mountInstance` 的 `createOrbEffectById` 包 try/catch（失败加 `.orb-scene-fallback` 退 CSS 背景）；cleanup 首行 `mountToken += 1` 作废在途挂载（否则泄漏一次 dispose）。
 5. `src/components/DeferredOrb.tsx`：新增 `SilentChunkBoundary`（失败停留 placeholder），装饰组件失败不再冒泡到路由级边界拖死首页。
 6. `src/ui-fixes.test.ts`：新 describe「懒加载失败与迟到响应守卫（回归审查 2026-10）」**6 例绊线**（源码扫描式，同既有惯例）。
-7. `CHANGELOG.md`：同日条目（含「没回归」清单全文）。
+7. 低危批（同日第二批）：`worker/other.ts` `edit[-_ ]` 补词首边界（`Credit roll.jpg` 子串误杀，+4 例黑线）｜`worker/media.ts` other 分支死三元清掉（恒 false 的 `throttled`，无行为变化）｜`shared/posterKey.ts` 注释代数改「以常量为准」｜`worker/index.ts` candidates `english` 补 120 上限（+1 例路由用例，复用 coverChoice 测试骨架）｜`src/lib/detailFields.ts` 未知对象值序列化 JSON（`[object Object]` 不再上屏，+2 例）。
+8. `CHANGELOG.md`：同日条目（含「没回归」清单全文 + 低危清单）。
 
 **为什么**：五个缺陷全在「不常走的路径」上——chunk 失败只在发版换代/弱网显形（且 2980ad9 的 immutable 一年恰好放大暴露面）、迟到响应只在手速快过 30s 详情链时显形、重复请求只烧后台配额不报错。逐条证据见审查报告与 CHANGELOG。
 
 **审查确认「没回归」的方面**（下一棒不必重查）：八次封面链迭代的关键机制（繁简归一/tier 闸门/年份 −4/类型词轮保底/详情链短路/桶宽白名单/逐条探针/artifact 尺）在 HEAD 全部在位且互相叠加；posterKey 换代 movie/book/music 逐字节同键、仅 other 换代；资产缓存 matcher 不误伤 HTML/API；fetchBounded/allowedImage/storedItem 白名单/Key 不落盘/管理面转义/读侧不删数据全部无新增违规；bf936bc 后无模块级跨请求状态。
 
 **下一步 / 遗留（按优先级）**：
-1. **线上实机验证本轮五处修复后标 ✅**（重点：部署换代后旧标签页点齿轮/AI 设置/榜单海报不再白屏；详情弹窗数据到达时焦点不被抢走）。
-2. **worker 侧 3 个结构性风险未修，建议先补观测再动**：① `otherDetail` 第一档把「裸标题同名条目」钉死并短路整套消歧救援（`worker/other.ts:1424` + `worker/media.ts:1734`，维基结构一变就错图直出）；② `ARTIFACT_FILE_RE` 误杀「标题即敏感词」作品（`worker/other.ts:296`，Avatar/Banner/Flag 类真海报被杀且连正文兜底一起失效，2d962d2 引入的回退）；③ other 链上游请求量翻倍（otherDetail+resolveOtherCover 同链重跑，429→15s 负缓存→批次变灰）。观测点：cover-choice 前后 key 命中分布、poster_errors 里 throttled 占比、标题含 icon/avatar/flag 条目抽样。
-3. 低危清单未动（OrbScene 之外的）：`edit[-_ ]` 无词边界、`worker/media.ts` 死变量 `throttled`、`shared/posterKey.ts:71` 注释代数过期（写 `|2` 实际 `"4"`）、candidates 端点 `english` 参数无长度上限、detailFields 未知对象值渲染 `[object Object]`、《2012》/《1984》类标题被年份否决刀误伤。
+1. **线上实机验证两批修复后标 ✅**（重点：部署换代后旧标签页点齿轮/AI 设置/榜单海报不再白屏；详情弹窗数据到达时焦点不被抢走）。
+2. **动闸门前先补线上观测（4 项）**：① `otherDetail` 第一档把「裸标题同名条目」钉死并短路整套消歧救援（`worker/other.ts:1424` + `worker/media.ts:1734`，维基结构一变就错图直出）；② `ARTIFACT_FILE_RE` 误杀「标题即敏感词」作品（`worker/other.ts:296`，Avatar/Banner/Flag 类真海报被杀且连正文兜底一起失效，2d962d2 引入的回退）；③ other 链上游请求量翻倍（otherDetail+resolveOtherCover 同链重跑，429→15s 负缓存→批次变灰）；④ 「标题即年份」作品（《2012》/《1984》）被年份否决刀 −4 误伤——修它没有干净的离线测试缝（做有区分度的夹具得反推整套评分词表），按「动闸门先观测」纪律与 ①②③ 同批。观测点：cover-choice 前后 key 命中分布、poster_errors 里 throttled 占比、标题含 icon/avatar/flag 条目抽样。
+3. 已知取舍不动：cover-choice 允许任意登录用户改全站封面位（端点注释已声明的产品决策，留意滥用面）；FocusTrap 焦点落在 trap 外时 Tab 可逃逸（实际暴露面极小）。
+
 
 
 ### T-20261002-12 · 迭代 11/20（前端类）· 作品详情弹窗接上焦点陷阱 + 字段翻译层（后端键不再直接印给人看）

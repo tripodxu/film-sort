@@ -1774,7 +1774,9 @@ async function computePosters(
     // 判定方向是「**有过一次答复** ⇒ absent」而不是「有过一次失败 ⇒ throttled」：
     // 兜底链有 5 档串行，若第 1 档成功、第 5 档超时，这一条其实已经用掉了
     // 前 4 档的答复，应当按「确实没有」记账。
-    return { urls: [], outcome: throttled ? "throttled" : wikiProbeVerdict(probe) };
+    // 本分支没有任何 noteThrottle 调用（豆瓣不在 other 的回退链里），
+    // 瞬时失败信号只来自逐条探针——`throttled` 在这里恒 false，别再抄回来。
+    return { urls: [], outcome: wikiProbeVerdict(probe) };
   } else {
     const [suggestion, imdb, search] = await Promise.allSettled([
       doubanSuggest(title),

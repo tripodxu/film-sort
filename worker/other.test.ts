@@ -1810,4 +1810,15 @@ describe("classifyArtworkFile（封面文件名判别）", () => {
     expect(classifyArtworkFile("OOjs UI icon edit-ltr-progressive.svg")).toBe("artifact");
     expect(classifyArtworkFile("edit-marker.jpg")).toBe("artifact");
   });
+
+  it("「edit」必须带词首边界（Credit roll 这类正文文件名里的子串不算）", () => {
+    // 无边界的 `edit[-_ ]` 会把 "Credit " 里的子串也判成 artifact——
+    // 正文里合法存在的文件名被误杀，整链从「有图」退化成「无图」。
+    for (const name of ["Credit roll.jpg", "Credit_Roll.png", "Unedited take.jpg"]) {
+      expect(classifyArtworkFile(name), name).toBe("artwork");
+    }
+    // 词首是分隔符的编辑素材照判（维基 UI 图标族）
+    expect(classifyArtworkFile("Pencil_edit_small.jpg")).toBe("artifact");
+    expect(classifyArtworkFile("Toolbar_edit-rtl.svg")).toBe("artifact");
+  });
 });

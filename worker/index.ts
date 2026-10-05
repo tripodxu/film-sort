@@ -2650,6 +2650,10 @@ async function route(request: Request, env: Env): Promise<Response> {
     const english = (url.searchParams.get("english") ?? "").trim();
     if (!name || name.length > 120)
       return json({ status: false, msg: "invalid_name", data: null }, 400);
+    // 与 name 同口径的上限：english 原样进上游查询 URL，当前前端虽不发这个
+    // 参数，也别留一个无界的口子在这。
+    if (english.length > 120)
+      return json({ status: false, msg: "invalid_english", data: null }, 400);
     const year = normalizeYear(
       url.searchParams.get("year") ?? url.searchParams.get("release_date"),
     );
