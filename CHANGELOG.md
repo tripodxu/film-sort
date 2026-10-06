@@ -1,5 +1,18 @@
 # Changelog
 
+## 2026-10-05 · F1 修复：分享页 fetch 加 15s 超时 + 页内错误态
+
+**背景**：全流程实测（T-20261005-05）发现的 F1——`/share/<code>` 页面无限停在「正在加载分享内容…」。后续诊断把根因钉死：分享 fetch **无超时**，且失败路径只弹一个会消失的 toast、占位分支没有任何持久反馈。当连接被黑洞（本次实测环境正是如此：DNS 污染注入伪造 IPv4 + 本地代理进程死亡 + 无 IPv6 出口，fetch 既不 resolve 也不 reject）时，访问者面对的就是无限加载。
+
+**改了什么**（`src/App.tsx`）
+
+- `/share/:code` 挂载 fetch 与 legacy 比较载荷 fetch 加 `AbortSignal.timeout(15000)`——挂起的连接最迟 15 秒转为失败。
+- 新增 `shareError` 页内状态：两条失败 catch 都落它；占位分支按它分叉出**错误态**（说明文案 + 重试按钮 `location.reload()` + 返回首页），不再无限「正在加载」。
+
+**测试**：`src/ui-fixes.test.ts` +1 绊线（两处 fetch 的超时字面量、`setShareError(true)` 必须出现两次、占位分支必须按 shareError 分叉）。
+
+**验证**：`npm run gates` 5/5 全绿（vitest **716 passed / 9 skipped (725)**，715 ⇒ +1）。**未推送、未线上验证**——本机到 github/sort.logicc.top 的网络在同一时段全面中断（代理进程死亡 + IPv4 DNS 污染 + 无 IPv6），提交 `d932e1f` 暂在本地，网络恢复后推送部署并用浏览器复验（分享页错误态 + F2 云端恢复一并测）。
+
 ## 2026-10-05 · 低危小项清账（lint 清零 / gates 聚合 / 审计 / 焦点圈回 / 加载态）
 
 **改了什么**
