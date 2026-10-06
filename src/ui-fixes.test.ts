@@ -895,4 +895,23 @@ describe("懒加载失败与迟到响应守卫（回归审查 2026-10）", () =>
     expect(boundary).toContain("this.props.fallback !== undefined");
     expect(boundary).not.toMatch(/this\.props\.fallback\s*\?\?/);
   });
+
+  it("分享页 fetch 必须带超时，失败必须落页内错误态（不许无限「正在加载」）", () => {
+    // F1（2026-10-05 线上实测）：DNS 污染/代理中断把连接黑洞掉时，无超时的
+    // fetch 既不 resolve 也不 reject——页面永远停在「正在加载分享内容…」，
+    // toast 就算弹过也会消失，访问者没有任何持久反馈。
+    expect(code).toMatch(
+      /fetch\(`\/api\/share\/\$\{code\}`, \{ signal: AbortSignal\.timeout\(15000\) \}\)/,
+    );
+    // legacy 比较载荷路径同一类挂起，超时不许只修一半
+    expect(code).toMatch(
+      /fetch\(`\/api\/share\/\$\{payload\}`, \{ signal: AbortSignal\.timeout\(15000\) \}\)/,
+    );
+    expect(code).toContain("const [shareError, setShareError]");
+    // 两条 catch 都要落 shareError（只弹 toast 不算落）
+    expect(code.match(/setShareError\(true\)/g) ?? []).toHaveLength(2);
+    // 占位分支必须按 shareError 分叉出可重试的错误态
+    expect(code).toMatch(/shareError \? \(/);
+    expect(code).toMatch(/onClick=\{\(\) => location\.reload\(\)\}/);
+  });
 });

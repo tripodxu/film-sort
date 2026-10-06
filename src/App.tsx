@@ -187,6 +187,10 @@ export default function App() {
   const [peerUrl, setPeerUrl] = useState("");
   const [peerUrlBusy, setPeerUrlBusy] = useState(false);
   const [sharePeer, setSharePeer] = useState<ArtisticProfile | null>(null);
+  // 分享内容加载失败的页内反馈：fetch 挂起（DNS 污染/代理中断会把连接黑洞掉，
+  // 既不 resolve 也不 reject）时，「正在加载」占位必须能变成明确的错误态，
+  // 否则访问者面对的是无限加载。2026-10-05 线上实测真实发生。
+  const [shareError, setShareError] = useState(false);
   // P5c：布局模式兜底（双点位之一——main.tsx 预挂载为主，此 effect 兜底）
   useEffect(() => {
     applyLayout(readLayout());
@@ -423,8 +427,8 @@ export default function App() {
       new URLSearchParams(location.search).get("payload");
     if (payload) {
       if (/^[0-9a-f]{8,12}$/i.test(payload)) {
-        // Short code — fetch from server
-        fetch(`/api/share/${payload}`)
+        // Short code — fetch from server（同 share 页：黑洞网络下不许无限挂起）
+        fetch(`/api/share/${payload}`, { signal: AbortSignal.timeout(15000) })
           .then(async (r) => {
             if (!r.ok) throw new Error();
             const d = (await r.json()) as { profile: unknown; notes?: Record<string, string> };
@@ -511,7 +515,9 @@ export default function App() {
         if (/^[0-9a-f]{8,12}$/i.test(code)) {
           // Short code — fetch from server. Notes belong to the peer and must stay in
           // peerNotes; merging them into own notes would pollute the viewer's data.
-          fetch(`/api/share/${code}`)
+          // 15s 超时：连接被黑洞（DNS 污染/断网）时 fetch 可能永远挂起，
+          // 没有它用户就永远停在「正在加载」。
+          fetch(`/api/share/${code}`, { signal: AbortSignal.timeout(15000) })
             .then(async (r) => {
               if (!r.ok) throw new Error();
               const d = (await r.json()) as {
@@ -524,9 +530,10 @@ export default function App() {
               setPeerNotes(d.notes && typeof d.notes === "object" ? d.notes : {});
               setView("share");
             })
-            .catch(() =>
-              setNotice(t("分享链接无效或已过期。", "Share link is invalid or expired.")),
-            );
+            .catch(() => {
+              setShareError(true);
+              setNotice(t("分享链接无效或已过期。", "Share link is invalid or expired."));
+            });
         } else {
           // Base64 payload in path
           decode(code)
@@ -534,9 +541,10 @@ export default function App() {
               setSharePeer(p);
               setView("share");
             })
-            .catch(() =>
-              setNotice(t("分享链接无效或过大。", "Share link is invalid or too large.")),
-            );
+            .catch(() => {
+              setShareError(true);
+              setNotice(t("分享链接无效或过大。", "Share link is invalid or too large."));
+            });
         }
       }
     }
@@ -1401,7 +1409,21 @@ export default function App() {
   else if (view === "share" && !sharePeer)
     content = (
       <div className="empty-state">
-        <p style={{ marginBottom: 12 }}>{t("正在加载分享内容…", "Loading shared content…")}</p>
+        {shareError ? (
+          <>
+            <p style={{ marginBottom: 12 }}>
+              {t(
+                "分享内容加载失败：链接无效、已过期，或网络暂时不可用。",
+                "Couldn't load this share: the link is invalid, expired, or the network is unreachable.",
+              )}
+            </p>
+            <button className="button secondary" onClick={() => location.reload()}>
+              {t("重试", "Retry")}
+            </button>{" "}
+          </>
+        ) : (
+          <p style={{ marginBottom: 12 }}>{t("正在加载分享内容…", "Loading shared content…")}</p>
+        )}
         <button className="button secondary" onClick={() => navigateTo("home")}>
           {t("返回首页", "Back home")}
         </button>
