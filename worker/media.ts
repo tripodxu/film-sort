@@ -1,6 +1,12 @@
 import curatedPosters from "./imdb-posters.json";
 import { gdPicUrl, gdSearch, pickTracks, toSc, type GdProxyEnv } from "./gdstudio";
-import { fetchBounded, parseAllowedUrl, readBoundedText, type OutboundPolicy } from "./outbound";
+import {
+  fetchBounded,
+  parseAllowedUrl,
+  readBoundedJson,
+  readBoundedText,
+  type OutboundPolicy,
+} from "./outbound";
 import { generationOf, registerPurger } from "./cachePurge";
 import { posterKeySegment, posterMediaKey } from "../shared/posterKey";
 import {
@@ -13,6 +19,7 @@ import {
   wikiFileThumbUrls,
   wikiPageImageAny,
   wikiProbeVerdict,
+  wikipediaPolicy,
   type WikiProbe,
 } from "./other";
 
@@ -686,12 +693,17 @@ async function collectExtracts(
   // zh 请求简体变体：标题与摘要统一为简体，与查询词/相关性判断的字符集一致
   if (lang === "zh") params.set("variant", "zh-cn");
   try {
-    const r = await fetch(`https://${lang}.wikipedia.org/w/api.php?${params}`, {
-      headers: { "user-agent": USER_AGENTS[0], accept: "application/json" },
-      signal: AbortSignal.timeout(timeoutMs),
-    });
+    // 出站走 fetchBounded（C2 / T-20261014-06）：与 other.ts wikiJson 同策略。
+    const policy = wikipediaPolicy(timeoutMs);
+    const r = await fetchBounded(
+      `https://${lang}.wikipedia.org/w/api.php?${params}`,
+      {
+        headers: { "user-agent": USER_AGENTS[0], accept: "application/json" },
+      },
+      policy,
+    );
     if (!r.ok) return [];
-    const d = (await r.json()) as {
+    const d = (await readBoundedJson(r, policy.maxBytes)) as {
       query?: {
         pages?: Record<string, { title?: string; extract?: string; missing?: boolean }>;
         redirects?: Array<{ from?: string; to?: string }>;
@@ -752,12 +764,17 @@ async function collectSearch(
   });
   if (lang === "zh") params.set("variant", "zh-cn");
   try {
-    const r = await fetch(`https://${lang}.wikipedia.org/w/api.php?${params}`, {
-      headers: { "user-agent": USER_AGENTS[0], accept: "application/json" },
-      signal: AbortSignal.timeout(timeoutMs),
-    });
+    // 出站走 fetchBounded（C2 / T-20261014-06）：与 other.ts wikiJson 同策略。
+    const policy = wikipediaPolicy(timeoutMs);
+    const r = await fetchBounded(
+      `https://${lang}.wikipedia.org/w/api.php?${params}`,
+      {
+        headers: { "user-agent": USER_AGENTS[0], accept: "application/json" },
+      },
+      policy,
+    );
     if (!r.ok) return [];
-    const d = (await r.json()) as {
+    const d = (await readBoundedJson(r, policy.maxBytes)) as {
       query?: { pages?: Record<string, { title?: string; extract?: string; missing?: boolean }> };
     };
     const out: Scored[] = [];
@@ -1425,10 +1442,16 @@ async function queryWikiImages(
   probe?: WikiProbe,
 ): Promise<string[]> {
   try {
-    const response = await fetch(`https://${lang}.wikipedia.org/w/api.php?${params}`, {
-      headers: { "user-agent": USER_AGENTS[0], accept: "application/json" },
-      signal: AbortSignal.timeout(8000),
-    });
+    // 出站走 fetchBounded（C2 / T-20261014-06）：与 other.ts wikiJson 同策略。
+    // 探针记账语义不变：抛错（超时/超限/非法跳转）走 catch；!ok 按原分支记账。
+    const policy = wikipediaPolicy(8000);
+    const response = await fetchBounded(
+      `https://${lang}.wikipedia.org/w/api.php?${params}`,
+      {
+        headers: { "user-agent": USER_AGENTS[0], accept: "application/json" },
+      },
+      policy,
+    );
     // 这一档自带 fetch（不走 other.ts 的 wikiJson），所以**它自己也要记账**：
     // 漏掉它 = 「第 5 档全超时但前 4 档成功」会被错判成 throttled。
     if (probe) {
@@ -1438,7 +1461,9 @@ async function queryWikiImages(
       } else probe.ok++;
     }
     if (!response.ok) return [];
-    const data = (await response.json()) as { query?: { pages?: Record<string, WikiImagePage> } };
+    const data = (await readBoundedJson(response, policy.maxBytes)) as {
+      query?: { pages?: Record<string, WikiImagePage> };
+    };
     const pages = Object.values(data.query?.pages ?? {});
     // pageprops.page_image（infobox 封面）是文件名，批量换一次 URL；非自由封面
     // （游戏/新上映影片盒装）只能从这里拿，pageimages 默认 free 档恒空

@@ -1,6 +1,7 @@
+import { fetchBounded, readBoundedJson, type OutboundPolicy } from "./outbound";
+
 // ===== "其他" 类别数据：维基百科（简介 + 图）为主 =====
-// 游戏/艺术/建筑等非影书音作品没有豆瓣条目，走维基多语言。
-//
+// 游戏/艺术/建筑等非影书音作品没有豆瓣条目，走维基多语言。//
 // 2026-09-30 迭代，三条链路一起改造（实测 sort.logicc.top 复现的错配）：
 // ① 取图主链从 pageimages（对非自由封面**恒空**）切到 pageprops.page_image
 //    （infobox 封面文件名，非自由文件也有值，需再打一次 imageinfo 换 URL），
@@ -79,6 +80,22 @@ export function wikiProbeVerdict(probe: WikiProbe): "absent" | "throttled" {
   return probe.ok > 0 ? "absent" : "throttled";
 }
 
+/** 维基 API 出站策略（硬规则 C2 / T-20261014-06）：精确 host 白名单 + 跳转逐跳复核
+ *  （2 跳封顶）+ 1MB 响应上限 + 调用方超时。本文件 wikiJson 与 media.ts 三处维基
+ *  调用共用此工厂，策略只改这一处。
+ *  注：刻意不限 content-type——非 JSON 的 200 响应照样在 readBoundedJson 里抛错，
+ *  走完全相同的 catch 路径；加白名单只会把错误码从 SyntaxError 换成
+ *  disallowed_content_type，零行为差异（content-intro-music.test.ts 的 mock
+ *  Response 默认 text/plain，加了反而是无谓的测试 churn）。 */
+export function wikipediaPolicy(timeoutMs: number): OutboundPolicy {
+  return {
+    allowedHosts: ["zh.wikipedia.org", "en.wikipedia.org"],
+    maxBytes: 1024 * 1024,
+    timeoutMs,
+    maxRedirects: 2,
+  };
+}
+
 async function wikiJson(
   lang: "zh" | "en",
   params: URLSearchParams,
@@ -86,10 +103,17 @@ async function wikiJson(
   probe: WikiProbe,
 ): Promise<Record<string, WikiPage> | null> {
   try {
-    const r = await fetch(`https://${lang}.wikipedia.org/w/api.php?${params}`, {
-      headers: { "user-agent": UA, accept: "application/json" },
-      signal: AbortSignal.timeout(timeoutMs),
-    });
+    // 出站走 fetchBounded（C2）：此前裸 fetch 无响应字节上限、无 host 白名单，
+    // 且默认跟随跳转到任意域。行为等价性：429/5xx 照旧进 !r.ok 记 failed；
+    // 超时/断连/超限/非法跳转都抛错进 catch 记 failed，与此前完全一致。
+    const policy = wikipediaPolicy(timeoutMs);
+    const r = await fetchBounded(
+      `https://${lang}.wikipedia.org/w/api.php?${params}`,
+      {
+        headers: { "user-agent": UA, accept: "application/json" },
+      },
+      policy,
+    );
     if (!r.ok) {
       // 429/5xx 是「再试一次可能就好了」；4xx（如无此条目）则是明确答复，
       // 记 ok 而不是 failed——维基对不存在的条目返 200+missing，4xx 极少见，
@@ -98,7 +122,9 @@ async function wikiJson(
       else probe.ok++;
       return null;
     }
-    const d = (await r.json()) as { query?: { pages?: Record<string, WikiPage> } };
+    const d = (await readBoundedJson(r, policy.maxBytes)) as {
+      query?: { pages?: Record<string, WikiPage> };
+    };
     probe.ok++;
     return d.query?.pages ?? null;
   } catch {

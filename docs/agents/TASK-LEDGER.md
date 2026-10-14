@@ -28,7 +28,7 @@
 **线上验证（2026-10-14，提交 `20fd3de`，T-05）**：首页引用新包 `assets/index-D037JABt.js` ✅、新 asset 200 ✅、浏览器 E2E 6/6 全绿 ✅。途中 `ui-fixes.test.ts` 绊线按预期变红（它锁死了旧的裸 `aria-label` 写法），已按 CONVENTIONS §6.7 把绊线升级为锁定新写法（`role=status` + `sr-only`），88/88 绿。附带核实：`IconButton` 早有 `aria-label`（前期已修，审查报告 item 18 过期作废）。实际包了 12 处 dialog（App 8 + SourceView 3 + ProfileView 1），超原计划 7 处。
 | T-20261014-04 | 大清单三重爆点（防抖+证据封顶+快照500→50） | ✅ 完成（线上验证过） | 本 agent |
 | T-20261014-05 | 7 处 dialog 接 FocusTrap + route-loading/iconBtn/进度条 | ✅ 完成（线上验证过） | 本 agent |
-| T-20261014-06 | S1 出站收敛 fetchBounded + 扫描绊线 | ⬜ 未开始 | 待认领 |
+| T-20261014-06 | S1 出站收敛 fetchBounded + 扫描绊线 | 🔄 进行中 | 本 agent |
 | T-20261014-07 | D2 四个 migration 幂等守卫 + A4 batch outcomes 并发 | ⬜ 未开始 | 待认领 |
 | T-20261014-08 | 导出 robustness（并发池+超时+超限降级）+ PWA 验收 | ⬜ 未开始 | 待认领 |
 | T-20261014-09 | quick+topN=1 退化 + rankMode 显式传参 + 文档滞后（A1/A2/A3） | ⬜ 未开始 | 待认领 |
