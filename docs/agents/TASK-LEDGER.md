@@ -24,8 +24,10 @@
 **线上验证（2026-10-14，提交 `63a365a`）**：推送后首页引用新包 `assets/index-D8NEKR9S.js`（与本地构建同名；three 块 `YZZFkaN9` 不变）✅、新 asset 200 ✅、`/api/health` 200（D1 ok）✅、浏览器 E2E 6/6 全绿（T1 菜单开合 / T2·T3 chunk 失败不白屏 / T4 详情焦点不回跳，无回归）✅。Jaccard 修法由单测 11/11 锁定（含对方重复→100 上界）；键盘穿透守卫与路由 title/focus 为纯前端行为变更，T4 无回跳可作旁证，完整键盘+读屏走查留待手动复核（非阻塞）。
 
 **线上验证（2026-10-14，提交 `aeaa038`，T-04）**：首页引用新包 `assets/index-SI5P3qyP.js` ✅、新 asset 200 ✅、浏览器 E2E 6/6 全绿 ✅（与上一轮同一脚本）。防抖语义说明：连点只落最后一次，切页 flush，关页 pagehide 兜底，完成路径清挂起；撤销深度 50。证据数组（decisionLog 全量）未截断——它是 O(D²) 重放撤销的正确性依赖，动它需先做 A9 的二选一重构，留待后续。
+
+**线上验证（2026-10-14，提交 `20fd3de`，T-05）**：首页引用新包 `assets/index-D037JABt.js` ✅、新 asset 200 ✅、浏览器 E2E 6/6 全绿 ✅。途中 `ui-fixes.test.ts` 绊线按预期变红（它锁死了旧的裸 `aria-label` 写法），已按 CONVENTIONS §6.7 把绊线升级为锁定新写法（`role=status` + `sr-only`），88/88 绿。附带核实：`IconButton` 早有 `aria-label`（前期已修，审查报告 item 18 过期作废）。实际包了 12 处 dialog（App 8 + SourceView 3 + ProfileView 1），超原计划 7 处。
 | T-20261014-04 | 大清单三重爆点（防抖+证据封顶+快照500→50） | ✅ 完成（线上验证过） | 本 agent |
-| T-20261014-05 | 7 处 dialog 接 FocusTrap + route-loading/iconBtn/进度条 | ⬜ 未开始 | 待认领 |
+| T-20261014-05 | 7 处 dialog 接 FocusTrap + route-loading/iconBtn/进度条 | ✅ 完成（线上验证过） | 本 agent |
 | T-20261014-06 | S1 出站收敛 fetchBounded + 扫描绊线 | ⬜ 未开始 | 待认领 |
 | T-20261014-07 | D2 四个 migration 幂等守卫 + A4 batch outcomes 并发 | ⬜ 未开始 | 待认领 |
 | T-20261014-08 | 导出 robustness（并发池+超时+超限降级）+ PWA 验收 | ⬜ 未开始 | 待认领 |
