@@ -1,5 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { readFileSync } from "node:fs";
 import worker, { type Env } from "./index";
+import { tallyBatchOutcomes } from "./media";
 
 /**
  * POST /api/posters/batch 的 outcome 分布落库（migrations/0026 poster_batch_stats）。
@@ -109,5 +111,51 @@ describe("POST /api/posters/batch · outcome 分布落库", () => {
     // 上游全挂时已知缓存也不存在 ⇒ 仍不是 found；本用例只钉「一行且 total=1」。
     expect(batchRows).toHaveLength(1);
     expect(batchRows[0]?.[0]).toBe(1);
+  });
+});
+
+describe("tallyBatchOutcomes（A4 / T-20261014-07）", () => {
+  it("found 从 results 有无数据推导，未知 outcome 标签永不虚增 found", () => {
+    const tally = tallyBatchOutcomes(
+      ["a", "b", "c", "d"],
+      { a: ["https://img/x.jpg"], b: [], c: [], d: [] },
+      {
+        a: "found",
+        b: "throttled",
+        c: "absent",
+        // 将来新增的 outcome 字符串：无数据 ⇒ absent，绝不能 else 进 found。
+        d: "stale",
+      } as unknown as Record<string, "found" | "absent" | "throttled">,
+    );
+    expect(tally).toEqual({ found: 1, absent: 2, throttled: 1 });
+  });
+
+  it("有数据的 key 即使标签缺失也计 found（标签是解释，数据是事实）", () => {
+    const tally = tallyBatchOutcomes(["a"], { a: ["https://img/x.jpg"] }, {});
+    expect(tally).toEqual({ found: 1, absent: 0, throttled: 0 });
+  });
+});
+
+describe("批量 outcome 无共享状态（A4 / T-20261014-07 tripwire）", () => {
+  const media = readFileSync(new URL("./media.ts", import.meta.url), "utf8");
+  const other = readFileSync(new URL("./other.ts", import.meta.url), "utf8");
+
+  it("resolvePostersBatch 每次调用新建 results/outcomes（并发批次互不可见）", () => {
+    expect(media).toMatch(/const results: PosterBatchResult = \{\};/);
+    expect(media).toMatch(/const outcomes: Record<string, PosterOutcome> = \{\};/);
+  });
+
+  it("media.ts/other.ts 无模块级未命名判决状态（wikiDegraded 类缺陷不许回来）", () => {
+    // 允许的模块级可变状态只有：UA 轮转计数、懒索引初始化守卫、按 key 索引的
+    // 缓存/节流/熔断 Map（键控，无跨条目染色）。裸的判决布尔/字符串一律不许出现。
+    for (const [name, code] of [
+      ["media.ts", media],
+      ["other.ts", other],
+    ] as const) {
+      const bad = code
+        .split("\n")
+        .filter((line) => /^let\s+\w*(outcome|verdict|degraded|throttled)\w*\b/i.test(line));
+      expect(bad, `${name} 出现模块级判决状态：${bad.join(" | ")}`).toEqual([]);
+    }
   });
 });

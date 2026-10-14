@@ -1865,6 +1865,28 @@ export interface PosterBatchResponse {
   /** 每个 key 的结果分类；路由据此把批量失败写进 poster_errors（原先批量失败完全不可见）。 */
   outcomes: Record<string, PosterOutcome>;
 }
+
+export interface BatchOutcomeTally {
+  found: number;
+  absent: number;
+  throttled: number;
+}
+/** 批量 outcome 分布（A4 / T-20261014-07）：found 必须从 results 有无数据推导，
+ *  不能按 outcome 标签 else 归入——将来新增 outcome 字符串时，旧写法会把未知
+ *  状态虚增进 found。throttled 仍按标签（无数据 + 非限流 = 确实没有）。 */
+export function tallyBatchOutcomes(
+  keys: string[],
+  results: PosterBatchResult,
+  outcomes: Record<string, PosterOutcome>,
+): BatchOutcomeTally {
+  const tally: BatchOutcomeTally = { found: 0, absent: 0, throttled: 0 };
+  for (const key of keys) {
+    if ((results[key] ?? []).length) tally.found += 1;
+    else if (outcomes[key] === "throttled") tally.throttled += 1;
+    else tally.absent += 1;
+  }
+  return tally;
+}
 /**
  * 已知结果能否用于短路。
  * **空数组按未命中处理**——空结果本来就不落库（见 posterStore.saveResolvedPosters），

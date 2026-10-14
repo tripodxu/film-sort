@@ -1,4 +1,4 @@
-CREATE TABLE plaza_posts (
+CREATE TABLE IF NOT EXISTS plaza_posts (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   user_id INTEGER NOT NULL REFERENCES user_accounts(id),
   post_type TEXT NOT NULL,
@@ -14,7 +14,7 @@ CREATE TABLE plaza_posts (
   updated_at TEXT DEFAULT (datetime('now'))
 );
 
-CREATE TABLE plaza_likes (
+CREATE TABLE IF NOT EXISTS plaza_likes (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   post_id INTEGER NOT NULL REFERENCES plaza_posts(id),
   user_id INTEGER NOT NULL REFERENCES user_accounts(id),
@@ -22,7 +22,7 @@ CREATE TABLE plaza_likes (
   UNIQUE(post_id, user_id)
 );
 
-CREATE TABLE plaza_comments (
+CREATE TABLE IF NOT EXISTS plaza_comments (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   post_id INTEGER NOT NULL REFERENCES plaza_posts(id),
   user_id INTEGER NOT NULL REFERENCES user_accounts(id),
@@ -30,7 +30,7 @@ CREATE TABLE plaza_comments (
   created_at TEXT DEFAULT (datetime('now'))
 );
 
-CREATE INDEX idx_plaza_posts_created ON plaza_posts(created_at DESC);
-CREATE INDEX idx_plaza_posts_user ON plaza_posts(user_id);
-CREATE INDEX idx_plaza_likes_post ON plaza_likes(post_id);
-CREATE INDEX idx_plaza_comments_post ON plaza_comments(post_id);
+CREATE INDEX IF NOT EXISTS idx_plaza_posts_created ON plaza_posts(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_plaza_posts_user ON plaza_posts(user_id);
+CREATE INDEX IF NOT EXISTS idx_plaza_likes_post ON plaza_likes(post_id);
+CREATE INDEX IF NOT EXISTS idx_plaza_comments_post ON plaza_comments(post_id);

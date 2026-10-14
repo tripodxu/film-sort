@@ -13,6 +13,7 @@ import {
   resolvePostersBatch,
   posterMediaKey,
   allowedImage,
+  tallyBatchOutcomes,
   type PosterBatchRequest,
 } from "./media";
 import {
@@ -2238,12 +2239,9 @@ async function route(request: Request, env: Env): Promise<Response> {
       }
       // 每批一行 outcome 分布：poster_errors 只有失败行、没有分母，throttled 占比
       // 必须有 total/found 才算得出来（migrations/0026）。单行/请求，火后不管。
-      const tally = { found: 0, absent: 0, throttled: 0 };
-      for (const key of keys) {
-        if (outcomes[key] === "throttled") tally.throttled += 1;
-        else if (outcomes[key] === "absent") tally.absent += 1;
-        else tally.found += 1;
-      }
+      // found 从 results 有无数据推导（tallyBatchOutcomes），不按 outcome 标签 else
+      // 归入——未知状态永不虚增 found（A4 / T-20261014-07）。
+      const tally = tallyBatchOutcomes(keys, results, outcomes);
       void env.DB.prepare(
         "INSERT INTO poster_batch_stats (total, found, absent, throttled) VALUES (?, ?, ?, ?)",
       )
