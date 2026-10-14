@@ -230,6 +230,17 @@ export function SortingView({
         aria-valuenow={Math.round(progress.fraction * 100)}
         aria-valuemin={0}
         aria-valuemax={100}
+        aria-valuetext={
+          progress.phase === "verification"
+            ? t(
+                `复测阶段，剩余 ${progress.estimatedRemaining} 组`,
+                `Verification phase, ${progress.estimatedRemaining} groups left`,
+              )
+            : t(
+                `已完成 ${Math.round(progress.fraction * 100)}%（${progress.processed}/${progress.total}）`,
+                `${Math.round(progress.fraction * 100)}% done (${progress.processed}/${progress.total})`,
+              )
+        }
       >
         <span style={{ width: `${progress.fraction * 100}%` }} />
       </div>

@@ -482,7 +482,10 @@ describe("首屏依赖图绊线（PLAN-ROUTE-EAGER）", () => {
   it("挂载在 Suspense 之外的懒弹窗自带 fallback（首次点击不许白屏）", () => {
     // SettingsMenu 在顶栏、AiConfigDialog 与 RankingDetail 在弹层，三者都在 content 之外。
     expect(code).toContain("function LazySpot()");
-    expect(code).toContain('return <div className="route-loading" aria-label="Loading" />;');
+    // LazySpot（懒弹窗 fallback）：role=status 让读屏播报，sr-only 给出加载文案——
+    // 裸 aria-label 的 div 无 role 会被 AT 忽略（T-20261014-05 修法，锁死新写法）。
+    expect(code).toContain('className="route-loading" role="status" aria-live="polite"');
+    expect(code).toContain('className="sr-only"');
     expect(code.match(/<Suspense fallback=\{<LazySpot \/>\}>/g) ?? []).toHaveLength(2);
     // 顶栏那个不能露出布局空洞，用 null 兜底
     expect(code).toContain("<Suspense fallback={null}>");

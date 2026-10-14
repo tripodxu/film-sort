@@ -22,6 +22,7 @@ import {
   X,
 } from "lucide-react";
 import { Poster } from "../components/Poster";
+import { FocusTrap } from "../components/FocusTrap";
 import { GalleryBento } from "../components/GalleryBento";
 import { GalleryWall } from "../components/GalleryWall";
 import { useThemeFamily } from "../lib/useTheme";
@@ -815,100 +816,108 @@ export function ProfileView({
 
       {/* Publish to Plaza Modal */}
       {showPublishModal && (
-        <div className="modal-backdrop" onClick={() => setShowPublishModal(false)}>
-          <section
-            className="account-dialog publish-modal"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="publish-heading"
-            onClick={(event) => event.stopPropagation()}
-            onKeyDown={(event) => {
-              if (event.key === "Escape") setShowPublishModal(false);
-            }}
-          >
-            <div className="section-heading">
-              <div>
-                <span className="eyebrow">PLAZA</span>
-                <h2 id="publish-heading">{t("发布到广场", "Publish to Plaza")}</h2>
+        <FocusTrap onEscape={() => setShowPublishModal(false)}>
+          <div className="modal-backdrop" onClick={() => setShowPublishModal(false)}>
+            <section
+              className="account-dialog publish-modal"
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="publish-heading"
+              onClick={(event) => event.stopPropagation()}
+              onKeyDown={(event) => {
+                if (event.key === "Escape") setShowPublishModal(false);
+              }}
+            >
+              <div className="section-heading">
+                <div>
+                  <span className="eyebrow">PLAZA</span>
+                  <h2 id="publish-heading">{t("发布到广场", "Publish to Plaza")}</h2>
+                </div>
+                <IconButton title={t("关闭", "Close")} onClick={() => setShowPublishModal(false)}>
+                  <X size={18} />
+                </IconButton>
               </div>
-              <IconButton title={t("关闭", "Close")} onClick={() => setShowPublishModal(false)}>
-                <X size={18} />
-              </IconButton>
-            </div>
-            <p style={{ fontSize: 13, color: "var(--muted)", lineHeight: 1.7 }}>
-              {publishTarget === "profile"
-                ? t(
-                    `将画像「${profile.profileName}」（${profile.rankings.length} 个榜单）发布到文化广场，其他用户可以看到、点赞、留言和使用其中的榜单排序。`,
-                    `Publish profile "${profile.profileName}" (${profile.rankings.length} lists) to the Culture Plaza.`,
-                  )
-                : t(
-                    `将「${activeRanking.collectionTitle}」发布到文化广场，其他用户可以看到、点赞、留言和使用你的榜单排序。`,
-                    `Publish "${activeRanking.collectionTitle}" to the Culture Plaza. Others can see, like, comment, and sort with your ranking.`,
-                  )}
-            </p>
-            <div className="publish-desc-label">
-              <b>{t("榜单描述", "Description")}</b>
-              <span>{publishDesc.length} / 500</span>
-            </div>
-            <textarea
-              className="publish-desc"
-              maxLength={500}
-              value={publishDesc}
-              onChange={(e) => setPublishDesc(e.target.value)}
-              placeholder={t(
-                "介绍一下这份榜单，让别人更懂你的品味…（可选）",
-                "Introduce this list so others understand your taste… (optional)",
-              )}
-              rows={4}
-              autoFocus
-            />
-            <div className="publish-preview">
-              {t(
-                "将随帖子公开展示，可在广场详情页看到。",
-                "Shown publicly on your plaza post detail page.",
-              )}
-            </div>
-            <div className="guide-modal-footer">
-              <button
-                className="button secondary"
-                onClick={() => {
-                  setShowPublishModal(false);
-                  setPublishDesc("");
-                }}
-              >
-                {t("取消", "Cancel")}
-              </button>
-              <button
-                className="button primary"
-                onClick={handlePublish}
-                style={{ position: "relative" }}
-              >
-                <Globe size={14} style={{ marginRight: 4 }} />
-                {t("发布", "Publish")}
-                {publishBurst && (
-                  <span className="publish-burst">
-                    {Array.from({ length: 12 }).map((_, i) => {
-                      const colors = ["var(--accent)", "#4ade80", "#818cf8", "#f472b6", "#facc15"];
-                      return (
-                        <span
-                          key={i}
-                          className="publish-particle"
-                          style={
-                            {
-                              "--angle": i * 30 + "deg",
-                              "--delay": i * 0.03 + "s",
-                              "--color": colors[i % 5],
-                            } as any
-                          }
-                        />
-                      );
-                    })}
-                  </span>
+              <p style={{ fontSize: 13, color: "var(--muted)", lineHeight: 1.7 }}>
+                {publishTarget === "profile"
+                  ? t(
+                      `将画像「${profile.profileName}」（${profile.rankings.length} 个榜单）发布到文化广场，其他用户可以看到、点赞、留言和使用其中的榜单排序。`,
+                      `Publish profile "${profile.profileName}" (${profile.rankings.length} lists) to the Culture Plaza.`,
+                    )
+                  : t(
+                      `将「${activeRanking.collectionTitle}」发布到文化广场，其他用户可以看到、点赞、留言和使用你的榜单排序。`,
+                      `Publish "${activeRanking.collectionTitle}" to the Culture Plaza. Others can see, like, comment, and sort with your ranking.`,
+                    )}
+              </p>
+              <div className="publish-desc-label">
+                <b>{t("榜单描述", "Description")}</b>
+                <span>{publishDesc.length} / 500</span>
+              </div>
+              <textarea
+                className="publish-desc"
+                maxLength={500}
+                value={publishDesc}
+                onChange={(e) => setPublishDesc(e.target.value)}
+                placeholder={t(
+                  "介绍一下这份榜单，让别人更懂你的品味…（可选）",
+                  "Introduce this list so others understand your taste… (optional)",
                 )}
-              </button>
-            </div>
-          </section>
-        </div>
+                rows={4}
+                autoFocus
+              />
+              <div className="publish-preview">
+                {t(
+                  "将随帖子公开展示，可在广场详情页看到。",
+                  "Shown publicly on your plaza post detail page.",
+                )}
+              </div>
+              <div className="guide-modal-footer">
+                <button
+                  className="button secondary"
+                  onClick={() => {
+                    setShowPublishModal(false);
+                    setPublishDesc("");
+                  }}
+                >
+                  {t("取消", "Cancel")}
+                </button>
+                <button
+                  className="button primary"
+                  onClick={handlePublish}
+                  style={{ position: "relative" }}
+                >
+                  <Globe size={14} style={{ marginRight: 4 }} />
+                  {t("发布", "Publish")}
+                  {publishBurst && (
+                    <span className="publish-burst">
+                      {Array.from({ length: 12 }).map((_, i) => {
+                        const colors = [
+                          "var(--accent)",
+                          "#4ade80",
+                          "#818cf8",
+                          "#f472b6",
+                          "#facc15",
+                        ];
+                        return (
+                          <span
+                            key={i}
+                            className="publish-particle"
+                            style={
+                              {
+                                "--angle": i * 30 + "deg",
+                                "--delay": i * 0.03 + "s",
+                                "--color": colors[i % 5],
+                              } as any
+                            }
+                          />
+                        );
+                      })}
+                    </span>
+                  )}
+                </button>
+              </div>
+            </section>
+          </div>
+        </FocusTrap>
       )}
     </>
   );

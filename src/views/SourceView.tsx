@@ -19,6 +19,7 @@ import {
   X,
 } from "lucide-react";
 import { Poster } from "../components/Poster";
+import { FocusTrap } from "../components/FocusTrap";
 import { IconButton } from "./IconButton";
 import { heading } from "./helpers";
 import { MAX_PROFILE_BYTES } from "../lib/profile";
@@ -1347,438 +1348,461 @@ export function SourceView({
         </section>
       )}
       {dbQrOpen && (
-        <div
-          className="modal-backdrop"
-          onClick={() => {
+        <FocusTrap
+          onEscape={() => {
             setDbQrOpen(false);
             setDbQrCode("");
           }}
         >
-          <section
-            className="account-dialog qr-connect-dialog"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="douban-qr-heading"
-            onClick={(event) => event.stopPropagation()}
-            onKeyDown={(event) => {
-              if (event.key === "Escape") {
-                setDbQrOpen(false);
-                setDbQrCode("");
-              }
+          <div
+            className="modal-backdrop"
+            onClick={() => {
+              setDbQrOpen(false);
+              setDbQrCode("");
             }}
           >
-            <div className="section-heading">
-              <div>
-                <span className="eyebrow">DOUBAN</span>
-                <h2 id="douban-qr-heading">{t("扫码连接豆瓣", "Connect Douban via QR")}</h2>
-              </div>
-              <IconButton
-                title={t("关闭", "Close")}
-                onClick={() => {
+            <section
+              className="account-dialog qr-connect-dialog"
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="douban-qr-heading"
+              onClick={(event) => event.stopPropagation()}
+              onKeyDown={(event) => {
+                if (event.key === "Escape") {
                   setDbQrOpen(false);
                   setDbQrCode("");
-                }}
-              >
-                <X size={18} />
-              </IconButton>
-            </div>
-            <div style={{ display: "grid", placeItems: "center", gap: 12 }}>
-              <div className="qr-stage">
-                <div className="qr-box">
-                  {dbQrImage ? (
-                    <img
-                      src={dbQrImage}
-                      alt={t("豆瓣登录二维码", "Douban login QR code")}
-                      style={{
-                        width: 300,
-                        height: 300,
-                        background: "#fff",
-                        padding: 12,
-                        borderRadius: 12,
-                      }}
-                    />
-                  ) : (
-                    <div className="loading" style={{ width: 300, height: 300 }}>
-                      {t("正在生成二维码…", "Generating QR…")}
-                    </div>
-                  )}
-                  {dbQrState === "confirmed" && (
-                    <div className="qr-mask ok">
-                      <CheckCircle2 size={44} />
-                      <span>{t("连接成功", "Connected")}</span>
-                    </div>
-                  )}
-                  {dbQrState === "expired" && (
-                    <div className="qr-mask">
-                      <RotateCcw size={40} />
-                      <button className="button secondary" onClick={() => void autoRefreshDbQr()}>
-                        {t("重新生成", "Regenerate")}
-                      </button>
-                    </div>
-                  )}
+                }
+              }}
+            >
+              <div className="section-heading">
+                <div>
+                  <span className="eyebrow">DOUBAN</span>
+                  <h2 id="douban-qr-heading">{t("扫码连接豆瓣", "Connect Douban via QR")}</h2>
                 </div>
-                <div className="qr-side">
-                  <div className="qr-timer" style={{ opacity: dbQrState === "waiting" ? 1 : 0.45 }}>
-                    <Clock size={13} />
-                    {dbQrState === "waiting"
-                      ? `${t("剩余", "left")} ${Math.floor(dbQrLeft / 60)}:${String(dbQrLeft % 60).padStart(2, "0")}`
-                      : t("已就绪", "ready")}
-                  </div>
-                  <div
-                    className="qr-refresh-dots"
-                    title={t(
-                      "二维码有效期倒计时，归零自动换码（最多 2 次）",
-                      "Countdown; auto-refresh up to 2 times",
-                    )}
-                  >
-                    <span className={dbQrRefreshed >= 1 ? "on" : ""}></span>
-                    <span className={dbQrRefreshed >= 2 ? "on" : ""}></span>
-                  </div>
-                </div>
+                <IconButton
+                  title={t("关闭", "Close")}
+                  onClick={() => {
+                    setDbQrOpen(false);
+                    setDbQrCode("");
+                  }}
+                >
+                  <X size={18} />
+                </IconButton>
               </div>
-              <p
-                style={{
-                  fontSize: 13,
-                  color:
-                    dbQrState === "confirmed"
-                      ? "var(--green)"
-                      : dbQrState === "scanned"
-                        ? "var(--accent)"
-                        : "var(--muted)",
-                  margin: 0,
-                  textAlign: "center",
-                }}
-              >
-                {dbQrState === "waiting"
-                  ? t("打开豆瓣 App → 右上角扫一扫", "Open the Douban app → tap Scan (top-right)")
-                  : dbQrState === "scanned"
-                    ? t("已扫码 ✓ 请在手机上点「确认登录」", "Scanned ✓ confirm on your phone")
-                    : dbQrState === "confirmed"
-                      ? t("连接成功！正在校验账号…", "Connected! Verifying your account…")
-                      : dbQrError || t("二维码已过期", "QR code expired")}
-              </p>
-              {dbRiskBlocked && (
-                <div className="qr-fallback">
-                  <strong>
-                    {t("扫码没成功？用 Cookie 直连", "QR didn't work? Connect with your cookie")}
-                  </strong>
-                  {dbCookieOpen ? (
-                    <>
-                      <textarea
-                        value={dbCookieText}
-                        onChange={(event) => setDbCookieText(event.target.value)}
-                        placeholder={t(
-                          "粘贴浏览器里 douban.com 的 Cookie（含 dbcl2=…）",
-                          "Paste the cookie of douban.com (with dbcl2=...)",
-                        )}
+              <div style={{ display: "grid", placeItems: "center", gap: 12 }}>
+                <div className="qr-stage">
+                  <div className="qr-box">
+                    {dbQrImage ? (
+                      <img
+                        src={dbQrImage}
+                        alt={t("豆瓣登录二维码", "Douban login QR code")}
+                        style={{
+                          width: 300,
+                          height: 300,
+                          background: "#fff",
+                          padding: 12,
+                          borderRadius: 12,
+                        }}
                       />
-                      <div className="inline-input">
-                        <button
-                          className="button primary"
-                          disabled={dbCookieBusy || !dbCookieText.trim()}
-                          onClick={() => void dbConnectWithCookie()}
-                        >
-                          {dbCookieBusy ? t("连接中…", "Connecting…") : t("连接", "Connect")}
-                        </button>
-                        <button
-                          className="text-button"
-                          onClick={() => {
-                            setDbCookieOpen(false);
-                            setDbRiskBlocked(false);
-                            void openDbQr();
-                          }}
-                        >
-                          {t("← 再试一次扫码", "← Try QR again")}
+                    ) : (
+                      <div className="loading" style={{ width: 300, height: 300 }}>
+                        {t("正在生成二维码…", "Generating QR…")}
+                      </div>
+                    )}
+                    {dbQrState === "confirmed" && (
+                      <div className="qr-mask ok">
+                        <CheckCircle2 size={44} />
+                        <span>{t("连接成功", "Connected")}</span>
+                      </div>
+                    )}
+                    {dbQrState === "expired" && (
+                      <div className="qr-mask">
+                        <RotateCcw size={40} />
+                        <button className="button secondary" onClick={() => void autoRefreshDbQr()}>
+                          {t("重新生成", "Regenerate")}
                         </button>
                       </div>
-                    </>
-                  ) : (
-                    <button className="button secondary" onClick={() => setDbCookieOpen(true)}>
-                      <KeyRound size={15} />
-                      {t("粘贴 Cookie 连接", "Paste cookie")}
-                    </button>
-                  )}
-                  <button
-                    className="text-button"
-                    onClick={() => setHelpOpen(true)}
-                    style={{ alignSelf: "center", fontSize: 11 }}
-                  >
-                    {t("如何获取 Cookie？看图文说明 →", "How to get the cookie? See guide →")}
-                  </button>
+                    )}
+                  </div>
+                  <div className="qr-side">
+                    <div
+                      className="qr-timer"
+                      style={{ opacity: dbQrState === "waiting" ? 1 : 0.45 }}
+                    >
+                      <Clock size={13} />
+                      {dbQrState === "waiting"
+                        ? `${t("剩余", "left")} ${Math.floor(dbQrLeft / 60)}:${String(dbQrLeft % 60).padStart(2, "0")}`
+                        : t("已就绪", "ready")}
+                    </div>
+                    <div
+                      className="qr-refresh-dots"
+                      title={t(
+                        "二维码有效期倒计时，归零自动换码（最多 2 次）",
+                        "Countdown; auto-refresh up to 2 times",
+                      )}
+                    >
+                      <span className={dbQrRefreshed >= 1 ? "on" : ""}></span>
+                      <span className={dbQrRefreshed >= 2 ? "on" : ""}></span>
+                    </div>
+                  </div>
                 </div>
-              )}
-              {!dbRiskBlocked && (
-                <p className="mini-note" style={{ textAlign: "center", margin: 0 }}>
-                  {t(
-                    "连接后可导入你的私有豆列；Cookie 以 AES-GCM 加密存储，可随时断开删除。",
-                    "Connecting enables private doulists. The cookie is AES-GCM encrypted and removable anytime.",
-                  )}
+                <p
+                  style={{
+                    fontSize: 13,
+                    color:
+                      dbQrState === "confirmed"
+                        ? "var(--green)"
+                        : dbQrState === "scanned"
+                          ? "var(--accent)"
+                          : "var(--muted)",
+                    margin: 0,
+                    textAlign: "center",
+                  }}
+                >
+                  {dbQrState === "waiting"
+                    ? t("打开豆瓣 App → 右上角扫一扫", "Open the Douban app → tap Scan (top-right)")
+                    : dbQrState === "scanned"
+                      ? t("已扫码 ✓ 请在手机上点「确认登录」", "Scanned ✓ confirm on your phone")
+                      : dbQrState === "confirmed"
+                        ? t("连接成功！正在校验账号…", "Connected! Verifying your account…")
+                        : dbQrError || t("二维码已过期", "QR code expired")}
                 </p>
-              )}
-            </div>
-          </section>
-        </div>
+                {dbRiskBlocked && (
+                  <div className="qr-fallback">
+                    <strong>
+                      {t("扫码没成功？用 Cookie 直连", "QR didn't work? Connect with your cookie")}
+                    </strong>
+                    {dbCookieOpen ? (
+                      <>
+                        <textarea
+                          value={dbCookieText}
+                          onChange={(event) => setDbCookieText(event.target.value)}
+                          placeholder={t(
+                            "粘贴浏览器里 douban.com 的 Cookie（含 dbcl2=…）",
+                            "Paste the cookie of douban.com (with dbcl2=...)",
+                          )}
+                        />
+                        <div className="inline-input">
+                          <button
+                            className="button primary"
+                            disabled={dbCookieBusy || !dbCookieText.trim()}
+                            onClick={() => void dbConnectWithCookie()}
+                          >
+                            {dbCookieBusy ? t("连接中…", "Connecting…") : t("连接", "Connect")}
+                          </button>
+                          <button
+                            className="text-button"
+                            onClick={() => {
+                              setDbCookieOpen(false);
+                              setDbRiskBlocked(false);
+                              void openDbQr();
+                            }}
+                          >
+                            {t("← 再试一次扫码", "← Try QR again")}
+                          </button>
+                        </div>
+                      </>
+                    ) : (
+                      <button className="button secondary" onClick={() => setDbCookieOpen(true)}>
+                        <KeyRound size={15} />
+                        {t("粘贴 Cookie 连接", "Paste cookie")}
+                      </button>
+                    )}
+                    <button
+                      className="text-button"
+                      onClick={() => setHelpOpen(true)}
+                      style={{ alignSelf: "center", fontSize: 11 }}
+                    >
+                      {t("如何获取 Cookie？看图文说明 →", "How to get the cookie? See guide →")}
+                    </button>
+                  </div>
+                )}
+                {!dbRiskBlocked && (
+                  <p className="mini-note" style={{ textAlign: "center", margin: 0 }}>
+                    {t(
+                      "连接后可导入你的私有豆列；Cookie 以 AES-GCM 加密存储，可随时断开删除。",
+                      "Connecting enables private doulists. The cookie is AES-GCM encrypted and removable anytime.",
+                    )}
+                  </p>
+                )}
+              </div>
+            </section>
+          </div>
+        </FocusTrap>
       )}
       {qrOpen && (
-        <div
-          className="modal-backdrop"
-          onClick={() => {
+        <FocusTrap
+          onEscape={() => {
             setQrOpen(false);
             setQrUnikey("");
           }}
         >
-          <section
-            className="account-dialog qr-connect-dialog"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="netease-qr-heading"
-            onClick={(event) => event.stopPropagation()}
-            onKeyDown={(event) => {
-              if (event.key === "Escape") {
-                setQrOpen(false);
-                setQrUnikey("");
-              }
+          <div
+            className="modal-backdrop"
+            onClick={() => {
+              setQrOpen(false);
+              setQrUnikey("");
             }}
           >
-            <div className="section-heading">
-              <div>
-                <span className="eyebrow">NETEASE</span>
-                <h2 id="netease-qr-heading">{t("扫码连接网易云音乐", "Connect NetEase via QR")}</h2>
-              </div>
-              <IconButton
-                title={t("关闭", "Close")}
-                onClick={() => {
+            <section
+              className="account-dialog qr-connect-dialog"
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="netease-qr-heading"
+              onClick={(event) => event.stopPropagation()}
+              onKeyDown={(event) => {
+                if (event.key === "Escape") {
                   setQrOpen(false);
                   setQrUnikey("");
-                }}
-              >
-                <X size={18} />
-              </IconButton>
-            </div>
-            <div style={{ display: "grid", placeItems: "center", gap: 12 }}>
-              <div className="qr-stage">
-                <div className="qr-box">
-                  {qrImage ? (
-                    <img
-                      src={qrImage}
-                      alt={t("网易云音乐登录二维码", "NetEase login QR code")}
-                      style={{
-                        width: 300,
-                        height: 300,
-                        background: "#fff",
-                        padding: 12,
-                        borderRadius: 12,
-                      }}
-                    />
-                  ) : (
-                    <div className="loading" style={{ width: 300, height: 300 }}>
-                      {t("正在生成二维码…", "Generating QR…")}
-                    </div>
-                  )}
-                  {qrState === "confirmed" && (
-                    <div className="qr-mask ok">
-                      <CheckCircle2 size={44} />
-                      <span>{t("连接成功", "Connected")}</span>
-                    </div>
-                  )}
-                  {qrState === "expired" && (
-                    <div className="qr-mask">
-                      <RotateCcw size={40} />
-                      <button className="button secondary" onClick={() => void autoRefreshQr()}>
-                        {t("重新生成", "Regenerate")}
-                      </button>
-                    </div>
-                  )}
+                }
+              }}
+            >
+              <div className="section-heading">
+                <div>
+                  <span className="eyebrow">NETEASE</span>
+                  <h2 id="netease-qr-heading">
+                    {t("扫码连接网易云音乐", "Connect NetEase via QR")}
+                  </h2>
                 </div>
-                <div className="qr-side">
-                  <div className="qr-timer" style={{ opacity: qrState === "waiting" ? 1 : 0.45 }}>
-                    <Clock size={13} />
-                    {qrState === "waiting"
-                      ? `${t("剩余", "left")} ${Math.floor(qrLeft / 60)}:${String(qrLeft % 60).padStart(2, "0")}`
-                      : t("已就绪", "ready")}
-                  </div>
-                  <div
-                    className="qr-refresh-dots"
-                    title={t(
-                      "二维码有效期倒计时，归零自动换码（最多 2 次）",
-                      "Countdown; auto-refresh up to 2 times",
-                    )}
-                  >
-                    <span className={qrRefreshed >= 1 ? "on" : ""}></span>
-                    <span className={qrRefreshed >= 2 ? "on" : ""}></span>
-                  </div>
-                  {qrScanned?.nickname && (
-                    <div className="qr-scanned-as">
+                <IconButton
+                  title={t("关闭", "Close")}
+                  onClick={() => {
+                    setQrOpen(false);
+                    setQrUnikey("");
+                  }}
+                >
+                  <X size={18} />
+                </IconButton>
+              </div>
+              <div style={{ display: "grid", placeItems: "center", gap: 12 }}>
+                <div className="qr-stage">
+                  <div className="qr-box">
+                    {qrImage ? (
                       <img
-                        src={`/api/image?url=${encodeURIComponent(qrScanned.avatarUrl ?? "")}`}
-                        alt=""
-                        referrerPolicy="no-referrer"
-                        onError={(event) => {
-                          (event.target as HTMLImageElement).style.display = "none";
+                        src={qrImage}
+                        alt={t("网易云音乐登录二维码", "NetEase login QR code")}
+                        style={{
+                          width: 300,
+                          height: 300,
+                          background: "#fff",
+                          padding: 12,
+                          borderRadius: 12,
                         }}
                       />
-                      {qrScanned.nickname}
-                    </div>
-                  )}
-                </div>
-              </div>
-              <p
-                style={{
-                  fontSize: 13,
-                  color:
-                    qrState === "confirmed"
-                      ? "var(--green)"
-                      : qrState === "scanned"
-                        ? "var(--accent)"
-                        : "var(--muted)",
-                  margin: 0,
-                  textAlign: "center",
-                }}
-              >
-                {qrState === "waiting"
-                  ? t(
-                      "打开网易云音乐 App → 左上角扫一扫",
-                      "Open the NetEase app → tap Scan (top-left)",
-                    )
-                  : qrState === "scanned"
-                    ? t("已扫码 ✓ 请在手机上点「确认登录」", "Scanned ✓ confirm on your phone")
-                    : qrState === "confirmed"
-                      ? t("连接成功！正在加载你的歌单…", "Connected! Loading your playlists…")
-                      : qrError || t("二维码已过期", "QR code expired")}
-              </p>
-              {riskBlocked && (
-                <div className="qr-fallback">
-                  <strong>
-                    {t(
-                      "被网易云风控拦住了？用 Cookie 直连（成功率 100%）",
-                      "Blocked by risk-control? Connect with your cookie (always works)",
+                    ) : (
+                      <div className="loading" style={{ width: 300, height: 300 }}>
+                        {t("正在生成二维码…", "Generating QR…")}
+                      </div>
                     )}
-                  </strong>
-                  {cookieOpen ? (
-                    <>
-                      <textarea
-                        value={cookieText}
-                        onChange={(event) => setCookieText(event.target.value)}
-                        placeholder={t(
-                          "粘贴浏览器里 music.163.com 的 Cookie（含 MUSIC_U=…），或只粘贴 MUSIC_U 值",
-                          "Paste the cookie of music.163.com from your browser (with MUSIC_U=...), or just the MUSIC_U value",
-                        )}
-                      />
-                      <div className="inline-input">
-                        <button
-                          className="button primary"
-                          disabled={cookieBusy || !cookieText.trim()}
-                          onClick={() => void connectWithCookie()}
-                        >
-                          {cookieBusy ? t("连接中…", "Connecting…") : t("连接", "Connect")}
-                        </button>
-                        <button
-                          className="text-button"
-                          onClick={() => {
-                            setCookieOpen(false);
-                            setRiskBlocked(false);
-                            void openQr();
-                          }}
-                        >
-                          {t("← 再试一次扫码", "← Try QR again")}
+                    {qrState === "confirmed" && (
+                      <div className="qr-mask ok">
+                        <CheckCircle2 size={44} />
+                        <span>{t("连接成功", "Connected")}</span>
+                      </div>
+                    )}
+                    {qrState === "expired" && (
+                      <div className="qr-mask">
+                        <RotateCcw size={40} />
+                        <button className="button secondary" onClick={() => void autoRefreshQr()}>
+                          {t("重新生成", "Regenerate")}
                         </button>
                       </div>
-                    </>
-                  ) : (
-                    <button className="button secondary" onClick={() => setCookieOpen(true)}>
-                      <KeyRound size={15} />
-                      {t("粘贴 Cookie 连接", "Paste cookie")}
-                    </button>
-                  )}
-                  <button
-                    className="text-button"
-                    onClick={() => setHelpOpen(true)}
-                    style={{ alignSelf: "center", fontSize: 11 }}
-                  >
-                    {t("如何获取 Cookie？看图文说明 →", "How to get the cookie? See guide →")}
-                  </button>
+                    )}
+                  </div>
+                  <div className="qr-side">
+                    <div className="qr-timer" style={{ opacity: qrState === "waiting" ? 1 : 0.45 }}>
+                      <Clock size={13} />
+                      {qrState === "waiting"
+                        ? `${t("剩余", "left")} ${Math.floor(qrLeft / 60)}:${String(qrLeft % 60).padStart(2, "0")}`
+                        : t("已就绪", "ready")}
+                    </div>
+                    <div
+                      className="qr-refresh-dots"
+                      title={t(
+                        "二维码有效期倒计时，归零自动换码（最多 2 次）",
+                        "Countdown; auto-refresh up to 2 times",
+                      )}
+                    >
+                      <span className={qrRefreshed >= 1 ? "on" : ""}></span>
+                      <span className={qrRefreshed >= 2 ? "on" : ""}></span>
+                    </div>
+                    {qrScanned?.nickname && (
+                      <div className="qr-scanned-as">
+                        <img
+                          src={`/api/image?url=${encodeURIComponent(qrScanned.avatarUrl ?? "")}`}
+                          alt=""
+                          referrerPolicy="no-referrer"
+                          onError={(event) => {
+                            (event.target as HTMLImageElement).style.display = "none";
+                          }}
+                        />
+                        {qrScanned.nickname}
+                      </div>
+                    )}
+                  </div>
                 </div>
-              )}
-              {!riskBlocked && (
-                <p className="mini-note" style={{ textAlign: "center", margin: 0 }}>
-                  {t(
-                    "授权 Cookie 以 AES-GCM 加密存储，仅用于导入你的歌单，可随时断开删除。",
-                    "The authorized cookie is stored AES-GCM encrypted, used only to import your playlists, and can be disconnected anytime.",
-                  )}
+                <p
+                  style={{
+                    fontSize: 13,
+                    color:
+                      qrState === "confirmed"
+                        ? "var(--green)"
+                        : qrState === "scanned"
+                          ? "var(--accent)"
+                          : "var(--muted)",
+                    margin: 0,
+                    textAlign: "center",
+                  }}
+                >
+                  {qrState === "waiting"
+                    ? t(
+                        "打开网易云音乐 App → 左上角扫一扫",
+                        "Open the NetEase app → tap Scan (top-left)",
+                      )
+                    : qrState === "scanned"
+                      ? t("已扫码 ✓ 请在手机上点「确认登录」", "Scanned ✓ confirm on your phone")
+                      : qrState === "confirmed"
+                        ? t("连接成功！正在加载你的歌单…", "Connected! Loading your playlists…")
+                        : qrError || t("二维码已过期", "QR code expired")}
                 </p>
-              )}
-            </div>
-          </section>
-        </div>
+                {riskBlocked && (
+                  <div className="qr-fallback">
+                    <strong>
+                      {t(
+                        "被网易云风控拦住了？用 Cookie 直连（成功率 100%）",
+                        "Blocked by risk-control? Connect with your cookie (always works)",
+                      )}
+                    </strong>
+                    {cookieOpen ? (
+                      <>
+                        <textarea
+                          value={cookieText}
+                          onChange={(event) => setCookieText(event.target.value)}
+                          placeholder={t(
+                            "粘贴浏览器里 music.163.com 的 Cookie（含 MUSIC_U=…），或只粘贴 MUSIC_U 值",
+                            "Paste the cookie of music.163.com from your browser (with MUSIC_U=...), or just the MUSIC_U value",
+                          )}
+                        />
+                        <div className="inline-input">
+                          <button
+                            className="button primary"
+                            disabled={cookieBusy || !cookieText.trim()}
+                            onClick={() => void connectWithCookie()}
+                          >
+                            {cookieBusy ? t("连接中…", "Connecting…") : t("连接", "Connect")}
+                          </button>
+                          <button
+                            className="text-button"
+                            onClick={() => {
+                              setCookieOpen(false);
+                              setRiskBlocked(false);
+                              void openQr();
+                            }}
+                          >
+                            {t("← 再试一次扫码", "← Try QR again")}
+                          </button>
+                        </div>
+                      </>
+                    ) : (
+                      <button className="button secondary" onClick={() => setCookieOpen(true)}>
+                        <KeyRound size={15} />
+                        {t("粘贴 Cookie 连接", "Paste cookie")}
+                      </button>
+                    )}
+                    <button
+                      className="text-button"
+                      onClick={() => setHelpOpen(true)}
+                      style={{ alignSelf: "center", fontSize: 11 }}
+                    >
+                      {t("如何获取 Cookie？看图文说明 →", "How to get the cookie? See guide →")}
+                    </button>
+                  </div>
+                )}
+                {!riskBlocked && (
+                  <p className="mini-note" style={{ textAlign: "center", margin: 0 }}>
+                    {t(
+                      "授权 Cookie 以 AES-GCM 加密存储，仅用于导入你的歌单，可随时断开删除。",
+                      "The authorized cookie is stored AES-GCM encrypted, used only to import your playlists, and can be disconnected anytime.",
+                    )}
+                  </p>
+                )}
+              </div>
+            </section>
+          </div>
+        </FocusTrap>
       )}
       {helpOpen && (
-        <div className="modal-backdrop" onClick={() => setHelpOpen(false)}>
-          <section
-            className="account-dialog"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="ext-help-heading"
-            style={{ width: "min(560px, 100%)" }}
-            onClick={(event) => event.stopPropagation()}
-            onKeyDown={(event) => {
-              if (event.key === "Escape") setHelpOpen(false);
-            }}
-          >
-            <div className="section-heading">
-              <div>
-                <span className="eyebrow">HELP</span>
-                <h2 id="ext-help-heading">{t("外部导入使用说明", "How external import works")}</h2>
+        <FocusTrap onEscape={() => setHelpOpen(false)}>
+          <div className="modal-backdrop" onClick={() => setHelpOpen(false)}>
+            <section
+              className="account-dialog"
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="ext-help-heading"
+              style={{ width: "min(560px, 100%)" }}
+              onClick={(event) => event.stopPropagation()}
+              onKeyDown={(event) => {
+                if (event.key === "Escape") setHelpOpen(false);
+              }}
+            >
+              <div className="section-heading">
+                <div>
+                  <span className="eyebrow">HELP</span>
+                  <h2 id="ext-help-heading">
+                    {t("外部导入使用说明", "How external import works")}
+                  </h2>
+                </div>
+                <IconButton title={t("关闭", "Close")} onClick={() => setHelpOpen(false)}>
+                  <X size={18} />
+                </IconButton>
               </div>
-              <IconButton title={t("关闭", "Close")} onClick={() => setHelpOpen(false)}>
-                <X size={18} />
-              </IconButton>
-            </div>
-            <ol className="help-steps">
-              <li>
-                <strong>{t("网易云 · 按用户浏览", "NetEase · browse by user")}</strong>
-                {t(
-                  "输入任意用户的网易云 ID（个人主页 URL 里的数字）或粘贴主页链接，即可列出 TA 的全部歌单（含收藏的），点「导入」抓取整单歌曲。也可直接粘贴歌单链接/ID。",
-                  "Enter any user's NetEase ID (the number in their profile URL) or paste the profile link to list all their playlists (including collected), then Import to fetch the songs. You can also paste a playlist link/ID directly.",
-                )}
-              </li>
-              <li>
-                <strong>{t("连接账号（可选）", "Connect account · optional")}</strong>
-                {t(
-                  "展开「连接我的网易云账号」可扫码或粘贴 Cookie：连接后能浏览自己的全部歌单（含私有与收藏），并导入他人看不到的私有歌单。若服务器匿名访问被网易云限制，连接后即可恢复。",
-                  "Expand Connect my NetEase account (QR or cookie): once connected you can browse your own full playlist list (private & collected included) and import private playlists. If anonymous server access is blocked, connecting restores it.",
-                )}
-              </li>
-              <li>
-                <strong>{t("扫码被拒怎么办", "If QR is blocked")}</strong>
-                {t(
-                  "提示「网易云拒绝了本次登录」是网易云对当前网络环境的风控，与你的账号无关。可稍后再试、更换网络（如手机热点），或改用「粘贴 Cookie 连接」。",
-                  "A rejected QR is NetEase risk-control on this network, not your account. Wait a while, switch networks, or use Connect with a pasted cookie instead.",
-                )}
-              </li>
-              <li>
-                <strong>{t("如何获取 Cookie", "Getting the cookie")}</strong>
-                {t(
-                  "电脑浏览器登录对应网站（music.163.com 或 douban.com）→ F12 开发者工具 → Network 标签 → 刷新页面点任意请求 → 在 Request Headers 的 cookie 里找到 MUSIC_U=…（网易云）或 dbcl2=…（豆瓣）→ 复制整段 cookie 或该值，粘贴后点「连接」。",
-                  "Log in to the site (music.163.com or douban.com) in a desktop browser → F12 → Network tab → reload → open any request → copy MUSIC_U=... (NetEase) or dbcl2=... (Douban) from the cookie header → paste and Connect.",
-                )}
-              </li>
-              <li>
-                <strong>{t("豆瓣豆列", "Douban doulist")}</strong>
-                {t(
-                  "电影/书籍/其他媒介均可：粘贴豆列(doulist/…)、豆瓣清单(m.douban.com/subject_collection/…) 链接直接导入；连接豆瓣后还能一键导入自己的「想看/已看」「想读/已读」，或粘贴 mine?status=… 链接。",
-                  "Paste a doulist or subject_collection link to import directly. Once connected to Douban, one-tap import your own wish/collect lists (movie & book).",
-                )}
-              </li>
-              <li>
-                <strong>{t("隐私", "Privacy")}</strong>
-                {t(
-                  "Cookie 以 AES-GCM 加密存储，仅用于读取你的歌单；点「断开连接」立即删除。",
-                  "Cookies are AES-GCM encrypted, used only to read your playlists, and deleted the moment you disconnect.",
-                )}
-              </li>
-            </ol>
-          </section>
-        </div>
+              <ol className="help-steps">
+                <li>
+                  <strong>{t("网易云 · 按用户浏览", "NetEase · browse by user")}</strong>
+                  {t(
+                    "输入任意用户的网易云 ID（个人主页 URL 里的数字）或粘贴主页链接，即可列出 TA 的全部歌单（含收藏的），点「导入」抓取整单歌曲。也可直接粘贴歌单链接/ID。",
+                    "Enter any user's NetEase ID (the number in their profile URL) or paste the profile link to list all their playlists (including collected), then Import to fetch the songs. You can also paste a playlist link/ID directly.",
+                  )}
+                </li>
+                <li>
+                  <strong>{t("连接账号（可选）", "Connect account · optional")}</strong>
+                  {t(
+                    "展开「连接我的网易云账号」可扫码或粘贴 Cookie：连接后能浏览自己的全部歌单（含私有与收藏），并导入他人看不到的私有歌单。若服务器匿名访问被网易云限制，连接后即可恢复。",
+                    "Expand Connect my NetEase account (QR or cookie): once connected you can browse your own full playlist list (private & collected included) and import private playlists. If anonymous server access is blocked, connecting restores it.",
+                  )}
+                </li>
+                <li>
+                  <strong>{t("扫码被拒怎么办", "If QR is blocked")}</strong>
+                  {t(
+                    "提示「网易云拒绝了本次登录」是网易云对当前网络环境的风控，与你的账号无关。可稍后再试、更换网络（如手机热点），或改用「粘贴 Cookie 连接」。",
+                    "A rejected QR is NetEase risk-control on this network, not your account. Wait a while, switch networks, or use Connect with a pasted cookie instead.",
+                  )}
+                </li>
+                <li>
+                  <strong>{t("如何获取 Cookie", "Getting the cookie")}</strong>
+                  {t(
+                    "电脑浏览器登录对应网站（music.163.com 或 douban.com）→ F12 开发者工具 → Network 标签 → 刷新页面点任意请求 → 在 Request Headers 的 cookie 里找到 MUSIC_U=…（网易云）或 dbcl2=…（豆瓣）→ 复制整段 cookie 或该值，粘贴后点「连接」。",
+                    "Log in to the site (music.163.com or douban.com) in a desktop browser → F12 → Network tab → reload → open any request → copy MUSIC_U=... (NetEase) or dbcl2=... (Douban) from the cookie header → paste and Connect.",
+                  )}
+                </li>
+                <li>
+                  <strong>{t("豆瓣豆列", "Douban doulist")}</strong>
+                  {t(
+                    "电影/书籍/其他媒介均可：粘贴豆列(doulist/…)、豆瓣清单(m.douban.com/subject_collection/…) 链接直接导入；连接豆瓣后还能一键导入自己的「想看/已看」「想读/已读」，或粘贴 mine?status=… 链接。",
+                    "Paste a doulist or subject_collection link to import directly. Once connected to Douban, one-tap import your own wish/collect lists (movie & book).",
+                  )}
+                </li>
+                <li>
+                  <strong>{t("隐私", "Privacy")}</strong>
+                  {t(
+                    "Cookie 以 AES-GCM 加密存储，仅用于读取你的歌单；点「断开连接」立即删除。",
+                    "Cookies are AES-GCM encrypted, used only to read your playlists, and deleted the moment you disconnect.",
+                  )}
+                </li>
+              </ol>
+            </section>
+          </div>
+        </FocusTrap>
       )}
     </>
   );

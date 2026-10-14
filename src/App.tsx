@@ -86,7 +86,11 @@ const PlazaView = lazy(() =>
 // 挂载在 <Suspense> 之外的三处(顶栏齿轮 / AI 设置 / 榜单海报)没有现成 fallback,
 // 首次点击会白屏一瞬。复用已有的 .route-loading,不新增 CSS。
 function LazySpot() {
-  return <div className="route-loading" aria-label="Loading" />;
+  return (
+    <div className="route-loading" role="status" aria-live="polite">
+      <span className="sr-only">加载中…</span>
+    </div>
+  );
 }
 
 import { stored, track, decode, saveFile, type Locale } from "./lib/utils";
@@ -1661,78 +1665,81 @@ export default function App() {
         </ErrorBoundary>
       )}
       {cloudConflict && (
-        <div className="modal-backdrop" onClick={() => setCloudConflict(null)}>
-          <section
-            className="account-dialog"
-            role="dialog"
-            aria-modal="true"
-            onClick={(event) => event.stopPropagation()}
-            onKeyDown={(event) => {
-              if (event.key === "Escape") setCloudConflict(null);
-            }}
-          >
-            <div className="section-heading">
-              <h2>{t("数据冲突", "Data conflict")}</h2>
-              <IconButton title={t("关闭", "Close")} onClick={() => setCloudConflict(null)}>
-                <X size={18} />
-              </IconButton>
-            </div>
-            <p style={{ marginBottom: 16, fontSize: 13, color: "var(--muted)", lineHeight: 1.6 }}>
-              {t(
-                "本地有游客数据，云端也有数据。请选择如何处理：",
-                "You have local guest data and cloud data. Choose how to proceed:",
-              )}
-            </p>
-            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-              <button
-                className="button primary"
-                onClick={() => {
-                  if (profile && cloudConflict) {
-                    const merged = mergeProfiles(cloudConflict.profile, profile);
-                    persist(merged);
-                    setSyncStatus("saving");
-                    // 增量合并必须同时提交合并后的批注映射，否则另一侧刚删除的批注
-                    // 会在下次同步时复活（DATA-03）。
-                    fetch("/api/account/profile", {
-                      method: "PUT",
-                      headers: {
-                        "content-type": "application/json",
-                        authorization: `Bearer ${accountToken}`,
-                      },
-                      body: JSON.stringify(buildProfileSyncBody(merged, notes, true)),
-                    })
-                      .then((r) => {
-                        setSyncStatus(r.ok ? "saved" : "error");
-                        if (r.ok) setNotice(t("已增量合并到云端。", "Merged to cloud."));
+        <FocusTrap onEscape={() => setCloudConflict(null)}>
+          <div className="modal-backdrop" onClick={() => setCloudConflict(null)}>
+            <section
+              className="account-dialog"
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="cloud-conflict-heading"
+              onClick={(event) => event.stopPropagation()}
+              onKeyDown={(event) => {
+                if (event.key === "Escape") setCloudConflict(null);
+              }}
+            >
+              <div className="section-heading">
+                <h2 id="cloud-conflict-heading">{t("数据冲突", "Data conflict")}</h2>
+                <IconButton title={t("关闭", "Close")} onClick={() => setCloudConflict(null)}>
+                  <X size={18} />
+                </IconButton>
+              </div>
+              <p style={{ marginBottom: 16, fontSize: 13, color: "var(--muted)", lineHeight: 1.6 }}>
+                {t(
+                  "本地有游客数据，云端也有数据。请选择如何处理：",
+                  "You have local guest data and cloud data. Choose how to proceed:",
+                )}
+              </p>
+              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                <button
+                  className="button primary"
+                  onClick={() => {
+                    if (profile && cloudConflict) {
+                      const merged = mergeProfiles(cloudConflict.profile, profile);
+                      persist(merged);
+                      setSyncStatus("saving");
+                      // 增量合并必须同时提交合并后的批注映射，否则另一侧刚删除的批注
+                      // 会在下次同步时复活（DATA-03）。
+                      fetch("/api/account/profile", {
+                        method: "PUT",
+                        headers: {
+                          "content-type": "application/json",
+                          authorization: `Bearer ${accountToken}`,
+                        },
+                        body: JSON.stringify(buildProfileSyncBody(merged, notes, true)),
                       })
-                      .catch(() => setSyncStatus("error"));
-                  }
-                  setCloudConflict(null);
-                }}
-              >
-                <CloudUpload size={16} />
-                {t("增量合并到云端", "Merge to cloud")}
-              </button>
-              <button
-                className="button secondary"
-                onClick={() => {
-                  persist(cloudConflict.profile);
-                  // 「使用云端数据」以云端为准：画像与批注一起原子替换（DATA-04）。
-                  setNotes({ ...cloudConflict.notes });
-                  writeNotes({ ...cloudConflict.notes });
-                  setCloudConflict(null);
-                  setNotice(t("已使用云端数据。", "Cloud data applied."));
-                }}
-              >
-                <CloudDownload size={16} />
-                {t("使用云端数据", "Use cloud data")}
-              </button>
-              <button className="button quiet" onClick={() => setCloudConflict(null)}>
-                {t("取消，各自保留", "Cancel, keep both")}
-              </button>
-            </div>
-          </section>
-        </div>
+                        .then((r) => {
+                          setSyncStatus(r.ok ? "saved" : "error");
+                          if (r.ok) setNotice(t("已增量合并到云端。", "Merged to cloud."));
+                        })
+                        .catch(() => setSyncStatus("error"));
+                    }
+                    setCloudConflict(null);
+                  }}
+                >
+                  <CloudUpload size={16} />
+                  {t("增量合并到云端", "Merge to cloud")}
+                </button>
+                <button
+                  className="button secondary"
+                  onClick={() => {
+                    persist(cloudConflict.profile);
+                    // 「使用云端数据」以云端为准：画像与批注一起原子替换（DATA-04）。
+                    setNotes({ ...cloudConflict.notes });
+                    writeNotes({ ...cloudConflict.notes });
+                    setCloudConflict(null);
+                    setNotice(t("已使用云端数据。", "Cloud data applied."));
+                  }}
+                >
+                  <CloudDownload size={16} />
+                  {t("使用云端数据", "Use cloud data")}
+                </button>
+                <button className="button quiet" onClick={() => setCloudConflict(null)}>
+                  {t("取消，各自保留", "Cancel, keep both")}
+                </button>
+              </div>
+            </section>
+          </div>
+        </FocusTrap>
       )}
       {detailWork && (
         <ArtworkDetail
@@ -1748,603 +1755,620 @@ export default function App() {
         />
       )}
       {shareModal && (
-        <div className="modal-backdrop" onClick={() => setShareModal(null)}>
-          <section
-            className="account-dialog"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="share-expiry-heading"
-            onClick={(event) => event.stopPropagation()}
-            onKeyDown={(event) => {
-              if (event.key === "Escape") setShareModal(null);
-            }}
-          >
-            <div className="section-heading">
-              <div>
-                <span className="eyebrow">SHARE</span>
-                <h2 id="share-expiry-heading">{t("分享链接有效期", "Share link expiry")}</h2>
-              </div>
-              <IconButton title={t("关闭", "Close")} onClick={() => setShareModal(null)}>
-                <X size={18} />
-              </IconButton>
-            </div>
-            <p style={{ fontSize: 13, color: "var(--muted)", lineHeight: 1.7, margin: 0 }}>
-              {t(
-                "选择链接有效期，到期后他人将无法再打开该链接。生成后链接自动复制。",
-                "Pick how long the link stays valid — it stops working after expiry. The link is copied automatically.",
-              )}
-            </p>
-            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-              {[7, 30, 90, 365].map((days) => (
-                <button
-                  key={days}
-                  className="button secondary"
-                  disabled={busy}
-                  style={{ justifyContent: "space-between" }}
-                  onClick={() => {
-                    const picked = shareModal;
-                    setShareModal(null);
-                    void generateShareLink(picked?.ranking, days);
-                  }}
-                >
-                  <span>{days === 365 ? t("一年", "1 year") : `${days} ${t("天", "days")}`}</span>
-                  <small>
-                    {new Date(Date.now() + days * 86400000).toLocaleDateString(
-                      locale === "zh" ? "zh-CN" : "en-US",
-                    )}
-                  </small>
-                </button>
-              ))}
-            </div>
-          </section>
-        </div>
-      )}
-      {noteModal && (
-        <div className="modal-backdrop note-backdrop" onClick={() => setNoteModal(null)}>
-          <section
-            className="note-reader"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="note-heading"
-            onClick={(event) => event.stopPropagation()}
-            onKeyDown={(event) => {
-              if (event.key === "Escape") setNoteModal(null);
-            }}
-          >
-            <div
-              className="note-reader-bg"
-              style={{
-                backgroundImage: noteModal.posterUrls?.[0]
-                  ? `url(/api/image?url=${encodeURIComponent(noteModal.posterUrls[0])})`
-                  : undefined,
+        <FocusTrap onEscape={() => setShareModal(null)}>
+          <div className="modal-backdrop" onClick={() => setShareModal(null)}>
+            <section
+              className="account-dialog"
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="share-expiry-heading"
+              onClick={(event) => event.stopPropagation()}
+              onKeyDown={(event) => {
+                if (event.key === "Escape") setShareModal(null);
               }}
-            />
-            <div className="note-reader-header">
-              <span className="note-reader-eyebrow">NOTE</span>
-              <h2 id="note-heading">{noteModal.title}</h2>
-            </div>
-            <textarea
-              className="note-reader-body"
-              value={noteDraft}
-              onChange={(e) => setNoteDraft(e.target.value)}
-              placeholder={t(
-                "写下你对这部作品的看法、感想、回忆…",
-                "Write your thoughts, feelings, memories about this work...",
-              )}
-              autoFocus
-            />
-            <div className="note-reader-footer">
-              <button
-                className="note-footer-btn"
-                onClick={() => {
-                  const next = setNote(notes, noteModal.key, "");
-                  setNotes(next);
-                  writeNotes(next);
-                  setNoteDraft("");
-                  setNotice(t("批注已清除。", "Note cleared."));
-                }}
-              >
-                {t("清除", "Clear")}
-              </button>
-              {noteDraft.length > 0 && (
-                <span className="note-char-count">
-                  {noteDraft.length} {t("字", "chars")}
-                </span>
-              )}
-              <div style={{ flex: 1 }} />
-              <button className="note-footer-btn" onClick={() => setNoteModal(null)}>
-                {t("取消", "Cancel")}
-              </button>
-              <button className="note-footer-btn note-footer-primary" onClick={saveNote}>
-                {t("保存", "Save")}
-              </button>
-            </div>
-          </section>
-        </div>
-      )}
-      {noteViewModal && (
-        <div className="modal-backdrop note-backdrop" onClick={() => setNoteViewModal(null)}>
-          <section
-            className="note-reader"
-            role="dialog"
-            aria-modal="true"
-            onClick={(event) => event.stopPropagation()}
-            onKeyDown={(event) => {
-              if (event.key === "Escape") setNoteViewModal(null);
-            }}
-          >
-            <div
-              className="note-reader-bg"
-              style={{
-                backgroundImage: noteViewModal.posterUrls?.[0]
-                  ? `url(/api/image?url=${encodeURIComponent(noteViewModal.posterUrls[0])})`
-                  : undefined,
-              }}
-            />
-            <div className="note-reader-header">
-              <span className="note-reader-eyebrow">NOTE</span>
-              <h2>{noteViewModal.title}</h2>
-            </div>
-            <div className="note-reader-body note-reader-view">
-              <p>{noteViewModal.text}</p>
-            </div>
-            <div className="note-reader-footer">
-              <div style={{ flex: 1 }} />
-              <button
-                className="note-footer-btn note-footer-primary"
-                onClick={() => setNoteViewModal(null)}
-              >
-                {t("关闭", "Close")}
-              </button>
-            </div>
-          </section>
-        </div>
-      )}
-      {peerRankPickOpen && peer && (
-        <div className="modal-backdrop" onClick={() => setPeerRankPickOpen(false)}>
-          <section
-            className="account-dialog"
-            role="dialog"
-            aria-modal="true"
-            onClick={(event) => event.stopPropagation()}
-            onKeyDown={(event) => {
-              if (event.key === "Escape") setPeerRankPickOpen(false);
-            }}
-          >
-            <div className="section-heading">
-              <h2>{t("选择对方榜单", "Pick their ranking")}</h2>
-              <IconButton title={t("关闭", "Close")} onClick={() => setPeerRankPickOpen(false)}>
-                <X size={18} />
-              </IconButton>
-            </div>
-            <p style={{ marginBottom: 16, fontSize: 13, color: "var(--muted)", lineHeight: 1.6 }}>
-              {t("选择一个榜单，用其中的作品进行排序。", "Pick a ranking to sort its works.")}
-            </p>
-            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-              {peer.rankings.map((entry, idx) => (
-                <button
-                  key={idx}
-                  className="button secondary"
-                  style={{ justifyContent: "flex-start", gap: 12 }}
-                  onClick={() => {
-                    setPeerRankPickOpen(false);
-                    const existingTitles =
-                      profile?.rankings
-                        .filter((r) => r.kind === entry.kind)
-                        .map((r) => r.collectionTitle) ?? [];
-                    let title = entry.collectionTitle;
-                    if (existingTitles.includes(title)) {
-                      let n = 2;
-                      while (existingTitles.includes(`${title} (${n})`)) n++;
-                      title = `${title} (${n})`;
-                    }
-                    openCollection({
-                      id: `peer-${entry.profileId}-${entry.kind}-${idx}`,
-                      kind: entry.kind,
-                      source: "custom",
-                      title,
-                      description: "",
-                      topN: entry.items.length,
-                      works: entry.items,
-                    });
-                  }}
-                >
-                  <span
-                    style={{
-                      color: "var(--accent)",
-                      fontSize: 11,
-                      fontWeight: 600,
-                      width: 28,
-                      flexShrink: 0,
-                    }}
-                  >
-                    {label(entry.kind)}
-                  </span>
-                  <Poster work={entry.items[0]} kind={entry.kind} />
-                  <span
-                    style={{
-                      flex: 1,
-                      textAlign: "left",
-                      overflow: "hidden",
-                      textOverflow: "ellipsis",
-                      whiteSpace: "nowrap",
-                    }}
-                  >
-                    {entry.collectionTitle}
-                  </span>
-                  <small style={{ color: "var(--muted)", flexShrink: 0 }}>
-                    TOP {entry.items.length}
-                  </small>
-                </button>
-              ))}
-            </div>
-          </section>
-        </div>
-      )}
-      {compareRankDetail && (
-        <div className="modal-backdrop" onClick={() => setCompareRankDetail(null)}>
-          <section
-            className="rank-detail-dialog"
-            role="dialog"
-            aria-modal="true"
-            onClick={(event) => event.stopPropagation()}
-            onKeyDown={(event) => {
-              if (event.key === "Escape") setCompareRankDetail(null);
-            }}
-          >
-            {compareRankDetail.ranking ? (
-              <ErrorBoundary fallback={null}>
-                <Suspense fallback={<LazySpot />}>
-                  <RankingDetail
-                    kind={compareRankDetail.ranking.kind}
-                    collectionTitle={compareRankDetail.collectionTitle}
-                    items={compareRankDetail.ranking.items}
-                    notes={compareRankDetail.side === "peer" ? peerNotes : notes}
-                    kindLabel={label}
-                    eyebrow={`${compareRankDetail.side === "own" ? t("我的索引", "MY INDEX") : t("对方索引", "THEIR INDEX")} / ${label(compareRankDetail.ranking.kind)}`}
-                    headerExtra={
-                      <IconButton
-                        title={t("关闭", "Close")}
-                        onClick={() => setCompareRankDetail(null)}
-                      >
-                        <X size={18} />
-                      </IconButton>
-                    }
-                    onNoteView={(title, text, posterUrls) => {
-                      openNoteView(title, text, posterUrls);
-                    }}
-                    onArtworkClick={(work, kind) => {
-                      void openArtworkDetail(work, kind);
-                    }}
-                    highlightId={compareRankDetail.highlightId}
-                  />
-                </Suspense>
-              </ErrorBoundary>
-            ) : (
+            >
               <div className="section-heading">
-                <h2>{compareRankDetail.collectionTitle}</h2>
-                <IconButton title={t("关闭", "Close")} onClick={() => setCompareRankDetail(null)}>
+                <div>
+                  <span className="eyebrow">SHARE</span>
+                  <h2 id="share-expiry-heading">{t("分享链接有效期", "Share link expiry")}</h2>
+                </div>
+                <IconButton title={t("关闭", "Close")} onClick={() => setShareModal(null)}>
                   <X size={18} />
                 </IconButton>
               </div>
-            )}
-            {!compareRankDetail.ranking && (
-              <p className="empty-state">{t("无法找到该榜单数据", "Ranking data not found")}</p>
-            )}
-          </section>
-        </div>
+              <p style={{ fontSize: 13, color: "var(--muted)", lineHeight: 1.7, margin: 0 }}>
+                {t(
+                  "选择链接有效期，到期后他人将无法再打开该链接。生成后链接自动复制。",
+                  "Pick how long the link stays valid — it stops working after expiry. The link is copied automatically.",
+                )}
+              </p>
+              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                {[7, 30, 90, 365].map((days) => (
+                  <button
+                    key={days}
+                    className="button secondary"
+                    disabled={busy}
+                    style={{ justifyContent: "space-between" }}
+                    onClick={() => {
+                      const picked = shareModal;
+                      setShareModal(null);
+                      void generateShareLink(picked?.ranking, days);
+                    }}
+                  >
+                    <span>{days === 365 ? t("一年", "1 year") : `${days} ${t("天", "days")}`}</span>
+                    <small>
+                      {new Date(Date.now() + days * 86400000).toLocaleDateString(
+                        locale === "zh" ? "zh-CN" : "en-US",
+                      )}
+                    </small>
+                  </button>
+                ))}
+              </div>
+            </section>
+          </div>
+        </FocusTrap>
+      )}
+      {noteModal && (
+        <FocusTrap onEscape={() => setNoteModal(null)}>
+          <div className="modal-backdrop note-backdrop" onClick={() => setNoteModal(null)}>
+            <section
+              className="note-reader"
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="note-heading"
+              onClick={(event) => event.stopPropagation()}
+              onKeyDown={(event) => {
+                if (event.key === "Escape") setNoteModal(null);
+              }}
+            >
+              <div
+                className="note-reader-bg"
+                style={{
+                  backgroundImage: noteModal.posterUrls?.[0]
+                    ? `url(/api/image?url=${encodeURIComponent(noteModal.posterUrls[0])})`
+                    : undefined,
+                }}
+              />
+              <div className="note-reader-header">
+                <span className="note-reader-eyebrow">NOTE</span>
+                <h2 id="note-heading">{noteModal.title}</h2>
+              </div>
+              <textarea
+                className="note-reader-body"
+                value={noteDraft}
+                onChange={(e) => setNoteDraft(e.target.value)}
+                placeholder={t(
+                  "写下你对这部作品的看法、感想、回忆…",
+                  "Write your thoughts, feelings, memories about this work...",
+                )}
+                autoFocus
+              />
+              <div className="note-reader-footer">
+                <button
+                  className="note-footer-btn"
+                  onClick={() => {
+                    const next = setNote(notes, noteModal.key, "");
+                    setNotes(next);
+                    writeNotes(next);
+                    setNoteDraft("");
+                    setNotice(t("批注已清除。", "Note cleared."));
+                  }}
+                >
+                  {t("清除", "Clear")}
+                </button>
+                {noteDraft.length > 0 && (
+                  <span className="note-char-count">
+                    {noteDraft.length} {t("字", "chars")}
+                  </span>
+                )}
+                <div style={{ flex: 1 }} />
+                <button className="note-footer-btn" onClick={() => setNoteModal(null)}>
+                  {t("取消", "Cancel")}
+                </button>
+                <button className="note-footer-btn note-footer-primary" onClick={saveNote}>
+                  {t("保存", "Save")}
+                </button>
+              </div>
+            </section>
+          </div>
+        </FocusTrap>
+      )}
+      {noteViewModal && (
+        <FocusTrap onEscape={() => setNoteViewModal(null)}>
+          <div className="modal-backdrop note-backdrop" onClick={() => setNoteViewModal(null)}>
+            <section
+              className="note-reader"
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="note-view-heading"
+              onClick={(event) => event.stopPropagation()}
+              onKeyDown={(event) => {
+                if (event.key === "Escape") setNoteViewModal(null);
+              }}
+            >
+              <div
+                className="note-reader-bg"
+                style={{
+                  backgroundImage: noteViewModal.posterUrls?.[0]
+                    ? `url(/api/image?url=${encodeURIComponent(noteViewModal.posterUrls[0])})`
+                    : undefined,
+                }}
+              />
+              <div className="note-reader-header">
+                <span className="note-reader-eyebrow">NOTE</span>
+                <h2 id="note-view-heading">{noteViewModal.title}</h2>
+              </div>
+              <div className="note-reader-body note-reader-view">
+                <p>{noteViewModal.text}</p>
+              </div>
+              <div className="note-reader-footer">
+                <div style={{ flex: 1 }} />
+                <button
+                  className="note-footer-btn note-footer-primary"
+                  onClick={() => setNoteViewModal(null)}
+                >
+                  {t("关闭", "Close")}
+                </button>
+              </div>
+            </section>
+          </div>
+        </FocusTrap>
+      )}
+      {peerRankPickOpen && peer && (
+        <FocusTrap onEscape={() => setPeerRankPickOpen(false)}>
+          <div className="modal-backdrop" onClick={() => setPeerRankPickOpen(false)}>
+            <section
+              className="account-dialog"
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="peer-pick-heading"
+              onClick={(event) => event.stopPropagation()}
+              onKeyDown={(event) => {
+                if (event.key === "Escape") setPeerRankPickOpen(false);
+              }}
+            >
+              <div className="section-heading">
+                <h2 id="peer-pick-heading">{t("选择对方榜单", "Pick their ranking")}</h2>
+                <IconButton title={t("关闭", "Close")} onClick={() => setPeerRankPickOpen(false)}>
+                  <X size={18} />
+                </IconButton>
+              </div>
+              <p style={{ marginBottom: 16, fontSize: 13, color: "var(--muted)", lineHeight: 1.6 }}>
+                {t("选择一个榜单，用其中的作品进行排序。", "Pick a ranking to sort its works.")}
+              </p>
+              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                {peer.rankings.map((entry, idx) => (
+                  <button
+                    key={idx}
+                    className="button secondary"
+                    style={{ justifyContent: "flex-start", gap: 12 }}
+                    onClick={() => {
+                      setPeerRankPickOpen(false);
+                      const existingTitles =
+                        profile?.rankings
+                          .filter((r) => r.kind === entry.kind)
+                          .map((r) => r.collectionTitle) ?? [];
+                      let title = entry.collectionTitle;
+                      if (existingTitles.includes(title)) {
+                        let n = 2;
+                        while (existingTitles.includes(`${title} (${n})`)) n++;
+                        title = `${title} (${n})`;
+                      }
+                      openCollection({
+                        id: `peer-${entry.profileId}-${entry.kind}-${idx}`,
+                        kind: entry.kind,
+                        source: "custom",
+                        title,
+                        description: "",
+                        topN: entry.items.length,
+                        works: entry.items,
+                      });
+                    }}
+                  >
+                    <span
+                      style={{
+                        color: "var(--accent)",
+                        fontSize: 11,
+                        fontWeight: 600,
+                        width: 28,
+                        flexShrink: 0,
+                      }}
+                    >
+                      {label(entry.kind)}
+                    </span>
+                    <Poster work={entry.items[0]} kind={entry.kind} />
+                    <span
+                      style={{
+                        flex: 1,
+                        textAlign: "left",
+                        overflow: "hidden",
+                        textOverflow: "ellipsis",
+                        whiteSpace: "nowrap",
+                      }}
+                    >
+                      {entry.collectionTitle}
+                    </span>
+                    <small style={{ color: "var(--muted)", flexShrink: 0 }}>
+                      TOP {entry.items.length}
+                    </small>
+                  </button>
+                ))}
+              </div>
+            </section>
+          </div>
+        </FocusTrap>
+      )}
+      {compareRankDetail && (
+        <FocusTrap onEscape={() => setCompareRankDetail(null)}>
+          <div className="modal-backdrop" onClick={() => setCompareRankDetail(null)}>
+            <section
+              className="rank-detail-dialog"
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="compare-rank-heading"
+              onClick={(event) => event.stopPropagation()}
+              onKeyDown={(event) => {
+                if (event.key === "Escape") setCompareRankDetail(null);
+              }}
+            >
+              {compareRankDetail.ranking ? (
+                <ErrorBoundary fallback={null}>
+                  <Suspense fallback={<LazySpot />}>
+                    <RankingDetail
+                      kind={compareRankDetail.ranking.kind}
+                      collectionTitle={compareRankDetail.collectionTitle}
+                      items={compareRankDetail.ranking.items}
+                      notes={compareRankDetail.side === "peer" ? peerNotes : notes}
+                      kindLabel={label}
+                      eyebrow={`${compareRankDetail.side === "own" ? t("我的索引", "MY INDEX") : t("对方索引", "THEIR INDEX")} / ${label(compareRankDetail.ranking.kind)}`}
+                      headerExtra={
+                        <IconButton
+                          title={t("关闭", "Close")}
+                          onClick={() => setCompareRankDetail(null)}
+                        >
+                          <X size={18} />
+                        </IconButton>
+                      }
+                      onNoteView={(title, text, posterUrls) => {
+                        openNoteView(title, text, posterUrls);
+                      }}
+                      onArtworkClick={(work, kind) => {
+                        void openArtworkDetail(work, kind);
+                      }}
+                      highlightId={compareRankDetail.highlightId}
+                    />
+                  </Suspense>
+                </ErrorBoundary>
+              ) : (
+                <div className="section-heading">
+                  <h2 id="compare-rank-heading">{compareRankDetail.collectionTitle}</h2>
+                  <IconButton title={t("关闭", "Close")} onClick={() => setCompareRankDetail(null)}>
+                    <X size={18} />
+                  </IconButton>
+                </div>
+              )}
+              {!compareRankDetail.ranking && (
+                <p className="empty-state">{t("无法找到该榜单数据", "Ranking data not found")}</p>
+              )}
+            </section>
+          </div>
+        </FocusTrap>
       )}
       {accountOpen && (
-        <div className="modal-backdrop" onClick={() => setAccountOpen(false)}>
-          <section
-            className="account-dialog"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="account-heading"
-            onClick={(event) => event.stopPropagation()}
-            onKeyDown={(event) => {
-              if (event.key === "Escape") setAccountOpen(false);
-            }}
-          >
-            <div className="section-heading">
-              <h2 id="account-heading">{t("账号与同步", "Account & sync")}</h2>
-              <IconButton title={t("关闭", "Close")} onClick={() => setAccountOpen(false)}>
-                <X size={18} />
-              </IconButton>
-            </div>
-            {accountEmail && needNickname ? (
-              <>
-                <p style={{ marginBottom: 12 }}>
-                  {t("请设置你的昵称", "Please set your nickname")}
-                </p>
-                <input
-                  type="text"
-                  placeholder={t("昵称", "Nickname")}
-                  value={authNickname}
-                  onChange={(e) => setAuthNickname(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") void saveNickname();
-                  }}
-                  style={{ marginBottom: 12 }}
-                  autoFocus
-                />
-                <button
-                  className="button primary"
-                  disabled={busy || !authNickname.trim()}
-                  onClick={() => void saveNickname()}
-                >
-                  {t("确认昵称", "Set nickname")}
-                </button>
-              </>
-            ) : accountEmail ? (
-              <>
-                <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 4 }}>
-                  {editingNickname ? (
-                    <div style={{ display: "flex", gap: 4, alignItems: "center", flex: 1 }}>
-                      <input
-                        type="text"
-                        value={editNicknameValue}
-                        onChange={(e) => setEditNicknameValue(e.target.value)}
-                        onKeyDown={(e) => {
-                          if (e.key === "Enter") void saveNickname();
-                          if (e.key === "Escape") setEditingNickname(false);
-                        }}
-                        style={{ fontSize: 14, padding: "4px 8px", minHeight: "auto", flex: 1 }}
-                        autoFocus
-                      />
-                      <button
-                        className="text-button"
-                        onClick={() => void saveNickname()}
-                        aria-label={t("确认修改昵称", "Confirm nickname")}
-                        style={{ color: "var(--accent)", padding: "4px 8px" }}
-                      >
-                        <Check size={15} />
-                      </button>
-                    </div>
-                  ) : (
-                    <>
-                      <p style={{ fontWeight: 600, margin: 0 }}>
-                        {accountNickname || accountEmail}
-                      </p>
-                      <button
-                        onClick={() => {
-                          setEditingNickname(true);
-                          setEditNicknameValue(accountNickname);
-                        }}
-                        style={{
-                          fontSize: 10,
-                          color: "var(--muted)",
-                          background: "none",
-                          border: "1px solid var(--line)",
-                          borderRadius: 4,
-                          padding: "1px 6px",
-                          cursor: "pointer",
-                        }}
-                      >
-                        {t("改名", "Edit")}
-                      </button>
-                    </>
-                  )}
-                </div>
-                <p
-                  style={{
-                    marginBottom: 16,
-                    fontSize: 12,
-                    color: "var(--muted)",
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 6,
-                  }}
-                >
-                  {accountEmail}
-                  <span
-                    title={
-                      syncStatus === "saving"
-                        ? t("同步中", "Syncing")
-                        : syncStatus === "saved"
-                          ? t("已同步", "Synced")
-                          : syncStatus === "error"
-                            ? t("同步失败", "Sync failed")
-                            : t("待机", "Idle")
-                    }
-                    className="sync-dot"
-                    data-status={syncStatus}
-                    style={{
-                      display: "inline-block",
-                      width: 8,
-                      height: 8,
-                      borderRadius: "50%",
-                      flexShrink: 0,
-                    }}
-                  />
-                </p>
-                <button
-                  className="button primary"
-                  disabled={busy || !profile}
-                  onClick={accountSave}
-                  style={{ marginBottom: 8 }}
-                >
-                  <CloudUpload size={16} />
-                  {t("同步到云端", "Sync to cloud")}
-                </button>
-                <button
-                  className="button secondary"
-                  disabled={busy}
-                  onClick={() => void accountLoad(false)}
-                  style={{ marginBottom: 8 }}
-                >
-                  <CloudDownload size={16} />
-                  {t("从云端恢复画像", "Restore from cloud")}
-                </button>
-                <button className="button quiet" onClick={accountLogout}>
-                  {t("退出登录", "Sign out")}
-                </button>
-              </>
-            ) : (
-              <>
-                <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 16 }}>
-                  <a
-                    className="button secondary"
-                    href="/api/account/oauth/google"
-                    style={{
-                      textAlign: "center",
-                      textDecoration: "none",
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      gap: 8,
-                    }}
-                  >
-                    <svg width="16" height="16" viewBox="0 0 24 24">
-                      <path
-                        fill="#4285F4"
-                        d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z"
-                      />
-                      <path
-                        fill="#34A853"
-                        d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
-                      />
-                      <path
-                        fill="#FBBC05"
-                        d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"
-                      />
-                      <path
-                        fill="#EA4335"
-                        d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"
-                      />
-                    </svg>
-                    {t("使用 Google 登录", "Sign in with Google")}
-                  </a>
-                  <a
-                    className="button secondary"
-                    href="/api/account/oauth/github"
-                    style={{
-                      textAlign: "center",
-                      textDecoration: "none",
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      gap: 8,
-                    }}
-                  >
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-                      <path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z" />
-                    </svg>
-                    {t("使用 GitHub 登录", "Sign in with GitHub")}
-                  </a>
-                </div>
-                <div style={{ display: "flex", alignItems: "center", gap: 8, margin: "8px 0" }}>
-                  <div style={{ flex: 1, height: 1, background: "var(--line)" }} />
-                  <span style={{ fontSize: 11, color: "var(--muted)" }}>
-                    {t("或使用邮箱", "or use email")}
-                  </span>
-                  <div style={{ flex: 1, height: 1, background: "var(--line)" }} />
-                </div>
-                <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
-                  <button
-                    className={`button ${authMode === "login" ? "primary" : "secondary"}`}
-                    onClick={() => {
-                      setAuthMode("login");
-                      setAuthError("");
-                    }}
-                    style={{ flex: 1 }}
-                  >
-                    {t("登录", "Sign in")}
-                  </button>
-                  <button
-                    className={`button ${authMode === "register" ? "primary" : "secondary"}`}
-                    onClick={() => {
-                      setAuthMode("register");
-                      setAuthError("");
-                    }}
-                    style={{ flex: 1 }}
-                  >
-                    {t("注册", "Register")}
-                  </button>
-                  <button
-                    className={`button ${authMode === "reset" ? "primary" : "secondary"}`}
-                    onClick={() => {
-                      setAuthMode("reset");
-                      setAuthError("");
-                    }}
-                    style={{ flex: 1 }}
-                  >
-                    {t("修改密码", "Change password")}
-                  </button>
-                </div>
-                {authError && (
-                  <p style={{ color: "#f87171", fontSize: 13, marginBottom: 8 }}>{authError}</p>
-                )}
-                {authMode === "register" && (
+        <FocusTrap onEscape={() => setAccountOpen(false)}>
+          <div className="modal-backdrop" onClick={() => setAccountOpen(false)}>
+            <section
+              className="account-dialog"
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="account-heading"
+              onClick={(event) => event.stopPropagation()}
+              onKeyDown={(event) => {
+                if (event.key === "Escape") setAccountOpen(false);
+              }}
+            >
+              <div className="section-heading">
+                <h2 id="account-heading">{t("账号与同步", "Account & sync")}</h2>
+                <IconButton title={t("关闭", "Close")} onClick={() => setAccountOpen(false)}>
+                  <X size={18} />
+                </IconButton>
+              </div>
+              {accountEmail && needNickname ? (
+                <>
+                  <p style={{ marginBottom: 12 }}>
+                    {t("请设置你的昵称", "Please set your nickname")}
+                  </p>
                   <input
                     type="text"
-                    placeholder={t("昵称（必填）", "Nickname (required)")}
+                    placeholder={t("昵称", "Nickname")}
                     value={authNickname}
                     onChange={(e) => setAuthNickname(e.target.value)}
-                    style={{ marginBottom: 8 }}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") void saveNickname();
+                    }}
+                    style={{ marginBottom: 12 }}
+                    autoFocus
                   />
-                )}
-                <input
-                  type="email"
-                  placeholder={t("邮箱", "Email")}
-                  value={authEmail}
-                  onChange={(e) => setAuthEmail(e.target.value)}
-                  style={{ marginBottom: 8 }}
-                />
-                {authMode !== "login" && (
-                  <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
-                    <input
-                      type="text"
-                      placeholder={t("邮箱验证码", "Email code")}
-                      value={authCode}
-                      onChange={(e) => setAuthCode(e.target.value)}
-                      style={{ flex: 1 }}
+                  <button
+                    className="button primary"
+                    disabled={busy || !authNickname.trim()}
+                    onClick={() => void saveNickname()}
+                  >
+                    {t("确认昵称", "Set nickname")}
+                  </button>
+                </>
+              ) : accountEmail ? (
+                <>
+                  <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 4 }}>
+                    {editingNickname ? (
+                      <div style={{ display: "flex", gap: 4, alignItems: "center", flex: 1 }}>
+                        <input
+                          type="text"
+                          value={editNicknameValue}
+                          onChange={(e) => setEditNicknameValue(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") void saveNickname();
+                            if (e.key === "Escape") setEditingNickname(false);
+                          }}
+                          style={{ fontSize: 14, padding: "4px 8px", minHeight: "auto", flex: 1 }}
+                          autoFocus
+                        />
+                        <button
+                          className="text-button"
+                          onClick={() => void saveNickname()}
+                          aria-label={t("确认修改昵称", "Confirm nickname")}
+                          style={{ color: "var(--accent)", padding: "4px 8px" }}
+                        >
+                          <Check size={15} />
+                        </button>
+                      </div>
+                    ) : (
+                      <>
+                        <p style={{ fontWeight: 600, margin: 0 }}>
+                          {accountNickname || accountEmail}
+                        </p>
+                        <button
+                          onClick={() => {
+                            setEditingNickname(true);
+                            setEditNicknameValue(accountNickname);
+                          }}
+                          style={{
+                            fontSize: 10,
+                            color: "var(--muted)",
+                            background: "none",
+                            border: "1px solid var(--line)",
+                            borderRadius: 4,
+                            padding: "1px 6px",
+                            cursor: "pointer",
+                          }}
+                        >
+                          {t("改名", "Edit")}
+                        </button>
+                      </>
+                    )}
+                  </div>
+                  <p
+                    style={{
+                      marginBottom: 16,
+                      fontSize: 12,
+                      color: "var(--muted)",
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 6,
+                    }}
+                  >
+                    {accountEmail}
+                    <span
+                      title={
+                        syncStatus === "saving"
+                          ? t("同步中", "Syncing")
+                          : syncStatus === "saved"
+                            ? t("已同步", "Synced")
+                            : syncStatus === "error"
+                              ? t("同步失败", "Sync failed")
+                              : t("待机", "Idle")
+                      }
+                      className="sync-dot"
+                      data-status={syncStatus}
+                      style={{
+                        display: "inline-block",
+                        width: 8,
+                        height: 8,
+                        borderRadius: "50%",
+                        flexShrink: 0,
+                      }}
                     />
-                    <button
+                  </p>
+                  <button
+                    className="button primary"
+                    disabled={busy || !profile}
+                    onClick={accountSave}
+                    style={{ marginBottom: 8 }}
+                  >
+                    <CloudUpload size={16} />
+                    {t("同步到云端", "Sync to cloud")}
+                  </button>
+                  <button
+                    className="button secondary"
+                    disabled={busy}
+                    onClick={() => void accountLoad(false)}
+                    style={{ marginBottom: 8 }}
+                  >
+                    <CloudDownload size={16} />
+                    {t("从云端恢复画像", "Restore from cloud")}
+                  </button>
+                  <button className="button quiet" onClick={accountLogout}>
+                    {t("退出登录", "Sign out")}
+                  </button>
+                </>
+              ) : (
+                <>
+                  <div
+                    style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 16 }}
+                  >
+                    <a
                       className="button secondary"
-                      disabled={busy || codeCooldown > 0}
-                      onClick={() => void sendAuthCode()}
-                      style={{ whiteSpace: "nowrap" }}
+                      href="/api/account/oauth/google"
+                      style={{
+                        textAlign: "center",
+                        textDecoration: "none",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        gap: 8,
+                      }}
                     >
-                      {codeCooldown > 0 ? `${codeCooldown}s` : t("获取验证码", "Get code")}
+                      <svg width="16" height="16" viewBox="0 0 24 24">
+                        <path
+                          fill="#4285F4"
+                          d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z"
+                        />
+                        <path
+                          fill="#34A853"
+                          d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
+                        />
+                        <path
+                          fill="#FBBC05"
+                          d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"
+                        />
+                        <path
+                          fill="#EA4335"
+                          d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"
+                        />
+                      </svg>
+                      {t("使用 Google 登录", "Sign in with Google")}
+                    </a>
+                    <a
+                      className="button secondary"
+                      href="/api/account/oauth/github"
+                      style={{
+                        textAlign: "center",
+                        textDecoration: "none",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        gap: 8,
+                      }}
+                    >
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z" />
+                      </svg>
+                      {t("使用 GitHub 登录", "Sign in with GitHub")}
+                    </a>
+                  </div>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, margin: "8px 0" }}>
+                    <div style={{ flex: 1, height: 1, background: "var(--line)" }} />
+                    <span style={{ fontSize: 11, color: "var(--muted)" }}>
+                      {t("或使用邮箱", "or use email")}
+                    </span>
+                    <div style={{ flex: 1, height: 1, background: "var(--line)" }} />
+                  </div>
+                  <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
+                    <button
+                      className={`button ${authMode === "login" ? "primary" : "secondary"}`}
+                      onClick={() => {
+                        setAuthMode("login");
+                        setAuthError("");
+                      }}
+                      style={{ flex: 1 }}
+                    >
+                      {t("登录", "Sign in")}
+                    </button>
+                    <button
+                      className={`button ${authMode === "register" ? "primary" : "secondary"}`}
+                      onClick={() => {
+                        setAuthMode("register");
+                        setAuthError("");
+                      }}
+                      style={{ flex: 1 }}
+                    >
+                      {t("注册", "Register")}
+                    </button>
+                    <button
+                      className={`button ${authMode === "reset" ? "primary" : "secondary"}`}
+                      onClick={() => {
+                        setAuthMode("reset");
+                        setAuthError("");
+                      }}
+                      style={{ flex: 1 }}
+                    >
+                      {t("修改密码", "Change password")}
                     </button>
                   </div>
-                )}
-                <input
-                  type="password"
-                  placeholder={
-                    authMode === "reset"
-                      ? t("新密码（至少6位）", "New password (6+ chars)")
-                      : t("密码（至少6位）", "Password (6+ chars)")
-                  }
-                  value={authPassword}
-                  onChange={(e) => setAuthPassword(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") void accountAuth(authMode);
-                  }}
-                  style={{ marginBottom: 12 }}
-                />
-                <button
-                  className="button primary"
-                  disabled={busy}
-                  onClick={() => void accountAuth(authMode)}
-                >
-                  {authMode === "login"
-                    ? t("登录", "Sign in")
-                    : authMode === "register"
-                      ? t("注册", "Register")
-                      : t("修改密码", "Change password")}
+                  {authError && (
+                    <p style={{ color: "#f87171", fontSize: 13, marginBottom: 8 }}>{authError}</p>
+                  )}
+                  {authMode === "register" && (
+                    <input
+                      type="text"
+                      placeholder={t("昵称（必填）", "Nickname (required)")}
+                      value={authNickname}
+                      onChange={(e) => setAuthNickname(e.target.value)}
+                      style={{ marginBottom: 8 }}
+                    />
+                  )}
+                  <input
+                    type="email"
+                    placeholder={t("邮箱", "Email")}
+                    value={authEmail}
+                    onChange={(e) => setAuthEmail(e.target.value)}
+                    style={{ marginBottom: 8 }}
+                  />
+                  {authMode !== "login" && (
+                    <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
+                      <input
+                        type="text"
+                        placeholder={t("邮箱验证码", "Email code")}
+                        value={authCode}
+                        onChange={(e) => setAuthCode(e.target.value)}
+                        style={{ flex: 1 }}
+                      />
+                      <button
+                        className="button secondary"
+                        disabled={busy || codeCooldown > 0}
+                        onClick={() => void sendAuthCode()}
+                        style={{ whiteSpace: "nowrap" }}
+                      >
+                        {codeCooldown > 0 ? `${codeCooldown}s` : t("获取验证码", "Get code")}
+                      </button>
+                    </div>
+                  )}
+                  <input
+                    type="password"
+                    placeholder={
+                      authMode === "reset"
+                        ? t("新密码（至少6位）", "New password (6+ chars)")
+                        : t("密码（至少6位）", "Password (6+ chars)")
+                    }
+                    value={authPassword}
+                    onChange={(e) => setAuthPassword(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") void accountAuth(authMode);
+                    }}
+                    style={{ marginBottom: 12 }}
+                  />
+                  <button
+                    className="button primary"
+                    disabled={busy}
+                    onClick={() => void accountAuth(authMode)}
+                  >
+                    {authMode === "login"
+                      ? t("登录", "Sign in")
+                      : authMode === "register"
+                        ? t("注册", "Register")
+                        : t("修改密码", "Change password")}
+                  </button>
+                </>
+              )}
+              {!accountEmail && (
+                <button className="button quiet" onClick={() => setAccountOpen(false)}>
+                  <UserRound size={16} />
+                  {t("继续使用游客模式", "Continue as guest")}
                 </button>
-              </>
-            )}
-            {!accountEmail && (
-              <button className="button quiet" onClick={() => setAccountOpen(false)}>
-                <UserRound size={16} />
-                {t("继续使用游客模式", "Continue as guest")}
-              </button>
-            )}
-          </section>
-        </div>
+              )}
+            </section>
+          </div>
+        </FocusTrap>
       )}
       {showGuide && (
         <div className="modal-backdrop" onClick={() => setShowGuide(false)}>
@@ -2457,238 +2481,240 @@ export default function App() {
         </div>
       )}
       {showTech && (
-        <div className="modal-backdrop" onClick={() => setShowTech(false)}>
-          <section
-            className="tech-modal account-dialog"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="tech-heading"
-            onClick={(event) => event.stopPropagation()}
-            onKeyDown={(event) => {
-              if (event.key === "Escape") setShowTech(false);
-            }}
-          >
-            <span className="eyebrow">ART/RANK TECHNICAL</span>
-            <h2 id="tech-heading">{t("技术说明", "Technical Details")}</h2>
-            <p className="guide-subtitle">
-              {t(
-                "ART/RANK 背后的核心算法和数据流。",
-                "The core algorithms and data flow behind ART/RANK.",
-              )}
-            </p>
-            <div className="tech-sections">
-              <details open>
-                <summary>{t("排序算法", "Sorting Algorithm")}</summary>
-                <div className="tech-body">
-                  <p>
-                    {t("排序引擎使用", "The sorting engine uses ")}
-                    <strong>{t("主动式二分插入排序", "Active Binary Insertion Sort")}</strong>
-                    {t(
-                      "，核心思路是：每次取出一个候选作品，与已排序列表的中位数比较，根据结果缩小搜索范围，直到确定精确插入位置。",
-                      ". The core idea: each candidate work is compared with the median of the sorted list, narrowing the search range until the exact insertion position is found.",
-                    )}
-                  </p>
-                  <p>
-                    {t(
-                      "时间复杂度 O(n log n)。对于 n 件作品取 Top N，每个候选最多需要 ⌈log₂(N+1)⌉ 次比较。",
-                      "Time complexity O(n log n). For n works with Top N, each candidate needs at most ⌈log₂(N+1)⌉ comparisons.",
-                    )}
-                  </p>
-                  <p>
-                    <strong>{t("冷却机制", "Cooldown")}</strong>：
-                    {t(
-                      "同一对作品至少间隔 3 次比较，同一作品至少间隔 4 次比较，防止顺序偏差和比较疲劳。",
-                      "Same pair at least 3 comparisons apart, same work at least 4 apart — prevents order bias and comparison fatigue.",
-                    )}
-                  </p>
-                  <p>
-                    <strong>{t("偏好回环检测", "Preference Loop Detection")}</strong>：
-                    {t(
-                      "当检测到 A→B→C→A 的偏好循环时，系统安排复测。首次标记为「观察中」，多次方向一致后标记为「持久张力」——尊重用户的真实品味矛盾，而非强行纠正。",
-                      "When detecting A→B→C→A preference loops, the system schedules rechecks. First marked 'observed', then 'persistent tension' if consistently confirmed — respecting genuine taste contradictions.",
-                    )}
-                  </p>
-                  <p>
-                    <strong>{t("验证阶段", "Verification Phase")}</strong>：
-                    {t(
-                      "主排序完成后，自动复测少量相邻作品对和循环边，确保结果稳定。复测数量约为 Top N 的 1/3。",
-                      "After main sorting, a few adjacent pairs and loop edges are rechecked. Verification count ≈ Top N / 3.",
-                    )}
-                  </p>
-                  <p>
-                    <strong>{t("撤销", "Undo")}</strong>：
-                    {t(
-                      "通过重放决策日志（去掉最后一条）重建完整状态，保证撤销后排序一致性。",
-                      "Rebuilds state by replaying the decision log minus the last entry, guaranteeing consistency after undo.",
-                    )}
-                  </p>
-                </div>
-              </details>
-              <details>
-                <summary>{t("比较算法", "Comparison Algorithm")}</summary>
-                <div className="tech-body">
-                  <p>
-                    {t(
-                      "两人比较时，系统首先将同维度的多个榜单",
-                      "When comparing two profiles, the system first ",
-                    )}
-                    <strong>{t("合并", "merges")}</strong>
-                    {t(
-                      "：同一作品出现在多个榜单中时取最高名次。匹配依据是标题 + 年份 + 创作者的规范化比较。",
-                      " multiple lists per dimension: same work across lists takes the best rank. Matching is based on normalized title + year + creator.",
-                    )}
-                  </p>
-                  <p>
-                    <strong>{t("贪心匹配", "Greedy Matching")}</strong>：
-                    {t(
-                      "生成所有候选对的匹配评分（70-90 分），按评分降序、排名差升序排列，贪心选择不冲突的最优匹配。",
-                      " — generates match scores (70-90) for all candidate pairs, sorted by score descending then rank-diff ascending, greedily selecting non-conflicting optimal matches.",
-                    )}
-                  </p>
-                  <p>
-                    <strong>{t("比较指标", "Comparison Metrics")}</strong>：
-                  </p>
-                  <ul>
-                    <li>
-                      <strong>{t("作品重合度", "Work Overlap")}</strong>：
-                      {t("共同作品数 / 并集作品数", "shared works / union count")}
-                    </li>
-                    <li>
-                      <strong>{t("加权偏好一致", "Weighted Agreement")}</strong>：
+        <FocusTrap onEscape={() => setShowTech(false)}>
+          <div className="modal-backdrop" onClick={() => setShowTech(false)}>
+            <section
+              className="tech-modal account-dialog"
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="tech-heading"
+              onClick={(event) => event.stopPropagation()}
+              onKeyDown={(event) => {
+                if (event.key === "Escape") setShowTech(false);
+              }}
+            >
+              <span className="eyebrow">ART/RANK TECHNICAL</span>
+              <h2 id="tech-heading">{t("技术说明", "Technical Details")}</h2>
+              <p className="guide-subtitle">
+                {t(
+                  "ART/RANK 背后的核心算法和数据流。",
+                  "The core algorithms and data flow behind ART/RANK.",
+                )}
+              </p>
+              <div className="tech-sections">
+                <details open>
+                  <summary>{t("排序算法", "Sorting Algorithm")}</summary>
+                  <div className="tech-body">
+                    <p>
+                      {t("排序引擎使用", "The sorting engine uses ")}
+                      <strong>{t("主动式二分插入排序", "Active Binary Insertion Sort")}</strong>
                       {t(
-                        "基于 1/rank 权重的一致性（高排名作品权重更大）",
-                        "consistency weighted by 1/rank (higher-ranked works matter more)",
+                        "，核心思路是：每次取出一个候选作品，与已排序列表的中位数比较，根据结果缩小搜索范围，直到确定精确插入位置。",
+                        ". The core idea: each candidate work is compared with the median of the sorted list, narrowing the search range until the exact insertion position is found.",
                       )}
-                    </li>
-                    <li>
-                      <strong>{t("顺序一致率", "Order Agreement")}</strong>：
+                    </p>
+                    <p>
                       {t(
-                        "剔除并列名次后的序对一致数 / 非并列总序对数（多榜单合并取最优名次会产生并列，并列无法判定先后，不计入）",
-                        "concordant pairs / non-tied pairs (merged best ranks can tie; ties are excluded)",
+                        "时间复杂度 O(n log n)。对于 n 件作品取 Top N，每个候选最多需要 ⌈log₂(N+1)⌉ 次比较。",
+                        "Time complexity O(n log n). For n works with Top N, each candidate needs at most ⌈log₂(N+1)⌉ comparisons.",
                       )}
-                    </li>
-                    <li>
-                      <strong>{t("Top 3 共识", "Top 3 Consensus")}</strong>：
-                      {t("双方前三名中的共同作品数", "shared works in both top 3")}
-                    </li>
-                    <li>
-                      <strong>{t("名次距离", "Rank Distance")}</strong>：
-                      {t("平均名次差 / 最大名次", "avg rank difference / max rank")}
-                    </li>
-                    <li>
-                      <strong>{t("斯皮尔曼相关", "Spearman-like")}</strong>：
+                    </p>
+                    <p>
+                      <strong>{t("冷却机制", "Cooldown")}</strong>：
                       {t(
-                        "基于排名差平方的秩相关系数",
-                        "rank correlation based on squared rank differences",
+                        "同一对作品至少间隔 3 次比较，同一作品至少间隔 4 次比较，防止顺序偏差和比较疲劳。",
+                        "Same pair at least 3 comparisons apart, same work at least 4 apart — prevents order bias and comparison fatigue.",
                       )}
-                    </li>
-                  </ul>
-                </div>
-              </details>
-              <details>
-                <summary>{t("海报与详情 API", "Poster & Detail API")}</summary>
-                <div className="tech-body">
-                  <p>
-                    <strong>
-                      {t("海报解析策略（按优先级）", "Poster resolution (by priority)")}
-                    </strong>
-                    ：
-                  </p>
-                  <ul>
-                    <li>
-                      <strong>{t("电影", "Film")}</strong>：
+                    </p>
+                    <p>
+                      <strong>{t("偏好回环检测", "Preference Loop Detection")}</strong>：
                       {t(
-                        "豆瓣 suggest API → search.douban.com 搜索 → Top250 索引 → IMDb 备用",
-                        "Douban suggest API → search.douban.com → Top250 index → IMDb fallback",
+                        "当检测到 A→B→C→A 的偏好循环时，系统安排复测。首次标记为「观察中」，多次方向一致后标记为「持久张力」——尊重用户的真实品味矛盾，而非强行纠正。",
+                        "When detecting A→B→C→A preference loops, the system schedules rechecks. First marked 'observed', then 'persistent tension' if consistently confirmed — respecting genuine taste contradictions.",
                       )}
-                    </li>
-                    <li>
-                      <strong>{t("书籍", "Book")}</strong>：
+                    </p>
+                    <p>
+                      <strong>{t("验证阶段", "Verification Phase")}</strong>：
                       {t(
-                        "豆瓣 suggest API（pic 字段）→ search.douban.com 搜索 → Top250 索引",
-                        "Douban suggest API (pic field) → search.douban.com → Top250 index",
+                        "主排序完成后，自动复测少量相邻作品对和循环边，确保结果稳定。复测数量约为 Top N 的 1/3。",
+                        "After main sorting, a few adjacent pairs and loop edges are rechecked. Verification count ≈ Top N / 3.",
                       )}
-                    </li>
-                    <li>
-                      <strong>{t("音乐", "Music")}</strong>：
+                    </p>
+                    <p>
+                      <strong>{t("撤销", "Undo")}</strong>：
                       {t(
-                        "网易云 CDN 封面直出优先 → search.douban.com 搜索 → Top250 索引（无 suggest API）",
-                        "NetEase CDN cover first → search.douban.com → Top250 index (no suggest API)",
+                        "通过重放决策日志（去掉最后一条）重建完整状态，保证撤销后排序一致性。",
+                        "Rebuilds state by replaying the decision log minus the last entry, guaranteeing consistency after undo.",
                       )}
-                    </li>
-                  </ul>
-                  <p>
-                    {t(
-                      "以上都没命中时，所有类别统一按「维基百科 → 网易云 / gd-proxy」逐级兜底。",
-                      "When none of the above hit, every medium falls back through Wikipedia → NetEase / gd-proxy.",
-                    )}
-                  </p>
-                  <p>
-                    {t(
-                      "豆瓣返回的 URL 会展开成多个 CDN 镜像变体（img1/2/3/9.doubanio.com）并做 https 升级，前端按顺序尝试加载。",
-                      "A Douban URL expands into several CDN mirror variants (img1/2/3/9.doubanio.com) with https upgrade; the frontend tries them in order.",
-                    )}
-                  </p>
-                  <p>
-                    <strong>{t("详情获取策略", "Detail fetching")}</strong>：
-                    {t(
-                      "优先从 Wikipedia（中英文）获取简介，辅以类型限定词减少歧义；然后尝试创作者组合搜索；最后用百度百科兜底。元数据（评分、导演、出版社等）从豆瓣搜索结果解析。",
-                      "Prioritizes Wikipedia (zh/en) for content intros with type disambiguation; then creator+title combo search; Baidu Baike as fallback. Metadata (ratings, director, publisher) parsed from Douban search results.",
-                    )}
-                  </p>
-                  <p>
-                    <strong>{t("防限流机制", "Rate Limit Protection")}</strong>：
-                    {t(
-                      "4 个 Edge UA 轮换；同域名请求按域名串行并保持最小间隔（默认 800ms，search.douban.com 放宽到 200ms）；图片请求不参与节流；403/418 重试 2 次并递增冷却 5s→10s→15s。",
-                      "4 Edge UAs rotated; per-domain serialized requests with a minimum gap (800ms default, 200ms for search.douban.com); image requests skip throttling; 2 retries on 403/418 with escalating cooldown 5s→10s→15s.",
-                    )}
-                  </p>
-                </div>
-              </details>
-              <details>
-                <summary>{t("数据存储", "Data Storage")}</summary>
-                <div className="tech-body">
-                  <p>
-                    <strong>{t("游客模式", "Guest mode")}</strong>：
-                    {t(
-                      "所有数据存储在浏览器 localStorage，不离开设备。",
-                      "All data in browser localStorage, never leaves the device.",
-                    )}
-                  </p>
-                  <p>
-                    <strong>{t("登录用户", "Signed-in users")}</strong>：
-                    {t(
-                      "画像和云端清单存储在 Cloudflare D1（SQLite），Token 有效期 30 天。画像变更自动防抖同步，切到后台或关闭页面时使用 keepalive 确保最后保存。",
-                      "Profiles and cloud lists stored in Cloudflare D1 (SQLite), 30-day token. Profile changes auto-debounced, with keepalive sync on page hide/close.",
-                    )}
-                  </p>
-                  <p>
-                    <strong>{t("分享链接", "Share links")}</strong>：
-                    {t(
-                      "统一走服务端 12 位短码（需要 D1）。旧版把画像压缩后内联在 URL 里的链接仍可打开，由前端 fflate 解压读取。",
-                      "Served as a 12-character server-side code (requires D1). Older links that inline a compressed profile in the URL still open, decoded client-side with fflate.",
-                    )}
-                  </p>
-                </div>
-              </details>
-            </div>
-            <div className="guide-modal-footer">
-              <a
-                className="button secondary"
-                href="https://github.com/tripodxu/film-sort"
-                target="_blank"
-                rel="noopener noreferrer"
-                style={{ textDecoration: "none" }}
-              >
-                GitHub
-              </a>
-              <div style={{ flex: 1 }} />
-              <button className="button primary" onClick={() => setShowTech(false)}>
-                {t("关闭", "Close")}
-              </button>
-            </div>
-          </section>
-        </div>
+                    </p>
+                  </div>
+                </details>
+                <details>
+                  <summary>{t("比较算法", "Comparison Algorithm")}</summary>
+                  <div className="tech-body">
+                    <p>
+                      {t(
+                        "两人比较时，系统首先将同维度的多个榜单",
+                        "When comparing two profiles, the system first ",
+                      )}
+                      <strong>{t("合并", "merges")}</strong>
+                      {t(
+                        "：同一作品出现在多个榜单中时取最高名次。匹配依据是标题 + 年份 + 创作者的规范化比较。",
+                        " multiple lists per dimension: same work across lists takes the best rank. Matching is based on normalized title + year + creator.",
+                      )}
+                    </p>
+                    <p>
+                      <strong>{t("贪心匹配", "Greedy Matching")}</strong>：
+                      {t(
+                        "生成所有候选对的匹配评分（70-90 分），按评分降序、排名差升序排列，贪心选择不冲突的最优匹配。",
+                        " — generates match scores (70-90) for all candidate pairs, sorted by score descending then rank-diff ascending, greedily selecting non-conflicting optimal matches.",
+                      )}
+                    </p>
+                    <p>
+                      <strong>{t("比较指标", "Comparison Metrics")}</strong>：
+                    </p>
+                    <ul>
+                      <li>
+                        <strong>{t("作品重合度", "Work Overlap")}</strong>：
+                        {t("共同作品数 / 并集作品数", "shared works / union count")}
+                      </li>
+                      <li>
+                        <strong>{t("加权偏好一致", "Weighted Agreement")}</strong>：
+                        {t(
+                          "基于 1/rank 权重的一致性（高排名作品权重更大）",
+                          "consistency weighted by 1/rank (higher-ranked works matter more)",
+                        )}
+                      </li>
+                      <li>
+                        <strong>{t("顺序一致率", "Order Agreement")}</strong>：
+                        {t(
+                          "剔除并列名次后的序对一致数 / 非并列总序对数（多榜单合并取最优名次会产生并列，并列无法判定先后，不计入）",
+                          "concordant pairs / non-tied pairs (merged best ranks can tie; ties are excluded)",
+                        )}
+                      </li>
+                      <li>
+                        <strong>{t("Top 3 共识", "Top 3 Consensus")}</strong>：
+                        {t("双方前三名中的共同作品数", "shared works in both top 3")}
+                      </li>
+                      <li>
+                        <strong>{t("名次距离", "Rank Distance")}</strong>：
+                        {t("平均名次差 / 最大名次", "avg rank difference / max rank")}
+                      </li>
+                      <li>
+                        <strong>{t("斯皮尔曼相关", "Spearman-like")}</strong>：
+                        {t(
+                          "基于排名差平方的秩相关系数",
+                          "rank correlation based on squared rank differences",
+                        )}
+                      </li>
+                    </ul>
+                  </div>
+                </details>
+                <details>
+                  <summary>{t("海报与详情 API", "Poster & Detail API")}</summary>
+                  <div className="tech-body">
+                    <p>
+                      <strong>
+                        {t("海报解析策略（按优先级）", "Poster resolution (by priority)")}
+                      </strong>
+                      ：
+                    </p>
+                    <ul>
+                      <li>
+                        <strong>{t("电影", "Film")}</strong>：
+                        {t(
+                          "豆瓣 suggest API → search.douban.com 搜索 → Top250 索引 → IMDb 备用",
+                          "Douban suggest API → search.douban.com → Top250 index → IMDb fallback",
+                        )}
+                      </li>
+                      <li>
+                        <strong>{t("书籍", "Book")}</strong>：
+                        {t(
+                          "豆瓣 suggest API（pic 字段）→ search.douban.com 搜索 → Top250 索引",
+                          "Douban suggest API (pic field) → search.douban.com → Top250 index",
+                        )}
+                      </li>
+                      <li>
+                        <strong>{t("音乐", "Music")}</strong>：
+                        {t(
+                          "网易云 CDN 封面直出优先 → search.douban.com 搜索 → Top250 索引（无 suggest API）",
+                          "NetEase CDN cover first → search.douban.com → Top250 index (no suggest API)",
+                        )}
+                      </li>
+                    </ul>
+                    <p>
+                      {t(
+                        "以上都没命中时，所有类别统一按「维基百科 → 网易云 / gd-proxy」逐级兜底。",
+                        "When none of the above hit, every medium falls back through Wikipedia → NetEase / gd-proxy.",
+                      )}
+                    </p>
+                    <p>
+                      {t(
+                        "豆瓣返回的 URL 会展开成多个 CDN 镜像变体（img1/2/3/9.doubanio.com）并做 https 升级，前端按顺序尝试加载。",
+                        "A Douban URL expands into several CDN mirror variants (img1/2/3/9.doubanio.com) with https upgrade; the frontend tries them in order.",
+                      )}
+                    </p>
+                    <p>
+                      <strong>{t("详情获取策略", "Detail fetching")}</strong>：
+                      {t(
+                        "优先从 Wikipedia（中英文）获取简介，辅以类型限定词减少歧义；然后尝试创作者组合搜索；最后用百度百科兜底。元数据（评分、导演、出版社等）从豆瓣搜索结果解析。",
+                        "Prioritizes Wikipedia (zh/en) for content intros with type disambiguation; then creator+title combo search; Baidu Baike as fallback. Metadata (ratings, director, publisher) parsed from Douban search results.",
+                      )}
+                    </p>
+                    <p>
+                      <strong>{t("防限流机制", "Rate Limit Protection")}</strong>：
+                      {t(
+                        "4 个 Edge UA 轮换；同域名请求按域名串行并保持最小间隔（默认 800ms，search.douban.com 放宽到 200ms）；图片请求不参与节流；403/418 重试 2 次并递增冷却 5s→10s→15s。",
+                        "4 Edge UAs rotated; per-domain serialized requests with a minimum gap (800ms default, 200ms for search.douban.com); image requests skip throttling; 2 retries on 403/418 with escalating cooldown 5s→10s→15s.",
+                      )}
+                    </p>
+                  </div>
+                </details>
+                <details>
+                  <summary>{t("数据存储", "Data Storage")}</summary>
+                  <div className="tech-body">
+                    <p>
+                      <strong>{t("游客模式", "Guest mode")}</strong>：
+                      {t(
+                        "所有数据存储在浏览器 localStorage，不离开设备。",
+                        "All data in browser localStorage, never leaves the device.",
+                      )}
+                    </p>
+                    <p>
+                      <strong>{t("登录用户", "Signed-in users")}</strong>：
+                      {t(
+                        "画像和云端清单存储在 Cloudflare D1（SQLite），Token 有效期 30 天。画像变更自动防抖同步，切到后台或关闭页面时使用 keepalive 确保最后保存。",
+                        "Profiles and cloud lists stored in Cloudflare D1 (SQLite), 30-day token. Profile changes auto-debounced, with keepalive sync on page hide/close.",
+                      )}
+                    </p>
+                    <p>
+                      <strong>{t("分享链接", "Share links")}</strong>：
+                      {t(
+                        "统一走服务端 12 位短码（需要 D1）。旧版把画像压缩后内联在 URL 里的链接仍可打开，由前端 fflate 解压读取。",
+                        "Served as a 12-character server-side code (requires D1). Older links that inline a compressed profile in the URL still open, decoded client-side with fflate.",
+                      )}
+                    </p>
+                  </div>
+                </details>
+              </div>
+              <div className="guide-modal-footer">
+                <a
+                  className="button secondary"
+                  href="https://github.com/tripodxu/film-sort"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  style={{ textDecoration: "none" }}
+                >
+                  GitHub
+                </a>
+                <div style={{ flex: 1 }} />
+                <button className="button primary" onClick={() => setShowTech(false)}>
+                  {t("关闭", "Close")}
+                </button>
+              </div>
+            </section>
+          </div>
+        </FocusTrap>
       )}
     </div>
   );
