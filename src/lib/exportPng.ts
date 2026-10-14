@@ -1,6 +1,7 @@
 import type { ArtisticProfile, RankedArtwork, RankingExport } from "./profile";
 import type { MediaKind } from "../data/media";
 import { buildWrappedStats, type WrappedDraftInsight } from "./wrapped";
+import { mapPool } from "./utils";
 
 // ===== 画像 PNG 导出：纯 Canvas 手绘，主题感知（采样当前 data-theme 的 CSS 变量），五套版式 =====
 
@@ -86,12 +87,22 @@ function resolveColor(cssColor: string): string {
   }
 }
 
-function loadImage(url: string): Promise<HTMLImageElement | null> {
+function loadImage(url: string, timeoutMs = 10000): Promise<HTMLImageElement | null> {
   return new Promise((resolve) => {
+    let settled = false;
+    const done = (value: HTMLImageElement | null) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      resolve(value);
+    };
     const image = new Image();
     image.crossOrigin = "anonymous";
-    image.onload = () => resolve(image);
-    image.onerror = () => resolve(null);
+    image.onload = () => done(image);
+    image.onerror = () => done(null);
+    // 远端图 hung 住时整个 PNG 导出会卡死：超时按缺图降级（此前无超时，
+    // 外层 Promise.all 永不 settle，用户卡在 busy）。
+    const timer = setTimeout(() => done(null), timeoutMs);
     image.src = url;
   });
 }
@@ -208,19 +219,18 @@ export async function renderProfilePng({
   const posterCandidates = exportRankings.flatMap((entry) =>
     entry.items.map((item) => ({ kind: entry.kind, item })),
   );
-  await Promise.all(
-    posterCandidates
-      .slice(0, MAX_EXPORT_POSTERS)
-      .map(({ kind, item }) => resolvePosterUrls(kind, item)),
+  // 海报解析限并发 6：80 条全开会打满浏览器同源连接池，并反压自家
+  // /api/posters 限流桶（此前 Promise.all 全开）。解码池 12：控内存峰值。
+  await mapPool(posterCandidates.slice(0, MAX_EXPORT_POSTERS), 6, ({ kind, item }) =>
+    resolvePosterUrls(kind, item),
   );
   const images = new Map<string, HTMLImageElement>();
-  await Promise.all(
-    [...posterSources.values()].flat().map(async (src) => {
-      if (images.has(src)) return;
-      const image = await loadImage(proxiedUrl(src));
-      if (image) images.set(src, image);
-    }),
-  );
+  await mapPool([...new Set([...posterSources.values()].flat())], 12, async (src) => {
+    if (images.has(src)) return null;
+    const image = await loadImage(proxiedUrl(src));
+    if (image) images.set(src, image);
+    return null;
+  });
 
   const count = (n: number, per: number) => Math.ceil(n / per);
   const sectionHeight = (entry: RankingExport) => {

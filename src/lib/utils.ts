@@ -46,3 +46,28 @@ export function saveFile(content: BlobPart, name: string, type: string) {
   link.click();
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
+
+/** 并发池 map（T-20261014-08）：保序、限并发；单项抛错收敛为 null（调用方决定
+ *  降级），池本身不因单项失败短路。cursor 自增在 await 之间同步执行，单线程下
+ *  不会重复领取——与 worker 批量池同一写法。 */
+export async function mapPool<T, R>(
+  items: readonly T[],
+  limit: number,
+  fn: (item: T, index: number) => Promise<R>,
+): Promise<Array<R | null>> {
+  const out: Array<R | null> = new Array(items.length).fill(null);
+  let cursor = 0;
+  const workers = Math.min(Math.max(1, limit), items.length);
+  async function worker(): Promise<void> {
+    while (cursor < items.length) {
+      const index = cursor++;
+      try {
+        out[index] = await fn(items[index], index);
+      } catch {
+        out[index] = null;
+      }
+    }
+  }
+  await Promise.all(Array.from({ length: workers }, () => worker()));
+  return out;
+}
