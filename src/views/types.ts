@@ -1,4 +1,4 @@
-import type { RankingState } from "../lib/ranking";
+import type { RankingMode, RankingState } from "../lib/ranking";
 import type { MediaCollection, MediaKind, Artwork } from "../data/media";
 import type { ArtisticProfile, RankingExport, RankedArtwork } from "../lib/profile";
 import type { ExportLayout } from "../lib/exportPng";
@@ -85,7 +85,7 @@ export interface SetupViewProps {
   seed: string;
   setSeed: (seed: string) => void;
   setCollection: (collection: MediaCollection) => void;
-  startRanking: () => void;
+  startRanking: (mode: RankingMode) => void;
   saveWithoutSorting: () => void;
   startJevRanking: () => void;
   jevBusy: boolean;

@@ -151,7 +151,7 @@ export function SetupView({
           <button
             className="button primary"
             disabled={selected.length < 2 || !collection.title.trim()}
-            onClick={startRanking}
+            onClick={() => startRanking(active.value)}
           >
             <Play size={16} />
             {t("开始相遇", "Start encounter")}

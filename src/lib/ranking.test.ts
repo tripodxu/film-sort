@@ -210,7 +210,7 @@ describe("serialize/deserialize", () => {
 
 // ===== 算法三模式（docs/PLAN-algo-modes.md）=====
 
-import { deferCurrent } from "./ranking";
+import { deferCurrent, skipCurrent } from "./ranking";
 
 describe("ranking modes", () => {
   it("缺省 mode 为 classic，旧快照反序列化补默认字段", () => {
@@ -312,6 +312,39 @@ describe("ranking modes", () => {
     // 暂放后没有其他候选 → 转验证/完成？pending 空且 deferred 有 1 件 → 恢复该件
     expect(state.activeInsertion?.candidateId).toBeDefined();
     expect(state.activeInsertion?.stage).toBe("gate");
+  });
+
+  // T-20261014-09：quick+topN=1 经探针证实无退化——守门员即整张榜，逐件 gate
+  // 照常收敛。这里把探针结论钉死：双向全胜/全败都终止、结果恰好 1 件、
+  // 进度 fraction 合法、暂放/略过/撤销不丢件。
+  it("quick+topN=1：双向驱动都终止且结果恰好 1 件", () => {
+    for (const side of ["left", "right"] as const) {
+      let state = createRankingState(ids(5), { seed, topN: 1, mode: "quick" });
+      let count = 0;
+      while (!state.completed && count < 50) {
+        expect(getCurrentComparison(state)).not.toBeNull();
+        state = chooseSide(state, side);
+        count++;
+      }
+      expect(state.completed).toBe(true);
+      expect(getRankingResult(state)).toHaveLength(1);
+      expect(getRankingProgress(state).fraction).toBe(1);
+    }
+  });
+
+  it("quick+topN=1：暂放/略过/撤销不丢件", () => {
+    let state = createRankingState(ids(4), { seed, topN: 1, mode: "quick" });
+    state = skipCurrent(state);
+    state = deferCurrent(state);
+    state = undoLastAction(state);
+    const all = [
+      ...state.rankedIds,
+      ...state.pendingIds,
+      ...state.skippedIds,
+      ...state.deferredIds,
+      ...(state.activeInsertion ? [state.activeInsertion.candidateId] : []),
+    ];
+    expect(new Set(all).size).toBe(4);
   });
 
   it("precise 模式：验证数量为 max(4, ceil(topN/2))，quick 为 1，classic 为现行", () => {

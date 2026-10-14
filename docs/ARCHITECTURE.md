@@ -256,9 +256,11 @@ interface RankingState {
 
 ### 3.6 排序三模式（quick/classic/precise）
 
-`RankingState.mode` 三选一（缺省 classic，零迁移）：
+`RankingState.mode` 三选一（缺省 classic，零迁移）。模式真相源是 SetupView 的
+rankMode state，随 `startRanking(mode)` 显式传入（localStorage 只记忆选择，不再是
+起跑真相源——隐私模式下存储失效时旧写法会无声回退 classic）：
 
-- **quick（简易）**：未满员二分建榜；满员后候选先与**守门员**（末位）比较（`ActiveInsertion.stage="gate"`），输则 1 次出局，赢则升级 bisect 于守门员之前定位；验证仅守门员边界 1 次；
+- **quick（简易）**：未满员二分建榜；满员后候选先与**守门员**（末位）比较（`ActiveInsertion.stage="gate"`），输则 1 次出局，赢则升级 bisect 于守门员之前定位；验证仅守门员边界 1 次（topN<2 时无验证）；
 - **classic（经典，默认）**：二分插入 + 冷却 + 回环检测 + 验证阶段（上文 §3.2–3.5）；
 - **precise（精确）**：验证数 max(4, ceil(topN/2)) + TopK 内未直接比较的相邻对主动入队 + 回环确认阈值 2× + `calibration` 校准一致率统计（完成时 notice 汇报）。
 

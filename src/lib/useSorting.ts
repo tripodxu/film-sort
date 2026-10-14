@@ -7,9 +7,11 @@ import {
   getCurrentComparison,
   getRankingProgress,
   getRankingResult,
+  RANKING_MODES,
   serializeRankingState,
   skipWork,
   undoLastAction,
+  type RankingMode,
   type RankingState,
 } from "./ranking";
 import {
@@ -699,18 +701,13 @@ export function useSorting(deps: SortingDeps) {
     }
   }
 
-  function startRanking() {
+  // 排序模式由调用方（SetupView 的 rankMode state）显式传入，不再经 localStorage
+  // 中转——隐私模式下存储读写双双失效时，旧写法会无声回退 classic，与用户选择 divergence。
+  function startRanking(mode: RankingMode) {
     const d = depsRef.current;
     if (!collection || selected.length < 2) return;
     const works = collection.works.filter((work) => selected.includes(work.id));
-    // 排序模式：SetupView 写入 localStorage，缺省 classic。
-    let rankMode: "quick" | "classic" | "precise" = "classic";
-    try {
-      const stored = localStorage.getItem("art-rank:rank-mode");
-      if (stored === "quick" || stored === "precise") rankMode = stored;
-    } catch {
-      /* 隐私模式 */
-    }
+    const rankMode: RankingMode = RANKING_MODES.includes(mode) ? mode : "classic";
     const next = createRankingState(
       works.map((work) => work.id),
       {

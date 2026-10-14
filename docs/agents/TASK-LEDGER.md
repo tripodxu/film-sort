@@ -37,7 +37,7 @@
 | T-20261014-06 | S1 出站收敛 fetchBounded + 扫描绊线 | ✅ 完成阶段1（线上验证过；残留17处锁定只许减） | 本 agent |
 | T-20261014-07 | D2 五个 migration 幂等守卫 + A4 batch outcomes 并发 | ✅ 完成（线上验证过） | 本 agent |
 | T-20261014-08 | 导出 robustness（并发池+超时+超限降级）+ PWA 验收 | ✅ 完成（线上验证过） | 本 agent |
-| T-20261014-09 | quick+topN=1 退化 + rankMode 显式传参 + 文档滞后（A1/A2/A3） | ⬜ 未开始 | 待认领 |
+| T-20261014-09 | quick+topN=1 退化 + rankMode 显式传参 + 文档滞后（A1/A2/A3） | 🔄 进行中 | 本 agent |
 
 **给下一棒**：每子项独立提交 → 推送 → 线上验证 → 标 ✅；改 Worker 接口同步 `docs/API.md`；改功能同步 README/FEATURES/USAGE/CHANGELOG。
 

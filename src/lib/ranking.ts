@@ -8,7 +8,7 @@ const MAX_BASELINE_VERIFICATIONS = 4;
 const PRECISE_CYCLE_CONFIRM_FACTOR = 2;
 
 export type RankingMode = "quick" | "classic" | "precise";
-const RANKING_MODES: RankingMode[] = ["quick", "classic", "precise"];
+export const RANKING_MODES: RankingMode[] = ["quick", "classic", "precise"];
 
 export interface RankingOptions {
   seed?: string;
