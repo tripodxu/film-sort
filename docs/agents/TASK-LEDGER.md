@@ -28,10 +28,12 @@
 **线上验证（2026-10-14，提交 `20fd3de`，T-05）**：首页引用新包 `assets/index-D037JABt.js` ✅、新 asset 200 ✅、浏览器 E2E 6/6 全绿 ✅。途中 `ui-fixes.test.ts` 绊线按预期变红（它锁死了旧的裸 `aria-label` 写法），已按 CONVENTIONS §6.7 把绊线升级为锁定新写法（`role=status` + `sr-only`），88/88 绿。附带核实：`IconButton` 早有 `aria-label`（前期已修，审查报告 item 18 过期作废）。实际包了 12 处 dialog（App 8 + SourceView 3 + ProfileView 1），超原计划 7 处。
 
 **线上验证（2026-10-14，提交 `05698f8`，T-06 阶段1）**：`/api/health` 200（D1 ok）✅；被改链路实测 `GET /api/other/detail?name=动物森友会` → 200（`status:true`，`title=動物森友會 (遊戲)`，真维基数据经新策略走通）✅；浏览器 E2E 6/6 全绿 ✅（前端包哈希未变，符合预期——本次只改 Worker）。途中 `content-intro-music.test.ts` 4 红：初版策略带 `allowedContentTypes: json`，而测试 mock Response 默认 `text/plain`；判定为冗余防御（非 JSON 的 200 照样在 parse 环节抛错走同一 catch），已删并加注，99/99 绿。阶段1范围：维基 4 站点；残留 17 处裸 fetch 由 `outboundCoverage.test.ts` 逐文件计数锁定（含 index.ts 同源断言、account OAuth 待动态 host 策略），后续逐个收敛。
+
+**线上验证（2026-10-14，提交 `6f93785`，T-07）**：`/api/health` 200 ✅；被改链路实测 `POST /api/posters/batch`（千与千寻/星际穿越）→ 200 且 outcomes 全 `found`（新 tally 上线前后一致）✅；浏览器 E2E 6/6 全绿 ✅。D2 范围纠正：报告写 4 个，实为 5 个文件（绊线多抓出 0014 的无守卫索引）共 13 处 `IF NOT EXISTS`；sqlite3 双遍验证：首遍 0 错、重放仅剩 6 个单语句 ADD COLUMN 的固有 `duplicate column`（SQLite 无该语法，靠 wrangler 文件级 tracking 保安全，已在绊线清单锁定）。A4 结论：wikiDegraded 类根因 10-02 已除（逐条探针+现存绊线），本次补 `tallyBatchOutcomes`（未知状态永不虚增 found）+ 无共享 outcome 状态绊线。
 | T-20261014-04 | 大清单三重爆点（防抖+证据封顶+快照500→50） | ✅ 完成（线上验证过） | 本 agent |
 | T-20261014-05 | 7 处 dialog 接 FocusTrap + route-loading/iconBtn/进度条 | ✅ 完成（线上验证过） | 本 agent |
 | T-20261014-06 | S1 出站收敛 fetchBounded + 扫描绊线 | ✅ 完成阶段1（线上验证过；残留17处锁定只许减） | 本 agent |
-| T-20261014-07 | D2 四个 migration 幂等守卫 + A4 batch outcomes 并发 | 🔄 进行中 | 本 agent |
+| T-20261014-07 | D2 五个 migration 幂等守卫 + A4 batch outcomes 并发 | ✅ 完成（线上验证过） | 本 agent |
 | T-20261014-08 | 导出 robustness（并发池+超时+超限降级）+ PWA 验收 | ⬜ 未开始 | 待认领 |
 | T-20261014-09 | quick+topN=1 退化 + rankMode 显式传参 + 文档滞后（A1/A2/A3） | ⬜ 未开始 | 待认领 |
 
