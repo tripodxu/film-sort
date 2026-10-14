@@ -40,6 +40,7 @@
 | T-20261014-07 | D2 五个 migration 幂等守卫 + A4 batch outcomes 并发 | ✅ 完成（线上验证过） | 本 agent |
 | T-20261014-08 | 导出 robustness（并发池+超时+超限降级）+ PWA 验收 | ✅ 完成（线上验证过） | 本 agent |
 | T-20261014-09 | quick+topN=1 退化 + rankMode 显式传参 + 文档滞后（A1/A2/A3） | ✅ 完成（线上验证过） | 本 agent |
+| T-20261014-10 | 前端 UI 全量打磨（skill 指导：对比度/焦点/触击/动效/节奏，不动视觉身份） | 🔄 进行中 | 本 agent |
 
 **给下一棒**：每子项独立提交 → 推送 → 线上验证 → 标 ✅；改 Worker 接口同步 `docs/API.md`；改功能同步 README/FEATURES/USAGE/CHANGELOG。
 
