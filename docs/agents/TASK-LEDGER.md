@@ -32,12 +32,14 @@
 **线上验证（2026-10-14，提交 `6f93785`，T-07）**：`/api/health` 200 ✅；被改链路实测 `POST /api/posters/batch`（千与千寻/星际穿越）→ 200 且 outcomes 全 `found`（新 tally 上线前后一致）✅；浏览器 E2E 6/6 全绿 ✅。D2 范围纠正：报告写 4 个，实为 5 个文件（绊线多抓出 0014 的无守卫索引）共 13 处 `IF NOT EXISTS`；sqlite3 双遍验证：首遍 0 错、重放仅剩 6 个单语句 ADD COLUMN 的固有 `duplicate column`（SQLite 无该语法，靠 wrangler 文件级 tracking 保安全，已在绊线清单锁定）。A4 结论：wikiDegraded 类根因 10-02 已除（逐条探针+现存绊线），本次补 `tallyBatchOutcomes`（未知状态永不虚增 found）+ 无共享 outcome 状态绊线。
 
 **线上验证（2026-10-14，提交 `d38ee84`，T-08）**：首页引用新包 `assets/index-Bi5n6VXC.js`（与本地构建同名）✅；`/manifest.json` 200（4 图标、maskable 512、start_url=/）✅、3 图标 + `/sw.js` + `/favicon.svg` 全 200 且字节数与构建产物一致 ✅；浏览器 E2E 6/6 全绿 ✅。「超限降级」核实为已有（MAX_EXPORT_ITEMS 240 / POSTERS 80），本次只补缺的两块：并发池（解析 6/解码 12）+ 图片 10s 超时。CHANGELOG 未记（与 T-02～T-07 一致，台账即记录）。
+
+**线上验证（2026-10-14，提交 `2f136a3`，T-09）**：首页引用新包 `assets/index-CGtMOu-A.js`（与本地构建同名）✅、`/api/health` 200 ✅、浏览器 E2E 6/6 全绿 ✅（首跑 T1 遇 `ERR_CERT_COMMON_NAME_INVALID`，与本机链路污染抖动同族，T2–T4 同浏览器内全过，重跑 6/6——非回归）。三项结论：① quick+topN=1 探针证伪（双向收敛/不丢件/进度合法），以回归用例钉死；② rankMode 改显式传参（隐私模式无声回退 classic 的真实分叉已除）；③ 文档补 ARCHITECTURE §3.6 两处（真相源 + topN<2 无验证），FEATURES/USAGE 核实无滞后。完整 quick 真机走查留待手动复核（非阻塞，与 T-02/03 键盘走查同口径）。
 | T-20261014-04 | 大清单三重爆点（防抖+证据封顶+快照500→50） | ✅ 完成（线上验证过） | 本 agent |
 | T-20261014-05 | 7 处 dialog 接 FocusTrap + route-loading/iconBtn/进度条 | ✅ 完成（线上验证过） | 本 agent |
 | T-20261014-06 | S1 出站收敛 fetchBounded + 扫描绊线 | ✅ 完成阶段1（线上验证过；残留17处锁定只许减） | 本 agent |
 | T-20261014-07 | D2 五个 migration 幂等守卫 + A4 batch outcomes 并发 | ✅ 完成（线上验证过） | 本 agent |
 | T-20261014-08 | 导出 robustness（并发池+超时+超限降级）+ PWA 验收 | ✅ 完成（线上验证过） | 本 agent |
-| T-20261014-09 | quick+topN=1 退化 + rankMode 显式传参 + 文档滞后（A1/A2/A3） | 🔄 进行中 | 本 agent |
+| T-20261014-09 | quick+topN=1 退化 + rankMode 显式传参 + 文档滞后（A1/A2/A3） | ✅ 完成（线上验证过） | 本 agent |
 
 **给下一棒**：每子项独立提交 → 推送 → 线上验证 → 标 ✅；改 Worker 接口同步 `docs/API.md`；改功能同步 README/FEATURES/USAGE/CHANGELOG。
 
