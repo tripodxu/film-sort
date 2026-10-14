@@ -746,7 +746,9 @@ export function useSorting(deps: SortingDeps) {
         next = undoLastAction(ranking);
       }
     } else {
-      if (rankingSnapshots.current.length >= 500) rankingSnapshots.current.shift();
+      // 撤销快照栈上限 50（曾为 500）：单快照在大清单下可达 MB 级（decisionLog/pairEvidence
+      // 全量），500 份既爆内存又无必要——50 步撤销深度已远超正常手误回退需求。
+      if (rankingSnapshots.current.length >= 50) rankingSnapshots.current.shift();
       rankingSnapshots.current.push(serializeRankingState(ranking));
       if (action === "skip-left") next = skipWork(ranking, comparison!.leftId);
       else if (action === "skip-right") next = skipWork(ranking, comparison!.rightId);
@@ -833,17 +835,88 @@ export function useSorting(deps: SortingDeps) {
   // Save draft on ranking change — only while an uncompleted ranking is on screen.
   // Dependency discipline: this effect setDraft()s itself, so its dep array must only
   // contain values that actually change with ranking progress; never make it deps-less.
-  useEffect(() => {
+  //
+  // 大清单性能（T-20261014-04）：serialize + localStorage.setItem 曾每次点击同步执行，
+  // N=1000 时 MB 级 JSON 每点一次全量落盘，主线程卡顿且逼近 5MB 配额。现改为 trailing
+  // 500ms 防抖——连点时只落最后一次；切页/关页时 flush，保证草稿不丢。
+  const draftSaveTimer = useRef<number | null>(null);
+  const pendingDraft = useRef<{
+    collection: MediaCollection;
+    ranking: RankingState;
+    profileName: string;
+  } | null>(null);
+  function flushPendingDraft() {
     const d = depsRef.current;
-    if (view !== "sorting" || !ranking || !collection || ranking.completed) return;
-    const next = { collection, ranking: serializeRankingState(ranking), profileName };
+    const pending = pendingDraft.current;
+    if (!pending) return;
+    pendingDraft.current = null;
+    if (draftSaveTimer.current !== null) {
+      window.clearTimeout(draftSaveTimer.current);
+      draftSaveTimer.current = null;
+    }
+    const next = {
+      collection: pending.collection,
+      ranking: serializeRankingState(pending.ranking),
+      profileName: pending.profileName,
+    };
     setDraft(next);
     try {
       localStorage.setItem(DRAFT_KEY, JSON.stringify(next));
     } catch {
       d.setNotice(d.t("进度无法写入浏览器存储。", "Progress could not be saved in this browser."));
     }
+  }
+  useEffect(() => {
+    if (view !== "sorting" || !ranking || !collection || ranking.completed) {
+      // 完成路径已同步 removeItem；切走时把挂起的一次刷掉（切页是低频操作，同步一次可接受），
+      // 否则 pagehide 会把已完成的旧草稿写回来复活。
+      if (view !== "sorting" || !ranking || ranking.completed) pendingDraft.current = null;
+      else flushPendingDraft();
+      if (draftSaveTimer.current !== null) {
+        window.clearTimeout(draftSaveTimer.current);
+        draftSaveTimer.current = null;
+      }
+      return;
+    }
+    pendingDraft.current = { collection, ranking, profileName };
+    if (draftSaveTimer.current !== null) window.clearTimeout(draftSaveTimer.current);
+    draftSaveTimer.current = window.setTimeout(() => {
+      draftSaveTimer.current = null;
+      flushPendingDraft();
+    }, 500);
+    return () => {
+      if (draftSaveTimer.current !== null) {
+        window.clearTimeout(draftSaveTimer.current);
+        draftSaveTimer.current = null;
+      }
+    };
   }, [ranking, collection, view, profileName]);
+  // 关页/切后台兜底：把防抖挂起的一次同步落盘（resume 读 localStorage，此处只写盘不 setDraft）。
+  useEffect(() => {
+    const onHide = () => {
+      const pending = pendingDraft.current;
+      if (!pending) return;
+      pendingDraft.current = null;
+      if (draftSaveTimer.current !== null) {
+        window.clearTimeout(draftSaveTimer.current);
+        draftSaveTimer.current = null;
+      }
+      try {
+        localStorage.setItem(
+          DRAFT_KEY,
+          JSON.stringify({
+            collection: pending.collection,
+            ranking: serializeRankingState(pending.ranking),
+            profileName: pending.profileName,
+          }),
+        );
+      } catch {
+        /* 关页时写不进不打扰 */
+      }
+    };
+    window.addEventListener("pagehide", onHide);
+    return () => window.removeEventListener("pagehide", onHide);
+  }, []);
 
   // Load cloud collections on token change (login, logout)
   useEffect(() => {
