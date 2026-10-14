@@ -494,7 +494,7 @@ film-sort3/
 | 画像 / 云端清单 / 广场帖 / 海报错误 / API 日志 | D1 持久化 | 永久（日志类由 cron 清理） |
 | 排序草稿 / 云端清单缓存 / 主题 / 布局 | 浏览器 localStorage | 手动清除 |
 
-**PWA 缓存更新策略**：Service Worker 对页面导航请求采用 network-first（部署新版本后立即生效，离线时回退缓存的 index.html），对带 hash 的静态资源采用 cache-first；缓存版本号升级（`art-rank-v2`）时自动清理旧缓存。开发环境（localhost）不注册 Service Worker，避免缓存住未带 hash 的源码模块导致热更新失效。
+**PWA 缓存更新策略**：Service Worker 对页面导航请求采用 network-first（部署新版本后立即生效，离线时回退缓存的 index.html），对带 hash 的静态资源采用 cache-first；缓存版本号升级（当前 `art-rank-v3`）时自动清理旧缓存。开发环境（localhost）不注册 Service Worker，避免缓存住未带 hash 的源码模块导致热更新失效。
 
 ---
 
