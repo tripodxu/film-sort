@@ -39,6 +39,7 @@ export function rankingSimilarity(
   const shared: Array<{ mine: number; theirs: number }> = [];
   const theirSet = new Set<string>();
   theirKeys.forEach((key, index) => {
+    if (theirSet.has(key)) return; // 对方重复键只计首次（否则 sharedCount 会超过并集，Jaccard > 100）
     theirSet.add(key);
     const rank = myRank.get(key);
     if (rank !== undefined) shared.push({ mine: rank, theirs: index + 1 });

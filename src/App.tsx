@@ -580,13 +580,28 @@ export default function App() {
   }, [noticeQueue]);
   useEffect(() => {
     const handler = (event: KeyboardEvent) => {
+      // 排序快捷键不得穿透任何弹窗：弹窗打开时 A/D/←/→ 必须留给弹窗本身
+      // （此前仅防 accountOpen，note/guide/详情等打开时仍会误触发 act 改榜）。
+      const modalOpen =
+        accountOpen ||
+        aiConfigOpen ||
+        peerRankPickOpen ||
+        compareRankDetail !== null ||
+        shareModal !== null ||
+        noteModal !== null ||
+        noteViewModal !== null ||
+        detailWork !== null ||
+        showGuide ||
+        showTech ||
+        cloudConflict !== null;
       if (
         view !== "sorting" ||
         !comparison ||
         event.repeat ||
-        accountOpen ||
+        modalOpen ||
         (event.target instanceof HTMLElement &&
-          event.target.closest("input,textarea,select,[contenteditable=true]"))
+          (event.target.closest("[role=dialog]") ||
+            event.target.closest("input,textarea,select,[contenteditable=true]")))
       )
         return;
       const key = event.key.toLowerCase();
@@ -597,7 +612,22 @@ export default function App() {
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [view, comparison, accountOpen, act]);
+  }, [
+    view,
+    comparison,
+    accountOpen,
+    aiConfigOpen,
+    peerRankPickOpen,
+    compareRankDetail,
+    shareModal,
+    noteModal,
+    noteViewModal,
+    detailWork,
+    showGuide,
+    showTech,
+    cloudConflict,
+    act,
+  ]);
 
   function renameRank(idx: number) {
     if (!profile || !editingRankTitle.trim()) return;

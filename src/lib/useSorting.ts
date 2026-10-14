@@ -783,23 +783,28 @@ export function useSorting(deps: SortingDeps) {
         /* */
       }
       const merged = getRankingResult(next).length - items.length;
+      // 完成提示合并为一条：合并提示与 precise 校准提示同时成立时不再互相覆盖。
+      const noticeParts: Array<{ zh: string; en: string }> = [];
       if (merged > 0)
-        d.setNotice(
-          d.t(
-            `排序完成，但清单里有 ${merged} 件作品同名同作者，已自动合并。`,
-            `Ranking saved — ${merged} duplicate(s) were merged.`,
-          ),
-        );
+        noticeParts.push({
+          zh: `清单里有 ${merged} 件作品同名同作者，已自动合并。`,
+          en: `${merged} duplicate(s) were merged.`,
+        });
       // precise 模式：汇报校准一致率（复测与首次结论一致的比例）。
       if (next.mode === "precise" && next.calibration.checked > 0) {
         const pct = Math.round((100 * next.calibration.consistent) / next.calibration.checked);
+        noticeParts.push({
+          zh: `校准一致率 ${pct}%（${next.calibration.checked} 次复测）。`,
+          en: `calibration accuracy ${pct}% over ${next.calibration.checked} rechecks.`,
+        });
+      }
+      if (noticeParts.length > 0)
         d.setNotice(
           d.t(
-            `排序完成：校准一致率 ${pct}%（${next.calibration.checked} 次复测）。`,
-            `Ranking complete — calibration accuracy ${pct}% over ${next.calibration.checked} rechecks.`,
+            `排序完成：${noticeParts.map((p) => p.zh).join(" ")}`,
+            `Ranking complete — ${noticeParts.map((p) => p.en).join(" ")}`,
           ),
         );
-      }
       d.navigateTo(d.getPeer() && collection.id.startsWith("peer-") ? "compare" : "profile");
       track("ranking_completed", {
         mode: kind,

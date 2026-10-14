@@ -10,6 +10,35 @@
 
 ## 进行中 / 最近
 
+### T-20261014-01 · 全量审查问题清账（2026-10-14 三路深读）· 🔄 进行中
+
+**状态**：🔄 进行中 —— 2026-10-14 全量审查（前端 31 条 / 算法性能 20+5 / 后端 S/A/D/E/O 全套）拆单。门禁基线：`tsc` ✅ / `eslint` 0 problems / `prettier` ✅ / `vitest` 716/9 skipped / `build` ✅（index 413KB + three 530KB 已隔离）。
+
+**子项（按优先级认领，避免撞车）**：
+
+| 子项 | 内容 | 状态 | 认领 |
+|---|---|---|---|
+| T-20261014-02 | D1 Jaccard 越界（对方重复→200%）+ notice 覆盖 | 👀 待审（本地门禁5/5：719 passed/9 skipped，待提交+线上验证） | 本 agent |
+| T-20261014-03 | 排序快捷键穿透弹窗 + 路由焦点/title | 👀 待审（本地门禁5/5，待提交+线上验证） | 本 agent |
+| T-20261014-04 | 大清单三重爆点（防抖+证据封顶+快照500→50） | ⬜ 未开始 | 待认领 |
+| T-20261014-05 | 7 处 dialog 接 FocusTrap + route-loading/iconBtn/进度条 | ⬜ 未开始 | 待认领 |
+| T-20261014-06 | S1 出站收敛 fetchBounded + 扫描绊线 | ⬜ 未开始 | 待认领 |
+| T-20261014-07 | D2 四个 migration 幂等守卫 + A4 batch outcomes 并发 | ⬜ 未开始 | 待认领 |
+| T-20261014-08 | 导出 robustness（并发池+超时+超限降级）+ PWA 验收 | ⬜ 未开始 | 待认领 |
+| T-20261014-09 | quick+topN=1 退化 + rankMode 显式传参 + 文档滞后（A1/A2/A3） | ⬜ 未开始 | 待认领 |
+
+**给下一棒**：每子项独立提交 → 推送 → 线上验证 → 标 ✅；改 Worker 接口同步 `docs/API.md`；改功能同步 README/FEATURES/USAGE/CHANGELOG。
+
+### T-20261014-02 · D1 Jaccard 越界 + 完成 notice 覆盖 · 🔄 进行中
+
+**最小上下文**：`src/lib/similarity.ts:40-51`（theirKeys 无去重，union 用 Set → 对方重复即 >100%）+ `src/lib/similarity.test.ts:47-51`（只测己方重复）；`src/lib/useSorting.ts:786-802`（两条 setNotice 先后执行，合并提示被校准提示覆盖）。
+
+**改法**：similarity 对 theirKeys 去重后再计 shared（sharedCount 按 distinct key）；补单测：对方重复→jaccard≤100、双方空、并列口径与 profile 一致；useSorting 把两条 notice 合并为一条。
+
+**验证**：`npm run gates` 5/5；新增用例红绿验证（先写断言跑红再修）。
+
+## 进行中 / 最近（此前）
+
 ### T-20261005-06 · F1 修复 · 分享页超时 + 页内错误态 · ✅ 完成（线上验证过）
 
 **状态**：✅ 完成 —— 门禁 5/5（vitest **716 / 9 skipped (725)**）；提交 `d932e1f` + `a55d41b` 已推送，自动部署 `index-CAyIB9O2.js` 上线后**浏览器实测 6/6 全绿**：无效分享码落页内错误态（重试可见）✅、拦截 share API 模拟断网立即落错误态 ✅、有效分享页渲染画像 ✅、**F2 定论无缺陷**（登录 200 后云端恢复正常落本地——此前疑似失效系实测期间自打满 `account_auth` 限流桶，教训见 T-20261005-05）。

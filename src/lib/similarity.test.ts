@@ -49,4 +49,22 @@ describe("rankingSimilarity", () => {
     expect(result.sharedCount).toBe(1);
     expect(result.jaccard).toBe(50); // 共同1 / 并集2
   });
+  it("对方重复键只计一次（Jaccard 永不超 100）", () => {
+    const result = rankingSimilarity([w("A")], [w("A"), w("A")]);
+    expect(result.sharedCount).toBe(1);
+    expect(result.jaccard).toBe(100);
+  });
+  it("双方重复：共同按去重计，Jaccard 有上界", () => {
+    const result = rankingSimilarity([w("A"), w("A"), w("B")], [w("A"), w("A"), w("X")]);
+    expect(result.sharedCount).toBe(1);
+    expect(result.jaccard).toBeLessThanOrEqual(100);
+  });
+  it("任一侧为空 → 全 null", () => {
+    expect(rankingSimilarity([], [w("A")])).toEqual({
+      sharedCount: 0,
+      jaccard: null,
+      orderAgreement: null,
+      score: null,
+    });
+  });
 });
