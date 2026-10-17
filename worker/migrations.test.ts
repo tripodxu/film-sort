@@ -66,4 +66,26 @@ describe("migrations 幂等（D2 / T-20261014-07）", () => {
       `ADD COLUMN / DROP 清单变化（新增=必须评审幂等）：${JSON.stringify([...found])}`,
     ).toEqual([...allowed.entries()]);
   });
+
+  it("ADD COLUMN 文件必须是单语句（失败重试靠「全成或全败」）", () => {
+    // 0021 是唯一的多语句例外（CREATE/INSERT 自带 IF NOT EXISTS / OR IGNORE，
+    // DROP 后紧跟 RENAME 成对出现）。其余 ADD COLUMN 文件一旦混入第二条语句：
+    // 前半条成功、后半条失败 → 重放整个文件时前半条 duplicate column，
+    // `wrangler d1 migrations apply` 从此永久卡住。
+    const MULTI_STATEMENT_EXCEPTIONS = new Set(["0021_user_collections_limit_1000.sql"]);
+    const offenders: string[] = [];
+    for (const file of migrationFiles()) {
+      if (MULTI_STATEMENT_EXCEPTIONS.has(file)) continue;
+      const statements = stripped(file);
+      if (
+        statements.length > 1 &&
+        statements.some((line) => /^ALTER\s+TABLE\s+\S+\s+ADD\s+COLUMN\b/i.test(line))
+      )
+        offenders.push(`${file}: ${statements.length} 条语句`);
+    }
+    expect(
+      offenders,
+      `ADD COLUMN 文件混入了多条语句（重试会 duplicate column）：\n${offenders.join("\n")}`,
+    ).toEqual([]);
+  });
 });
