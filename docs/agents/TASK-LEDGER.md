@@ -28,10 +28,11 @@
   - **视觉基线 `docs/ui-baseline.json` 是全局共享资源，S3/S4/S5 必须串行**（HANDOFF §4.4）
 - **验证状态**：
   - 单测 ✅ `npm test -- --run`：Test Files **59 passed / 1 skipped (60)**，Tests **812 passed / 9 skipped (821)**（S1 后为 58/1、795/9；S2 再 +1 文件 +17 测试，单调上升）。
-  - 门禁 ✅ `check` / `lint`（0 problems）/ `format:check` / `test`（812/9）/ `build`（3.34 s，`index-DM9in6VN.js` 426.78 kB）全绿。
+  - 门禁 ✅ `check` / `lint`（0 problems）/ `format:check` / `test`（812/9）/ `build`（3.34 s，`index-62AQJal8.js` 426816 B）全绿。
   - 视觉零差异 ✅（S2 新增证据）HEAD 构建与 S2 构建的 classic /sorting 截图经 `node scripts/ui-diff.mjs --tol 0`：桌面 1300x900 与移动 540x960 均 **diffPixels 0 / maxDelta 0**；确定性前置（固定种子 PRNG + `art-rank:guide-dismissed` + 阻断跨域图片 + 禁过渡）已用「同一构建两次截图 = 0 差异」自证。**跑对照基线必须先断言基线包可见特征**（首版基线因 tsc 编译失败的混包而无效）。
   - 零引用证据 ✅ 全仓检索三个模块名除自身与测试外 0 命中；`dist/assets/*.js` 扫 10 个新标识符全部 0 命中（`consensusShrunk`/`selectAdaptivePair`/`getRankIntervals`/`rankEstimate`/`coverageDeficit`/`bootstrapTau`/`ADAPTIVE_PAIR_COOLDOWN`/`decayedAgreement`/`shrinkConsensus`/`expectedInformation`）⇒ **产物零影响**。
-  - 线上 ✅ 提交 `8686468` 推送后 Cloudflare 自动部署完成：`https://sort.logicc.top/` 引用 `assets/index-_oHYYUO0.js`，该文件 SHA256 与本地 `dist/assets/index-_oHYYUO0.js` **完全一致**（`20667B5A621009F1B487755BBDB912B7C521A7CEBC75BB3EB6944516B99FD7F2`），包内扫 `rankEstimate`/`consensusShrunk`/`selectAdaptivePair`/`ADAPTIVE_PAIR_COOLDOWN`/`getRankIntervals`/`coverageDeficit` 全部 0 命中 ⇒ 线上产物零变化；`/api/health` 200（D1 ok）。（注：推送后约 1–3 分钟内该 asset 曾短暂 404，属部署传播延迟，复查 200。）
+  - 线上 ✅ **S2**（提交 `d971a50`）Cloudflare 部署完成：首页引用 `assets/index-62AQJal8.js`，SHA256 `BCF2AC3F161C93453192572B5AD49484926C730919547569D2BF310E85DFF052`（426816 B / gzip 142719 B）与本地 `dist/assets/index-62AQJal8.js` **完全一致**；**线上实机走查**（真实浏览器）：/setup 列出第 4 个模式「自适应」、线上跑 3 回合 adaptive 正常（strip「名次区间 · 90% 置信 / 还可比较 45 次 / 第 4–9 名 失眠症 / 第 6–11 名 盗梦空间」与 `.progress-meta`「3 / 12 预计剩余 45」一致），旧模式 classic 线上 2 回合正常（对手序列与本地逐字相同），`/api/health` 200（D1 ok）。本次传播约 1 分钟生效（S1 时曾 1–3 分钟 asset 404，属已知现象）。
+  - 线上 ✅ **S1**，提交 `8686468` 推送后 Cloudflare 自动部署完成：`https://sort.logicc.top/` 引用 `assets/index-_oHYYUO0.js`，该文件 SHA256 与本地 `dist/assets/index-_oHYYUO0.js` **完全一致**（`20667B5A621009F1B487755BBDB912B7C521A7CEBC75BB3EB6944516B99FD7F2`），包内扫 `rankEstimate`/`consensusShrunk`/`selectAdaptivePair`/`ADAPTIVE_PAIR_COOLDOWN`/`getRankIntervals`/`coverageDeficit` 全部 0 命中 ⇒ 线上产物零变化；`/api/health` 200（D1 ok）。（注：推送后约 1–3 分钟内该 asset 曾短暂 404，属部署传播延迟，复查 200。）
 - **遗留风险**：
   1. ~~S2 触碰状态机~~ **已证伪**：六处前置早退后旧三模式执行路径逐字不变（golden 回归 + tol=0 zero-diff 双证）；特异性/扩容风险转移到 S3（`View` 联合扩容 + `src/styles.css` 追加块）。
   2. `View` 联合扩容会一次性报出所有 `Record<View, X>` 缺键（本项目只有 `src/lib/useRouter.ts:6` 与 `:18` 两处）；
