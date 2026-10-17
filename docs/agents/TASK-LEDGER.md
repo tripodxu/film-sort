@@ -10,6 +10,39 @@
 
 ## 进行中 / 最近
 
+### T-20261017-01 · 纯增量升级计划（前端 UI 设计 + 1v1 排名算法 + 榜单比较算法）· 🔄 进行中（S1 已落地，待线上确认）
+
+- **状态**：🔄 进行中 —— **S1 三个纯新增算法模块已落地（零引用、门禁全绿）**，S2 待接手 ｜ **负责人**：本 agent（S1）→ 待认领（S2）
+- **任务类型**：MAP.md §2.1（排序/比较算法）+ §2.2/§2.3（前端视图与视觉）
+- **最小上下文**：`AGENTS.md` + `docs/PLAN-ADDITIVE-UPGRADE.md`（本计划的全部事实表、方案、阶段、坑、不变量都在这一份里）
+- **改了什么**：
+  - 计划阶段：新增 `docs/PLAN-ADDITIVE-UPGRADE.md`（纯新增）+ 本条目（纯追加）。
+  - **S1（本次）**：新增 `src/lib/preferenceModel.ts`（在线 BT / 一步 Newton → `rankEstimate` + 名次区间）、`src/lib/adaptiveQueue.ts`（`gain ∝ p(1-p)(σ_i²+σ_j²)` + 覆盖度，冷却常量作入参）、`src/lib/compareMetrics.ts`（头部加权 τ / 位置折扣一致度 / bootstrap CI / 样本量收缩共识分），以及 `src/lib/preferenceModel.test.ts`(14) / `src/lib/adaptiveQueue.test.ts`(10) / `src/lib/compareMetrics.test.ts`(12) / `src/lib/additiveModules.test.ts`(8，源码扫描绊线)。**全部为新增文件，未修改任何既有源码/样式/迁移。**
+- **为什么**：用户硬约束（原话）「**我的需求是不能有减法，只能做增量，可以有新的界面，这个可以做到吗**」；沿用 `docs/PLAN-ui-modernization.md` §0 已验证的「只增不改 + zero-diff」路线，并把同一原则推广到算法层（新增第四模式而不是替换二分插入）。
+- **文件边界（认领前先看，避免撞车）**：
+  - S1 只碰：新增 `src/lib/preferenceModel.ts` / `src/lib/adaptiveQueue.ts` / `src/lib/compareMetrics.ts` + 三个同名 `.test.ts`（**零引用，不接入**）
+  - S2 触碰状态机：`src/lib/ranking.ts:11`（`RANKING_MODES` 末位追加）、RankingState 可选字段与 `isRankingState`(:1086) 宽容校验、`scheduleNextCandidate`(:512) 与 `choosePreferred`(:676) 前置早退分支；`src/views/SetupView.tsx:7`；`src/views/SortingView.tsx`（只追加 DOM）
+  - S3 新增 `src/views/DepthCompareView.tsx` + `src/components/RankIntervalBar.tsx` / `MetricExplainer.tsx` / `ConfidenceBadge.tsx`；追加 `src/lib/useRouter.ts`(:3/:6/:18/:29)、`src/App.tsx`(一个 else if)、`src/styles.css` 末尾追加 token 块
+  - S4 新增 `src/styles/atlas.css`（新目录 `src/styles/` 尚不存在）+ 追加 `src/lib/theme.ts:9`、`src/main.tsx:7`
+  - **视觉基线 `docs/ui-baseline.json` 是全局共享资源，S3/S4/S5 必须串行**（HANDOFF §4.4）
+- **验证状态**：
+  - 单测 ✅ `npm test -- --run`：Test Files **58 passed / 1 skipped (59)**，Tests **795 passed / 9 skipped (804)**（相对基线 +4 文件 +44 测试，单调上升）。
+  - 门禁 ✅ `check` / `lint`（0 problems）/ `format:check` / `build` 全绿。
+  - 零引用证据 ✅ 全仓检索三个模块名除自身与测试外 0 命中；`dist/assets/*.js` 扫 10 个新标识符全部 0 命中（`consensusShrunk`/`selectAdaptivePair`/`getRankIntervals`/`rankEstimate`/`coverageDeficit`/`bootstrapTau`/`ADAPTIVE_PAIR_COOLDOWN`/`decayedAgreement`/`shrinkConsensus`/`expectedInformation`）⇒ **产物零影响**。
+  - 线上 ⏳ 待推送后确认首页包哈希与本轮构建一致（本轮 dist 产物指纹：`assets/index-_oHYYUO0.js`）。
+- **遗留风险**：
+  1. S2 触碰状态机，唯一护身符是「前置早退分支 + 旧路径逐字不变」，必须用 `src/rankmode.test.ts` 既有三条绊线 + 新增「前三项顺序不变」断言看守；
+  2. `View` 联合扩容会一次性报出所有 `Record<View, X>` 缺键（本项目只有 `src/lib/useRouter.ts:6` 与 `:18` 两处）；
+  3. 「新主题块追加在文件末尾」有特异性陷阱（PITFALLS 4.19）：禁止覆写 `.ranking-list` 系列，形态差异一律由新类 `.depth-*` 承担；**禁止用 @layer**（未分层旧 CSS 会整体压过分层规则）；
+  4. `adaptive` 的 K/λ/z 超参需要线上真实取舍回放定标，S1 先给保守默认值；
+  5. `pairEvidence`/`decisionLog`/`preferenceEdges`/`cycleEvents` 无上界（与 D1 单行 512KB 同源风险）本计划**不动**，只登记。
+- **下一步（给接手者）**：S1 已完成（见上），从 **S2** 开始 —— 把三个模块接入第四模式 `adaptive`，**全部为「前置早退」，旧三模式执行路径必须逐字不变**：
+  1. `src/lib/ranking.ts:11` `RANKING_MODES` 末位追加 `"adaptive"`（前三项顺序与字面量不动）；
+  2. `RankingState`（`src/lib/ranking.ts:83`）追加**可选**字段 `bt?` / `snapshotStack?`，`isRankingState`（`src/lib/ranking.ts:1086`）校验写成 `state.bt === undefined || isBt(state.bt)` 的宽容形式（旧草稿/云快照必须继续通过）；
+  3. `scheduleNextCandidate`（`src/lib/ranking.ts:512`）与 `choosePreferred`（`src/lib/ranking.ts:676`）**函数体最前面**加 `if (state.mode === "adaptive") { ... }` 前置分支后 return，旧逻辑一行不改；`startVerification`（`src/lib/ranking.ts:473`）同理；
+  4. `src/views/SetupView.tsx:7` 的 `RANK_MODES` 追加第四项（该项值类型字面量需放宽为 `RankingMode`）；`src/views/SortingView.tsx` 只**追加**名次区间条/信息量指示器，不改既有 DOM。
+  跑绿五道门禁 + `src/rankmode.test.ts` 既有三条绊线保持绿色 → 单独提交 → 推送 → 线上跑一次完整 adaptive 排序、旧三模式各跑一次、旧 11 套主题截图 zero-diff → 回本台账把 S2 标状态。
+
 ### T-20261014-01 · 全量审查问题清账（2026-10-14 三路深读）· 🔄 进行中
 
 **状态**：🔄 进行中 —— 2026-10-14 全量审查（前端 31 条 / 算法性能 20+5 / 后端 S/A/D/E/O 全套）拆单。门禁基线：`tsc` ✅ / `eslint` 0 problems / `prettier` ✅ / `vitest` 716/9 skipped / `build` ✅（index 413KB + three 530KB 已隔离）。
