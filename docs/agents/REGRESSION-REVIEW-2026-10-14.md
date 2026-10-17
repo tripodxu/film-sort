@@ -4,7 +4,7 @@
 > 结论：**存在 1 个 P0（数据丢失）+ 2 个 P1（行为退化），必须在下一批前修**；其余为 P2 遗留。
 > 基线门禁：`npm run gates` 5/5 全绿（tsc ✅ / eslint 0 problems / prettier ✅ / vitest 749 passed + 9 skipped / build ✅）。**门禁全绿不覆盖下列任何一条**——它们都是测试断言不到的分支。
 
-> **修复状态**：P0、P1-1、P1-2、P2-2 已在本批次修完（详见文末「六、本次修复记录」），复跑门禁 `751 passed / 9 skipped` 5/5 全绿。其余 P2 仍为遗留。
+> **修复状态**：P0、P1-1、P1-2、P2-2 已在本批次修完（详见文末「六、本次修复记录」），复跑门禁 `751 passed / 9 skipped` 5/5 全绿；**2026-10-17 已线上实机验证 P0 / P1-1 / P2-2 查询路径**（详见「七、线上验证记录」）。其余 P2 仍为遗留。
 
 ---
 
@@ -27,7 +27,7 @@ if (view !== "sorting" || !ranking || !collection || ranking.completed) {
 
 同一 effect 的 cleanup（行 884-889）只 `clearTimeout` 不 flush → 组件卸载同样丢一次。
 
-**修法**：用 `lastViewRef` 记住上一视图，离开 sorting 时调 `flushPendingDraft()`，只在 `ranking.completed` 时置空；cleanup 里也补 flush。
+**实际修法**（`0efaaf3`）：同一 effect 改成三分支互斥判断 —— ①`!ranking || !collection || ranking.completed` → 丢弃 pendingDraft + clearTimer；②`view !== "sorting"` → **同步** `flushPendingDraft()`；③否则挂起 pendingDraft + 500ms 定时器。cleanup **只** clearTimer 不动 pendingDraft：依赖每次取舍都会重跑，在 cleanup 里 flush 等于取消防抖本身。`pagehide` 兜底改为复用 `flushPendingDraft()`（既写盘也 `setDraft`，顺带修 bfcache 返回后草稿陈旧的 P2-7）。
 
 ---
 
@@ -118,5 +118,22 @@ if (view !== "sorting" || !ranking || !collection || ranking.completed) {
 | 测试 | `worker/outbound.test.ts` 新增回归用例：响应头已回、body 永不出数时读 body 必须在 timeoutMs 内失败（钉住 P1-2）。`npm run gates` → **751 passed / 9 skipped，5/5 全绿** |
 
 未修（仍为遗留 P2）：FocusTrap 不还原焦点 / 不判最上层、`useRouter` 换页抢焦、`SetupView` 双份 `RANK_MODES`、三处弹窗缺 `aria-labelledby`、50 份全量快照体积、`.theme-dot.theme-simple` 旧色、`media.ts` probe 记账时机、`IF NOT EXISTS` 掩盖 schema drift、`0008` 重号、`posterBatchStats.test.ts` 弱断言、全仓 21 处裸 fetch（硬规则 2 未做完）。
+
+---
+
+## 七、线上验证记录（2026-10-17，提交 `0efaaf3`～`0f0cace`）
+
+浏览器实机 https://sort.logicc.top，仓库不带 jsdom/RTL，P0 只能手测——已手测并通过：
+
+| 项 | 做法 | 结果 |
+| --- | --- | --- |
+| 部署一致性 | 首页引用的 `assets/index-_oHYYUO0.js` 与本地 `dist` 同名 | ✅ 推送后构建已生效，非旧包 |
+| P0 切页 flush | 新海诚 9 件清单、简易模式做 4 次取舍后**立刻**点顶部「清单」离开，再点「继续上次进度」 | ✅ 显示 **4 次取舍**（改动前该次会被丢弃） |
+| P0 pagehide 兜底 | 再做第 5 次取舍后直接整页刷新，再续 | ✅ 仍为 **5 次取舍** |
+| P1-1 导出预算 | 部署产物 `assets/exportPng-BL8ttgqi.js` 内搜 `25e3` | ✅ 命中 1 次，总预算 25000 已上线 |
+| P1-1 导出实跑 | Top 6 完成后导出 PNG（并用 CDP `Network.emulateNetworkConditions` 打 300s 延迟） | ✅ **4.8s** 出图，2400×1980，TOP1 海报在位，无 busy 卡死 |
+| P2-2 评论查询 | `/api/plaza/posts?limit=20` → 4 条；逐条 `/api/plaza/posts/{id}/comments` | ✅ 全部 200，无 5xx（线上暂无评论数据，回复树渲染未能实测） |
+
+未覆盖：远端 D1 里 `idx_plaza_comments_parent` 是否已由 0027 建上——本机 wrangler 与 `node_modules` 版本不匹配，`wrangler d1 execute DB --remote` 报 `Unknown argument: ...\wrangler-dist\cli.js`，需在有凭据的环境复查一次 `PRAGMA index_list('plaza_comments')`。
 
 复核人：本次会话（全量审查清账批次）。相关台账见 [TASK-LEDGER.md](TASK-LEDGER.md)（T-20261014-01～10），当日提要见 [TIMELINE.md](../memory/TIMELINE.md)。

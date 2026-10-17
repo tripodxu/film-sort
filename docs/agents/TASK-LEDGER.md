@@ -43,6 +43,8 @@
 **线上验证（2026-10-14，提交 `2f136a3`，T-09）**：首页引用新包 `assets/index-CGtMOu-A.js`（与本地构建同名）✅、`/api/health` 200 ✅、浏览器 E2E 6/6 全绿 ✅（首跑 T1 遇 `ERR_CERT_COMMON_NAME_INVALID`，与本机链路污染抖动同族，T2–T4 同浏览器内全过，重跑 6/6——非回归）。三项结论：① quick+topN=1 探针证伪（双向收敛/不丢件/进度合法），以回归用例钉死；② rankMode 改显式传参（隐私模式无声回退 classic 的真实分叉已除）；③ 文档补 ARCHITECTURE §3.6 两处（真相源 + topN<2 无验证），FEATURES/USAGE 核实无滞后。完整 quick 真机走查留待手动复核（非阻塞，与 T-02/03 键盘走查同口径）。
 
 **线上验证（2026-10-14，提交 `d5d03b5`，T-10）**：首页引用新包 `assets/index-A7b6piKe.js` ✅（CSS 改动新 hash）；E2E 四跑：run1 T1✅/T3 超时、run2 T2✅T3✅T4✅/T1 超时、run3 T1✅T3✅/T2 超时、run4 仅 T4✅（带线上 API 真数据）——每次恰好是不同用例的 `page.goto` 30s 超时，其余全绿，T1–T4 每个都在新包上绿过至少一次。结论：本机链路污染抖动（与 T-09 证书错、CHANGELOG F1 黑洞连接同族），CSS-only 改动不可能造成导航级超时，且 run1 已在新包上 T1 通过；非回归。动效真机（非 reduced-motion）走查留待手动复核（截图基线强制 reduced-motion，看不到入场动画）。
+**线上验证（2026-10-17，回归修复批 `0efaaf3`～`0f0cace`）**：浏览器实机 https://sort.logicc.top —— 首页引用新包 `assets/index-_oHYYUO0.js`（与本地 dist 同名，即修复后构建）✅；P0 实测：新海诚 9 件清单简易模式做 4 次取舍后**立刻**点导航离开，回「继续上次进度」显示 **4 次取舍**，再做第 5 次后直接整页刷新再续仍为 **5 次取舍**（切页 flush 与 pagehide 兜底两条路径都成立）✅；P1-1 实测：Top 6 完成后导出 PNG，300s 延迟模拟下仍 **4.8s** 出图、海报完整（TOP1《铃芽之旅》封面在位），产物 2400×1980 可读 ✅，另在部署产物 `assets/exportPng-BL8ttgqi.js` 内确认 `25e3`（=25000 总预算）已上线 ✅；P2-2 实测：`/api/plaza/posts?limit=20` 4 条全 200，`/api/plaza/posts/{id}/comments` 全 200 无 5xx（线上暂无任何评论数据，0027 索引在远端 D1 的落地未能实测——本机 wrangler 4.x 与 node_modules 版本不匹配报 `Unknown argument: ...\wrangler-dist\cli.js`，`wrangler d1 execute --remote` 不可用，索引是否存在待有凭据时复查）。遗留 P2 未动。
+
 **给下一棒**：每子项独立提交 → 推送 → 线上验证 → 标 ✅；改 Worker 接口同步 `docs/API.md`；改功能同步 README/FEATURES/USAGE/CHANGELOG。
 
 ### T-20261014-02 · D1 Jaccard 越界 + 完成 notice 覆盖 · ✅ 完成（线上验证记录见 T-20261014-01 条目）
