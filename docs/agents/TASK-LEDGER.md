@@ -10,7 +10,7 @@
 
 ## 进行中 / 最近
 
-### T-20261017-01 · 纯增量升级计划（前端 UI 设计 + 1v1 排名算法 + 榜单比较算法）· 🔄 进行中（S1 已落地，待线上确认）
+### T-20261017-01 · 纯增量升级计划（前端 UI 设计 + 1v1 排名算法 + 榜单比较算法）· 🔄 进行中（S1 已落地并线上验证，S2 待接手）
 
 - **状态**：🔄 进行中 —— **S1 三个纯新增算法模块已落地（零引用、门禁全绿）**，S2 待接手 ｜ **负责人**：本 agent（S1）→ 待认领（S2）
 - **任务类型**：MAP.md §2.1（排序/比较算法）+ §2.2/§2.3（前端视图与视觉）
@@ -29,7 +29,7 @@
   - 单测 ✅ `npm test -- --run`：Test Files **58 passed / 1 skipped (59)**，Tests **795 passed / 9 skipped (804)**（相对基线 +4 文件 +44 测试，单调上升）。
   - 门禁 ✅ `check` / `lint`（0 problems）/ `format:check` / `build` 全绿。
   - 零引用证据 ✅ 全仓检索三个模块名除自身与测试外 0 命中；`dist/assets/*.js` 扫 10 个新标识符全部 0 命中（`consensusShrunk`/`selectAdaptivePair`/`getRankIntervals`/`rankEstimate`/`coverageDeficit`/`bootstrapTau`/`ADAPTIVE_PAIR_COOLDOWN`/`decayedAgreement`/`shrinkConsensus`/`expectedInformation`）⇒ **产物零影响**。
-  - 线上 ⏳ 待推送后确认首页包哈希与本轮构建一致（本轮 dist 产物指纹：`assets/index-_oHYYUO0.js`）。
+  - 线上 ✅ 提交 `8686468` 推送后 Cloudflare 自动部署完成：`https://sort.logicc.top/` 引用 `assets/index-_oHYYUO0.js`，该文件 SHA256 与本地 `dist/assets/index-_oHYYUO0.js` **完全一致**（`20667B5A621009F1B487755BBDB912B7C521A7CEBC75BB3EB6944516B99FD7F2`），包内扫 `rankEstimate`/`consensusShrunk`/`selectAdaptivePair`/`ADAPTIVE_PAIR_COOLDOWN`/`getRankIntervals`/`coverageDeficit` 全部 0 命中 ⇒ 线上产物零变化；`/api/health` 200（D1 ok）。（注：推送后约 1–3 分钟内该 asset 曾短暂 404，属部署传播延迟，复查 200。）
 - **遗留风险**：
   1. S2 触碰状态机，唯一护身符是「前置早退分支 + 旧路径逐字不变」，必须用 `src/rankmode.test.ts` 既有三条绊线 + 新增「前三项顺序不变」断言看守；
   2. `View` 联合扩容会一次性报出所有 `Record<View, X>` 缺键（本项目只有 `src/lib/useRouter.ts:6` 与 `:18` 两处）；
