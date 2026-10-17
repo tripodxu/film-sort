@@ -59,6 +59,10 @@ const ProfileView = lazy(() =>
 const CompareView = lazy(() =>
   import("./views/CompareView").then((module) => ({ default: module.CompareView })),
 );
+// S3 新增：深度比较页同样按路由拆包，且是独立文件（旧 CompareView 一行不改）。
+const DepthCompareView = lazy(() =>
+  import("./views/DepthCompareView").then((module) => ({ default: module.DepthCompareView })),
+);
 const ShareView = lazy(() =>
   import("./views/ShareView").then((module) => ({ default: module.ShareView })),
 );
@@ -1418,6 +1422,8 @@ export default function App() {
         openShareModal={openShareModal}
       />
     );
+  else if (view === "depth")
+    content = <DepthCompareView profile={profile} peer={peer} t={t} navigateTo={navigateTo} />;
   else if (view === "share" && sharePeer)
     content = (
       <ShareView
@@ -1528,6 +1534,9 @@ export default function App() {
             onClick={() => navigateTo("compare")}
           >
             {t("相遇", "Encounter")}
+          </button>
+          <button className={view === "depth" ? "active" : ""} onClick={() => navigateTo("depth")}>
+            {t("深度", "Depth")}
           </button>
           <button
             className={view === "plaza" || view === "plazaPost" ? "active" : ""}

@@ -10,41 +10,43 @@
 
 ## 进行中 / 最近
 
-### T-20261017-01 · 纯增量升级计划（前端 UI 设计 + 1v1 排名算法 + 榜单比较算法）· 🔄 进行中（S1/S2 已落地并线上验证，S3 待接手）
+### T-20261017-01 · 纯增量升级计划（前端 UI 设计 + 1v1 排名算法 + 榜单比较算法）· 🔄 进行中（S1/S2 已上线，S3 已落地待线上验证）
 
-- **状态**：🔄 进行中 —— **S1 三模块 + S2 第四模式 adaptive（含名次区间 UI）已落地并线上验证**，S3 待接手 ｜ **负责人**：本 agent（S1/S2）→ 待认领（S3）
+- **状态**：🔄 进行中 —— **S1 三模块 + S2 第四模式 adaptive（含名次区间 UI）+ S3 深度比较页 `/depth` 均已落地**（S1/S2 已线上验证，S3 待线上验证）｜ **负责人**：本 agent（S1/S2/S3）→ 待认领（S4）
 - **任务类型**：MAP.md §2.1（排序/比较算法）+ §2.2/§2.3（前端视图与视觉）
 - **最小上下文**：`AGENTS.md` + `docs/PLAN-ADDITIVE-UPGRADE.md`（本计划的全部事实表、方案、阶段、坑、不变量都在这一份里）
 - **改了什么**：
   - 计划阶段：新增 `docs/PLAN-ADDITIVE-UPGRADE.md`（纯新增）+ 本条目（纯追加）。
   - **S1**：新增 `src/lib/preferenceModel.ts`（在线 BT / 一步 Newton → `rankEstimate` + 名次区间）、`src/lib/adaptiveQueue.ts`（`gain ∝ p(1-p)(σ_i²+σ_j²)` + 覆盖度，冷却常量作入参）、`src/lib/compareMetrics.ts`（头部加权 τ / 位置折扣一致度 / bootstrap CI / 样本量收缩共识分），以及 `src/lib/preferenceModel.test.ts`(14) / `src/lib/adaptiveQueue.test.ts`(10) / `src/lib/compareMetrics.test.ts`(12) / `src/lib/additiveModules.test.ts`(8，源码扫描绊线)。**全部为新增文件，未修改任何既有源码/样式/迁移。**
   - **S2（本次）**：新增 `src/lib/adaptiveRanking.ts`（**不新增任何持久化字段**，模型与名次区间全部由 `decisionLog` 重推）+ `src/lib/adaptiveRanking.test.ts`(17)；新增 `src/components/RankIntervalBar.tsx`；**追加** `src/lib/preferenceModel.ts`（批量 `fitPreferenceModel` 坐标上升 MAP，逐条 `recordObservation` 原样保留）、`src/lib/ranking.ts`（`RANKING_MODES` 末位 +adaptive、`ActiveInsertion` 可选 `opponentId?`、`estimateTotalComparisons` / `getCurrentComparison` / `scheduleNextCandidate` / `choosePreferred` / `skipWork` / `deferWork` 六处**前置早退**分支）、`src/views/SetupView.tsx:7`（第四项「自适应 / Adaptive」）、`src/views/SortingView.tsx`（eyebrow「· 自适应」+ `.adaptive-strip` 条件块 + adaptive 下 `.progress-meta` 取 `adaptiveInsight.remaining`）、`src/styles.css` 末尾 14 行 `.adaptive-*` / `.rank-interval-bar` 新类（0 deletions）。**无既有分支被改写、无删除。**
+  - **S3（本次）**：新增 `src/views/DepthCompareView.tsx`（`React.lazy` 只读页：`.depth-hero` 收缩共识分 + `ConfidenceBadge`、`.depth-metrics` 四格新指标、三个 `MetricExplainer`、`.depth-rows` 分歧作品点阵条、`dl.depth-legacy` 13 行旧指标、`.depth-cross`；无 localStorage / fetch / 写接口）+ `src/components/ConfidenceBadge.tsx` + `src/components/MetricExplainer.tsx` + `src/depth.test.ts`(16 项源码绊线)；**追加** `src/lib/useRouter.ts`（`View` 联合 +`depth`、`VIEW_PATH.depth="/depth"`、`VIEW_TITLE.depth`，`pathToView` 未改、靠 `Object.entries(VIEW_PATH)` 兜底）、`src/App.tsx`（`lazy` 声明 + 顶栏第 4 个按钮 + 一个 `else if`）、`src/views/types.ts`（`DepthCompareViewProps`）、`src/styles.css` 末尾 53 行 `.depth-*` / `.confidence-badge` / `.metric-explainer`（1842 → 1895 行，0 deletions，无裸 hex、无 `!important`、**未新增任何 token**）。**旧 `/encounter` 页一行未改。**
 - **为什么**：用户硬约束（原话）「**我的需求是不能有减法，只能做增量，可以有新的界面，这个可以做到吗**」；沿用 `docs/PLAN-ui-modernization.md` §0 已验证的「只增不改 + zero-diff」路线，并把同一原则推广到算法层（新增第四模式而不是替换二分插入）。
 - **文件边界（认领前先看，避免撞车）**：
   - S1 只碰：新增 `src/lib/preferenceModel.ts` / `src/lib/adaptiveQueue.ts` / `src/lib/compareMetrics.ts` + 三个同名 `.test.ts`（**零引用，不接入**）
   - S2 **已落地**（S2 触碰状态机）：`src/lib/ranking.ts:11`（`RANKING_MODES` 末位追加）、RankingState 可选字段与 `isRankingState`(:1086) 宽容校验、`scheduleNextCandidate`(:512) 与 `choosePreferred`(:676) 前置早退分支；`src/views/SetupView.tsx:7`；`src/views/SortingView.tsx`（只追加 DOM）
-  - S3 新增 `src/views/DepthCompareView.tsx` + `src/components/MetricExplainer.tsx` / `ConfidenceBadge.tsx`（`RankIntervalBar.tsx` 已在 S2 落地）；追加 `src/lib/useRouter.ts`(:3/:6/:18/:29)、`src/App.tsx`(一个 else if)、`src/styles.css` 末尾追加 token 块
+  - S3 **已落地**：新增 `src/views/DepthCompareView.tsx` / `src/components/MetricExplainer.tsx` / `ConfidenceBadge.tsx` / `src/depth.test.ts`；追加 `src/lib/useRouter.ts`(:3/:6/:18，`pathToView` 未改)、`src/App.tsx`、`src/views/types.ts`、`src/styles.css` 末尾 53 行（**未引入 `--dep-*` 新 token**；`RankIntervalBar.tsx` 是 S2 的 adaptive 专用组件，本页不复用，改用自己的 `.depth-rank-bar`）
   - S4 新增 `src/styles/atlas.css`（新目录 `src/styles/` 尚不存在）+ 追加 `src/lib/theme.ts:9`、`src/main.tsx:7`
   - **视觉基线 `docs/ui-baseline.json` 是全局共享资源，S3/S4/S5 必须串行**（HANDOFF §4.4）
 - **验证状态**：
-  - 单测 ✅ `npm test -- --run`：Test Files **59 passed / 1 skipped (60)**，Tests **812 passed / 9 skipped (821)**（S1 后为 58/1、795/9；S2 再 +1 文件 +17 测试，单调上升）。
-  - 门禁 ✅ `check` / `lint`（0 problems）/ `format:check` / `test`（812/9）/ `build`（3.34 s，`index-62AQJal8.js` 426816 B）全绿。
+  - 单测 ✅ `npm test -- --run`：Test Files **60 passed / 1 skipped (61)**，Tests **828 passed / 9 skipped (837)**（S1 → 58/1、795/9；S2 → 59/1、812/9；S3 再 +1 文件 +16 测试，单调上升）。
+  - 门禁 ✅ `check` / `lint`（0 problems）/ `format:check` / `test`（828/9）/ `build`（3.46 s，`index-BcAQwz7W.js` 427.15 kB，新页独立分包 `DepthCompareView-yBbb2zbw.js` 14.76 kB ⇒ 懒加载成立）全绿。
   - 视觉零差异 ✅（S2 新增证据）HEAD 构建与 S2 构建的 classic /sorting 截图经 `node scripts/ui-diff.mjs --tol 0`：桌面 1300x900 与移动 540x960 均 **diffPixels 0 / maxDelta 0**；确定性前置（固定种子 PRNG + `art-rank:guide-dismissed` + 阻断跨域图片 + 禁过渡）已用「同一构建两次截图 = 0 差异」自证。**跑对照基线必须先断言基线包可见特征**（首版基线因 tsc 编译失败的混包而无效）。
+  - 视觉零差异 ✅（S3 新增证据）`/encounter` 页 HEAD 构建 vs S3 构建，`node scripts/ui-diff.mjs --tol 0`：差异**全部落在顶栏带**（桌面 bbox y 38–51 CSS px、4901 px / 0.1047%；移动 bbox y 28–37、1441 px / 0.0695%），顶栏以下逐像素不变；另 88 个像素为 `.segmented`「自动合并」按钮的瞬时焦点环（同一构建第二次截图不复现，判为时序产物）。基线包可见特征已断言：HEAD 包内 `深度比较` 0 命中、S3 包 3 命中，两版均含 `自适应` 2 命中。`/depth` 真实数据渲染正常：收缩共识分 73.4（原始 89 / 共同作品 9）、四格新指标 89 / 91 / 80.6–100 / 36–36，且旧指标表 92% / 78% / 90% / 89 / 77% 与 `/encounter` 实测逐项一致；桌面与移动均无横向溢出（scrollWidth === innerWidth）。
   - 零引用证据 ✅ 全仓检索三个模块名除自身与测试外 0 命中；`dist/assets/*.js` 扫 10 个新标识符全部 0 命中（`consensusShrunk`/`selectAdaptivePair`/`getRankIntervals`/`rankEstimate`/`coverageDeficit`/`bootstrapTau`/`ADAPTIVE_PAIR_COOLDOWN`/`decayedAgreement`/`shrinkConsensus`/`expectedInformation`）⇒ **产物零影响**。
   - 线上 ✅ **S2**（提交 `d971a50`）Cloudflare 部署完成：首页引用 `assets/index-62AQJal8.js`，SHA256 `BCF2AC3F161C93453192572B5AD49484926C730919547569D2BF310E85DFF052`（426816 B / gzip 142719 B）与本地 `dist/assets/index-62AQJal8.js` **完全一致**；**线上实机走查**（真实浏览器）：/setup 列出第 4 个模式「自适应」、线上跑 3 回合 adaptive 正常（strip「名次区间 · 90% 置信 / 还可比较 45 次 / 第 4–9 名 失眠症 / 第 6–11 名 盗梦空间」与 `.progress-meta`「3 / 12 预计剩余 45」一致），旧模式 classic 线上 2 回合正常（对手序列与本地逐字相同），`/api/health` 200（D1 ok）。本次传播约 1 分钟生效（S1 时曾 1–3 分钟 asset 404，属已知现象）。
   - 线上 ✅ **S1**，提交 `8686468` 推送后 Cloudflare 自动部署完成：`https://sort.logicc.top/` 引用 `assets/index-_oHYYUO0.js`，该文件 SHA256 与本地 `dist/assets/index-_oHYYUO0.js` **完全一致**（`20667B5A621009F1B487755BBDB912B7C521A7CEBC75BB3EB6944516B99FD7F2`），包内扫 `rankEstimate`/`consensusShrunk`/`selectAdaptivePair`/`ADAPTIVE_PAIR_COOLDOWN`/`getRankIntervals`/`coverageDeficit` 全部 0 命中 ⇒ 线上产物零变化；`/api/health` 200（D1 ok）。（注：推送后约 1–3 分钟内该 asset 曾短暂 404，属部署传播延迟，复查 200。）
 - **遗留风险**：
-  1. ~~S2 触碰状态机~~ **已证伪**：六处前置早退后旧三模式执行路径逐字不变（golden 回归 + tol=0 zero-diff 双证）；特异性/扩容风险转移到 S3（`View` 联合扩容 + `src/styles.css` 追加块）。
-  2. `View` 联合扩容会一次性报出所有 `Record<View, X>` 缺键（本项目只有 `src/lib/useRouter.ts:6` 与 `:18` 两处）；
-  3. 「新主题块追加在文件末尾」有特异性陷阱（PITFALLS 4.19）：禁止覆写 `.ranking-list` 系列，形态差异一律由新类 `.depth-*` 承担；**禁止用 @layer**（未分层旧 CSS 会整体压过分层规则）；
+  1. ~~S2 触碰状态机~~ **已证伪**：六处前置早退后旧三模式执行路径逐字不变（golden 回归 + tol=0 zero-diff 双证）。
+  2. ~~`View` 联合扩容 / `styles.css` 追加块~~ **S3 已落地并实测**：`Record<View, X>` 确只有 `src/lib/useRouter.ts:6` 与 `:18` 两处、`pathToView` 未改；追加块 67 行 0 删除，旧页差异仅顶栏带。
+  3. 「新主题块追加在文件末尾」有特异性陷阱（PITFALLS 4.19）：禁止覆写 `.ranking-list` 系列，形态差异一律由新类承担（S3 已按此落地：`.depth-*`；S4 同理：`--atlas-*` / `[data-theme=atlas]`）；**禁止用 @layer**（未分层旧 CSS 会整体压过分层规则）；
   4. `adaptive` 的预算斜率（现固定 4n）、`shrinkage`（0.05）与区间置信系数（0.9）仍是保守默认值：离线曲线显示 42 次即全序精确，但**仍需线上真实取舍回放定标**；分项见 `docs/PLAN-ADDITIVE-UPGRADE.md` §9 未决问题 1–2。
   5. `pairEvidence`/`decisionLog`/`preferenceEdges`/`cycleEvents` 无上界（与 D1 单行 512KB 同源风险）本计划**不动**，只登记。
-- **下一步（给接手者）**：S1/S2 已完成（见上；S2 的实际落点与施工单略有偏差，以 `docs/PLAN-ADDITIVE-UPGRADE.md` §10「S2 执行记录」为准），从 **S3** 开始 —— 新增 `/depth` 深度比较页（S4 新主题 `atlas` 紧随其后），**全部为「新增文件 + 追加分支」，旧 `/encounter` 页一行不改**：
-  1. 新增 `src/views/DepthCompareView.tsx`（走 `React.lazy`）+ `src/components/MetricExplainer.tsx` / `ConfidenceBadge.tsx`（`RankIntervalBar.tsx` 已在 S2 落地，直接复用）；**追加** `src/lib/useRouter.ts` 四行（`View` 联合 :3 / `VIEW_PATH` :6 / `VIEW_TITLE` :18 / `pathToView` :29）与 `src/App.tsx` 一个 `else if`（分发是 else if 链，锚点 :1303/:1319/:1374），导航新增第 4 项入口；
-  2. 指标复用 S1 的 `src/lib/compareMetrics.ts`（头部加权 τ / 位置折扣一致度 / bootstrap CI / 样本量收缩共识分），**旧字段一个不删**；`strategy: bt` 与 `memoizedCompareProfiles()` 如需引入，默认值必须保持现状（默认仍 `best`）；新指标只在新页展示，避免与旧页数字互相矛盾；
-  3. `src/styles.css` **末尾追加** `.depth-*` 新类与 `--dep-*` 新 token（**禁止重定义既有 545 个变量、禁止 @layer**：未分层的旧 CSS 会整体压过分层规则）；S4 的 `atlas` 主题放**新文件** `src/styles/atlas.css`（新目录）+ `src/lib/theme.ts:9` 末位追加 + `src/main.tsx:7` 之后追加一行 import；
-  4. 视觉基线 `docs/ui-baseline.json` 与在库 270 张截图清单是全局共享资源 ⇒ S3/S4/S5 **串行**；跑绿五道门禁 → 单独提交 → 推送 → 线上验证（`/depth` 需带 `Accept: text/html` 验证 SPA fallback，PITFALLS 4.35）→ 回本台账更新状态。
-  附：把 /sorting 流程纳入正式截图清单需要先给 `scripts/ui-shot.mjs` 加「多步 steps 数组」能力（现在只支持单次 click），登记为后续可选增量（S2 未做）。
+- **下一步（给接手者）**：S1/S2/S3 代码已完成（S1/S2 已线上验证，S3 待线上验证；实际落点一律以 `docs/PLAN-ADDITIVE-UPGRADE.md` §10 的 S1/S2/S3 执行记录为准），从 **S4 —— 第 12 套主题 `atlas`** 开始，**全部为「新增文件 + 追加一行 import」，旧 11 套主题与既有样式一行不改**：
+  1. 新增 `src/styles/atlas.css`（新建目录 `src/styles/`），命名空间 `[data-theme=atlas]`，只新增 `--atlas-*` 令牌；**禁止重定义既有 545 个变量、禁止用 @layer**（未分层旧 CSS 会整体压过分层规则）；形态差异一律由新类承担，避开 `.ranking-list` / `.orb-hero-inner` 这类有同特异性后置修复的类（PITFALLS 4.19）。
+  2. **追加** `src/lib/theme.ts:9` 的 `THEMES` **末位**一项（`atlas`）与 `src/main.tsx:7` 之后一行 `import "./styles/atlas.css"`（同层未分层，靠源码顺序在后者胜）；`themeRegistry` 的 `KNOWN_VARS` 无需改动（新主题只用白名单内变量）。计划 §4 的 V1「`--dep-*` token 块」在 S3 已被判定为**不需要**（新规则直接引用既有令牌）；S4 若确有新设计常量，同样只加 `--atlas-*`。
+  3. 视觉验证：先跑 `node scripts/ui-shot.mjs`（在库 270 张）确认旧 11 套 zero-diff，再逐套切换截图人工签收 `atlas`；**构建期间禁止截图**（PITFALLS 4.1），跑对照前先断言基线包的可见特征。
+  4. 门禁基线（S3 收尾，后续需单调不减）：Test Files **60 passed / 1 skipped (61)**、Tests **828 passed / 9 skipped (837)**、build 3.46 s；跑绿五道门禁 → 单独提交（Conventional Commits + 中文）→ 推送 → 线上验证（切换 12 套主题实测）→ 回本台账更新状态。S5（无障碍纯追加修补）可缓，启动前须逐项截图 zero-diff。
+  附：**S3 尚未线上验证** —— 需带 `Accept: text/html` 打开 `https://sort.logicc.top/depth`（SPA fallback，PITFALLS 4.35），且部署后 `/assets` 可能短暂 404（1–10 分钟，已知传播现象）。把 `/sorting`、`/depth` 纳入正式截图清单需先给 `scripts/ui-shot.mjs` 加「多步 steps 数组」能力（现在只支持单次 click），登记为后续可选增量（S2/S3 均未做）。
 
 ### T-20261014-01 · 全量审查问题清账（2026-10-14 三路深读）· 🔄 进行中
 

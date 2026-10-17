@@ -300,3 +300,15 @@ export interface CompareViewProps {
   peerNotes?: Record<string, string>;
   openShareModal?: (ranking?: RankingExport) => void;
 }
+
+/**
+ * 深度比较页（S3 新增，路由 /depth）。刻意只收 4 个 prop：
+ * 页面自己用 compareProfiles + computeCompareMetrics 现算，不把比较状态挂到 App 上，
+ * 旧 CompareView 的 24 个 prop 与它没有任何共享状态。
+ */
+export interface DepthCompareViewProps {
+  profile: ArtisticProfile | null;
+  peer: ArtisticProfile | null;
+  t: (zh: string, en: string) => string;
+  navigateTo: (view: "home" | "compare" | "depth") => void;
+}

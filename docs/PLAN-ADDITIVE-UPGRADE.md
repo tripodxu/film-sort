@@ -305,3 +305,22 @@
   4. 工具事故：PowerShell 多路径 `Move-Item` 把整个 `src/lib` 移到仓库根（教训：**批量移动文件一律用 Node fs 逐文件操作**）；事后用 `git hash-object` 与 HEAD blob 逐一对齐确认无残留。
   5. `tools.read` 大文件后回写会截断（曾把 `src/styles.css` 1827 行写成 439 行）；**对生成型大文件永远追加写，不要 read→write 回写**。
 - 未做（留 S3 及以后）：/depth 新界面与 `MetricExplainer` / `ConfidenceBadge` 组件、atlas 主题、V5 无障碍修补；`scripts/ui-shot.mjs` 目前只支持单次 click，无法把 /sorting 流程纳入在库 270 张截图清单 ⇒ 「给 `ui-shot.mjs` 加多步 steps 数组」登记为后续可选增量（未做，避免动共享验证工具）。
+
+### S3 执行记录（2026-10-17）
+
+- 交付（新增 4 个文件 + 4 个既有文件纯追加，**零删除**）：
+  - 新增 `src/views/DepthCompareView.tsx`（约 15.8 KB）：只读页，`useMemo` 调 `compareProfiles(profile, peer)` 与 `computeCompareMetrics(entry.result.shared, { rawConsensus: entry.result.consensusScore })`；渲染 `.depth-hero`（收缩共识分 + `ConfidenceBadge`）、`.depth-metrics` 四格（头部加权 τ / 位置折扣一致 / τ 置信区间 / 序对账本）、三个 `MetricExplainer`、`.depth-rows` 分歧作品（最多 5 条，含我方/对方名次点阵条）、`dl.depth-legacy` 13 行旧指标、`.depth-cross`。**不含 localStorage / fetch / 任何写接口**（有源码绊线看守）。
+  - 新增 `src/components/ConfidenceBadge.tsx`（阈值 80/50，类名 `confidence-badge is-{high,medium,low}`）与 `src/components/MetricExplainer.tsx`（`aria-expanded` + 默认收起）。
+  - 追加 `src/lib/useRouter.ts`（`View` 联合 + `"depth"`、`VIEW_PATH.depth = "/depth"`、`VIEW_TITLE.depth = "深度比较 · ART/RANK"`；`pathToView` 未改，`/depth` 靠末尾 `Object.entries(VIEW_PATH)` 兜底命中）、追加 `src/App.tsx`（`const DepthCompareView = lazy(...)`、顶栏第 4 个按钮「深度 / Depth」、视图分发链 `else if (view === "depth")`）、追加 `src/views/types.ts`（`DepthCompareViewProps`，只收 profile/peer/t/navigateTo 四个 prop）、追加 `src/styles.css` 末尾 **53 行**（`.depth-*` / `.confidence-badge` / `.metric-explainer`，1842 → 1895 行）。
+  - 新增 `src/depth.test.ts`（16 项源码绊线：路由只增不改 / 旧 `CompareView.tsx` 不含任何 S3 新符号 / 新页无写接口 / 追加块无裸 hex、无 `!important` 且引用的每个 `var(--x)` 都已有定义 / 两个新组件契约）。
+- 执行偏差（记录在案）：
+  1. 计划 S3 行里列了 `RankIntervalBar.tsx`，但它在 S2 已新增且输入是 adaptive 专用的 `RankInterval`，比较页没有对应数据 ⇒ `/depth` **不复用**该组件，改用自己的 `.depth-rank-bar` 点阵条；绊线断言新页不含 `RankIntervalBar` 以防误接。
+  2. 计划 S3 行写「追加 `--dep-*` 新 token」，实际**未引入任何新令牌**：新规则全部直接引用既有令牌，没有新增设计常量需要间接层（颜色零裸 hex）。绊线因此改为断言「追加块引用的 `var(--x)` 全部有定义」（PITFALLS 4.20 型守卫）。
+- 门禁：check ✅ ｜ lint ✅ 0 problems ｜ format:check ✅ ｜ test ✅ Test Files **60 passed / 1 skipped (61)**、Tests **828 passed / 9 skipped (837)**（S2 基线 59/1、812/9 ⇒ +1 文件 +16 测试，单调上升）｜ build ✅ 3.46 s（`dist/assets/index-BcAQwz7W.js` **427.15 kB** / gzip 142.82 kB；新页面独立分包 `DepthCompareView-yBbb2zbw.js` 14.76 kB / gzip 5.96 kB ⇒ 懒加载成立，主包只增加路由与导航的少量字节）。
+- 视觉验证（一次性 Playwright 脚本，`.tmp/` 已 gitignore 不入库；夹具 = `scripts/ui-fixtures.json` 的 `demo-profile` 作我方 + 程序化错位同源画像作对方；桌面 1300×900 与移动 540×960，dsf 2）：
+  - `/depth` 真实数据渲染正常：收缩共识分 **73.4**（原始 89、共同作品 9）、徽章「中等」、四格新指标「头部加权 τ 89 / 位置折扣一致 91 / τ 置信区间 80.6–100（bootstrap 200 轮 · 90% 水平）/ 序对账本 36 / 36」、分歧作品 5 行、旧指标 13 行齐全。
+  - **与相遇页同源一致（跨页核对）**：新页旧指标表 一致率 92% · 加权头部一致 78% · 重合度 90% · 共识分（旧）89 · 跨媒介一致 77%，与 `/encounter` 实测 顺序一致率 92% · 加权偏好一致 78% · 作品重合度 90% · 综合共识评分 89 · 跨媒介共识 77% 逐项相同。
+  - 无横向溢出：两页在 1300 与 540 宽度下 `document.documentElement.scrollWidth === window.innerWidth`；顶栏桌面显示 清单/相遇/深度/广场/我的文化索引，移动端显示 4 项且**含「深度」**，active 为「深度」。
+  - 旧页像素证据（stash 基线法 + `scripts/ui-diff.mjs --tol 0`）：HEAD 与 S3 两版构建各截 `/encounter` 三张（桌面/移动 viewport）⇒ 差异**全部落在顶栏带**（桌面 bbox y 38–51 CSS px、diffPixels 4901 / pct 0.1047%；移动 bbox y 28–37、diffPixels 1441 / pct 0.0695%）；同一次对照中另一张桌面截图额外多 88 个差异像素（`.segmented` 的「自动合并」按钮焦点环），同一构建第二次截图不复现 ⇒ 判定为截图时序造成的瞬时焦点态，非代码差异。基线包可见特征已断言：HEAD 包内 `深度比较` **0 命中**、S3 包 **3 命中**，两版均含 `自适应` 2 命中。
+  - 结论口径：S3 对旧页的可见变化**仅在顶栏**（新增第 4 个导航项，属用户已批准的增量），顶栏以下内容逐像素不变；因此本阶段的验收标准是「旧页数字与内容一致」而非整页 tol=0。
+- 未做（下一步）：提交 → 推送 → 线上验证（`/depth` 需带 `Accept: text/html` 走 SPA fallback，PITFALLS 4.35）；`scripts/ui-shots.json`（在库 270 张）里既没有 `/sorting` 也没有 `/depth` 条目 ⇒ 基线不因本页变化，「给 `ui-shot.mjs` 加多步 steps 数组」仍登记为后续可选增量（未做，避免动共享验证工具）。

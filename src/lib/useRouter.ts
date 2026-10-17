@@ -1,7 +1,16 @@
 import { useState, useEffect } from "react";
 
 export type View =
-  "home" | "source" | "setup" | "sorting" | "profile" | "compare" | "share" | "plaza" | "plazaPost";
+  | "home"
+  | "source"
+  | "setup"
+  | "sorting"
+  | "profile"
+  | "compare"
+  | "depth"
+  | "share"
+  | "plaza"
+  | "plazaPost";
 
 const VIEW_PATH: Record<View, string> = {
   home: "/",
@@ -10,6 +19,8 @@ const VIEW_PATH: Record<View, string> = {
   sorting: "/catalog/sorting",
   profile: "/myself",
   compare: "/encounter",
+  // S3 新增：深度比较页（只增不改，旧 /encounter 完全不动）。
+  depth: "/depth",
   share: "/share",
   plaza: "/plaza",
   plazaPost: "/plaza/0",
@@ -22,6 +33,7 @@ const VIEW_TITLE: Record<View, string> = {
   sorting: "1v1 排序中 · ART/RANK",
   profile: "我的文化索引 · ART/RANK",
   compare: "相遇比较 · ART/RANK",
+  depth: "深度比较 · ART/RANK",
   share: "分享榜单 · ART/RANK",
   plaza: "广场 · ART/RANK",
   plazaPost: "广场帖子 · ART/RANK",
