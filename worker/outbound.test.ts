@@ -280,4 +280,36 @@ describe("outbound policy", () => {
     await expect(readBoundedText(response, doubanPolicy.maxBytes)).rejects.toThrow(OutboundError);
     expect(body.wasCancelled()).toBe(true);
   });
+
+  it("keeps the timeout covering body reading (headers returned, body hung)", async () => {
+    // 回归：fetchBounded 曾在返回 Response 的 finally 里 clearTimeout，导致超时只管到
+    // 响应头——body 慢速/挂起时调用方（readBoundedText / readBoundedJson）只能等平台上限，
+    // 批量并发下放大成分钟级挂起。这里用「响应头已回、body 永不出数」的流钉住语义：
+    // 读 body 超过 timeoutMs 必须失败，而不是永远挂着。
+    const policy = { ...doubanPolicy, timeoutMs: 60 };
+    const hangingFetch = vi.fn(async (_url: string, init?: RequestInit) => {
+      const signal = init?.signal;
+      const stream = new ReadableStream<Uint8Array>({
+        start(streamController) {
+          signal?.addEventListener(
+            "abort",
+            () => streamController.error(new DOMException("aborted", "AbortError")),
+            { once: true },
+          );
+        },
+      });
+      return new Response(stream, { status: 200, headers: { "content-type": "application/json" } });
+    });
+
+    const started = Date.now();
+    await expect(
+      fetchBounded(
+        "https://book.douban.com/x",
+        {},
+        policy,
+        hangingFetch as unknown as typeof fetch,
+      ).then((response) => readBoundedText(response, policy.maxBytes)),
+    ).rejects.toThrow();
+    expect(Date.now() - started).toBeLessThan(2000);
+  });
 });

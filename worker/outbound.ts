@@ -80,6 +80,8 @@ export async function fetchBounded(
     else callerSignal.addEventListener("abort", () => controller.abort(), { once: true });
   }
   let currentInit: RequestInit = { ...init, redirect: "manual", signal: controller.signal };
+  // 已交还给调用方的响应（body 由 readBounded* 之后才读）。
+  let handedOff: Response | null = null;
   try {
     for (let hops = 0; ; hops += 1) {
       let response: Response;
@@ -104,6 +106,7 @@ export async function fetchBounded(
               `content-type ${contentType || "(missing)"} is not allowed`,
             );
         }
+        handedOff = response;
         return response;
       }
       if (hops >= policy.maxRedirects)
@@ -112,7 +115,10 @@ export async function fetchBounded(
           `redirect budget of ${policy.maxRedirects} exceeded`,
         );
       const location = response.headers.get("location");
-      if (!location) return response;
+      if (!location) {
+        handedOff = response;
+        return response;
+      }
       let next: URL;
       try {
         next = new URL(location, currentUrl);
@@ -131,7 +137,12 @@ export async function fetchBounded(
         currentInit = { ...currentInit, method: "GET", body: undefined };
     }
   } finally {
-    clearTimeout(timer);
+    // 超时必须覆盖 body 读取，不能在返回 Response 时就撤销：响应头已回、body 慢速或挂起时，
+    // 调用方（readBoundedText / readBoundedJson）会一路等到平台上限，批量并发下放大成
+    // 分钟级挂起——这正是 AbortSignal.timeout 的原生语义，这里保持一致。
+    // 只有「没有 body 的响应」（HEAD/204/304）与抛错路径才立即清理定时器；
+    // 有 body 时定时器最多再存活 timeoutMs，body 读完或超时后自然结束。
+    if (!handedOff?.body) clearTimeout(timer);
   }
 }
 
