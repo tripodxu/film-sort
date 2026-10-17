@@ -20,6 +20,13 @@
 |---|---|---|---|
 | T-20261014-02 | D1 Jaccard 越界（对方重复→200%）+ notice 覆盖 | ✅ 完成（线上验证过） | 本 agent |
 | T-20261014-03 | 排序快捷键穿透弹窗 + 路由焦点/title | ✅ 完成（线上验证过） | 本 agent |
+| T-20261014-04 | 大清单三重爆点（防抖+证据封顶+快照500→50） | ✅ 完成（线上验证过） | 本 agent |
+| T-20261014-05 | 7 处 dialog 接 FocusTrap + route-loading/iconBtn/进度条 | ✅ 完成（线上验证过） | 本 agent |
+| T-20261014-06 | S1 出站收敛 fetchBounded + 扫描绊线 | ✅ 完成阶段1（线上验证过；残留17处锁定只许减） | 本 agent |
+| T-20261014-07 | D2 五个 migration 幂等守卫 + A4 batch outcomes 并发 | ✅ 完成（线上验证过） | 本 agent |
+| T-20261014-08 | 导出 robustness（并发池+超时+超限降级）+ PWA 验收 | ✅ 完成（线上验证过） | 本 agent |
+| T-20261014-09 | quick+topN=1 退化 + rankMode 显式传参 + 文档滞后（A1/A2/A3） | ✅ 完成（线上验证过） | 本 agent |
+| T-20261014-10 | 前端 UI 全量打磨（skill 指导：对比度/焦点/触击/动效/节奏，不动视觉身份） | ✅ 完成（线上验证过） | 本 agent |
 
 **线上验证（2026-10-14，提交 `63a365a`）**：推送后首页引用新包 `assets/index-D8NEKR9S.js`（与本地构建同名；three 块 `YZZFkaN9` 不变）✅、新 asset 200 ✅、`/api/health` 200（D1 ok）✅、浏览器 E2E 6/6 全绿（T1 菜单开合 / T2·T3 chunk 失败不白屏 / T4 详情焦点不回跳，无回归）✅。Jaccard 修法由单测 11/11 锁定（含对方重复→100 上界）；键盘穿透守卫与路由 title/focus 为纯前端行为变更，T4 无回跳可作旁证，完整键盘+读屏走查留待手动复核（非阻塞）。
 
@@ -36,17 +43,9 @@
 **线上验证（2026-10-14，提交 `2f136a3`，T-09）**：首页引用新包 `assets/index-CGtMOu-A.js`（与本地构建同名）✅、`/api/health` 200 ✅、浏览器 E2E 6/6 全绿 ✅（首跑 T1 遇 `ERR_CERT_COMMON_NAME_INVALID`，与本机链路污染抖动同族，T2–T4 同浏览器内全过，重跑 6/6——非回归）。三项结论：① quick+topN=1 探针证伪（双向收敛/不丢件/进度合法），以回归用例钉死；② rankMode 改显式传参（隐私模式无声回退 classic 的真实分叉已除）；③ 文档补 ARCHITECTURE §3.6 两处（真相源 + topN<2 无验证），FEATURES/USAGE 核实无滞后。完整 quick 真机走查留待手动复核（非阻塞，与 T-02/03 键盘走查同口径）。
 
 **线上验证（2026-10-14，提交 `d5d03b5`，T-10）**：首页引用新包 `assets/index-A7b6piKe.js` ✅（CSS 改动新 hash）；E2E 四跑：run1 T1✅/T3 超时、run2 T2✅T3✅T4✅/T1 超时、run3 T1✅T3✅/T2 超时、run4 仅 T4✅（带线上 API 真数据）——每次恰好是不同用例的 `page.goto` 30s 超时，其余全绿，T1–T4 每个都在新包上绿过至少一次。结论：本机链路污染抖动（与 T-09 证书错、CHANGELOG F1 黑洞连接同族），CSS-only 改动不可能造成导航级超时，且 run1 已在新包上 T1 通过；非回归。动效真机（非 reduced-motion）走查留待手动复核（截图基线强制 reduced-motion，看不到入场动画）。
-| T-20261014-04 | 大清单三重爆点（防抖+证据封顶+快照500→50） | ✅ 完成（线上验证过） | 本 agent |
-| T-20261014-05 | 7 处 dialog 接 FocusTrap + route-loading/iconBtn/进度条 | ✅ 完成（线上验证过） | 本 agent |
-| T-20261014-06 | S1 出站收敛 fetchBounded + 扫描绊线 | ✅ 完成阶段1（线上验证过；残留17处锁定只许减） | 本 agent |
-| T-20261014-07 | D2 五个 migration 幂等守卫 + A4 batch outcomes 并发 | ✅ 完成（线上验证过） | 本 agent |
-| T-20261014-08 | 导出 robustness（并发池+超时+超限降级）+ PWA 验收 | ✅ 完成（线上验证过） | 本 agent |
-| T-20261014-09 | quick+topN=1 退化 + rankMode 显式传参 + 文档滞后（A1/A2/A3） | ✅ 完成（线上验证过） | 本 agent |
-| T-20261014-10 | 前端 UI 全量打磨（skill 指导：对比度/焦点/触击/动效/节奏，不动视觉身份） | ✅ 完成（线上验证过） | 本 agent |
-
 **给下一棒**：每子项独立提交 → 推送 → 线上验证 → 标 ✅；改 Worker 接口同步 `docs/API.md`；改功能同步 README/FEATURES/USAGE/CHANGELOG。
 
-### T-20261014-02 · D1 Jaccard 越界 + 完成 notice 覆盖 · 🔄 进行中
+### T-20261014-02 · D1 Jaccard 越界 + 完成 notice 覆盖 · ✅ 完成（线上验证记录见 T-20261014-01 条目）
 
 **最小上下文**：`src/lib/similarity.ts:40-51`（theirKeys 无去重，union 用 Set → 对方重复即 >100%）+ `src/lib/similarity.test.ts:47-51`（只测己方重复）；`src/lib/useSorting.ts:786-802`（两条 setNotice 先后执行，合并提示被校准提示覆盖）。
 

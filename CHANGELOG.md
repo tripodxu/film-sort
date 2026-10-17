@@ -1,5 +1,34 @@
 # Changelog
 
+## 2026-10-14 · 全量审查清账 T-01～T-10（10 commits，一批上线）
+
+**背景**：2026-10-14 三路深读（全量审查：前端 31 条 / 算法性能 20+5 / 后端 S/A/D/E/O）拆成 T-20261014-01～10 九个子项逐个提交，逐项线上验证通过。本节补记此前漏记的 CHANGELOG（当时以台账为唯一记录，违反 AGENTS.md §5）。
+
+**改了什么**
+
+- **T-02 `63a365a`** 相似度上限：`src/lib/similarity.ts` 对 `theirKeys` 去重后再计 shared —— 对方清单含重复项时 Jaccard 会 >100%。完成提示两条 notice 合并为一条（原先校准提示覆盖完成提示）。排序快捷键加弹窗防穿透，路由切换补 focus 与 `document.title`。
+- **T-04 `aeaa038`** 大清单三重爆点：排序草稿落盘改 500ms 防抖（切页 flush、`pagehide` 兜底、完成路径清挂起），撤销快照上限 500 → 50。
+- **T-05 `20fd3de`** 无障碍：12 处 dialog（App 8 + SourceView 3 + ProfileView 1）接 FocusTrap，加载与进度接 `role=status`/`sr-only` 播报。
+- **T-06 `05698f8`** 出站收敛：维基 4 站点改走 `worker/outbound.ts` 的 `fetchBounded`；新增 `worker/outboundCoverage.test.ts` 逐文件计数锁定裸 fetch（残留 17 处，只许减不许增）。
+- **T-07 `6f93785`** 5 个 migration（0011/0014/0019/0020/0023）补 `IF NOT EXISTS` 幂等守卫共 13 处；`POST /api/posters/batch` 改批量 tally 落库（未知状态永不虚增 found），共用 mapPool 写法。
+- **T-08 `d38ee84`** 导出健壮性：`src/lib/exportPng.ts` 海报解析限并发 6 / 解码 12，新增 `src/lib/utils.ts` 的 `mapPool`（保序、限流、单项失败收敛为 null）；`loadImage` 加 10s 超时，远端图 hung 不再卡死导出。PWA：`scripts/gen-icons.mjs` 光栅化生成 192/512/maskable 三图标，`public/manifest.json` 补 `id`/`scope`/图标，`index.html` 补 `apple-touch-icon`。
+- **T-09 `2f136a3`** `rankMode` 改显式传参（隐私模式下无声回退 classic 的分叉已除）；quick + topN=1 退化用回归用例钉死；`docs/ARCHITECTURE.md` §3.6 补真相源与「topN<2 无验证」。
+- **T-10 `d5d03b5`** 11 主题对比度审计：simple 主题激活态 4.24→5.00（accent `#2f6fed`→`#2b64d8`），paper 次级文字 3.28→5.33（`--text-3`/`--muted` `#8B8175`→`#6B5F50`）；orb 无 WebGL 降级改主题氛围渐变；icon-button 补过渡与按压缩放；hero 三段 stagger 入场（reduced-motion 全局清零，截图基线不受影响）。
+- **`9c25d3c`** 文档同步：README 的 SW 缓存版本对齐 `public/sw.js` 现状（`art-rank-v3`），FEATURES 补 PWA 三图标与 apple-touch-icon。
+
+**验证**：`npm run gates` 5/5 全绿（复跑于 T-10 之后：tsc ✅ / eslint 0 problems / prettier ✅ / vitest **749 passed / 9 skipped (758)** / build ✅）。每子项线上验证记录见 `docs/agents/TASK-LEDGER.md` 的 T-20261014-01 条目；T-06 残留 17 处裸 fetch、T-05/T-09/T-10 的手动走查（键盘、读屏、非 reduced-motion 动效）仍留作后续。
+
+### 同日回归复核（1 P0 + 2 P1 + 1 P2，已修）
+
+上述 14 个提交单日合并上线，任何一条出问题都会同批暴露。对近七日全部提交做回归复核后修了 4 处（完整清单见 [`docs/agents/REGRESSION-REVIEW-2026-10-14.md`](docs/agents/REGRESSION-REVIEW-2026-10-14.md)）：
+
+- **`0efaaf3` fix(sorting) P0**：T-04 的防抖 effect 里两条分支条件互斥，真正 flush 的 else **永不可达**——commit message 承诺的「切页 flush」从未发生。用户在 500ms 窗口内切页会丢掉最后一次取舍（`resume()` 读的是 draft state）。改为离开 sorting 视图时同步 flush；cleanup 只清定时器以保住防抖本身。
+- **`72fff80` fix(export) P1**：T-08 的限并发缺总预算，「远端图全挂」最坏耗时从 ~10s 放大到 ~210s/~270s。解析与解码两段共用 25s 预算，耗尽即按缺图降级。
+- **`99ae9bd` fix(worker) P1**：`fetchBounded` 在 `finally` 无条件 `clearTimeout`，超时只管到响应头，body 挂起时只能等平台上限（T-06 把维基 4 站点全改走此出口，放大了暴露面）。改为有 body 时定时器存活至 timeoutMs；新增回归用例。
+- **`3930cdb` fix(db) P2**：`0014_comment_replies.sql` 混入 `CREATE INDEX`，违反自家「ADD COLUMN 必须单语句」不变量，重放会 `duplicate column` 卡死 apply。索引拆到 `migrations/0027_comment_replies_index.sql`，并新增断言锁死该不变量。
+
+**验证**：修复后 `npm run gates` 5/5 全绿（vitest **751 passed / 9 skipped (760)**，新增 2 条用例）。P0 的浏览器侧场景（取舍 → 500ms 内切页 → 继续）仓库无 jsdom/RTL，需线上手测。遗留 P2 与「硬规则 2 未做完（全仓仍有 21 处裸 fetch）」见复核报告。
+
 ## 2026-10-05 · F1 修复：分享页 fetch 加 15s 超时 + 页内错误态
 
 **背景**：全流程实测（T-20261005-05）发现的 F1——`/share/<code>` 页面无限停在「正在加载分享内容…」。后续诊断把根因钉死：分享 fetch **无超时**，且失败路径只弹一个会消失的 toast、占位分支没有任何持久反馈。当连接被黑洞（本次实测环境正是如此：DNS 污染注入伪造 IPv4 + 本地代理进程死亡 + 无 IPv6 出口，fetch 既不 resolve 也不 reject）时，访问者面对的就是无限加载。

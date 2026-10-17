@@ -58,7 +58,7 @@ npm run build          # 构建
 
 ### L2 — 按需深读（确认需要才打开，别默认读）
 
-`docs/ARCHITECTURE.md`（架构与 Schema）· `docs/API.md`（全部端点）· `docs/FEATURES.md`（功能回归基线）· `docs/USAGE.md`（用户视角）· `docs/CLOUDFLARE.md`（部署）· `docs/THEME-PACKS.md` · `docs/ORB-EFFECTS.md` · `docs/PLAN-*.md`（在办计划）· `docs/ROADMAP.md` · `CHANGELOG.md`
+`docs/ARCHITECTURE.md`（架构与 Schema）· `docs/API.md`（全部端点）· `docs/FEATURES.md`（功能回归基线）· `docs/USAGE.md`（用户视角）· `docs/CLOUDFLARE.md`（部署）· `docs/THEME-PACKS.md` · `docs/ORB-EFFECTS.md` · `docs/PLAN-*.md`（在办计划）· `docs/ROADMAP.md` · `CHANGELOG.md` · `docs/agents/REGRESSION-REVIEW-*.md`（批次回归复核，含已知遗留缺陷）
 
 ### L3 — 历史记忆（需要背景时才查，不要通读）
 

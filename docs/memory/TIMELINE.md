@@ -4,10 +4,22 @@
 > 用途：让 agent 在**不翻 git log** 的前提下，快速知道「这个功能是什么时候、为什么、以什么代价加进来的」。
 > 覆盖口径：**每日的每条 commit 都可在本文找到** —— 主线写进主题条目，细支/微调/文档标记收进节末「**当日提交索引**」（按主题分组列 hash）。需要逐条看提交信息时用 `git log --oneline --all`（536 条）或 `git log --grep=<关键词>`。
 
-生成时间：2026-09-29 ｜ 覆盖区间：2026-09-06 → 2026-09-29（24 天，单人开发，0 个外部贡献者）
+生成时间：2026-09-29（2026-10-14 增补当日条目）｜ 覆盖区间：2026-09-06 → 2026-10-14
 
 ---
 
+## 2026-10-14 · 全量审查清账 T-01～T-10（18 commits，单日一批上线）
+
+单日三路深读（全量审查：前端 31 条 / 算法性能 20+5 / 后端 S/A/D/E/O）拆成 10 个子项逐个提交、逐项线上验证。全部在同一天合并上线，因此**任何一条改动出问题都会同批暴露**——回归复查口径见 [REGRESSION-REVIEW-2026-10-14](../agents/REGRESSION-REVIEW-2026-10-14.md)。
+
+- **排序正确性**：`src/lib/similarity.ts` 的 `theirKeys` 去重（对方清单含重复项时 Jaccard 曾 >100%）；`rankMode` 改显式传参（隐私模式下曾无声回退 classic）；quick + topN=1 用回归用例钉死。
+- **大清单性能**：草稿落盘 500ms 防抖（切页 flush、`pagehide` 兜底）、撤销快照上限 500→50。
+- **出站收敛（阶段1）**：维基 4 站点改走 `fetchBounded`，`worker/outboundCoverage.test.ts` 逐文件锁定裸 fetch 计数（残留 17 处，只许减不许增）——**这是硬规则 2 的持续工程，未做完**。
+- **数据层**：5 个 migration 补幂等守卫（13 处 `IF NOT EXISTS`）；`POST /api/posters/batch` 改批量 tally 落库。
+- **导出与 PWA**：`src/lib/exportPng.ts` 海报解析限并发 6 / 解码 12 + 图片 10s 超时（新增 `mapPool`）；PWA 补 192/512/maskable 三图标与 apple-touch-icon。
+- **无障碍与视觉**：12 处 dialog 接 FocusTrap、加载/进度接 `role=status` 播报；11 主题对比度审计（simple/paper 两处真实不达标已修）；hero 三段 stagger 入场（reduced-motion 清零）。
+
+**当日提交索引**：`63a365a`（T-02/03）· `aeaa038`（T-04）· `20fd3de`（T-05）· `05698f8`（T-06）· `6f93785`（T-07）· `d38ee84`（T-08）· `9c25d3c`（文档同步）· `2f136a3`（T-09）· `d5d03b5`（T-10）· 其余 8 条为 `docs(ledger)` 台账勾完成记录。
 ## 2026-09-30 · 「其他」维度封面/详情错配修复（pageprops.page_image + 年份消歧）
 
 T-20260930-02（父 T-20260928-07）。用户清单三条目线上错配 → 改 `worker/other.ts`、`worker/media.ts`、`worker/index.ts`、`src/App.tsx`，新增 `worker/other.test.ts`（×10，离线 fetch 桩）。
