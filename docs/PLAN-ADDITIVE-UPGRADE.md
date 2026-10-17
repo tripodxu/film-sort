@@ -323,4 +323,11 @@
   - 无横向溢出：两页在 1300 与 540 宽度下 `document.documentElement.scrollWidth === window.innerWidth`；顶栏桌面显示 清单/相遇/深度/广场/我的文化索引，移动端显示 4 项且**含「深度」**，active 为「深度」。
   - 旧页像素证据（stash 基线法 + `scripts/ui-diff.mjs --tol 0`）：HEAD 与 S3 两版构建各截 `/encounter` 三张（桌面/移动 viewport）⇒ 差异**全部落在顶栏带**（桌面 bbox y 38–51 CSS px、diffPixels 4901 / pct 0.1047%；移动 bbox y 28–37、diffPixels 1441 / pct 0.0695%）；同一次对照中另一张桌面截图额外多 88 个差异像素（`.segmented` 的「自动合并」按钮焦点环），同一构建第二次截图不复现 ⇒ 判定为截图时序造成的瞬时焦点态，非代码差异。基线包可见特征已断言：HEAD 包内 `深度比较` **0 命中**、S3 包 **3 命中**，两版均含 `自适应` 2 命中。
   - 结论口径：S3 对旧页的可见变化**仅在顶栏**（新增第 4 个导航项，属用户已批准的增量），顶栏以下内容逐像素不变；因此本阶段的验收标准是「旧页数字与内容一致」而非整页 tol=0。
-- 未做（下一步）：提交 → 推送 → 线上验证（`/depth` 需带 `Accept: text/html` 走 SPA fallback，PITFALLS 4.35）；`scripts/ui-shots.json`（在库 270 张）里既没有 `/sorting` 也没有 `/depth` 条目 ⇒ 基线不因本页变化，「给 `ui-shot.mjs` 加多步 steps 数组」仍登记为后续可选增量（未做，避免动共享验证工具）。
+
+- 线上验证（提交 `2c21f62`，已 push `63c0604..2c21f62`）—— 本次传播极快，约 45 秒即生效（轮询第 3 次已切换）：
+  - 首页引用 `assets/index-BcAQwz7W.js`，SHA256 `5D9330C87CD51EA90FBBD56EB83B14237C47BE675EFA1B31F2AC0B0A22974E6B`（427152 B）与本地 `dist/assets/index-BcAQwz7W.js` **逐字节一致**。
+  - 新页独立分包 `assets/DepthCompareView-yBbb2zbw.js` 线上 200、14760 B、SHA256 `D10159F167B6834455573B3E5C8A8B39029251CAA7BD5A09B2F0A365A9BAC035` 与本地一致 ⇒ 懒加载 chunk 确实上线并可被按需取回。
+  - `/depth` 与 `/encounter` 带 `Accept: text/html` 均 **200**（1435 B SPA 外壳、引用主包）⇒ SPA fallback 正常（PITFALLS 4.35 的 header 要求已满足）。
+  - 真实浏览器线上走查（同一套夹具）：`/depth` 渲染出 收缩共识分 **73.4** / 徽章「中等」/ 四格新指标 **89 · 91 · 80.6–100 · 36–36** / 分歧作品 5 行 / 跨媒介条「共同作品 16 · 媒介覆盖 100% · 跨媒介一致 77% · 总重合度 47%」，旧指标 13 行与本地逐字相同；顶栏 清单/相遇/**深度**/广场/我的文化索引，`深度` 为 active；`scrollWidth === innerWidth === 1300`（无横向溢出）。`/encounter` 线上 作品重合度 90% · 顺序一致率 92% · 加权偏好一致 78% · 综合共识 89 · 跨媒介共识 77% 与新页旧指标表一致。
+  - `/api/health` **200**：`{"ok":true,"version":"2.0.0","checks":{"storage":"d1","database":"ok"}}`。
+- 未做（下一步）：~~提交 → 推送 → 线上验证~~ 已完成（见上）⇒ **S3 全部完成**，下一阶段为 S4（新主题 `atlas`）；`scripts/ui-shots.json`（在库 270 张）里既没有 `/sorting` 也没有 `/depth` 条目 ⇒ 基线不因本页变化，「给 `ui-shot.mjs` 加多步 steps 数组」仍登记为后续可选增量（未做，避免动共享验证工具）。
