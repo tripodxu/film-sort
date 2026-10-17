@@ -182,6 +182,15 @@ export async function renderProfilePng({
   const posterFor = (kind: MediaKind, item: RankedArtwork) =>
     posterSources.get(posterKey(kind, item))?.[0] ?? item.posterUrls?.[0];
 
+  // 整体 deadline：限并发本身是对的（避免打爆同源连接池与自家 /api/posters 限流桶），
+  // 但没有总预算时「远端全挂」的最坏耗时会从 ~10s 放大到数分钟——解析 80÷6×15s≈210s、
+  // 解码最多 320 张 ÷12×10s≈270s，且用户全程卡在 busy 且无取消入口。
+  // 两段（解析 + 解码）共用一个 25s 预算，单项超时取「上限与剩余预算的较小值」，
+  // 超预算后按缺图降级，绝不无限等待。
+  const POSTER_PHASE_BUDGET_MS = 25000;
+  const posterDeadline = Date.now() + POSTER_PHASE_BUDGET_MS;
+  const budgetOr = (capMs: number) => Math.max(1, Math.min(capMs, posterDeadline - Date.now()));
+
   async function resolvePosterUrls(kind: MediaKind, item: RankedArtwork) {
     const key = posterKey(kind, item);
     const cached = posterSources.get(key);
@@ -190,7 +199,8 @@ export async function renderProfilePng({
     if (
       !urls.length &&
       posterSources.size < MAX_EXPORT_POSTERS &&
-      (kind === "film" || kind === "book" || kind === "music")
+      (kind === "film" || kind === "book" || kind === "music") &&
+      posterDeadline > Date.now()
     ) {
       try {
         const params = new URLSearchParams({
@@ -201,7 +211,7 @@ export async function renderProfilePng({
           ...(item.year ? { year: String(item.year) } : {}),
         });
         const response = await fetch(`/api/posters?${params}`, {
-          signal: AbortSignal.timeout(15000),
+          signal: AbortSignal.timeout(budgetOr(15000)),
         });
         if (response.ok) {
           const data = (await response.json()) as { poster_urls?: string[] };
@@ -221,13 +231,14 @@ export async function renderProfilePng({
   );
   // 海报解析限并发 6：80 条全开会打满浏览器同源连接池，并反压自家
   // /api/posters 限流桶（此前 Promise.all 全开）。解码池 12：控内存峰值。
+  // 两段共用上面那 25s 总预算——限并发必须有总预算兜底，否则最坏耗时是「并发数 × 超时」。
   await mapPool(posterCandidates.slice(0, MAX_EXPORT_POSTERS), 6, ({ kind, item }) =>
     resolvePosterUrls(kind, item),
   );
   const images = new Map<string, HTMLImageElement>();
   await mapPool([...new Set([...posterSources.values()].flat())], 12, async (src) => {
     if (images.has(src)) return null;
-    const image = await loadImage(proxiedUrl(src));
+    const image = await loadImage(proxiedUrl(src), budgetOr(10000));
     if (image) images.set(src, image);
     return null;
   });
