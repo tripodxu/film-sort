@@ -864,52 +864,42 @@ export function useSorting(deps: SortingDeps) {
     }
   }
   useEffect(() => {
-    if (view !== "sorting" || !ranking || !collection || ranking.completed) {
-      // 完成路径已同步 removeItem；切走时把挂起的一次刷掉（切页是低频操作，同步一次可接受），
-      // 否则 pagehide 会把已完成的旧草稿写回来复活。
-      if (view !== "sorting" || !ranking || ranking.completed) pendingDraft.current = null;
-      else flushPendingDraft();
-      if (draftSaveTimer.current !== null) {
-        window.clearTimeout(draftSaveTimer.current);
-        draftSaveTimer.current = null;
-      }
-      return;
-    }
-    pendingDraft.current = { collection, ranking, profileName };
-    if (draftSaveTimer.current !== null) window.clearTimeout(draftSaveTimer.current);
-    draftSaveTimer.current = window.setTimeout(() => {
-      draftSaveTimer.current = null;
-      flushPendingDraft();
-    }, 500);
-    return () => {
+    const clearTimer = () => {
       if (draftSaveTimer.current !== null) {
         window.clearTimeout(draftSaveTimer.current);
         draftSaveTimer.current = null;
       }
     };
+    if (!ranking || !collection || ranking.completed) {
+      // 完成路径已同步 removeItem：挂起的一次直接丢弃，否则 pagehide 会把已完成的
+      // 旧草稿写回来复活。clearTimer 后 return，不 flush。
+      pendingDraft.current = null;
+      clearTimer();
+      return;
+    }
+    if (view !== "sorting") {
+      // 离开排序视图（切页/返回）时同步 flush 一次：防抖窗口内的最后一次取舍既不能丢
+      // localStorage，也不能只落盘不 setDraft（resume() 读的是 draft state）。
+      // 这里必须 flush 而不是置空——曾经两条分支的条件互斥，真正 flush 的 else 不可达。
+      flushPendingDraft();
+      return;
+    }
+    pendingDraft.current = { collection, ranking, profileName };
+    clearTimer();
+    draftSaveTimer.current = window.setTimeout(() => {
+      draftSaveTimer.current = null;
+      flushPendingDraft();
+    }, 500);
+    // cleanup 只清定时器、不动 pendingDraft：依赖每次取舍都会重跑，若在此 flush 就等于
+    // 取消防抖。离开视图由上面的 view !== "sorting" 分支负责落盘。
+    return clearTimer;
   }, [ranking, collection, view, profileName]);
-  // 关页/切后台兜底：把防抖挂起的一次同步落盘（resume 读 localStorage，此处只写盘不 setDraft）。
+  // 关页/切后台兜底：复用 flushPendingDraft()（既写盘也 setDraft），
+  // 否则 bfcache 返回后内存 draft 仍少最后几次取舍，而 resume() 读的是 draft state。
+  // 已完成的排序 pendingDraft 为 null，这里直接返回，不会复活旧草稿。
   useEffect(() => {
     const onHide = () => {
-      const pending = pendingDraft.current;
-      if (!pending) return;
-      pendingDraft.current = null;
-      if (draftSaveTimer.current !== null) {
-        window.clearTimeout(draftSaveTimer.current);
-        draftSaveTimer.current = null;
-      }
-      try {
-        localStorage.setItem(
-          DRAFT_KEY,
-          JSON.stringify({
-            collection: pending.collection,
-            ranking: serializeRankingState(pending.ranking),
-            profileName: pending.profileName,
-          }),
-        );
-      } catch {
-        /* 关页时写不进不打扰 */
-      }
+      flushPendingDraft();
     };
     window.addEventListener("pagehide", onHide);
     return () => window.removeEventListener("pagehide", onHide);
