@@ -276,3 +276,31 @@
   3. 单对反复比较时胜者 theta 先升后回落（单对实测第 7 轮见顶 0.62 后缓慢回 0），名次差始终单调拉大 ⇒ 排名结论不受影响；已写成测试断言与注释。
 - 线上验证（提交 `8686468`）：线上首页引用 `assets/index-_oHYYUO0.js`，其 SHA256 与本地构建产物**逐字节一致**（`20667B5A…FD7F2`），包内新标识符 0 命中；`/api/health` 200 ⇒ 本轮对生产产物**零影响**，符合「不接入即零影响」的设计预期。
 - 未做（按阶段边界留给 S2）：`RANKING_MODES` 追加 `adaptive`、`RankingState` 可选字段与宽容校验、状态机前置早退分支、`SetupView` 第四项、`SortingView` 名次区间条。
+
+### S2 执行记录（2026-10-17）
+
+- 交付（全部为「新增模块 + 前置早退分支 + 追加 DOM/CSS」，**无删除**）：
+  - 新增 `src/lib/adaptiveRanking.ts`：**不往 `RankingState` 增加任何持久化字段**，能力模型与名次区间全部由 `decisionLog` 重推（O(决策数)）⇒ 旧草稿/云快照零迁移、撤销=重放自动成立。导出 `adaptiveComparisonBudget`（= clamp(n×4, n−1, n(n−1)/2)）、`adaptivePairKey`、`adaptivePoolIds`、`adaptiveObservations`、`buildAdaptiveModel`、`adaptiveOpponentCounts`、`syncAdaptiveRanking`（`rankedIds`=模型序 topN、`pendingIds`=接触对手数 < 2 者）、`scheduleAdaptiveCandidate`、`removeAdaptiveWork`、`getAdaptivePairInsight`、`getAdaptiveOrder`，常量 `ADAPTIVE_COMPARISONS_PER_ITEM=4` / `ADAPTIVE_MIN_OPPONENTS=2` / `ADAPTIVE_INTERVAL_LEVEL=0.9`。
+  - 追加 `src/lib/preferenceModel.ts`：新增 `fitPreferenceModel`（见下「模型精度」）。
+  - 追加 `src/lib/ranking.ts`：模式联合与 `RANKING_MODES` 末位 +adaptive（前三项顺序与字面量不动）；`ActiveInsertion` 追加**可选** `opponentId?`；`estimateTotalComparisons` 首行早退到 `adaptiveComparisonBudget`；`getCurrentComparison` 在既有守卫之后插入 `opponentId !== undefined` 早退块；`scheduleNextCandidate` / `choosePreferred` / `skipWork` / `deferWork` 各在函数体前段插入 `if (state.mode === adaptive)` 分支后 return —— **既有分支一行未改**。
+  - 追加 `src/views/SetupView.tsx:7`：第四项「自适应 / Adaptive」；前三项文案与顺序未动。
+  - 新增 `src/components/RankIntervalBar.tsx`（纯展示、aria-hidden）；追加 `src/views/SortingView.tsx`（`useMemo` 算 `adaptiveInsight` + eyebrow「· 自适应」+ `.progress-meta` 之后的条件 `.adaptive-strip` 块）；追加 `src/styles.css` 末尾 14 行 `.adaptive-*` / `.rank-interval-bar` 新类（git diff --numstat = 14 insertions / **0 deletions**，全部使用既有 token、无裸 hex）。
+  - 新增 `src/lib/adaptiveRanking.test.ts`（17 项，含旧三模式 golden 回归、预算公式、序列化键集合与 classic 相同=零新增持久化字段、skip/defer、batch fit）。
+- **模型精度：逐条一步 Newton → 批量坐标上升 MAP**
+  - 病灶（实测）：12 件清单用 adaptive 比较 50 次只命中 top-5 **3/5**，而 classic 用 26 次就 5/5。根因是 `recordObservation` 逐条一步 Newton 把方差逐条乘性收窄，早期「零证据相邻对决」把顺序锁死，后续观测几乎拉不动（路径依赖 + 区间虚假收窄）。
+  - 修法：新增 `fitPreferenceModel` —— 逐坐标一维牛顿（gradient = −prior·(theta_i − initialRating) + Σ(胜 + (1−p) / 负 − p)，curvature = prior + Σp(1−p)，delta = learningRate·gradient/curvature），默认 6 轮、单轮最大 |delta| < 1e-4 提前停；方差取对角 Laplace 1/curvature 后 clamp。O(轮数·决策数)，**与观测顺序无关**，区间宽度反映总证据量。原 `recordObservation` / `recordObservations` 原样保留（既有测试与在线语义不动），仅 `buildAdaptiveModel` 改用它。
+  - 修后实测（IDS=[a..l]、TRUE_ORDER=[d,a,k,c,h,b,e,j,f,i,l,g]、seed golden-1、topN 5、规则=总选真实名次更高者）：`rankedIds` = [d,a,k,c,h]（=真值）、**全序等于 TRUE_ORDER**、`comparisonCount` 50、roundTrip true、deterministic true；旧三模式逐字不变（`rankedIds` 均 [d,a,k,c,h]，比较次数 24/26/28）。
+  - 预算-精度曲线（比较次数 → top-5 命中 / 全序 Spearman）：8→3/5, 0.671；12→4/5, 0.825；16→4/5, 0.846；20→4/5, 0.909；24→5/5, 0.965；30→4/5, 0.972；36→5/5, 0.993；**42→5/5, 1.0（全序精确）**；48/50→1.0。topN=12 时 24 次→12/12 命中、48 次全序精确 ⇒ **4n 预算成立**（12 件 = 48 次，42 次已精确）。
+  - 性能（300 件、400 次比较）：整轮平均每次 `getCurrentComparison+choosePreferred` ≈ **14.14 ms**（5655 ms / 400 决策），单次 `buildAdaptiveModel` ≈ 2 ms。
+- **视觉验证：旧三模式在本页像素级零差异（tol=0）**
+  - 方法学：一次性 Playwright 脚本（`.tmp/`，已 gitignore、不入库）走真实流程（首页 → 影片合集诺兰 12 件 → /setup 选模式 → 开始相遇 → /sorting 连点左侧 6 回合 → 截图）；确定性三件套 = 预置 `art-rank:guide-dismissed` + 固定种子 PRNG 覆写 `Math.random` + 阻断跨域海报/字体请求 + 禁过渡动画。**控制实验**：未加这三件时**同一构建**两次截图相差 0.7526%（bbox 覆盖卡片区）⇒ 那种前后对比完全不可信；加上后同一构建两次 diffPixels = 0。
+  - 零差异：HEAD 构建（`.tmp/before`）与 S2 构建（`.tmp/after`）的 `sorting-classic-1300x900.png` / `sorting-classic-540x960.png` 经 `node scripts/ui-diff.mjs --tol 0` ⇒ **diffPixels 0 / pct 0 / maxDelta 0**；两次 classic 的 6 回合对手序列与 `.progress-meta` 文本逐字相同。旁证：before 构建的 /setup 只列 3 个模式（证明确实跑在 HEAD 包上）。
+  - 新增 UI 实测：adaptive 收尾 `.adaptive-strip` 文本「名次区间 · 90% 置信 / 还可比较 42 次 / 第 4–9 名 奥本海默 / 第 5–10 名 记忆碎片 / 这一对仍能区分名次，先问它。」，桌面与移动端各截图人工确认无溢出、无遮挡、移动端单列正常。
+- 门禁：check ✅ ｜ lint ✅ 0 problems ｜ format:check ✅ ｜ test ✅ Test Files 59 passed / 1 skipped (60)、Tests **812 passed / 9 skipped (821)**（S1 基线 58/1、795/9 ⇒ +1 文件 +17 测试，单调上升）｜ build ✅ 3.34 s（`dist/assets/index-DM9in6VN.js` 426.78 kB / gzip 142.72 kB；S1 基线 415.52 kB ⇒ +11 kB，来自 `ranking.ts` 引入三个模块）。
+- 执行偏差（记录在案）：
+  1. 原计划 S2 只做「接入」，实测发现**接入会暴露 S1 模型的路径依赖缺陷**（见上「模型精度」），故追加 `fitPreferenceModel`。二者语义并存：在线逐条 vs 批量拟合，`recordObservation` 不删。
+  2. 计划外的一致性修补：`src/views/SortingView.tsx` 的 `.progress-meta` 在 adaptive 下改取 `adaptiveInsight.remaining`（否则同屏出现「预计剩余 14」与「还可比较 42 次」两个互相矛盾的数字）；旧三模式取原表达式，已用 tol=0 zero-diff 证明渲染不变。
+  3. **首版对照基线无效**：只 stash 已跟踪文件、未挪走未跟踪的 S2 模块，导致 HEAD 的 `ranking.ts` 与新版 `adaptiveRanking.ts` 混编译，`tsc -b` 失败（`src/lib/adaptiveRanking.ts(199,9): error TS2353: ... opponentId does not exist in type ActiveInsertion`）、`vite build` 未执行、dist 仍是改动包却照样截图。**跑对照基线必须先断言基线包的可见特征。**
+  4. 工具事故：PowerShell 多路径 `Move-Item` 把整个 `src/lib` 移到仓库根（教训：**批量移动文件一律用 Node fs 逐文件操作**）；事后用 `git hash-object` 与 HEAD blob 逐一对齐确认无残留。
+  5. `tools.read` 大文件后回写会截断（曾把 `src/styles.css` 1827 行写成 439 行）；**对生成型大文件永远追加写，不要 read→write 回写**。
+- 未做（留 S3 及以后）：/depth 新界面与 `MetricExplainer` / `ConfidenceBadge` 组件、atlas 主题、V5 无障碍修补；`scripts/ui-shot.mjs` 目前只支持单次 click，无法把 /sorting 流程纳入在库 270 张截图清单 ⇒ 「给 `ui-shot.mjs` 加多步 steps 数组」登记为后续可选增量（未做，避免动共享验证工具）。

@@ -5,7 +5,7 @@ import { heading } from "./helpers";
 import type { SetupViewProps } from "./types";
 
 const RANK_MODES: Array<{
-  value: "quick" | "classic" | "precise";
+  value: "quick" | "classic" | "precise" | "adaptive";
   zh: string;
   en: string;
   hint: [string, string];
@@ -35,6 +35,15 @@ const RANK_MODES: Array<{
     hint: [
       "更多复测与主动校准，给出校准一致率",
       "Extra verification rounds; reports a calibration accuracy",
+    ],
+  },
+  {
+    value: "adaptive",
+    zh: "自适应",
+    en: "Adaptive",
+    hint: [
+      "按信息量挑最该问的一对，实时给出名次区间（比较次数更多）",
+      "Picks the most informative pair and shows live rank intervals (more choices needed)",
     ],
   },
 ];

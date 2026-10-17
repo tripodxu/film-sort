@@ -1825,3 +1825,17 @@ body[data-theme=classic]{
   .gl-card-actions .rank-pill{min-height:24px;padding:0 6px}
   [data-theme=gallery] .topbar{gap:8px}
 }
+
+/* ===== S2（docs/PLAN-ADDITIVE-UPGRADE.md）adaptive 模式：名次区间条 =====
+   纯新增类名，旧三模式不渲染这些节点，旧主题零像素改动。全部用既有 token，无裸 hex。 */
+.adaptive-strip{display:grid;gap:8px;margin:0 0 24px;padding:12px 16px;border:1px solid var(--line);border-radius:var(--r-sm);background:var(--surface-2)}
+.adaptive-strip-head{display:flex;justify-content:space-between;gap:16px;align-items:baseline;color:var(--text-3);font-size:var(--t-meta);font-family:var(--font-mono)}
+.adaptive-row{display:grid;grid-template-columns:86px minmax(0,1fr);gap:4px 12px;align-items:center;font-size:var(--t-small)}
+.adaptive-row strong{min-width:0;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.adaptive-rank{color:var(--accent);font-family:var(--font-mono);font-size:var(--t-meta);white-space:nowrap}
+.rank-interval-bar{position:relative;grid-column:1/-1;height:2px;background:var(--line);border-radius:var(--r-pill)}
+.rank-interval-band{position:absolute;top:-3px;bottom:-3px;background:color-mix(in srgb,var(--accent) 28%,transparent);border-radius:var(--r-pill)}
+.rank-interval-mark{position:absolute;top:-4px;bottom:-4px;width:2px;margin-left:-1px;background:var(--accent);border-radius:var(--r-pill)}
+.adaptive-hint{margin:0;color:var(--text-3);font-size:var(--t-meta)}
+.adaptive-strip.is-settled .rank-interval-band{background:color-mix(in srgb,var(--text) 18%,transparent)}
+@media (max-width:720px){.adaptive-row{grid-template-columns:minmax(0,1fr);gap:4px}.adaptive-strip{padding:12px}}

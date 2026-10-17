@@ -10,38 +10,40 @@
 
 ## 进行中 / 最近
 
-### T-20261017-01 · 纯增量升级计划（前端 UI 设计 + 1v1 排名算法 + 榜单比较算法）· 🔄 进行中（S1 已落地并线上验证，S2 待接手）
+### T-20261017-01 · 纯增量升级计划（前端 UI 设计 + 1v1 排名算法 + 榜单比较算法）· 🔄 进行中（S1/S2 已落地并线上验证，S3 待接手）
 
-- **状态**：🔄 进行中 —— **S1 三个纯新增算法模块已落地（零引用、门禁全绿）**，S2 待接手 ｜ **负责人**：本 agent（S1）→ 待认领（S2）
+- **状态**：🔄 进行中 —— **S1 三模块 + S2 第四模式 adaptive（含名次区间 UI）已落地并线上验证**，S3 待接手 ｜ **负责人**：本 agent（S1/S2）→ 待认领（S3）
 - **任务类型**：MAP.md §2.1（排序/比较算法）+ §2.2/§2.3（前端视图与视觉）
 - **最小上下文**：`AGENTS.md` + `docs/PLAN-ADDITIVE-UPGRADE.md`（本计划的全部事实表、方案、阶段、坑、不变量都在这一份里）
 - **改了什么**：
   - 计划阶段：新增 `docs/PLAN-ADDITIVE-UPGRADE.md`（纯新增）+ 本条目（纯追加）。
-  - **S1（本次）**：新增 `src/lib/preferenceModel.ts`（在线 BT / 一步 Newton → `rankEstimate` + 名次区间）、`src/lib/adaptiveQueue.ts`（`gain ∝ p(1-p)(σ_i²+σ_j²)` + 覆盖度，冷却常量作入参）、`src/lib/compareMetrics.ts`（头部加权 τ / 位置折扣一致度 / bootstrap CI / 样本量收缩共识分），以及 `src/lib/preferenceModel.test.ts`(14) / `src/lib/adaptiveQueue.test.ts`(10) / `src/lib/compareMetrics.test.ts`(12) / `src/lib/additiveModules.test.ts`(8，源码扫描绊线)。**全部为新增文件，未修改任何既有源码/样式/迁移。**
+  - **S1**：新增 `src/lib/preferenceModel.ts`（在线 BT / 一步 Newton → `rankEstimate` + 名次区间）、`src/lib/adaptiveQueue.ts`（`gain ∝ p(1-p)(σ_i²+σ_j²)` + 覆盖度，冷却常量作入参）、`src/lib/compareMetrics.ts`（头部加权 τ / 位置折扣一致度 / bootstrap CI / 样本量收缩共识分），以及 `src/lib/preferenceModel.test.ts`(14) / `src/lib/adaptiveQueue.test.ts`(10) / `src/lib/compareMetrics.test.ts`(12) / `src/lib/additiveModules.test.ts`(8，源码扫描绊线)。**全部为新增文件，未修改任何既有源码/样式/迁移。**
+  - **S2（本次）**：新增 `src/lib/adaptiveRanking.ts`（**不新增任何持久化字段**，模型与名次区间全部由 `decisionLog` 重推）+ `src/lib/adaptiveRanking.test.ts`(17)；新增 `src/components/RankIntervalBar.tsx`；**追加** `src/lib/preferenceModel.ts`（批量 `fitPreferenceModel` 坐标上升 MAP，逐条 `recordObservation` 原样保留）、`src/lib/ranking.ts`（`RANKING_MODES` 末位 +adaptive、`ActiveInsertion` 可选 `opponentId?`、`estimateTotalComparisons` / `getCurrentComparison` / `scheduleNextCandidate` / `choosePreferred` / `skipWork` / `deferWork` 六处**前置早退**分支）、`src/views/SetupView.tsx:7`（第四项「自适应 / Adaptive」）、`src/views/SortingView.tsx`（eyebrow「· 自适应」+ `.adaptive-strip` 条件块 + adaptive 下 `.progress-meta` 取 `adaptiveInsight.remaining`）、`src/styles.css` 末尾 14 行 `.adaptive-*` / `.rank-interval-bar` 新类（0 deletions）。**无既有分支被改写、无删除。**
 - **为什么**：用户硬约束（原话）「**我的需求是不能有减法，只能做增量，可以有新的界面，这个可以做到吗**」；沿用 `docs/PLAN-ui-modernization.md` §0 已验证的「只增不改 + zero-diff」路线，并把同一原则推广到算法层（新增第四模式而不是替换二分插入）。
 - **文件边界（认领前先看，避免撞车）**：
   - S1 只碰：新增 `src/lib/preferenceModel.ts` / `src/lib/adaptiveQueue.ts` / `src/lib/compareMetrics.ts` + 三个同名 `.test.ts`（**零引用，不接入**）
-  - S2 触碰状态机：`src/lib/ranking.ts:11`（`RANKING_MODES` 末位追加）、RankingState 可选字段与 `isRankingState`(:1086) 宽容校验、`scheduleNextCandidate`(:512) 与 `choosePreferred`(:676) 前置早退分支；`src/views/SetupView.tsx:7`；`src/views/SortingView.tsx`（只追加 DOM）
-  - S3 新增 `src/views/DepthCompareView.tsx` + `src/components/RankIntervalBar.tsx` / `MetricExplainer.tsx` / `ConfidenceBadge.tsx`；追加 `src/lib/useRouter.ts`(:3/:6/:18/:29)、`src/App.tsx`(一个 else if)、`src/styles.css` 末尾追加 token 块
+  - S2 **已落地**（S2 触碰状态机）：`src/lib/ranking.ts:11`（`RANKING_MODES` 末位追加）、RankingState 可选字段与 `isRankingState`(:1086) 宽容校验、`scheduleNextCandidate`(:512) 与 `choosePreferred`(:676) 前置早退分支；`src/views/SetupView.tsx:7`；`src/views/SortingView.tsx`（只追加 DOM）
+  - S3 新增 `src/views/DepthCompareView.tsx` + `src/components/MetricExplainer.tsx` / `ConfidenceBadge.tsx`（`RankIntervalBar.tsx` 已在 S2 落地）；追加 `src/lib/useRouter.ts`(:3/:6/:18/:29)、`src/App.tsx`(一个 else if)、`src/styles.css` 末尾追加 token 块
   - S4 新增 `src/styles/atlas.css`（新目录 `src/styles/` 尚不存在）+ 追加 `src/lib/theme.ts:9`、`src/main.tsx:7`
   - **视觉基线 `docs/ui-baseline.json` 是全局共享资源，S3/S4/S5 必须串行**（HANDOFF §4.4）
 - **验证状态**：
-  - 单测 ✅ `npm test -- --run`：Test Files **58 passed / 1 skipped (59)**，Tests **795 passed / 9 skipped (804)**（相对基线 +4 文件 +44 测试，单调上升）。
-  - 门禁 ✅ `check` / `lint`（0 problems）/ `format:check` / `build` 全绿。
+  - 单测 ✅ `npm test -- --run`：Test Files **59 passed / 1 skipped (60)**，Tests **812 passed / 9 skipped (821)**（S1 后为 58/1、795/9；S2 再 +1 文件 +17 测试，单调上升）。
+  - 门禁 ✅ `check` / `lint`（0 problems）/ `format:check` / `test`（812/9）/ `build`（3.34 s，`index-DM9in6VN.js` 426.78 kB）全绿。
+  - 视觉零差异 ✅（S2 新增证据）HEAD 构建与 S2 构建的 classic /sorting 截图经 `node scripts/ui-diff.mjs --tol 0`：桌面 1300x900 与移动 540x960 均 **diffPixels 0 / maxDelta 0**；确定性前置（固定种子 PRNG + `art-rank:guide-dismissed` + 阻断跨域图片 + 禁过渡）已用「同一构建两次截图 = 0 差异」自证。**跑对照基线必须先断言基线包可见特征**（首版基线因 tsc 编译失败的混包而无效）。
   - 零引用证据 ✅ 全仓检索三个模块名除自身与测试外 0 命中；`dist/assets/*.js` 扫 10 个新标识符全部 0 命中（`consensusShrunk`/`selectAdaptivePair`/`getRankIntervals`/`rankEstimate`/`coverageDeficit`/`bootstrapTau`/`ADAPTIVE_PAIR_COOLDOWN`/`decayedAgreement`/`shrinkConsensus`/`expectedInformation`）⇒ **产物零影响**。
   - 线上 ✅ 提交 `8686468` 推送后 Cloudflare 自动部署完成：`https://sort.logicc.top/` 引用 `assets/index-_oHYYUO0.js`，该文件 SHA256 与本地 `dist/assets/index-_oHYYUO0.js` **完全一致**（`20667B5A621009F1B487755BBDB912B7C521A7CEBC75BB3EB6944516B99FD7F2`），包内扫 `rankEstimate`/`consensusShrunk`/`selectAdaptivePair`/`ADAPTIVE_PAIR_COOLDOWN`/`getRankIntervals`/`coverageDeficit` 全部 0 命中 ⇒ 线上产物零变化；`/api/health` 200（D1 ok）。（注：推送后约 1–3 分钟内该 asset 曾短暂 404，属部署传播延迟，复查 200。）
 - **遗留风险**：
-  1. S2 触碰状态机，唯一护身符是「前置早退分支 + 旧路径逐字不变」，必须用 `src/rankmode.test.ts` 既有三条绊线 + 新增「前三项顺序不变」断言看守；
+  1. ~~S2 触碰状态机~~ **已证伪**：六处前置早退后旧三模式执行路径逐字不变（golden 回归 + tol=0 zero-diff 双证）；特异性/扩容风险转移到 S3（`View` 联合扩容 + `src/styles.css` 追加块）。
   2. `View` 联合扩容会一次性报出所有 `Record<View, X>` 缺键（本项目只有 `src/lib/useRouter.ts:6` 与 `:18` 两处）；
   3. 「新主题块追加在文件末尾」有特异性陷阱（PITFALLS 4.19）：禁止覆写 `.ranking-list` 系列，形态差异一律由新类 `.depth-*` 承担；**禁止用 @layer**（未分层旧 CSS 会整体压过分层规则）；
-  4. `adaptive` 的 K/λ/z 超参需要线上真实取舍回放定标，S1 先给保守默认值；
+  4. `adaptive` 的预算斜率（现固定 4n）、`shrinkage`（0.05）与区间置信系数（0.9）仍是保守默认值：离线曲线显示 42 次即全序精确，但**仍需线上真实取舍回放定标**；分项见 `docs/PLAN-ADDITIVE-UPGRADE.md` §9 未决问题 1–2。
   5. `pairEvidence`/`decisionLog`/`preferenceEdges`/`cycleEvents` 无上界（与 D1 单行 512KB 同源风险）本计划**不动**，只登记。
-- **下一步（给接手者）**：S1 已完成（见上），从 **S2** 开始 —— 把三个模块接入第四模式 `adaptive`，**全部为「前置早退」，旧三模式执行路径必须逐字不变**：
-  1. `src/lib/ranking.ts:11` `RANKING_MODES` 末位追加 `"adaptive"`（前三项顺序与字面量不动）；
-  2. `RankingState`（`src/lib/ranking.ts:83`）追加**可选**字段 `bt?` / `snapshotStack?`，`isRankingState`（`src/lib/ranking.ts:1086`）校验写成 `state.bt === undefined || isBt(state.bt)` 的宽容形式（旧草稿/云快照必须继续通过）；
-  3. `scheduleNextCandidate`（`src/lib/ranking.ts:512`）与 `choosePreferred`（`src/lib/ranking.ts:676`）**函数体最前面**加 `if (state.mode === "adaptive") { ... }` 前置分支后 return，旧逻辑一行不改；`startVerification`（`src/lib/ranking.ts:473`）同理；
-  4. `src/views/SetupView.tsx:7` 的 `RANK_MODES` 追加第四项（该项值类型字面量需放宽为 `RankingMode`）；`src/views/SortingView.tsx` 只**追加**名次区间条/信息量指示器，不改既有 DOM。
-  跑绿五道门禁 + `src/rankmode.test.ts` 既有三条绊线保持绿色 → 单独提交 → 推送 → 线上跑一次完整 adaptive 排序、旧三模式各跑一次、旧 11 套主题截图 zero-diff → 回本台账把 S2 标状态。
+- **下一步（给接手者）**：S1/S2 已完成（见上；S2 的实际落点与施工单略有偏差，以 `docs/PLAN-ADDITIVE-UPGRADE.md` §10「S2 执行记录」为准），从 **S3** 开始 —— 新增 `/depth` 深度比较页（S4 新主题 `atlas` 紧随其后），**全部为「新增文件 + 追加分支」，旧 `/encounter` 页一行不改**：
+  1. 新增 `src/views/DepthCompareView.tsx`（走 `React.lazy`）+ `src/components/MetricExplainer.tsx` / `ConfidenceBadge.tsx`（`RankIntervalBar.tsx` 已在 S2 落地，直接复用）；**追加** `src/lib/useRouter.ts` 四行（`View` 联合 :3 / `VIEW_PATH` :6 / `VIEW_TITLE` :18 / `pathToView` :29）与 `src/App.tsx` 一个 `else if`（分发是 else if 链，锚点 :1303/:1319/:1374），导航新增第 4 项入口；
+  2. 指标复用 S1 的 `src/lib/compareMetrics.ts`（头部加权 τ / 位置折扣一致度 / bootstrap CI / 样本量收缩共识分），**旧字段一个不删**；`strategy: bt` 与 `memoizedCompareProfiles()` 如需引入，默认值必须保持现状（默认仍 `best`）；新指标只在新页展示，避免与旧页数字互相矛盾；
+  3. `src/styles.css` **末尾追加** `.depth-*` 新类与 `--dep-*` 新 token（**禁止重定义既有 545 个变量、禁止 @layer**：未分层的旧 CSS 会整体压过分层规则）；S4 的 `atlas` 主题放**新文件** `src/styles/atlas.css`（新目录）+ `src/lib/theme.ts:9` 末位追加 + `src/main.tsx:7` 之后追加一行 import；
+  4. 视觉基线 `docs/ui-baseline.json` 与在库 270 张截图清单是全局共享资源 ⇒ S3/S4/S5 **串行**；跑绿五道门禁 → 单独提交 → 推送 → 线上验证（`/depth` 需带 `Accept: text/html` 验证 SPA fallback，PITFALLS 4.35）→ 回本台账更新状态。
+  附：把 /sorting 流程纳入正式截图清单需要先给 `scripts/ui-shot.mjs` 加「多步 steps 数组」能力（现在只支持单次 click），登记为后续可选增量（S2 未做）。
 
 ### T-20261014-01 · 全量审查问题清账（2026-10-14 三路深读）· 🔄 进行中
 

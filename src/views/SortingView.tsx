@@ -1,10 +1,12 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { ArrowRight, Pause, SkipForward, Sparkles, Undo2 } from "lucide-react";
 import { Poster } from "../components/Poster";
+import { RankIntervalBar } from "../components/RankIntervalBar";
 import { IconButton } from "./IconButton";
 import { decideSwipe } from "../lib/swipe";
 import { track } from "../lib/utils";
 import { readJevAssistEnabled, readTypesafeConfig, requestJevPick } from "../lib/typesafe";
+import { getAdaptivePairInsight } from "../lib/adaptiveRanking";
 import { useThemeFamily } from "../lib/useTheme";
 import type { SortingViewProps } from "./types";
 
@@ -113,6 +115,17 @@ export function SortingView({
     act,
   ]);
 
+  // ===== S2 新增：adaptive 模式的名次区间与信息量 =====
+  // 只在 adaptive 模式计算（其余模式为 null，不渲染、也不付建模型的成本）。
+  // useMemo 键为 ranking 对象本身：每一步 act 都会换新对象，模型随之重算一次。
+  const adaptiveInsight = useMemo(
+    () =>
+      ranking.mode === "adaptive"
+        ? getAdaptivePairInsight(ranking, comparison.leftId, comparison.rightId)
+        : null,
+    [ranking, comparison.leftId, comparison.rightId],
+  );
+
   /** 手动提交:清除 AI 代判标注(键盘路径不清除——「上一对」本就是历史语义)。 */
   function commitManually(side: "left" | "right") {
     setAssistMarker(null);
@@ -174,6 +187,7 @@ export function SortingView({
             {label(kind)} / {t("相遇", "ENCOUNTER")} TOP {ranking.topN}
             {ranking.mode === "quick" && t(" · 简易", " · Quick")}
             {ranking.mode === "precise" && t(" · 精确", " · Precise")}
+            {ranking.mode === "adaptive" && t(" · 自适应", " · Adaptive")}
           </span>
           <h1>{collection.title}</h1>
         </div>
@@ -251,9 +265,57 @@ export function SortingView({
             : `${progress.processed} / ${progress.total}`}
         </span>
         <span>
-          {t("预计剩余", "Estimated remaining")} {progress.estimatedRemaining}
+          {t("预计剩余", "Estimated remaining")}{" "}
+          {ranking.mode === "adaptive" && adaptiveInsight
+            ? adaptiveInsight.remaining
+            : progress.estimatedRemaining}
         </span>
       </div>
+      {/* S2 新增：adaptive 模式的「名次区间 + 这一对的信息量」。
+          旧三模式与 classic 路径不渲染本块，DOM 与改动前逐字一致。 */}
+      {ranking.mode === "adaptive" && adaptiveInsight && (
+        <div className={"adaptive-strip" + (adaptiveInsight.informative ? "" : " is-settled")}>
+          <div className="adaptive-strip-head">
+            <span>{t("名次区间 · 90% 置信", "RANK INTERVAL · 90%")}</span>
+            <small>
+              {t(
+                "还可比较 " + adaptiveInsight.remaining + " 次",
+                adaptiveInsight.remaining + " choices left",
+              )}
+            </small>
+          </div>
+          {(["left", "right"] as const).map((side) => {
+            const workId = side === "left" ? comparison.leftId : comparison.rightId;
+            const interval = side === "left" ? adaptiveInsight.left : adaptiveInsight.right;
+            const work = worksById.get(workId);
+            return (
+              <div key={side} className="adaptive-row">
+                <span className="adaptive-rank">
+                  {interval
+                    ? t(
+                        "第 " + interval.low + "–" + interval.high + " 名",
+                        "#" + interval.low + "–" + interval.high,
+                      )
+                    : t("待估计", "Pending")}
+                </span>
+                <strong>{work ? work.title : ""}</strong>
+                <RankIntervalBar interval={interval} total={ranking.sourceIds.length} />
+              </div>
+            );
+          })}
+          <p className="adaptive-hint">
+            {adaptiveInsight.informative
+              ? t(
+                  "这一对仍能区分名次，先问它。",
+                  "This pair still separates ranks — asking it first.",
+                )
+              : t(
+                  "这一对已接近确定，引擎转入收尾。",
+                  "This pair is nearly decided; the engine is wrapping up.",
+                )}
+          </p>
+        </div>
+      )}
       {assistMarker && (
         <p className="assist-marker" role="status">
           <Sparkles size={12} />

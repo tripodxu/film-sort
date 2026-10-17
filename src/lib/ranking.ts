@@ -1,3 +1,9 @@
+import {
+  adaptiveComparisonBudget,
+  removeAdaptiveWork,
+  scheduleAdaptiveCandidate,
+} from "./adaptiveRanking";
+
 export const RANKING_STATE_VERSION = 2 as const;
 
 const PAIR_COOLDOWN = 3;
@@ -7,8 +13,9 @@ const MAX_BASELINE_VERIFICATIONS = 4;
 /** precise 模式的回环确认阈值倍数：需 2× 成员数的方向一致才判 persistent。 */
 const PRECISE_CYCLE_CONFIRM_FACTOR = 2;
 
-export type RankingMode = "quick" | "classic" | "precise";
-export const RANKING_MODES: RankingMode[] = ["quick", "classic", "precise"];
+export type RankingMode = "quick" | "classic" | "precise" | "adaptive";
+// adaptive（S2 新增第四模式）：末位追加，前三项顺序与语义不变（src/rankmode.test.ts 绊线）。
+export const RANKING_MODES: RankingMode[] = ["quick", "classic", "precise", "adaptive"];
 
 export interface RankingOptions {
   seed?: string;
@@ -23,6 +30,8 @@ export interface ActiveInsertion {
   presentationIndex: number;
   /** quick 模式：先与守门员（当前末位）比（gate），赢了才进入二分（bisect）。其余模式恒为 bisect。 */
   stage: "gate" | "bisect";
+  /** adaptive 模式：对手在选对时已定好（信息增益），直接钉在状态里；旧三模式恒为 undefined。 */
+  opponentId?: string;
 }
 export interface VerificationTask {
   leftId: string;
@@ -188,6 +197,8 @@ function seededShuffle(ids: readonly string[], seed: string): string[] {
   return shuffled;
 }
 function estimateTotalComparisons(itemCount: number, topN: number, mode: RankingMode): number {
+  // adaptive（S2）：预算由 adaptiveRanking.adaptiveComparisonBudget 统一给出（整数，见 DATA-01）。
+  if (mode === "adaptive") return adaptiveComparisonBudget(itemCount);
   if (mode === "quick") {
     // 守门员截断：满员后每个落选者约 1 次；进榜者二分成本。经验系数 1.3（见 2.txt 模拟）。
     let build = 0;
@@ -511,6 +522,11 @@ function startVerification(state: RankingState): RankingState {
 }
 function scheduleNextCandidate(state: RankingState): RankingState {
   if (state.activeInsertion || state.phase !== "ranking") return state;
+  // adaptive（S2）：成对选择走 BT 信息增益，与二分插入完全独立；预算用完转既有复测流程。
+  if (state.mode === "adaptive") {
+    const adaptive = scheduleAdaptiveCandidate(state);
+    return adaptive.done ? startVerification(adaptive.state) : adaptive.state;
+  }
   let candidateId: string | undefined;
   let pendingIds = [...state.pendingIds];
   let deferredIds = [...state.deferredIds];
@@ -606,6 +622,25 @@ export function getCurrentComparison(state: RankingState): RankingComparison | n
   }
   const active = state.activeInsertion;
   if (!active || state.phase !== "ranking" || active.low >= active.high) return null;
+  // adaptive（S2）：对手在选对时已定好（activeInsertion.opponentId），与二分中位无关。
+  // 旧三模式的 activeInsertion 没有该字段，下面原路径逐字不变。
+  if (active.opponentId !== undefined) {
+    const candidateOnLeft = candidateIsOnLeft(
+      state,
+      active.presentationIndex,
+      active.candidateId,
+      active.opponentId,
+    );
+    return {
+      leftId: candidateOnLeft ? active.candidateId : active.opponentId,
+      rightId: candidateOnLeft ? active.opponentId : active.candidateId,
+      candidateId: active.candidateId,
+      opponentId: active.opponentId,
+      candidateOnLeft,
+      presentationIndex: active.presentationIndex,
+      phase: "ranking",
+    };
+  }
   // quick+gate：对手固定为守门员（当前末位），而非二分中位。
   const opponentIndex =
     active.stage === "gate"
@@ -688,6 +723,18 @@ export function choosePreferred(state: RankingState, preferredId: string): Ranki
   };
   if (comparison.phase === "verification")
     return completeVerification(state, preferredId, decision);
+  // adaptive（S2）：只更新证据与模型名次，不存在「插入位置」；复测阶段上一行已返回。
+  if (state.mode === "adaptive") {
+    const otherId =
+      preferredId === comparison.candidateId ? comparison.opponentId : comparison.candidateId;
+    const recorded = recordPreference(
+      { ...state, comparisonCount: state.comparisonCount + 1, activeInsertion: null },
+      preferredId,
+      otherId,
+      "ranking",
+    );
+    return appendDecision(scheduleNextCandidate(recorded), decision);
+  }
   const active = state.activeInsertion;
   if (!active) throw new Error("There is no active insertion");
   const candidateWon = preferredId === active.candidateId;
@@ -875,6 +922,16 @@ export function skipWork(state: RankingState, workId: string): RankingState {
   const comparison = getCurrentComparison(state);
   if (!comparison) throw new Error("There is no active comparison");
   if (state.phase === "verification") return skipVerification(state);
+  // adaptive（S2）：没有二分区间可收缩，略过 = 移出选择集后重新选对。
+  if (state.mode === "adaptive")
+    return appendDecision(scheduleNextCandidate(removeAdaptiveWork(state, workId, "skip")), {
+      kind: "skip",
+      candidateId: comparison.candidateId,
+      opponentId: comparison.opponentId,
+      presentationIndex: comparison.presentationIndex,
+      targetId: workId,
+      phase: "ranking",
+    });
   if (workId === comparison.candidateId) return skipCurrent(state);
   if (workId === comparison.opponentId) return skipOrDeferOpponent(state, "skip");
   throw new RangeError("The work must be in the active comparison");
@@ -883,6 +940,16 @@ export function deferWork(state: RankingState, workId: string): RankingState {
   const comparison = getCurrentComparison(state);
   if (!comparison) throw new Error("There is no active comparison");
   if (state.phase === "verification") return deferVerification(state);
+  // adaptive（S2）：暂放 = 记录后几轮内避开该作品，仍在池内（名次继续由模型给出）。
+  if (state.mode === "adaptive")
+    return appendDecision(scheduleNextCandidate(removeAdaptiveWork(state, workId, "defer")), {
+      kind: "defer",
+      candidateId: comparison.candidateId,
+      opponentId: comparison.opponentId,
+      presentationIndex: comparison.presentationIndex,
+      targetId: workId,
+      phase: "ranking",
+    });
   if (workId === comparison.candidateId) return deferCurrent(state);
   if (workId === comparison.opponentId) return skipOrDeferOpponent(state, "defer");
   throw new RangeError("The work must be in the active comparison");

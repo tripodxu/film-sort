@@ -243,6 +243,103 @@ export function recordObservations(
   return next;
 }
 
+/**
+ * 全量批量拟合（坐标上升 MAP）。
+ *
+ * 与逐条 recordObservation 的区别（这是 adaptive 模式必须用它的原因）：
+ * - 逐条更新是路径依赖的：早期观测先动了 theta，方差又被每次观测乘性收窄，
+ *   后面再多证据也拉不动（实测 12 件清单 50 次比较只命中 3/5，而二分插入 26 次就 5/5）。
+ * - 批量拟合与观测顺序无关，方差取最终对角 Laplace = 1/(Σ p(1-p) + prior)，
+ *   区间宽度反映总证据量，而不是「被更新了多少次」。
+ * 代价是 O(passes · N · D) 的纯算术，不做矩阵分解（对角近似，与 getRankInterval 同源）。
+ */
+export interface PreferenceFitOptions {
+  /** 坐标上升轮数上限，默认 6。 */
+  passes?: number;
+  /** 收敛阈值：单轮最大 |Δtheta| 小于它就提前停，默认 1e-4。 */
+  tolerance?: number;
+  /** 先验精度（曲率），默认取 options.shrinkage，即 N(0, 1/shrinkage)。 */
+  priorPrecision?: number;
+}
+
+export function fitPreferenceModel(
+  ids: readonly string[],
+  observations: readonly PreferenceObservation[],
+  options: PreferenceModelOptions = {},
+  fitOptions: PreferenceFitOptions = {},
+): PreferenceModelState {
+  const resolved = resolveOptions(options);
+  const base = createPreferenceModel(ids, resolved);
+  const prior = fitOptions.priorPrecision ?? resolved.shrinkage;
+  const passes = Math.max(1, Math.floor(fitOptions.passes ?? 6));
+  const tolerance = fitOptions.tolerance ?? 1e-4;
+  const wins: Record<string, number> = {};
+  const losses: Record<string, number> = {};
+  const usable: PreferenceObservation[] = [];
+  for (const observation of observations) {
+    const { winnerId, loserId } = observation;
+    if (winnerId === loserId) continue;
+    if (!base.ratings[winnerId] || !base.ratings[loserId]) continue;
+    usable.push({ winnerId, loserId });
+    wins[winnerId] = (wins[winnerId] ?? 0) + 1;
+    losses[loserId] = (losses[loserId] ?? 0) + 1;
+  }
+
+  const theta: Record<string, number> = {};
+  for (const id of base.order) theta[id] = resolved.initialRating;
+
+  for (let pass = 0; pass < passes; pass += 1) {
+    let maxDelta = 0;
+    for (const id of base.order) {
+      // 一维牛顿：固定其他坐标，求 theta_i 的一维 MAP 解。
+      let gradient = -prior * (theta[id] - resolved.initialRating);
+      let curvature = prior;
+      for (const { winnerId, loserId } of usable) {
+        if (winnerId === id) {
+          const p = expectedWinProbability(theta[id], theta[loserId]);
+          gradient += 1 - p;
+          curvature += p * (1 - p);
+        } else if (loserId === id) {
+          const p = expectedWinProbability(theta[winnerId], theta[id]);
+          gradient -= 1 - p;
+          curvature += p * (1 - p);
+        }
+      }
+      const delta = (resolved.learningRate * gradient) / Math.max(curvature, Number.EPSILON);
+      theta[id] += delta;
+      const magnitude = Math.abs(delta);
+      if (magnitude > maxDelta) maxDelta = magnitude;
+    }
+    if (maxDelta < tolerance) break;
+  }
+
+  // 方差 = 对角 Laplace 近似（固定其他坐标的曲率倒数），与 theta 用同一批观测。
+  const ratings: Record<string, PreferenceRating> = {};
+  for (const id of base.order) {
+    let curvature = prior;
+    for (const { winnerId, loserId } of usable) {
+      if (winnerId === id) {
+        const p = expectedWinProbability(theta[id], theta[loserId]);
+        curvature += p * (1 - p);
+      } else if (loserId === id) {
+        const p = expectedWinProbability(theta[winnerId], theta[id]);
+        curvature += p * (1 - p);
+      }
+    }
+    const variance = clampVariance(1 / Math.max(curvature, Number.EPSILON), resolved);
+    ratings[id] = {
+      id,
+      theta: theta[id],
+      variance,
+      sigma: Math.sqrt(variance),
+      wins: wins[id] ?? 0,
+      losses: losses[id] ?? 0,
+    };
+  }
+
+  return { ratings, order: base.order.slice(), comparisons: usable.length, options: resolved };
+}
+
 /** 按 theta 降序（同分按 id 升序）的作品 id 顺序。 */
 export function getPreferenceOrder(state: PreferenceModelState): string[] {
   return state.order.slice().sort((aId, bId) => {
