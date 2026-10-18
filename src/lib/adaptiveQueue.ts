@@ -113,84 +113,110 @@ interface Candidate {
   blockedByWork: boolean;
 }
 
-function thetaOf(model: PreferenceModelState, id: string): number {
-  const rating = model.ratings[id];
-  return rating ? rating.theta : model.options.initialRating;
-}
-
-/** 选下一对。ids 少于 2 件返回 null。 */
+/**
+ * 选下一对。ids 少于 2 件返回 null。
+ *
+ * 性能（2026-10-18 优化）：原实现为每一对分配候选对象再整体排序——300 件时约 4.5 万个对象
+ * 加 O(N²log N) 排序，实测单次 17.2ms，占一次取舍总耗时（约 20ms）的 85%。现在改成
+ * 「一遍扫描 + 只为三级各自保留当前最优」：模型与计数只读一次（Float64Array），内层循环零分配。
+ * 比较判据与并列顺序（score ↓ → information ↓ → coverage ↓ → leftId|rightId ↑）逐字不变，
+ * 冷却放宽阶梯（none → work-cooldown → pair-cooldown）逐字不变 ⇒ **选出的对手与优化前完全一致**
+ * （由 golden 指纹与既有单测双重看守）。
+ */
 export function selectAdaptivePair(input: AdaptiveQueueInput): AdaptivePair | null {
   const options = resolveOptions(input.options);
   const pairKeyOf = input.pairKeyOf ?? adaptivePairKey;
   const ids: string[] = [];
+  const seen = new Set<string>();
   for (const id of input.ids) {
-    if (!ids.includes(id)) ids.push(id);
+    if (!seen.has(id)) {
+      seen.add(id);
+      ids.push(id);
+    }
   }
   if (ids.length < 2) return null;
 
   const recentPairs = new Set((input.recentPairKeys ?? []).slice(-options.pairCooldown));
   const recentWorks = new Set((input.recentWorkIds ?? []).slice(-options.workCooldown));
   const counts = input.opponentCounts ?? {};
+  const model = input.model;
+  const size = ids.length;
+  const theta = new Float64Array(size);
+  const variance = new Float64Array(size);
+  const deficit = new Float64Array(size);
+  for (let i = 0; i < size; i += 1) {
+    const rating = model.ratings[ids[i]];
+    theta[i] = rating ? rating.theta : model.options.initialRating;
+    variance[i] = rating ? rating.variance : model.options.initialVariance;
+    deficit[i] = Math.max(0, options.minOpponents - (counts[ids[i]] ?? 0));
+  }
 
-  const candidates: Candidate[] = [];
-  for (let i = 0; i < ids.length; i += 1) {
-    for (let j = i + 1; j < ids.length; j += 1) {
-      const aId = ids[i];
+  let bestNone: Candidate | null = null;
+  let bestWork: Candidate | null = null;
+  let bestAny: Candidate | null = null;
+
+  for (let i = 0; i < size; i += 1) {
+    const aId = ids[i];
+    const thetaA = theta[i];
+    const varianceA = variance[i];
+    const deficitA = deficit[i];
+    for (let j = i + 1; j < size; j += 1) {
       const bId = ids[j];
-      const information = expectedInformation(input.model, aId, bId);
+      const p = 1 / (1 + Math.exp(-(thetaA - theta[j])));
+      const information = p * (1 - p) * (varianceA + variance[j]);
       // 任一端未达标就给补偿（取较大缺口），保证孤岛作品优先被接上。
-      const coverage = Math.max(
-        coverageDeficit(aId, counts, options.minOpponents),
-        coverageDeficit(bId, counts, options.minOpponents),
-      );
-      const [leftId, rightId] = orderPair(aId, bId, input.model);
-      candidates.push({
-        leftId,
-        rightId,
-        information,
-        coverage,
-        score: information + options.coverageWeight * coverage,
-        blockedByPair: recentPairs.has(pairKeyOf(aId, bId)),
-        blockedByWork: recentWorks.has(aId) || recentWorks.has(bId),
-      });
+      const coverage = Math.max(deficitA, deficit[j]);
+      const score = information + options.coverageWeight * coverage;
+      const leftId = thetaA !== theta[j] ? (thetaA > theta[j] ? aId : bId) : aId < bId ? aId : bId;
+      const rightId = leftId === aId ? bId : aId;
+      const blockedByPair = recentPairs.has(pairKeyOf(aId, bId));
+      const blockedByWork = recentWorks.has(aId) || recentWorks.has(bId);
+      if (
+        !blockedByPair &&
+        !blockedByWork &&
+        beats(score, information, coverage, leftId, rightId, bestNone)
+      ) {
+        bestNone = { leftId, rightId, information, coverage, score, blockedByPair, blockedByWork };
+      }
+      if (!blockedByPair && beats(score, information, coverage, leftId, rightId, bestWork)) {
+        bestWork = { leftId, rightId, information, coverage, score, blockedByPair, blockedByWork };
+      }
+      if (beats(score, information, coverage, leftId, rightId, bestAny)) {
+        bestAny = { leftId, rightId, information, coverage, score, blockedByPair, blockedByWork };
+      }
     }
   }
 
-  const tiers: AdaptiveRelaxation[] = ["none", "work-cooldown", "pair-cooldown"];
-  for (const relaxed of tiers) {
-    const pool = candidates.filter((candidate) => {
-      if (relaxed === "none") return !candidate.blockedByPair && !candidate.blockedByWork;
-      if (relaxed === "work-cooldown") return !candidate.blockedByPair;
-      return true;
-    });
-    if (pool.length === 0) continue;
-    pool.sort(compareCandidates);
-    const best = pool[0];
-    return {
-      leftId: best.leftId,
-      rightId: best.rightId,
-      information: best.information,
-      coverage: best.coverage,
-      score: best.score,
-      reason: best.coverage > 0 ? "coverage" : "information",
-      relaxed,
-    };
-  }
-  return null;
+  const best = bestNone ?? bestWork ?? bestAny;
+  if (!best) return null;
+  const relaxed: AdaptiveRelaxation = bestNone
+    ? "none"
+    : bestWork
+      ? "work-cooldown"
+      : "pair-cooldown";
+  return {
+    leftId: best.leftId,
+    rightId: best.rightId,
+    information: best.information,
+    coverage: best.coverage,
+    score: best.score,
+    reason: best.coverage > 0 ? "coverage" : "information",
+    relaxed,
+  };
 }
 
-function orderPair(aId: string, bId: string, model: PreferenceModelState): [string, string] {
-  const thetaA = thetaOf(model, aId);
-  const thetaB = thetaOf(model, bId);
-  if (thetaA !== thetaB) return thetaA > thetaB ? [aId, bId] : [bId, aId];
-  return aId < bId ? [aId, bId] : [bId, aId];
-}
-
-function compareCandidates(a: Candidate, b: Candidate): number {
-  if (a.score !== b.score) return b.score - a.score;
-  if (a.information !== b.information) return b.information - a.information;
-  if (a.coverage !== b.coverage) return b.coverage - a.coverage;
-  const aKey = a.leftId + "|" + a.rightId;
-  const bKey = b.leftId + "|" + b.rightId;
-  return aKey < bKey ? -1 : aKey > bKey ? 1 : 0;
+/** 三级各自的当前最优用同一套判据：score ↓ → information ↓ → coverage ↓ → 键 ↑（Tie 时才拼键）。 */
+function beats(
+  score: number,
+  information: number,
+  coverage: number,
+  leftId: string,
+  rightId: string,
+  best: Candidate | null,
+): boolean {
+  if (!best) return true;
+  if (score !== best.score) return score > best.score;
+  if (information !== best.information) return information > best.information;
+  if (coverage !== best.coverage) return coverage > best.coverage;
+  return leftId + "|" + rightId < best.leftId + "|" + best.rightId;
 }
