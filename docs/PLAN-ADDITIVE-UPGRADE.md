@@ -367,3 +367,13 @@
 - 已过期（无需再做）：`ArtworkDetail` 的 Escape / 焦点陷阱与归还（已由 `FocusTrap` 承担，`onEscape` 已接）、`<audio>` 已有 `aria-label`、`ranking-card-poster` 类点击目标已有 `role="button" + tabIndex + Enter/Space` 处理、全局 `IconButton` 早已带 `aria-label`。
 - **仍待办（后续逐项做，均须过零差异闸门）**：`ProfileView` 的 rename 输入缺可访问名称、WorkEditor 的 `<label>` 与输入未用 `htmlFor/id` 关联、rank 菜单缺 Escape 关闭；`PlazaView` 整卡 `role="button"` 内嵌真实 `<button>`（嵌套交互）；`PlazaPostView` 点赞按钮缺 `aria-pressed` 与 busy 防连点；`CompareView` 对端导入输入 38px 与 busy 只显示「…」、`.comparison-row` 内嵌可点击 `span` 的嵌套交互；触控目标（`ProfileView` 28px 按钮、`PlazaPostView` 回复框 33px、`AiInsightCard` 徽章与复制按钮）——**其中「恢复 44px / 放大命中区」会改变视觉，必须单独评估：若 `ui-diff --tol 0` 不为零则该项回退或改用透明命中区扩大的纯追加手法**。
 - 计划里的 C（token 化内联样式）与 D（CompareView 结构重排）**不在 S5 范围**（必然改旧 DOM）。
+
+### 性能优化记录（2026-10-18，S5 之后）
+
+- 背景：S2 的实测已显示自适应模式在 300 件清单下每次取舍约 20 ms。细粒度基准把耗时拆开后定位到 **`selectAdaptivePair` 单次 17.21 ms（占一次取舍的 85%）**：原实现为「每一对都 `push` 一个候选对象 → 整体 `sort`」，300 件 ≈ 4.5 万个对象 + O(N²log N) 排序；`buildAdaptiveModel`（0.57 ms）与池/观测构造（0.01 ms）都不是瓶颈。
+- 改法（`src/lib/adaptiveQueue.ts`，**行为不变的纯实现优化**）：一遍扫描 + 只为三级（无冷却 / 放宽作品冷却 / 放宽序对冷却）各保留当前最优；模型与对手计数只读一次（`Float64Array`），内层循环零分配；比较判据与并列顺序（score ↓ → information ↓ → coverage ↓ → leftId|rightId ↑）与冷却放宽阶梯逐字不变；顺带删掉优化后不再使用的私有 helper（`thetaOf` / `compareCandidates`）。
+- 等价性证据（**golden 指纹逐字相同**，优化前后各跑一次同一脚本）：N=12/60 步 `b3c89829af197937b2b4e4b8c663366b`、N=40/120 步 `c2a4e5b8f0a7955f04f7310bbdb734eb`、N=120/200 步 `421da68365f5668520c62b81a369f011`、N=300/200 步 `3efe70ce3a922ebbe378ce251426c971`；既有单测（`adaptiveQueue.test.ts` 10 + `adaptiveRanking.test.ts` 17 + `additiveModules.test.ts` 8）保持全绿。
+- 收益（300 件，同机同脚本）：**一次取舍 20.26 ms → 9.74 ms（2.08×）**；`selectAdaptivePair` 17.21 → 5.22 ms（3.30×）；`scheduleAdaptiveCandidate` 20.21 → 9.27 ms（2.18×）。UI 渲染代码一行未动（选择结果不变 ⇒ 界面上出现的对子与优化前完全一致）。
+- 门禁：`check` ✅ ｜ `lint` ✅ 0 problems ｜ `format:check` ✅ ｜ `test` ✅ Test Files **62 passed / 1 skipped (63)**、Tests **847 passed / 9 skipped (856)** ｜ `build` ✅ 2.80 s。
+- 线上验证（提交 `d47bd98`）：首页引用 `assets/index-CH_gZlVY.js`（427360 B，SHA256 `1BAABCE4E938D07B919E321615DFDB238C40567822FFE71DDC08A457341EF4A9`）与本地**逐字节一致**；`/encounter`、`/plaza`、`/depth`、`/catalog/sorting` 带 `Accept: text/html` 均 200；`/api/health` 200（D1 ok）。
+- 未做的进一步优化（诚实登记）：`selectAdaptivePair` 仍是 O(N²) 全量扫描（5.22 ms @300 件），可用「上界剪枝」压到 O(N·k)，但任何剪枝都可能改变选中的对子 ⇒ 需先证明剪枝是精确的（不改变结果）再做；`getRankIntervals` 的 O(N²) 区间计算（≈1.9 ms/次）同属此类。

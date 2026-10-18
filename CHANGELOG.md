@@ -11,6 +11,7 @@
 - **S3 `2c21f62`** 新界面 `/depth` 深度比较页（`src/views/DepthCompareView.tsx` + `ConfidenceBadge` / `MetricExplainer`），路由与顶栏新增第 4 项；旧 `/encounter` 一行未改，新指标只在新页展示。
 - **S4 `2d4570c`** 第 12 套内置主题「图册 / Atlas」（`src/styles/atlas.css` + `THEMES` 末位 + `main.tsx` 一行 import + 截图清单两格 + `src/theme-atlas.test.ts` 13 项绊线）；旧 11 套 22 张截图 tol=0 全零差异。
 - **S5 第 1 项 `79a84ff`** 无障碍纯追加修补：比较页两个分组补 `role="tablist"` + 组名、手动模式两个清单 checkbox 补 `aria-label`；广场页维度/排序两组补 `tablist`（排序组用 `display:contents` 包装层，不参与布局）；新增 `src/a11y.test.ts` 6 项绊线。
+- **性能优化 `d47bd98`** 自适应选对去掉逐对分配与整体排序（一遍扫描 + 三级各保留当前最优，判据不变）：300 件时一次取舍 **20.26 ms → 9.74 ms**，`selectAdaptivePair` 17.21 → 5.22 ms；4 组 golden 指纹优化前后逐字相同。
 - 文档：`docs/PLAN-ADDITIVE-UPGRADE.md` §10 逐阶段记录（含执行偏差与工具事故教训）；`docs/agents/MAP.md` / `THEME-PACKS.md` / `README.md` / `FEATURES.md` / `USAGE.md` 本次统一补齐四模式、`/depth` 与十二主题。
 
 **验证**
