@@ -204,7 +204,12 @@ export function CompareView({
         <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 16 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
             <span style={{ fontSize: 11, color: "var(--muted)" }}>{t("比较模式", "Mode")}:</span>
-            <div className="segmented" style={{ marginBottom: 0 }}>
+            <div
+              className="segmented"
+              role="tablist"
+              aria-label={t("比较模式", "Mode")}
+              style={{ marginBottom: 0 }}
+            >
               <button
                 role="tab"
                 aria-selected={compareMode === "auto"}
@@ -225,7 +230,12 @@ export function CompareView({
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
             <span style={{ fontSize: 11, color: "var(--muted)" }}>{t("比较深度", "Depth")}:</span>
-            <div className="segmented" style={{ marginBottom: 0 }}>
+            <div
+              className="segmented"
+              role="tablist"
+              aria-label={t("比较深度", "Depth")}
+              style={{ marginBottom: 0 }}
+            >
               {LEVELS.map((level) => (
                 <button
                   key={level.value}
@@ -278,6 +288,7 @@ export function CompareView({
                     {showCheck && (
                       <input
                         type="checkbox"
+                        aria-label={`${label(entry.kind)} · ${entry.collectionTitle}`}
                         checked={manualOwnSelections.has(kindIdx)}
                         onChange={() => {
                           const next = new Set(manualOwnSelections);
@@ -411,6 +422,7 @@ export function CompareView({
                     {showCheck && (
                       <input
                         type="checkbox"
+                        aria-label={`${label(entry.kind)} · ${entry.collectionTitle}`}
                         checked={manualPeerSelections.has(kindIdx)}
                         onChange={() => {
                           const next = new Set(manualPeerSelections);

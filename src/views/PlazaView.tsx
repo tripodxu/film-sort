@@ -171,7 +171,7 @@ export function PlazaView({
       </div>
 
       {/* Ability selector */}
-      <div className="plaza-abilities">
+      <div className="plaza-abilities" role="tablist" aria-label={t("榜单维度", "Post medium")}>
         {FILTER_KINDS.map((item) => (
           <button
             key={item.value}
@@ -192,18 +192,25 @@ export function PlazaView({
       {/* Toolbar */}
       <div className="plaza-toolbar">
         <div className="plaza-toolbar-left">
-          {SORT_OPTIONS.map((item) => (
-            <button
-              key={item.value}
-              className={`plaza-toolbar-btn ${sort === item.value ? "active" : ""}`}
-              onClick={() => handleSortChange(item.value as "newest" | "hottest")}
-              aria-label={t(item.zh, item.en)}
-              role="tab"
-              aria-selected={sort === item.value}
-            >
-              {t(item.zh, item.en)}
-            </button>
-          ))}
+          {/* S5：给这组 role=tab 补 tablist 父容器；display:contents 让包装层不参与布局（零视觉影响）。 */}
+          <div
+            role="tablist"
+            aria-label={t("排序方式", "Sort order")}
+            style={{ display: "contents" }}
+          >
+            {SORT_OPTIONS.map((item) => (
+              <button
+                key={item.value}
+                className={`plaza-toolbar-btn ${sort === item.value ? "active" : ""}`}
+                onClick={() => handleSortChange(item.value as "newest" | "hottest")}
+                aria-label={t(item.zh, item.en)}
+                role="tab"
+                aria-selected={sort === item.value}
+              >
+                {t(item.zh, item.en)}
+              </button>
+            ))}
+          </div>
           <label className="search-field plaza-search" style={{ padding: 0, marginLeft: 8 }}>
             <Search size={14} />
             <input
