@@ -30,7 +30,7 @@
 | 四媒介维度选择（电影/书籍/音乐/其他） | 首页 medium 胶囊 | `App.chooseKind` |
 | 主动式二分插入排序（中位数对手 + 区间收敛） | `/catalog/sorting` | `lib/ranking.ts createRankingState/getCurrentComparison/choosePreferred` |
 | 键盘 A/D、←/→、1/2 快捷选择 | 排序页 | `App.tsx` keydown |
-| 三种排序模式：简易(守门员截断,~1次/件)/经典(二分+回环+复测,默认)/精确(加强校准+校准一致率) | Setup「排序模式」segmented，localStorage 记忆 | `ranking.ts mode`：quick gate 阶段 + precise 验证队列/校准统计 |
+| **四种排序模式**：简易(守门员截断,~1 次/件)/经典(二分+回环+复测,默认)/精确(加强校准+校准一致率)/**自适应**(按信息量选对 + 实时 90% 名次区间,预算 ≈4×件数) | Setup「排序模式」segmented，localStorage 记忆 | `ranking.ts mode`：quick gate 阶段 + precise 验证队列/校准统计；adaptive 走 `adaptiveRanking.ts` 的前置分支（旧三模式执行路径逐字不变，且不新增持久化字段） |
 | 撤销（O(1) 快照栈，上限 500）/ 略过 / 暂放 | 排序页底部工具 | `undoLastAction/skipWork/deferWork` |
 | 偏好回环检测（A>B>C>A）+ 二次确认 | 排序页 evidence 条 | `recordPreference/recordCycleConfirmation` |
 | 触屏滑动选择（往哪边甩选哪边，56px 阈值 + 垂直意图否决；鼠标不启用） | 排序页 duel-grid | `lib/swipe.ts decideSwipe` + SortingView pointer 处理 |
@@ -143,7 +143,7 @@
 
 | 功能 | 入口 | 实现 |
 |---|---|---|
-| 十一内置主题：经典七套（现代(默认深色)/复古纸感/极简/简约/古典/赛博朋克/纸上擂台）+ 新系列四套（刊物/刊物暗色/极光/画廊，组件级差异） | 顶栏调色板下拉（分「经典/新系列」组） | `lib/theme.ts` + `[data-theme]` 变量块；新系列另含 L2 结构覆写与 L3 条件渲染（`lib/useTheme.ts` themeFamily） |
+| **十二内置主题**：经典七套（现代(默认深色)/复古纸感/极简/简约/古典/赛博朋克/纸上擂台）+ 新系列五套（刊物/刊物暗色/极光/画廊/图册；前四套为组件级差异，图册为 2026-10-18 新增的变量型主题） | 顶栏调色板下拉（分「经典/新系列」组） | `lib/theme.ts` + `[data-theme]` 变量块；新系列另含 L2 结构覆写与 L3 条件渲染（`lib/useTheme.ts` themeFamily） |
 | 全量设计令牌（--bg/--text/--accent/--surface-*/--line…，color-mix 派生） | — | `styles.css :root` |
 | 选择持久化 + 首帧防闪烁 + theme-color 同步 | 自动 | `art-rank:theme`、`src/main.tsx` 首帧前置应用 |
 | PNG 导出跟随当前主题 | 导出 | `exportPng.samplePalette` |
@@ -201,11 +201,11 @@
 1. 首页→选维度→精选/搜索/批量导入→TopN→排序（键盘+撤销+回环提示）→完成落画像
 2. 画像：切换胶囊、改名/删除(⋯+确认条)、手动调整拖拽、编辑作品增删搜、三级批注、点海报详情
 3. 导出：JSON/TXT/MD/CSV/PNG × 五版式 × 至少 2 主题
-4. 比较：贴对方链接→共识圆环+全指标+悬浮解释→共同/分歧表→点名次进详情→AI 解读→用对方排序
+4. 比较：贴对方链接→共识圆环+全指标+悬浮解释→共同/分歧表→点名次进详情→AI 解读→用对方排序；另有 `/depth` 深度比较页（收缩共识分 + 头部加权 τ / 位置折扣一致度 / bootstrap 置信区间，并把 13 项旧指标原样列出以便与相遇页逐项核对）
 5. 分享：短链+有效期、二维码、/share 页、比较链接
 6. 广场：发布→列表(排序/筛选/搜索/滚动)→点赞/评论/回复→作者编辑/历史/隐藏/删除→与曾经的我比较→同步提示
 7. 导入：豆列/subject_collection/mine(连接后一键)/网易云按 UID 浏览全部歌单(含收藏)点选导入/网易云直链/other 维基搜索带海报；分批进度条+右上角设置调单次上限(100~1000)+清单折叠/全选/仅保存不排序
 8. 账号：注册/登录/OAuth/同步/冲突弹窗/退出清数据
-9. 主题：十一内置主题切换（经典/新系列分组）、刷新持久化、PNG 跟随
+9. 主题：十二内置主题切换（经典/新系列分组）、刷新持久化、PNG 跟随
 10. /admin 四页签各一操作
 11. AI 点评：三场景各生成一次（含长度三档切换）；设置→配置自己的 API→获取模型列表→测试连接→再生成（来源徽标变「我的」）；清除配置回落内置；错误注入（错 key / 错 base / 连打限流）文案正确

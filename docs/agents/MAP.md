@@ -13,11 +13,11 @@
 | 某个 API 端点怎么实现的 | `worker/index.ts` 路由表（约 1822 行起，`if (url.pathname === ...)` 链） |
 | 某路由的业务逻辑 | 按前缀找对应模块：`/api/plaza/*`→`worker/plaza.ts`、`/api/netease/*`→`worker/netease.ts`、`/api/douban/*`→`worker/douban.ts`+`doubanlist.ts`、`/api/import/*`→`worker/import.ts`、`/api/account/*`→`worker/account.ts` |
 | 前端页面 | `src/views/*.tsx`（路由在 `src/lib/useRouter.ts` + `src/App.tsx`） |
-| 全局状态 / 事件编排 | `src/App.tsx`（2539 行，改动前先确认是否被 `useAuth` / `useSorting` / `useRouter` 接管） |
-| 样式与主题 | `src/styles.css`（1286 行，全令牌化） |
+| 全局状态 / 事件编排 | `src/App.tsx`（2731 行，改动前先确认是否被 `useAuth` / `useSorting` / `useRouter` 接管） |
+| 样式与主题 | `src/styles.css`（1895 行，全令牌化）+ `src/styles/atlas.css`（第 12 套内置主题的变量块） |
 | 数据库表结构 | `migrations/0001..0025` + `docs/ARCHITECTURE.md` 的 Schema 节 |
 | 「什么能落库」 | `shared/storedItem.ts` —— **唯一出口** |
-| 排序 / 比较算法 | `src/lib/ranking.ts`（1210 行） |
+| 排序 / 比较算法 | `src/lib/ranking.ts`（1278 行，四模式）+ `src/lib/adaptiveRanking.ts` / `preferenceModel.ts` / `adaptiveQueue.ts` / `compareMetrics.ts` |
 | 历史决策理由 | `docs/memory/DECISIONS.md` |
 | 这个功能什么时候加的 | `docs/memory/TIMELINE.md`（按日倒序） |
 
@@ -46,13 +46,18 @@
 
 | 文件 | 行数 | 职责 |
 |------|------|------|
-| `src/lib/ranking.ts` | 1210 | 排序引擎（简易/经典/精确三模式）、比较指标（Kendall τ-b、Top-5 Jaccard、年代偏好、共识评分）、插入定位、回环检测 |
-| `src/lib/useSorting.ts` | 911 | 排序状态机：草稿、撤销、略过/暂放、Jev 代判挂钩、竞态守卫 |
-| `src/views/SortingView.tsx` | 330 | 对战界面（duel card）、键盘快捷键、滑动手势接入 |
+| `src/lib/ranking.ts` | 1278 | 排序引擎（简易/经典/精确/**自适应**四模式：前三者为二分插入族，自适应走 `adaptiveRanking.ts` 前置分支）、插入定位、回环检测、序列化兼容 |
+| `src/lib/useSorting.ts` | 977 | 排序状态机：草稿、撤销、略过/暂放、Jev 代判挂钩、竞态守卫 |
+| `src/lib/adaptiveRanking.ts` | 274 | 自适应模式的「由决策重推」层：不新增持久化字段，模型/名次区间全部由 `decisionLog` 重算 |
+| `src/lib/preferenceModel.ts` | 462 | 在线 Bradley-Terry 能力模型（一步 Newton）与批量 `fitPreferenceModel`（坐标上升 MAP），输出 θ/σ 与名次区间 |
+| `src/lib/adaptiveQueue.ts` | 197 | 自适应选对：信息量 `p(1-p)(σ_i²+σ_j²)` + 对手覆盖度，冷却常量作入参 |
+| `src/lib/compareMetrics.ts` | 243 | 比较页新指标：头部加权 τ、位置折扣一致度、bootstrap 置信区间、样本量收缩共识分（旧字段一个不删） |
+| `src/views/SortingView.tsx` | 417 | 对战界面（duel card）、键盘快捷键、滑动手势接入、自适应模式的名次区间条与信息量提示 |
 | `src/lib/swipe.ts` | — | 纯函数 `decideSwipe(dx, dy, threshold=56)`，滑动判定可单测 |
-| `src/views/CompareView.tsx` | 1155 | 比较界面 + 三档深度 |
+| `src/views/CompareView.tsx` | 1191 | 相遇比较界面（`/encounter`）+ 三档深度；旧指标原样保留 |
+| `src/views/DepthCompareView.tsx` | 415 | 深度比较页（`/depth`，只读）：收缩共识分 + 四格新指标 + 分歧作品点阵条 + 13 行旧指标对照 |
 
-**改这里前必读**：`docs/agents/PITFALLS.md` §3（异步覆盖与撤销一致性）、`docs/USAGE.md` 的排序三模式章节。
+**改这里前必读**：`docs/agents/PITFALLS.md` §3（异步覆盖与撤销一致性）、`docs/USAGE.md` 的排序模式章节（四模式）。**自适应模式的隐藏约束**：任何改动都必须保持「既有三模式执行路径逐字不变」，且不得往 `RankingState` 增加持久化字段（见 `docs/PLAN-ADDITIVE-UPGRADE.md` §10 的 S2 记录）。
 
 ---
 
@@ -60,16 +65,16 @@
 
 | 文件 | 行数 | 职责 |
 |------|------|------|
-| `src/App.tsx` | 2539 | 全局状态与事件编排；大视图已 `React.lazy` 拆包 |
-| `src/lib/useRouter.ts` | 81 | URL 路径路由（`/`、`/encounter`、`/profile`、`/share/:code`、`/plaza/:id`、`/admin`） |
+| `src/App.tsx` | 2731 | 全局状态与事件编排；大视图已 `React.lazy` 拆包 |
+| `src/lib/useRouter.ts` | 116 | URL 路径路由（`/`、`/catalog/source|setup|sorting`、`/encounter`、`/depth`、`/myself`、`/share/:code`、`/plaza/:id`）；`View` 联合扩容时会强制补全 `VIEW_PATH` / `VIEW_TITLE` 两个 Record |
 | `src/lib/useAuth.ts` | 545 | 登录态、云同步、会话代际 |
-| `src/views/SetupView.tsx` | 208 | 准备页（自行排序 / 仅保存不排序 / AI 快排三个动作） |
-| `src/views/SourceView.tsx` | 1780 | 来源与导入页（最大的视图） |
-| `src/views/ProfileView.tsx` | 1276 | 我的文化索引（品味年轮、榜单管理） |
+| `src/views/SetupView.tsx` | 228 | 准备页：四种排序模式（简易/经典/精确/自适应）+ 三个动作（自行排序 / 仅保存不排序 / AI 快排） |
+| `src/views/SourceView.tsx` | 1810 | 来源与导入页（最大的视图） |
+| `src/views/ProfileView.tsx` | 1331 | 我的文化索引（品味年轮、榜单管理） |
 | `src/views/CompareView.tsx` | 1155 | 比较 |
-| `src/views/PlazaView.tsx` / `PlazaPostView.tsx` | 457 / 1172 | 广场列表 / 帖子详情 |
-| `src/views/ShareView.tsx` | 235 | 分享查看页 |
-| `src/views/HomeView.tsx` | 472 | 首页 |
+| `src/views/PlazaView.tsx` / `PlazaPostView.tsx` | 467 / 1174 | 广场列表 / 帖子详情 |
+| `src/views/ShareView.tsx` | 252 | 分享查看页 |
+| `src/views/HomeView.tsx` | 507 | 首页 |
 | `src/components/` | — | `Poster`、`ArtworkDetail`、`RankingDetail`、`AiConfigDialog`、`ThemeSwitcher`、`OrbScene`（Three.js）、`FocusTrap`、`ErrorBoundary`、`ExpandableNote`、`SettingsMenu` |
 
 **改这里前必读**：`docs/agents/CONVENTIONS.md` §2（React Hook 约定 —— 历史上有两处 Hook 违规与三处 Hook 提取回归）。

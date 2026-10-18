@@ -1,5 +1,24 @@
 # Changelog
 
+## 2026-10-17 ~ 10-18 · 增量升级 S1–S4 + S5 第一项（10 commits，逐项线上验证）
+
+**背景**：按 `docs/PLAN-ADDITIVE-UPGRADE.md` 推进「只增不改」的四个阶段——新增算法模块、新增第四排序模式、新增深度比较页、新增第 12 套主题，另开 S5（无障碍纯追加修补）第一项。全部为纯增量：旧三模式、旧比较页、旧 11 套主题**一行未改**，每阶段都留下门禁 + 零差异/哈希证据。
+
+**改了什么**
+
+- **S1 `8686468`** 三个纯新增算法模块（零引用）：`src/lib/preferenceModel.ts`（在线 Bradley-Terry + 批量 `fitPreferenceModel` 坐标上升 MAP）、`src/lib/adaptiveQueue.ts`（信息量选对 + 对手覆盖度）、`src/lib/compareMetrics.ts`（头部加权 τ / 位置折扣一致度 / bootstrap 置信区间 / 样本量收缩共识分），配套 4 个测试文件共 44 项。
+- **S2 `d971a50`** 第四排序模式「自适应」：新增 `src/lib/adaptiveRanking.ts`（**不新增任何持久化字段**，模型与名次区间全部由 `decisionLog` 重推）；`src/lib/ranking.ts` 六处前置早退分支；准备页第四项；排序页名次区间条 + 信息量提示；`src/styles.css` 末尾 14 行。接入时实测暴露逐条一步 Newton 的路径依赖缺陷（12 件清单比 50 次只命中 top-5 3/5），改用批量拟合后 **42 次即全序精确**。
+- **S3 `2c21f62`** 新界面 `/depth` 深度比较页（`src/views/DepthCompareView.tsx` + `ConfidenceBadge` / `MetricExplainer`），路由与顶栏新增第 4 项；旧 `/encounter` 一行未改，新指标只在新页展示。
+- **S4 `2d4570c`** 第 12 套内置主题「图册 / Atlas」（`src/styles/atlas.css` + `THEMES` 末位 + `main.tsx` 一行 import + 截图清单两格 + `src/theme-atlas.test.ts` 13 项绊线）；旧 11 套 22 张截图 tol=0 全零差异。
+- **S5 第 1 项 `79a84ff`** 无障碍纯追加修补：比较页两个分组补 `role="tablist"` + 组名、手动模式两个清单 checkbox 补 `aria-label`；广场页维度/排序两组补 `tablist`（排序组用 `display:contents` 包装层，不参与布局）；新增 `src/a11y.test.ts` 6 项绊线。
+- 文档：`docs/PLAN-ADDITIVE-UPGRADE.md` §10 逐阶段记录（含执行偏差与工具事故教训）；`docs/agents/MAP.md` / `THEME-PACKS.md` / `README.md` / `FEATURES.md` / `USAGE.md` 本次统一补齐四模式、`/depth` 与十二主题。
+
+**验证**
+
+- 每阶段五道门禁全绿（收尾基线：`test` 62 files / 847 passed / 9 skipped、`build` 3.11 s）。
+- 零差异证据：S2 旧三模式 `/sorting` tol=0 全零；S3 `/encounter` 差异**仅顶栏带**（4901 px / 0.1047%，其中 88 px 为截图时序的瞬时焦点环）；S4 旧 11 套 22 张全零；S5 第 1 项 `/encounter` 与 `/plaza` 共 4 张全零。
+- 线上：每阶段部署后首页 `assets/index-*.js` 的 SHA256 与本地 `dist` **逐字节一致**；`/depth`、`/encounter`、`/plaza` 带 `Accept: text/html` 均 200；`/api/health` 200（D1 ok）。
+
 ## 2026-10-14 · 全量审查清账 T-01～T-10（10 commits，一批上线）
 
 **背景**：2026-10-14 三路深读（全量审查：前端 31 条 / 算法性能 20+5 / 后端 S/A/D/E/O）拆成 T-20261014-01～10 九个子项逐个提交，逐项线上验证通过。本节补记此前漏记的 CHANGELOG（当时以台账为唯一记录，违反 AGENTS.md §5）。
