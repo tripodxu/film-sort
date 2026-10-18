@@ -347,3 +347,23 @@
   - `/depth` 与 `/encounter` 带 `Accept: text/html` 均 200（SPA 外壳）；`/api/health` 200（D1 ok）。
   - 真实浏览器线上抽检：把主题注入设为 `atlas` 后打开线上 `/depth` 与 `/encounter`，浅色主题渲染正常（青灰绿强调色、名次点阵条、四格指标卡、13 行旧指标栅格均清晰），且**线上截图的 SHA256 与本地同款截图逐字节相同**（`.tmp/live-atlas/depth-desktop-1300x900.png` = `7cdc2f7c6921c31b2fd7b27d0ccdd55a6f6dfc14306d611920266e393d0222e9`）⇒ 线上主题与本地一致。
 - ⇒ **S4 全部完成**；本计划只剩 **S5（可缓）无障碍纯追加修补**与一条工具增量（`ui-shot.mjs` 多步 steps）。
+
+### S5 执行记录（2026-10-18）
+
+> 本阶段只做「纯追加」：给现有元素**追加** `aria-label` / `role` / 键盘监听，不删节点、不改布局、不改文案。每一项都必须配 `ui-diff --tol 0` 的零差异证据，不达标即回退该项。
+
+**第 1 项（已完成并线上验证）：比较页 / 广场页的 ARIA 语义补全**
+
+- 改动（全部为属性级追加；`.tmp/a11y-shots.json` 临时截图清单覆盖 `/encounter`、`/plaza` × 桌面 1300×900 / 移动 540×960，夹具 = `demo-profile` + 程序化错位同源对方画像写入 `art-rank:peer:v2`）：
+  1. `src/views/CompareView.tsx`：比较模式、比较深度两个 `.segmented` 容器补 `role="tablist"` 与组名 `aria-label`（原先只有子按钮带 `role="tab"`，缺父级 tablist，与同文件另一处 `.segmented`（比较维度）已有 tablist 的写法不一致）。
+  2. `src/views/CompareView.tsx`：手动模式下「我的索引 / 对方索引」两处清单 checkbox 补 `aria-label`（维度 · 清单名），此前它们没有任何可访问名称。
+  3. `src/views/PlazaView.tsx`：维度筛选补 `role="tablist"` + 组名；排序组因为同一容器里还放着搜索框，改用一层 `role="tablist"` + `display:contents` 的包装层（结构上补父级、布局上不参与，实测像素零差异）。
+  4. 新增 `src/a11y.test.ts`（6 项源码绊线：tablist 数量与组名、两个 checkbox 都有名称、tab 数量不少于 tablist（无孤儿 tab）、包装层 `display:contents` 且搜索框在其后、搜索框自身名称未被改动）。
+- 零差异证据：`node scripts/ui-shot.mjs --shots .tmp/a11y-shots.json --out .tmp/a11y-before/--after --dsf 2`（各 4 张、0 failed）→ `node scripts/ui-diff.mjs .tmp/a11y-before .tmp/a11y-after --tol 0` ⇒ **pairs 4 / zeroDiff 4 / changed 0 / mismatches 0**（含两处桌面与两处移动，`diffPixels 0 / maxDelta 0`）⇒ 这一批改动不可见。
+- 门禁：`check` ✅ ｜ `lint` ✅ 0 problems ｜ `format:check` ✅ ｜ `test` ✅ Test Files **62 passed / 1 skipped (63)**、Tests **847 passed / 9 skipped (856)**（S4 基线 61/1、841/9 ⇒ +1 文件 +6 测试）｜ `build` ✅ 3.11 s。
+- 线上验证（提交 `79a84ff`，已 push `e184c3d..79a84ff`；本次传播极快，首次轮询即为新包）：首页引用 `assets/index-Cq219VaK.js`（427196 B，SHA256 `CD50A597795FAFF678EBD0672390F09F7CF039CA8C2335FD29257CE2581FC395`）与本地**逐字节一致**；`/encounter`、`/plaza`、`/depth` 带 `Accept: text/html` 均 **200**；`/api/health` 200（D1 ok）。
+
+**复核结论：ROADMAP §二 P2 的 A/B 清单里有一批条目已经过期（先前批次已修），开工前必须先核**（PITFALLS 4.31）：
+- 已过期（无需再做）：`ArtworkDetail` 的 Escape / 焦点陷阱与归还（已由 `FocusTrap` 承担，`onEscape` 已接）、`<audio>` 已有 `aria-label`、`ranking-card-poster` 类点击目标已有 `role="button" + tabIndex + Enter/Space` 处理、全局 `IconButton` 早已带 `aria-label`。
+- **仍待办（后续逐项做，均须过零差异闸门）**：`ProfileView` 的 rename 输入缺可访问名称、WorkEditor 的 `<label>` 与输入未用 `htmlFor/id` 关联、rank 菜单缺 Escape 关闭；`PlazaView` 整卡 `role="button"` 内嵌真实 `<button>`（嵌套交互）；`PlazaPostView` 点赞按钮缺 `aria-pressed` 与 busy 防连点；`CompareView` 对端导入输入 38px 与 busy 只显示「…」、`.comparison-row` 内嵌可点击 `span` 的嵌套交互；触控目标（`ProfileView` 28px 按钮、`PlazaPostView` 回复框 33px、`AiInsightCard` 徽章与复制按钮）——**其中「恢复 44px / 放大命中区」会改变视觉，必须单独评估：若 `ui-diff --tol 0` 不为零则该项回退或改用透明命中区扩大的纯追加手法**。
+- 计划里的 C（token 化内联样式）与 D（CompareView 结构重排）**不在 S5 范围**（必然改旧 DOM）。
