@@ -1,0 +1,26 @@
+
+/* ===== 主题：图册 atlas（S4 新增，纯新增文件）=====
+   设计意图：冷灰纸感的「地图册」——单一强调色（青灰绿）+ 更紧的圆角 + 冷调投影，
+   与既有的 11 套主题（暖纸 editorial/classic/paper、黑白 minimal、蓝灰 simple、
+   深色 modern/cyber/aurora、画廊 gallery）在明暗与色温上都区分得开。
+   约束（S4 验收）：本文件**只允许出现 [data-theme=atlas] 与 .theme-dot.theme-atlas 前缀的选择器**，
+   因此不可能影响其它主题；不引入 @layer（未分层的旧 CSS 会整体压过分层规则），
+   不改 styles.css 的任何既有内容，也不新造令牌名（只覆写既有令牌，与其余 11 套同款）。 */
+[data-theme=atlas]{
+  --bg:#EFF2F4;--text:#14202A;--text-2:#33424E;--text-3:#586878;--muted:#586878;
+  --accent:#1D6B66;--accent-2:#2E8B83;--accent-ink:#F3F9F8;
+  --line:#C7D2DA;--border-2:#AEBBC5;
+  --surface:#E7ECF0;--surface-2:#DFE6EB;--surface-3:#F6F8FA;--surface-4:#EDF1F4;--surface-hover:#E1E7EC;--surface-glow:#EDF4F3;
+  --ok:#2C6E49;--warn:#9A6B12;--danger:#A33A2E;--danger-2:#C05A45;--indigo:#4359A8;--pink:#9C4F72;
+  --film:#1D6B66;--book:#2C6E49;--music:#8A6A1F;--other:#4359A8;
+  --scrim:rgba(20,32,42,.55);--toast-bg:#14202A;--toast-bg-2:#22303C;--toast-ink:#EFF2F4;--toast-border:#14202A;
+  --status-ok:#2E8B57;--status-warn:#C08A12;--status-danger:#C0392B;
+  --shadow-tint:#22303C;
+  --reader-dim:.92;--reader-poster-opacity:.18;
+  --r-xs:2px;--r-sm:4px;--r-md:6px;--r-lg:10px;
+}
+/* L2：两条极保守的形态差异（按钮收角 + 顶栏细线加深），只作用于本主题。 */
+[data-theme=atlas] .button{border-radius:var(--r-sm)}
+[data-theme=atlas] .topbar{border-bottom:1px solid var(--border-2)}
+/* 主题菜单里的色点（照 .theme-dot.theme-* 既有写法，属全局工具样式，必须带 .theme-dot 前缀）。 */
+.theme-dot.theme-atlas{--dot-a:#EFF2F4;--dot-b:#1D6B66;background:linear-gradient(135deg,var(--dot-a) 50%,var(--dot-b) 50%)}

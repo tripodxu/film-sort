@@ -23,6 +23,7 @@ const NEW_SERIES: ReadonlySet<string> = new Set([
   "editorial-dark",
   "aurora",
   "gallery",
+  "atlas",
 ]);
 
 export function ThemeSwitcher({ zh, onNotice }: { zh: boolean; onNotice?: (m: string) => void }) {

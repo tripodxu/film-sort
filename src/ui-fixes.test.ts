@@ -358,13 +358,15 @@ describe("P3 gallery 画廊主题绊线（PLAN-ui-modernization）", () => {
 });
 
 describe("P4 收尾绊线（PLAN-ui-modernization）", () => {
-  it("主题菜单分「经典 / 新系列」两组（11 个平铺太长）；内置主题共 11 套", () => {
+  it("主题菜单分「经典 / 新系列」两组（12 个平铺太长）；内置主题共 12 套", () => {
     const sw = readFileSync("src/components/ThemeSwitcher.tsx", "utf8");
     expect(sw).toContain("NEW_SERIES: ReadonlySet<string>");
     expect(sw).toContain('t("经典", "Classic")');
     expect(sw).toContain('t("新系列", "New Series")');
     const theme = readFileSync("src/lib/theme.ts", "utf8");
-    expect((theme.match(/id: "/g) ?? []).length).toBe(11);
+    // 11 → 12：S4 按计划新增第 12 套内置主题 atlas（只增不改；旧 11 套的 id 与顺序由
+    // src/theme-atlas.test.ts 逐项断言）。本行是「内置主题数量变化必须显式确认」的闸门。
+    expect((theme.match(/id: "/g) ?? []).length).toBe(12);
   });
 });
 
