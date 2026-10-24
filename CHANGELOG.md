@@ -1,5 +1,24 @@
 # Changelog
 
+## 2026-10-24 · 文档全面审计与漂移清零（T-20261024-03）
+
+**背景**：用户指派「全面阅读，查看优化项，优化文档」。四组并行审计（agent 路由文档 / 主文档 / 计划状态 / 坑档规范）+ 逐条对照代码修复全仓文档漂移。本条目同时补记 2026-10-02 迭代 1–8/20 的 CHANGELOG 缺口（当时仅记台账）。
+
+**改了什么**
+
+- **MEMORY.md 刷新**（停更 24 天）：补 2026-10 汇总条目；§0 规模行 / §2 架构快照更新（10 视图、adaptive 四模块、posterStore、gates/e2e 脚本、migration 0027）；§5 待办焦点重写为指针式（指向 TASK-LEDGER 与未完成 PLAN，消除双轨漂移）；C10「270 张截图」改为按清单口径（当前 41 张）。
+- **三份计划状态错误纠正并归档**：PLAN-OPTIMIZATION-SPRINT Phase 8「PWA ⬜」实为 **2026-09-10 已上线**（`76b290c`，后续 10-14 T-08 补图标验收）→ 改 ✅，P1–P8 全完结，整份归档；PLAN-BUNDLE-SPLIT「🔄 进行中」实为当日已完成（主包 gzip **-28.4%**）→ 改 ✅ 归档；PLAN-AI-QUICK-RANK 补「已于 2026-09-28 全部执行完毕」横幅后归档。
+- **幻影文件引用清除**：MAP/CONVENTIONS/ROLES 引用的 `worker/payloadGuard.ts` **不存在**（实为静态扫描护栏测试 `payloadGuard.test.ts`；形状校验在 `plaza.ts` `plazaRoute`）——三处改写为正确指引；MAP §2.5 的 `shared/storedNotes.ts` 同病（实际在 `storedItem.ts` 的 `encodeStoredNotes`）。
+- **README**：管理后台四→五页签（补缓存页签）；十二主题枚举补齐图册/纸上擂台；`/depth` 与 `/admin` 补进路由表；视图清单补 DepthCompareView；migration 数 25/23→28；分享码 8–12 位→12 位；顶栏工具描述与实际 UI 对齐（广场在主导航）；环境变量补邮件组；**三张全量 API 表（~110 行）收敛为分类速览 + 指向 `docs/API.md`**（消除 21 个端点的缺口漂移源）；commit/行数等硬编码计数更新为带口径的动态表述。
+- **ARCHITECTURE**：§3.6「排序三模式」→**四模式**（补 adaptive 段）；六/七主题→12；视图与路由枚举补 depth；Worker 模块表补 mailer/og/typesafe 与插件子系统说明（并注明 payloadGuard/posterBatchStats 非独立模块）；migration 26→28（补 0027 行）；测试计数改动态口径。
+- **API.md**：补 `POST /api/other/cover-choice`（三道闸门/审计/回读校验）；注册接口补必填 `code` 字段与 `invalid_code` 错误（与文末验证码节对齐）；限流表补 `cache` 桶与 cover-choice 归桶，并声明本表为唯一权威；「管理接口」章标题归位（用户侧缓存接口独立成章）。
+- **FEATURES / USAGE**：路由表补 `/depth`；管理后台章按五页签重写；「外观与个性化」节与 L61 新口径合并（四组网格 + Esc）；深度页「顶栏第四项」→「主导航第三项」；FEATURES §12 与回归走查清单的错位结构归位；限流明细改指向 API.md。
+- **坑档/规范**：PITFALLS 2.21/2.22 行号引用修正、4.67 补「ArtworkDetail 已接 FocusTrap」回写、4.14–4.17 归位至 4.13 与 4.18 之间；ORB-EFFECTS §1/§3 **重写为「EFFECT_META 纯元数据 + orbEffectLoaders 动态 import」两层注册**（原文照抄会复发 three 进主包的 4.21 回归）并补齐 4 个特效模块；THEME-PACKS §4 补 5 个白名单变量；CLOUDFLARE migration 23→28、限流配额改指向 API.md 权威表、归档文档引用改指 ci.yml；DOUBAN_API 删不存在的 `invalid_key` 错误码；REGRESSION-REVIEW 修两处行号与重复编号、裸 fetch 计数补口径；AGENTS/MAP/ROLES/HANDOFF/CONVENTIONS 的路由行号（1822→1880）、styles.css 度量（589/204 口径）、懒加载清单、`npm run gates`/`e2e` 聚合入口、ui-baseline.json 性质描述等同步修正。
+- **docs/archive/**：4 个缺「已过时」横幅的归档文件补挂横幅。
+- **补记 2026-10-02 迭代 1–8/20**（此前仅台账）：迭代 1 `50c9f53` Three.js 摘出主包（gzip -28.4%）；迭代 2 `8c67773` 维基消歧 Choice 出口层（`/api/other/candidates` + `/api/ai/jev-disambiguate`）；迭代 3 `3280ccb` 维基缩略图桶宽治理；迭代 4 `743e430` 首屏路由清扫（主包 gzip 再 -7.5%）；迭代 5 `27a24b4` 消歧出口「让用户选」；迭代 6 `2980ad9` 内容哈希产物缓存（immutable 一年）；迭代 7 `e204c03` 空封面三态；迭代 8 `bf936bc` 上游降级信号逐条化。迭代 9/10/11 已有独立条目。
+
+**验证**：纯文档变更（零代码/零测试改动），`npm run format:check` 过；所有修改点均经 grep/ls/读码对照核实（详见 `docs/agents/TASK-LEDGER.md` T-20261024-03）。
+
 ## 2026-10-24 · 首页 identity 胶囊统一右上角定位（T-20261024-02）
 
 **背景**：用户报「本地游客 / 登录·同步的位置太偏下了，应该要更加右上方」。根因：桌面端该胶囊被 v2 玻璃卡的 `position:relative`（`.identity.glass-capsule`，0,2,0）压过 modern 基座的 `absolute`（`.identity`，0,1,0），退回 hero v2 网格流 col2-row1 且被残留 `top:26px` 再下推，落在**顶栏下方 ~104px**；而 ≤800px 的 P6 补丁（`top:14px`）与刊物家族（`top:0`）又各有定位——三处不一致。

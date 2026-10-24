@@ -4,7 +4,9 @@
 > 本文件是**跨会话、跨 agent 共享**的项目长期记忆（git 可追踪）。单会话的过程记录写 `.workbuddy/memory/YYYY-MM-DD.md`。
 > 完整演化脉络见 [`docs/memory/TIMELINE.md`](docs/memory/TIMELINE.md)；决策理由见 [`docs/memory/DECISIONS.md`](docs/memory/DECISIONS.md)。
 
-最后更新：2026-09-29
+最后更新：2026-10-24
+
+> 2026-10-24 起：逐任务的细记录以 [`docs/agents/TASK-LEDGER.md`](docs/agents/TASK-LEDGER.md) 顶部为准，本区按批次归并。
 
 ---
 
@@ -17,12 +19,20 @@
 | 仓库 | `git@github.com:tripodxu/film-sort.git`（私有） |
 | 线上 | `sort.logicc.top` |
 | 技术栈 | React 19 + TypeScript + Vite（前端 SPA） / Cloudflare Workers + D1 + KV-free（后端全在 Worker） / Vitest + ESLint + Prettier |
-| 规模 | 536 commits（2026-09-06 → 2026-09-29，24 天，单人开发）；`worker/` + `src/` + `shared/` ≈ 39,600 行 TS/TSX；25 个 D1 migration |
+| 规模 | 631 commits（2026-09-06 → 2026-10-24，48 天，单人开发）；`worker/` + `src/` + `shared/` ≈ 40,000 行 TS/TSX（不含测试，精确数以 `wc -l` / `git rev-list --count` 为准）；28 个 D1 migration（0001 → 0027） |
 | 关键约束 | **全站零自建服务器**，所有能力必须能在 Cloudflare Workers（workerd）运行时内跑起来 |
 
 ---
 
-## 1. 活跃记录（最近 7 天，最新在最上）
+## 1. 活跃记录（最新在最上）
+
+### 2026-10-24 · 十月冲刺收束：增量升级 S1–S4+S5-1、性能 2.08x、两项 UI 整理与文档全面审计
+
+- **增量升级计划**（`docs/PLAN-ADDITIVE-UPGRADE.md`，T-20261017-01，S1–S4 均已上线验证）：S1 三算法模块（BT 偏好模型 / 自适应配对 / 比较指标）→ S2 第四排序模式 **adaptive**（`src/lib/adaptiveRanking.ts`，不新增持久化字段，名次区间由 decisionLog 重推）→ S3 深度比较页 **`/depth`**（DepthCompareView，旧 `/encounter` 一行未改）→ S4 第 12 套主题 **atlas 图册**（`src/styles/atlas.css`，旧 11 套逐像素零差异）→ S5 第 1 项 ARIA 语义补全。后续 `d47bd98` 把 `selectAdaptivePair` 单次取舍 20.3ms→9.7ms（golden 指纹不变）。
+- **主题菜单收纳**（T-20261024-01，`1fd8b09`）：12 主题单列 ~27 行 → settings-menu 同款「分组标签 + 双列 chip 网格」四组收纳 + Escape 关闭；样式锁 `.theme-menu-grid` 作用域，41 张截图关闭态零差异。
+- **identity 胶囊定位**（T-20261024-02，`5a0393c`）：首页「本地游客/登录·同步」桌面端被 v2 玻璃卡压回网格流（顶栏下 104px）→ 全宽度右上绝对定位（顶栏下 14px、右缘对齐图标列；`:not(.ed-hero)` 不波及刊物家族）。
+- **文档全面审计**（2026-10-24）：三组并行审计修复全仓文档漂移——PWA Phase 8 实为 2026-09-10 已上线（`76b290c`）但计划标 ⬜、BUNDLE-SPLIT 已完成标 🔄，均已改 ✅ 并归档 `docs/archive/`；MAP/CONVENTIONS 引用了不存在的 `payloadGuard.ts`（实为静态扫描测试，形状校验在 `plaza.ts` `plazaRoute`）已改；README API 三张表收敛为分类+指向 `docs/API.md`（消除 21 端点缺口漂移源）。
+- **十月上旬**（详见 TASK-LEDGER）：T-20261014-01 全量审查清账 9 子项全部线上验证；20 轮迭代（Three.js 摘包主包 gzip -28.4%、封面链/消歧记忆/详情字段翻译层等）；migration 0026 `poster_batch_stats`、0027 `comment_replies_index`。
 
 ### 2026-09-30 · 「其他」维度封面/详情错配修复（pageprops.page_image + 年份消歧）
 
@@ -70,19 +80,23 @@ T-20260930-02：用户清单（动物森友会 2020 / Inside 2016 / Journey 2012
 ```
 src/           前端 SPA：App.tsx（路由+全局状态编排）
   views/       HomeView / SetupView / SortingView / ProfileView / CompareView /
-               PlazaView / PlazaPostView / ShareView / SourceView
+               DepthCompareView（/depth）/ PlazaView / PlazaPostView / ShareView / SourceView
   components/  Poster / ArtworkDetail / RankingDetail / AiConfigDialog / ThemeSwitcher /
                OrbScene（Three.js 光球）/ FocusTrap / ErrorBoundary ...
-  lib/         ranking.ts（排序+比较算法） / profile.ts / profileSync.ts / notes.ts /
+  lib/         ranking.ts（排序+比较算法，四模式 quick/classic/precise/adaptive） /
+               adaptiveRanking.ts + preferenceModel.ts + adaptiveQueue.ts + compareMetrics.ts（S1/S2 增量算法）/
+               profile.ts / profileSync.ts / notes.ts / wrapped.ts（年度年鉴）/
                exportPng.ts / aiInsight.ts / typesafe.ts / similarity.ts / swipe.ts /
+               coverChoice.ts / coverMemory.ts / detailFields.ts / galleryStats.ts /
                theme.ts + themeRegistry.ts / layout.ts / useAuth / useSorting / useRouter
 worker/        Cloudflare Worker：index.ts 为路由总入口
   ai.ts  media.ts  douban.ts  doubanlist.ts  netease.ts  gdstudio.ts  other.ts
   plaza.ts  import.ts  account.ts  verification.ts  mailer.ts  og.ts  typesafe.ts
-  audit.ts  cachePurge.ts  qrTransactions.ts  outbound.ts  payloadGuard.ts  rateWindow.ts
-shared/        前后端共享：storedItem.ts（落库白名单唯一出口）
-migrations/    0001 → 0025，D1 schema
-scripts/       ui-shot.mjs / ui-diff.mjs / ui-contrast.mjs / ui-audit.mjs / ui-normalize.mjs
+  audit.ts  cachePurge.ts  qrTransactions.ts  outbound.ts  posterStore.ts  rateWindow.ts
+shared/        前后端共享：storedItem.ts（落库白名单唯一出口）+ posterKey.ts
+migrations/    0001 → 0027，D1 schema
+scripts/       gates.mjs（五道门禁聚合）/ ui-e2e.mjs（浏览器 E2E）/
+               ui-shot.mjs / ui-diff.mjs / ui-contrast.mjs / ui-audit.mjs / ui-normalize.mjs
 ```
 
 **三条不可绕过的主链路**（改任何一处都要跑通）：
@@ -105,22 +119,24 @@ scripts/       ui-shot.mjs / ui-diff.mjs / ui-contrast.mjs / ui-audit.mjs / ui-n
 | C7 | 522/418 等上游失败必须区分「网络失败」与「预算耗尽」 | 曾把网络失败误报为限流，导致音乐服务假死 |
 | C8 | 邮件生产环境缺配置必须 **fail-closed** | 不允许静默降级到开发兜底 |
 | C9 | 验证码 / OAuth exchange 必须一次性消费 | 重放风险（审计修复） |
-| C10 | 视觉改动走 270 张截图对比，且**构建期间不得截图** | `dist` 重建会让 ENOENT 杀死整轮 capture（204/270 惨案） |
+| C10 | 视觉改动按 `scripts/ui-shots*.json` 清单截图对比（当前共 41 张：主 8 + 主题 24 + editorial 8 + tall 1），且**构建期间不得截图** | `dist` 重建会让 ENOENT 杀死整轮 capture（204/270 惨案）；「270 张」是 2026-09-22 那轮的历史数字 |
 
 ---
 
 ## 4. 协作约定（人与 agent 共用）
 
 - **提交规范**：Conventional Commits 中文描述，`feat/fix/docs/chore/style/refactor/perf/test/ci/ops`；同一提交可并列 `feat(...)` + `fix(...)`。历史中格式曾不统一（`fix:` 与 `fix` 并存），新提交统一带冒号。
-- **五道门禁**（CI 与本地一致，缺一不可）：`npm run check` → `npm run lint` → `npm run format:check` → `npm test` → `npm run build`。
+- **五道门禁**（CI 与本地一致，缺一不可）：`npm run check` → `npm run lint` → `npm run format:check` → `npm test` → `npm run build`；本地聚合入口 **`npm run gates`**（`scripts/gates.mjs`，失败即停、退出码正确聚合），浏览器 E2E 用 **`npm run e2e [url]`**。
 - **发布节奏**：本地改完 → 提交 → 推送 → Cloudflare 自动部署 → **到 `sort.logicc.top` 线上实机验证** → 再进下一个 Phase。「未线上验证不标 ✅」是本项目铁律。
 - **文档同步**：功能变更必须同步 `README.md` / `docs/API.md` / `docs/FEATURES.md` / `docs/USAGE.md`；过时文档移入 `docs/archive/` 并加「已过时」横幅，不直接删。
 - **详细约定与踩坑档案**：[`docs/agents/CONVENTIONS.md`](docs/agents/CONVENTIONS.md)、[`docs/agents/PITFALLS.md`](docs/agents/PITFALLS.md)。
 
 ---
 
-## 5. 当前待办焦点（按优先级）
+## 5. 当前待办焦点（按优先级；进行中任务以 TASK-LEDGER 顶部为准）
 
-1. `docs/PLAN-OPTIMIZATION-SPRINT.md` Phase 6–8（Jev 预测分歧 / Wrapped 年度报告 / PWA 离线）
-2. `docs/ROADMAP.md` 的 Jev Phase 2（维基消歧 Choice）、Phase 3（广场 Noul 护栏）
-3. P2 打磨待办池（2026-09-27 全量审查遗留项）
+1. **S5 剩余项**（`docs/PLAN-ADDITIVE-UPGRADE.md` §10 下一步）：ProfileView rename 输入 `aria-label`、WorkEditor `label htmlFor/id`、rank 菜单 Escape、PlazaPostView `aria-pressed`；触控目标类需单独评估（改视觉，tol=0 纪律）。
+2. **Jev Phase 2 收尾**（`docs/ROADMAP.md`）：「让用户选」UI 已落地（CoverChoice + coverMemory，走规则候选端点），剩「band 触发 Jev Choice 判决」接入或撤销评估；Phase 3（Noul 护栏）/ Phase 4（Score 校准）⬜ 未开始。
+3. P2 打磨池残留（触控目标 44px、内联样式 token 化、CompareView 结构 D 项、`.plaza-search` 死类清理）。
+4. 工具/基线债：`docs/ui-baseline.json` 冻结在 2026-09-28（styles.css 已 1738→1909 行）需重立；`ui-shot.mjs` 补多步 steps；`.worktrees/p0-p1-hardening/` 遗留目录清理；`styles.css` ≤800px 段两条 `.identity` 死规则清理（T-20261024-02 台账登记）。
+5. FocusTrap 卸载时焦点归还触发元素（仓级组件语义，影响三处调用点）；封面链第 5 档「超时但前 4 档成功」运行时用例（现为源码扫描绊线覆盖）。

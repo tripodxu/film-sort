@@ -52,8 +52,8 @@
 - **2.18 年份过滤要收进共享键函数**：`normalizeYear` 只放行 1800–2200，《蒙娜丽莎》1503 在 API 层被丢弃，而前端兜底键仍拼 1503 → 两端键差一段，命中不了服务端行。键的每一段（含年份口径）都必须两端同源，不能只在服务端归一。
 - **2.19 部署后首几个请求会抖动，复测别拿一次结果下结论**：两次部署（e044093 / 4dcd622）后都出现过冷启动第一次请求摘错页（西遊記重播年、济南景点列表页、404），同一参数即刻重试即恢复正确。isolate 冷启动叠加上游 gsrsearch 排序抖动的复合现象——**线上复测同一参数至少跑 2～3 次**，全部一致才算验收；单次异常先重试再立案。
 - **2.20 白名单类事实必须查官方出处，抽样反推一定会漏** —— MediaWiki 合法缩略图宽度是 `$wgThumbnailSteps` = `20, 40, 60, 120, 250, 330, 500, 960, 1280, 1920, 3840`（出处 `https://w.wiki/GHai`）。我曾只测 `[60..1200]` 区间，据此写下「只有 6 个桶」的桶表，把 `20/40/1280/1920/3840` 五档全漏在测试范围外，直到逐档实测才纠正。配套三条：① **桶外宽度上游返 400**，body 原文 `Use thumbnail sizes listed on https://w.wiki/GHai`——502 只是自家 `/api/image` 代理 catch 后的呈现，别当偶发故障；② `iiurlwidth` 是**向上**取桶（官方原文：smallest step that has larger value than requested），所以旧的 `"600"` 实际拿到 **960px**；③ `iiurlwidth` **不放大**——原图窄于请求宽度时直返原图（带 `utm_content=thumbnail_unscaled`），所以下调桶宽只会让大图变小、对小原图无副作用。
-- **2.21 24h 边缘缓存连部署都清不掉：验证新代码必须用没缓存过的 key** —— `worker/media.ts:45` `POSTER_CACHE_TTL_MS = 24 * 60 * 60 * 1000`，成功的**错的**结果与 miss 同 TTL。本轮实测：代数 bump 后 Journey 2012 在线上返错图 manga logo，我清掉 D1 全部 16 行 gen4 行、再单删 `other|journey|journey|2012|4`，**线上仍返错图**——一度让我以为新代码没生效。而 `year=2014`/`2015`（从未缓存过的键）立刻返回正确封面。**教训：清 D1 ≠ 清缓存**；要判定「线上跑的是不是新代码」，换一个**从未被请求过的维度/年份组合**当探针，比反复 purge 可靠得多（对应 §2.17 的 D1 短路与本条的边缘缓存是两层叠加）。
-- **2.22 别把 `!important` 整宽当 bug 改** —— `src/styles.css:62-64` 把 `.collection-row .poster` / `.poster-small` 强制成 `width:100%!important;height:auto!important`，单卡实际宽 369–557px（容器 1120px ÷ 列数 2/3/4，`colCount` 存在 localStorage `art-rank:cols`）。`src/styles.css:56` 的注释「Collection Sticker Cards (source view only)」说明这是**设计**（贴纸卡要整宽无裁剪）。若只按「小缩略图却拉全尺寸原图」的表象去拆，会砸掉 source view 的既有版式——**动之前先找设计注释**。
+- **2.21 24h 边缘缓存连部署都清不掉：验证新代码必须用没缓存过的 key** —— `worker/media.ts`（`POSTER_CACHE_TTL_MS = 24 * 60 * 60 * 1000`，约 L54），成功的**错的**结果与 miss 同 TTL。本轮实测：代数 bump 后 Journey 2012 在线上返错图 manga logo，我清掉 D1 全部 16 行 gen4 行、再单删 `other|journey|journey|2012|4`，**线上仍返错图**——一度让我以为新代码没生效。而 `year=2014`/`2015`（从未缓存过的键）立刻返回正确封面。**教训：清 D1 ≠ 清缓存**；要判定「线上跑的是不是新代码」，换一个**从未被请求过的维度/年份组合**当探针，比反复 purge 可靠得多（对应 §2.17 的 D1 短路与本条的边缘缓存是两层叠加）。
+- **2.22 别把 `!important` 整宽当 bug 改** —— `src/styles.css` 顶部 base 区（约 L69-72）把 `.collection-row .poster` / `.poster-small` 强制成 `width:100%!important;height:auto!important`，单卡实际宽 369–557px（容器 1120px ÷ 列数 2/3/4，`colCount` 存在 localStorage `art-rank:cols`）。base 区的注释「Collection Sticker Cards (source view only)」说明这是**设计**（贴纸卡要整宽无裁剪）。若只按「小缩略图却拉全尺寸原图」的表象去拆，会砸掉 source view 的既有版式——**动之前先找设计注释**。
 
 ---
 
@@ -94,6 +94,10 @@
 - **4.11 通用选择器误伤** —— `.custom-suggestion > div { flex: 1 }` 拉伸了海报（海报也是 div）→ 加 `:not(.poster)`。
 - **4.12 `display: grid` 必须显式声明**（`display:block` base 会空化 `grid-template-columns`）。
 - **4.13 `setPointerCapture` 要守卫** —— 非活跃 pointer 事件会打断滑动链。
+- **4.14 emoji 要 `aria-hidden`**，图标统一收编 lucide 并带 `aria-label` / `aria-pressed`。
+- **4.15 原生 `title` 悬停延迟且触屏不可用** → 改 `data-tip` 即时浮层。
+- **4.16 `prefers-reduced-motion`** 不只是 CSS —— JS 行为（如 journey 平滑滚动）也要处理。
+- **4.17 触屏 tooltip 粘滞** → `hover: none` 时隐藏。
 - **4.18 媒体查询不加特异性** —— `@media` 内的 `.x{...}`（0,1,0）压不过媒体查询外的 `.x:nth-child(N){...}`（0,2,0），与代码顺序无关。editorial 移动端轮播曾因此泄漏桌面绝对定位（倾斜/推右 127px 巨间隙/错位）→ 用「后代前缀 + `:nth-child(n)`」抬到 (0,3,0)，hover 扩散覆写抬到 (0,4,0) 同分后来者胜。
 - **4.19 后置的同名基座规则会吞掉前置覆写** —— 基座 `.orb-hero-inner` 的 `grid-template-columns` 写在移动端媒体查询**之后**（L846），同名类 (0,1,0) 后来者胜，`.ed-hero-inner` 的单列覆写整个成死代码（实测 mobile 跑双轨 + 48px column-gap，轮播容器 438 = 486−48）。媒体查询内的结构覆写要么双类 `.a.a{}` 抬到 (0,2,0)，要么加后代前缀。**症状是「覆写在但没生效」，dump 盒模型（`getBoundingClientRect` + `scrollWidth`）一比就见分晓**。
   **主题块变体（P3 gallery 实测预防）**：新主题块追加在文件末尾，其 `[data-theme=x] .ranking-list>li{display:grid}`（0,2,1）会反过来压过**前面**的历史修复 `.ranking-list.reorder-list>li{display:flex}`（0,2,1）——手动重排行第 5 个子元素折进 92px 名次列。凡在文件尾部加主题块，先 grep 它触碰的类有没有「特异性相同的后置修复」，有就必须更高特异性把修复要回来（gallery 用 0,3,1 重排守卫 + 绊线）。
@@ -151,13 +155,9 @@
 - **4.64 JSDoc 里写路径通配符会提前终止整个文件的解析** —— 在块注释里写 `` `/api/*/detail` ``，其中的 `*/` 立刻闭合注释，剩下的正文被当代码解析 ⇒ esbuild 报 `Unterminated string literal`，**而报错位置在文件末行**（离真错 180 行以上），完全指不到地方。定位法：逐行前缀二分，对每个前缀跑 `esbuild.transform`，找**第一条硬错误**（本例报 `Expected "*/" to terminate multi-line comment` 于第 7 行）。通则：**「报错行号离错误很远」的第一反应是「我写的注释里有注释终止符」**，而不是去查语法树完整性；写路由通配符改用 `api/<kind>/detail` 或加引号说明。
 - **4.65 判空必须在 stringify 之前，这两步的顺序是语义不是风格** —— 我把旧 `.filter(([, value]) => value && …)` 翻译成「先 `String(value)` 再 `!text.trim()` 判空」，看着更统一，结果 `country: null` 变成界面上可见的「地区: null」（`String(null) === "null"`，`String(undefined) === "undefined"`，`[].join() === ""` 三种「缺失」都长得像值）。修法：新增 `isPresent(value)` 在 `stringifyValue()` 之前判，并**数组元素也要滤**——`["", null, "徐凯鑫"]` 直接 join 出 `、null、徐凯鑫`（前导顿号 + 字面量 null）。配套：`isPresent` 里 `0` 与 `false` 必须算**存在**，它们是有意义的值不是缺失。
 - **4.66 翻译后的标签会撞车，`key` 与 `label` 必须是两个字段** —— `author` 译成「作者」，而书籍接口的原始键就叫 `作者`（保底照印）⇒ 两个 `<dt>` 文本相同，`key={field.label}` 触发 React 重复 key，**错位复用 DOM**（表现为字段值串行、点错行）。这类撞车**只在保留「未知键保底」的设计下才可能出现**，也就是自己引入的。修法：`DetailField.key` 用**原始键名**（唯一），`label` 只给人看。通则：**任何「标签经过翻译的列表」，渲染用的 key 一律回原始标识**。
-- **4.67 可访问性属性是「声明」，不是「行为」** —— `role="dialog" aria-modal="true"` 写了两行，读屏软件据此宣布「这是一个模态」，但它**不产生任何行为**：焦点仍在触发按钮上、Tab 会走到弹窗背后的页面、Esc 什么也不会发生。写这两行的人以为自己在写「可访问的弹窗」，实际写的是「**可访问的弹窗的自我声明**」。本仓 `src/components/FocusTrap.tsx` 已实现 Esc / Tab 循环 / 首焦点三件事，而 `ArtworkDetail` 是全站**唯一**没接的模态（另两处 `src/App.tsx:2278` / `src/components/AiConfigDialog.tsx:166` 已接）⇒ 这不是「缺一个功能」，是「**已经有的东西漏接了**」。判据：**看到一个 a11y 属性时追问「它背后是谁在干活」**，答不上来它就是一句空话——而且是最容易骗过 review 的那种空话。同理「零浏览器可验」时要拆成「接线形状 ✅（离线可判）」+「行为 ❌（留红）」两栏，**不许合并成一行 ✅**。
+- **4.67 可访问性属性是「声明」，不是「行为」** —— `role="dialog" aria-modal="true"` 写了两行，读屏软件据此宣布「这是一个模态」，但它**不产生任何行为**：焦点仍在触发按钮上、Tab 会走到弹窗背后的页面、Esc 什么也不会发生。写这两行的人以为自己在写「可访问的弹窗」，实际写的是「**可访问的弹窗的自我声明**」。本仓 `src/components/FocusTrap.tsx` 已实现 Esc / Tab 循环 / 首焦点三件事，`ArtworkDetail` 曾是全站**唯一**没接的模态（另两处 `src/App.tsx` / `src/components/AiConfigDialog.tsx` 已接），已于 2026-10-02 迭代 11 接上（`<FocusTrap onEscape={onClose}>`）——教训保留：**看到一个 a11y 属性时追问「它背后是谁在干活」**，答不上来它就是一句空话——而且是最容易骗过 review 的那种空话。同理「零浏览器可验」时要拆成「接线形状 ✅（离线可判）」+「行为 ❌（留红）」两栏，**不许合并成一行 ✅**。
 
-
-- **4.14 emoji 要 `aria-hidden`**，图标统一收编 lucide 并带 `aria-label` / `aria-pressed`。
-- **4.15 原生 `title` 悬停延迟且触屏不可用** → 改 `data-tip` 即时浮层。
-- **4.16 `prefers-reduced-motion`** 不只是 CSS —— JS 行为（如 journey 平滑滚动）也要处理。
-- **4.17 触屏 tooltip 粘滞** → `hover: none` 时隐藏。
+（§4 完；4.14–4.17 已于 2026-10-24 归位至 4.13 与 4.18 之间）
 
 ---
 

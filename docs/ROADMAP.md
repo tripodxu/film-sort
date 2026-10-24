@@ -57,9 +57,9 @@ Jev 是 TypeSafe AI 的「System One」决策模型(2026-09-15 发布):输入 st
 - `GET /api/other/candidates` —— 无 key 可用的候选池诊断端点,把「为什么是这个 / 为什么不敢给」摊开,并给出结构化置信度(`exact`/`strong`/`shaky`/`weak` + 证据类型 `literal`/`alias`/`hint`);
 - `POST /api/ai/jev-disambiguate` —— Choice 多选一(2–255 选一),未配 key 返 400、上游失败附 `fallback: "rules"`。
 
-判决层接入(哪个 `band` 触发一次 Jev 调用、用户选择如何回写 D1)留给前端「让用户选」UI 那一轮。
+判决层接入(哪个 `band` 触发一次 Jev 调用、用户选择如何回写 D1)仍未做。原计划的触发时机「前端『让用户选』UI 那一轮」已于迭代 5/20 + 9/20 完成(`CoverChoice` + `coverMemory`,走规则候选端点 `/api/other/candidates`;`/api/ai/jev-disambiguate` 目前前端 0 调用)——剩余工作收敛为「band 触发 Jev Choice 替代/增强规则判决」,或评估撤销该子项。
 
-### Phase 3:广场内容护栏(Noul)
+### Phase 3 ⬜:广场内容护栏(Noul)
 
 发布帖子前同步检查(70ms 延迟可承受):
 
@@ -68,7 +68,7 @@ Jev 是 TypeSafe AI 的「System One」决策模型(2026-09-15 发布):输入 st
 
 命中时走现有的发布拦截 UI。当前广场无任何内容审核层,这是 Jev 在社交面上最直接的落点。
 
-### Phase 4:回环「真实张力」Score 校准
+### Phase 4 ⬜:回环「真实张力」Score 校准
 
 偏好回环(A→B→C→A)现按「多次一致才保留」的计数规则标记为真实张力。可换成 Score:state 塞完整冲突链与用户相关历史,打「这组矛盾反映真实品味 vs 噪声」的分,低置信度时安排更多复测。小改进,收益是标记更可信。
 
@@ -85,22 +85,18 @@ Jev 是 TypeSafe AI 的「System One」决策模型(2026-09-15 发布):输入 st
 
 ### A. 可访问性与键盘
 
+> 2026-10-24 修剪：以下条目已完成并从表中移除——CompareView/PlazaView 的 tablist 与组名、手动模式 checkbox aria-label、ranking-card-poster 的 role/tabIndex/键盘（以上 `79a84ff` S5 第 1 项）、ArtworkDetail 的 FocusTrap/Escape/audio aria-label（`03f1cbb` 迭代 11）、全局 IconButton aria-label（`src/views/IconButton.tsx` 已内置）。仍开放的条目如下。
+
 | 位置 | 问题 | 修法 |
 |---|---|---|
 | `ProfileView.tsx` rename 输入(~275) | 无 accessible label;`minHeight:'auto'` 与 44px 输入基线冲突 | 补 `aria-label`;min-height ≥36 |
 | `ProfileView.tsx` WorkEditor(~1167,1194) | `<label>` 无 htmlFor/id 关联,搜索框与手动文本域无标签 | 补 htmlFor/id 对 |
 | `ProfileView.tsx` rank 菜单(~418) | 菜单无 Escape 关闭 | backdrop onKeyDown Escape |
-| `CompareView.tsx`(~196,217) | mode/depth segmented 用 `role="tab"` 却无 tablist 父级 | 补 tablist 或改 aria-pressed |
-| `PlazaView.tsx` abilities/sort(~172,191) | 同上,tab 语义不完整 | 同上 |
-| `CompareView.tsx`(~268,388) | 手动模式 checkbox 无可访问名称 | `aria-label={collectionTitle}` |
 | `CompareView.tsx`(~500) | 对端导入输入 38px、busy 态只显示「…」 | 恢复 44px;显示「导入中…」 |
-| `CompareView.tsx`(~332,452) | `ranking-card-poster` 点击目标缺 role/tabIndex/键盘(与 ProfileView 不一致) | 补齐同款处理 |
 | `CompareView.tsx`(~1012) | `.comparison-row` `<button>` 内嵌 `.rank-clickable` 可点击 span——嵌套交互,键盘不可达 | 行改 div + 单元格各自按钮 |
 | `PlazaView.tsx`(~289) | 整卡 `role="button"` 内嵌真实 `<button>`(管理/排序)——嵌套交互 | 动作区移出 role 容器或 overlay link 模式 |
 | `PlazaPostView.tsx`(~863) | 点赞按钮无 `aria-pressed`、无 busy 防连点 | 补 aria-pressed + in-flight 禁用 |
-| `ArtworkDetail.tsx`(~108) | 弹窗仅点背景可关,无 Escape、无焦点陷阱/归还 | useEffect Escape + 焦点管理 |
-| `ArtworkDetail.tsx`(~153) | `<audio controls>` 无 accessible label | 补 `aria-label` |
-| 全局 | 图标按钮普遍只靠 `title` 提供名称(title 在触屏与部分 AT 上不可见) | 逐一补 `aria-label` |
+| FocusTrap(仓级组件) | 卸载时不把焦点归还打开弹窗的触发元素(影响三处调用点) | cleanup 记录 trigger 并归还 |
 
 ### B. 触控目标(<40px)
 
@@ -132,14 +128,13 @@ Jev 是 TypeSafe AI 的「System One」决策模型(2026-09-15 发布):输入 st
 | `PlazaPostView.tsx`(~1023) | 嵌套回复每层 `marginLeft:24` 无上限,深楼挤爆移动端 | 深度 ≥3 拍平或封顶缩进 |
 | `PlazaView.tsx`(~305) | `.plaza-search` 类无任何 CSS 规则(死类);搜索框下划线式样与广场卡片语言不符 | 定义 `.plaza-search` 或删类 |
 | `PlazaView.tsx`(~383) | 「加载更多」内联 `borderRadius:999` 绕过 token | 用 `--r-pill` |
-| `src/lib/profile.ts` 入口 | index chunk 1.07MB(qrcode/lucide/全应用),构建警告持续存在 | qrcode 仅分享页用 → `import()` 动态引入;评估 manualChunks |
 | `src/components/Poster.tsx`(~298) | cover-fallback(图标 + 9px 标题)在网格里观感弱 | 兜底卡视觉重设计(维持档案语言) |
+
+> 2026-10-24 修剪：原「index chunk 1.07MB」一行已解决并移除——qrcode 已动态引入、Three.js 已摘出主包（`50c9f53`，主包 gzip -28.4%；2026-10-17 时点 427.20 kB / gzip 142.83 kB），防线由 `src/ui-fixes.test.ts` 首屏依赖图绊线看守。
 
 ### E. i18n
 
-| 位置 | 问题 | 修法 |
-|---|---|---|
-| `ArtworkDetail.tsx`(~204) | `<dl>` 直接打印 API 键名作 `<dt>`(director/actors…),英文界面下中英混杂 | 已知键走 t() 字典,未知键保底 |
+> 2026-10-24 修剪：本组唯一条目（ArtworkDetail `<dl>` 打印 API 键名 / book 类字段中文化）已由 `03f1cbb` 迭代 11 完成——`src/lib/detailFields.ts` 翻译层（KNOWN_FIELDS 字典 + 未知键保底），不再单列。
 
 ---
 

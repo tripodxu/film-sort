@@ -15,7 +15,7 @@ npm test -- --run
 npm run build
 ```
 
-CI **只做检查，不部署**（步骤清单详见 `OPTIMIZATION.md` §7.1）。
+CI **只做检查，不部署**（步骤清单见 `.github/workflows/ci.yml`；本地聚合入口 `npm run gates`）。
 
 部署走 `wrangler`：
 
@@ -43,7 +43,7 @@ npx wrangler d1 migrations apply film-sort --local
 npx wrangler d1 migrations apply film-sort --remote
 ```
 
-`wrangler.jsonc` 的 `d1_databases` binding 保持 `DB`。`migrations/` 下现有 23 个迁移文件（编号 0001–0022，其中 0008 有两支），覆盖：匿名事件 + 挑战片单、旧版画像表、API 日志 + 管理会话/配置、账户体系（user_accounts/sessions/oauth/exchanges）、画像 v2 + 批注、云端清单（0021 重建为 1000 件上限）、分享短链、广场（帖子/点赞/留言/楼中楼/编辑历史/性能索引）、海报错误日志、Cookie 保险库、管理审计、海报地址侧表（0022）。
+`wrangler.jsonc` 的 `d1_databases` binding 保持 `DB`。`migrations/` 下现有 28 个迁移文件（编号 0001–0027，其中 0008 有两支，精确数字以 `ls migrations` 为准），覆盖：匿名事件 + 挑战片单、旧版画像表、API 日志 + 管理会话/配置、账户体系（user_accounts/sessions/oauth/exchanges）、画像 v2 + 批注、云端清单（0021 重建为 1000 件上限）、分享短链、广场（帖子/点赞/留言/楼中楼/编辑历史/性能索引）、海报错误日志、Cookie 保险库、管理审计、海报地址侧表（0022）、邮箱验证码（0023）、扫码事务（0024）、运行时索引（0025）、海报批次统计（0026）、评论回复索引（0027）。
 
 清理策略：Worker cron（每周一 03:00 UTC）自动清理 90 天前 `analytics_events`/`api_logs`、180 天前 `poster_errors`、过期的 `admin_sessions`/`user_sessions`/`oauth_exchanges`/`shared_links`。也可在 `/admin` 数据页签手动清理。
 
@@ -83,7 +83,7 @@ npx wrangler d1 migrations apply film-sort --remote
 
 ## 限流与安全
 
-- **两级限流**（`worker/index.ts` 的 `allowUpstreamRequest`）：先过 isolate 级窗口（键 `bucket:ip`，`RATE_WINDOW_MS` = 10 分钟，上界 5000 条 + 惰性清扫，见 `worker/rateWindow.ts`），再过 Edge Cache 计数（键 `https://rate-limit.art-rank.internal/<bucket>/<ip>`，`max-age=600`），后者让预算跨 isolate 可见。配额按 bucket：auth 30 / ai 8 / music_play 12 / music_lyric 12 / import 8 / netease 120 / douban 120 / other 20 / events 120 / posters 60 / share 30 / challenge 30。
+- **两级限流**（`worker/index.ts` 的 `allowUpstreamRequest`）：先过 isolate 级窗口（键 `bucket:ip`，`RATE_WINDOW_MS` = 10 分钟，上界 5000 条 + 惰性清扫，见 `worker/rateWindow.ts`），再过 Edge Cache 计数（键 `https://rate-limit.art-rank.internal/<bucket>/<ip>`，`max-age=600`），后者让预算跨 isolate 可见。**各桶配额的权威表见 `docs/API.md` 开篇**（含 ai/ai_jev 系列与 cache 桶；other 桶注意两档——海报失败上报 120、其他类别接口 20），此处不重复维护。
 - 安全头：CSP（img 白名单、script 含 cloudflareinsights 与 beacon hash）、`X-Frame-Options: DENY`、`frame-ancestors 'none'`、COOP、nosniff、referrer、permissions-policy。
 - 写接口同源校验（`assertSameOrigin`）；`POST /api/events` 事件名 + payload 键双白名单，不落 IP/标题/自由文本。
 - 边缘缓存：`fetch` 包装层只对 `GET /api/douban/top250`、`/api/douban/suggest`、`/api/posters`、`/api/image` 做 `caches.default` 读写（响应自带 TTL：top250 `max-age=900`、suggest `max-age=3600`、posters `86400`/空结果 `300`、image `86400`）；详情与列表接口通过响应头 `max-age=86400`/`3600` 交给 CDN；账号/广场/事件 `no-store`。服务端海报另有两级缓存与 D1 `poster_urls` 侧表，见 `ARCHITECTURE.md` §5.3。

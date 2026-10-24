@@ -1,6 +1,6 @@
 # MAP — 任务 → 文件路由表
 
-> **本文件是整个 agent 文档体系的核心。** 目的：让每个 agent 只读「与任务相关的那一两个文件」，而不是通读 39,600 行代码或 515 条 commit。
+> **本文件是整个 agent 文档体系的核心。** 目的：让每个 agent 只读「与任务相关的那一两个文件」，而不是通读约 40,000 行代码或 630+ 条 commit。
 > 用法：先在 §1 找到你的任务类型 → 跳到对应小节 → 只打开列出的文件。
 > 行号会漂移，**以符号名 / 路由字符串为准**，行号仅作初次定位的提示。
 
@@ -10,12 +10,12 @@
 
 | 我想找… | 去这里 |
 |---------|--------|
-| 某个 API 端点怎么实现的 | `worker/index.ts` 路由表（约 1822 行起，`if (url.pathname === ...)` 链） |
+| 某个 API 端点怎么实现的 | `worker/index.ts` 路由表（约 1880 行起，`if (url.pathname === ...)` 链） |
 | 某路由的业务逻辑 | 按前缀找对应模块：`/api/plaza/*`→`worker/plaza.ts`、`/api/netease/*`→`worker/netease.ts`、`/api/douban/*`→`worker/douban.ts`+`doubanlist.ts`、`/api/import/*`→`worker/import.ts`、`/api/account/*`→`worker/account.ts` |
 | 前端页面 | `src/views/*.tsx`（路由在 `src/lib/useRouter.ts` + `src/App.tsx`） |
-| 全局状态 / 事件编排 | `src/App.tsx`（2731 行，改动前先确认是否被 `useAuth` / `useSorting` / `useRouter` 接管） |
-| 样式与主题 | `src/styles.css`（1895 行，全令牌化）+ `src/styles/atlas.css`（第 12 套内置主题的变量块） |
-| 数据库表结构 | `migrations/0001..0025` + `docs/ARCHITECTURE.md` 的 Schema 节 |
+| 全局状态 / 事件编排 | `src/App.tsx`（2730 行，改动前先确认是否被 `useAuth` / `useSorting` / `useRouter` 接管） |
+| 样式与主题 | `src/styles.css`（1909 行，全令牌化）+ `src/styles/atlas.css`（第 12 套内置主题的变量块） |
+| 数据库表结构 | `migrations/0001..0027` + `docs/ARCHITECTURE.md` 的 Schema 节 |
 | 「什么能落库」 | `shared/storedItem.ts` —— **唯一出口** |
 | 排序 / 比较算法 | `src/lib/ranking.ts`（1278 行，四模式）+ `src/lib/adaptiveRanking.ts` / `preferenceModel.ts` / `adaptiveQueue.ts` / `compareMetrics.ts` |
 | 历史决策理由 | `docs/memory/DECISIONS.md` |
@@ -50,11 +50,11 @@
 | `src/lib/useSorting.ts` | 977 | 排序状态机：草稿、撤销、略过/暂放、Jev 代判挂钩、竞态守卫 |
 | `src/lib/adaptiveRanking.ts` | 274 | 自适应模式的「由决策重推」层：不新增持久化字段，模型/名次区间全部由 `decisionLog` 重算 |
 | `src/lib/preferenceModel.ts` | 462 | 在线 Bradley-Terry 能力模型（一步 Newton）与批量 `fitPreferenceModel`（坐标上升 MAP），输出 θ/σ 与名次区间 |
-| `src/lib/adaptiveQueue.ts` | 197 | 自适应选对：信息量 `p(1-p)(σ_i²+σ_j²)` + 对手覆盖度，冷却常量作入参 |
+| `src/lib/adaptiveQueue.ts` | 222 | 自适应选对：信息量 `p(1-p)(σ_i²+σ_j²)` + 对手覆盖度，冷却常量作入参；一遍扫描三级各保留当前最优（d47bd98 性能重写） |
 | `src/lib/compareMetrics.ts` | 243 | 比较页新指标：头部加权 τ、位置折扣一致度、bootstrap 置信区间、样本量收缩共识分（旧字段一个不删） |
 | `src/views/SortingView.tsx` | 417 | 对战界面（duel card）、键盘快捷键、滑动手势接入、自适应模式的名次区间条与信息量提示 |
 | `src/lib/swipe.ts` | — | 纯函数 `decideSwipe(dx, dy, threshold=56)`，滑动判定可单测 |
-| `src/views/CompareView.tsx` | 1191 | 相遇比较界面（`/encounter`）+ 三档深度；旧指标原样保留 |
+| `src/views/CompareView.tsx` | 1190 | 相遇比较界面（`/encounter`）+ 三档深度；旧指标原样保留 |
 | `src/views/DepthCompareView.tsx` | 415 | 深度比较页（`/depth`，只读）：收缩共识分 + 四格新指标 + 分歧作品点阵条 + 13 行旧指标对照 |
 
 **改这里前必读**：`docs/agents/PITFALLS.md` §3（异步覆盖与撤销一致性）、`docs/USAGE.md` 的排序模式章节（四模式）。**自适应模式的隐藏约束**：任何改动都必须保持「既有三模式执行路径逐字不变」，且不得往 `RankingState` 增加持久化字段（见 `docs/PLAN-ADDITIVE-UPGRADE.md` §10 的 S2 记录）。
@@ -65,13 +65,13 @@
 
 | 文件 | 行数 | 职责 |
 |------|------|------|
-| `src/App.tsx` | 2731 | 全局状态与事件编排；大视图已 `React.lazy` 拆包 |
+| `src/App.tsx` | 2730 | 全局状态与事件编排；大视图已 `React.lazy` 拆包 |
 | `src/lib/useRouter.ts` | 116 | URL 路径路由（`/`、`/catalog/source|setup|sorting`、`/encounter`、`/depth`、`/myself`、`/share/:code`、`/plaza/:id`）；`View` 联合扩容时会强制补全 `VIEW_PATH` / `VIEW_TITLE` 两个 Record |
 | `src/lib/useAuth.ts` | 545 | 登录态、云同步、会话代际 |
 | `src/views/SetupView.tsx` | 228 | 准备页：四种排序模式（简易/经典/精确/自适应）+ 三个动作（自行排序 / 仅保存不排序 / AI 快排） |
 | `src/views/SourceView.tsx` | 1810 | 来源与导入页（最大的视图） |
 | `src/views/ProfileView.tsx` | 1331 | 我的文化索引（品味年轮、榜单管理） |
-| `src/views/CompareView.tsx` | 1155 | 比较 |
+| `src/views/CompareView.tsx` | 1190 | 比较 |
 | `src/views/PlazaView.tsx` / `PlazaPostView.tsx` | 467 / 1174 | 广场列表 / 帖子详情 |
 | `src/views/ShareView.tsx` | 252 | 分享查看页 |
 | `src/views/HomeView.tsx` | 507 | 首页 |
@@ -85,8 +85,8 @@
 
 | 文件 | 行数 | 职责 |
 |------|------|------|
-| `src/styles.css` | 1286 | 全令牌化样式（545 var / 194 color-mix）；圆角 5 档、间距 8px 阶梯、阴影 2 级 |
-| `src/lib/theme.ts` | 54 | `data-theme` 切换与持久化 |
+| `src/styles.css` | 1909 | 全令牌化样式（589 行含 `var(--` / 204 行含 `color-mix(`，统计口径=按行计数）；圆角 5 档、间距 8px 阶梯、阴影 2 级 |
+| `src/lib/theme.ts` | 59 | `data-theme` 切换与持久化（THEMES 12 套） |
 | `src/lib/themeRegistry.ts` | 383 | 插拔主题包注册表（规范见 `docs/THEME-PACKS.md`） |
 | `src/lib/layout.ts` | — | `data-layout` 布局模式（与 theme 正交） |
 | `src/lib/orbEffects/` | — | 开场光球特效注册表（规范见 `docs/ORB-EFFECTS.md`） |
@@ -94,24 +94,23 @@
 | `scripts/ui-contrast.mjs` / `ui-audit.mjs` / `ui-normalize.mjs` | — | 对比度扫描 / 审计 / 字面量归一化（dry-run 优先、幂等） |
 | `docs/ui-baseline.json` / `docs/ui-contrast.json` | — | 冻结的基线与对比度档案 |
 
-**改这里前必读**：`docs/agents/PITFALLS.md` §4（8 条视觉陷阱，含「构建期间禁止截图」）、`docs/memory/EPISODES.md` E-20260922。
+**改这里前必读**：`docs/agents/PITFALLS.md` §4（视觉陷阱，含「构建期间禁止截图」）、`docs/memory/EPISODES.md` E-20260922。
 
 ---
 
 ### §2.4 Worker 接口 / 新增 API
 
-**路由总表在 `worker/index.ts` 约 1822 行起**，是一条 `if (url.pathname === ...)` 链。新增端点时：
+**路由总表在 `worker/index.ts` 约 1880 行起**，是一条 `if (url.pathname === ...)` 链。新增端点时：
 
 1. 在路由链里加分支；
 2. 业务逻辑放独立模块（`worker/<domain>.ts`），保持 `index.ts` 只做路由与编排；
-3. 请求体校验走 `worker/payloadGuard.ts`；
+3. 请求体校验在各业务模块内就近实现（如 `worker/plaza.ts` 的 `plazaRoute`）；**不存在独立的 `payloadGuard.ts` 模块**——`worker/payloadGuard.test.ts` 是「可落库字符串编码出口唯一性」的静态扫描护栏，形状契约另由 `plazaPayload.test.ts` 锁死；
 4. 限流走 `worker/rateWindow.ts`（各桶配额见 `docs/API.md`）；
 5. 若涉及外部请求，必须走 `worker/outbound.ts` 的 `fetchBounded`；
 6. 同步 `docs/API.md`。
 
 | 模块 | 职责 |
 |------|------|
-| `worker/payloadGuard.ts` | 请求形状校验 |
 | `worker/rateWindow.ts` | 限流窗口（Map 有上界 + 惰性清扫） |
 | `worker/outbound.ts` | 出站请求统一策略（SSRF 防线） |
 | `worker/og.ts` | `/share/:code`、`/plaza/:id` 的 OG 元注入 |
@@ -122,8 +121,8 @@
 
 ### §2.5 数据库 / migration
 
-- 迁移文件：`migrations/0001_initial.sql` → `0025_runtime_indexes.sql`。**新增迁移必须幂等可重复应用**（曾因非幂等导致远程迁移失败）。
-- 共享契约：`shared/storedItem.ts`（落库字段白名单唯一出口，289 行）、`shared/storedNotes.ts`（批注语义：未提供=保留 / 显式空=清空）。
+- 迁移文件：`migrations/0001_initial.sql` → `0027_comment_replies_index.sql`。**新增迁移必须幂等可重复应用**（曾因非幂等导致远程迁移失败）。
+- 共享契约：`shared/storedItem.ts`（落库字段白名单唯一出口，289 行，含批注编码 `encodeStoredNotes`：未提供=保留 / 显式空=清空；批注语义测试见 `shared/storedNotes.test.ts`）。
 - Schema 说明：`docs/ARCHITECTURE.md`。
 - 关键表：`user_profiles`、`user_accounts`、`user_collections`、`poster_urls`、`shared_links`、`plaza_posts`、`plaza_post_edits`、`plaza_comments`、`plaza_likes`、`api_logs`、`poster_errors`、`admin_audit`、`user_cookie_vault`、`oauth_bindings`、`oauth_exchanges`、`verification_codes`、`qr_transactions`、`user_sessions`。
 
@@ -156,7 +155,7 @@
 | `worker/typesafe.ts` | Jev（TypeSafe System One）REST 客户端：入参校验、30s 超时、错误映射 |
 | `src/lib/aiInsight.ts` | 前端 AI 点评客户端 |
 | `src/lib/typesafe.ts` | 前端 Jev 配置与请求（key 只存 localStorage） |
-| 端点 | `/api/ai/test`、`/api/ai/models`、`/api/insights`、`/api/ai/jev/test`、`/api/ai/jev-rank`、`/api/ai/jev-pick` |
+| 端点 | `/api/ai/test`、`/api/ai/models`、`/api/insights`、`/api/ai/jev/test`、`/api/ai/jev-rank`、`/api/ai/jev-pick`、`/api/ai/jev-disambiguate`（判决层未接前端，见 ROADMAP Phase 2） |
 | 限流桶 | `ai_jev_test` 5 / `ai_jev` 10 / `ai_jev_pick` 60（次/10 分钟） |
 
 **四原则**（`docs/memory/DECISIONS.md` D-20260928-01）：key 不内置 / 只做决策不做生成 / 必须可降级 / 非关键路径先行。
@@ -189,7 +188,7 @@
 ### §2.10 测试
 
 - 框架 Vitest（`vitest.config.ts`），测试就近放置：`src/lib/*.test.ts`、`worker/*.test.ts`、`shared/*.test.ts`。
-- 代表性大测试：`src/lib/profile.test.ts`（763 行）、`ranking.test.ts`（475）、`aiInsight.test.ts`（373）、`worker/plazaIntegrity.test.ts`、`worker/outbound.test.ts`。
+- 代表性大测试：`src/lib/profile.test.ts`（763 行）、`ranking.test.ts`（508）、`aiInsight.test.ts`（373）、`worker/plazaIntegrity.test.ts`、`worker/outbound.test.ts`。
 - 契约类测试是本项目特色：`outbound.test.ts`（出站安全契约）、`payloadGuard`、`plazaPayload`、`typesafe.test.ts`、`typesafe`(worker) —— 安全与形状契约优先用单测锁死。
 
 ---
@@ -222,8 +221,8 @@
 
 | ❌ 反模式 | ✅ 正确做法 |
 |-----------|------------|
-| 开工前通读 `src/App.tsx` 2539 行 | 先 `grep` 符号名，只读相关函数 |
-| 通读 515 条 git log 了解背景 | 查 `docs/memory/TIMELINE.md` 或 `git log --grep=<关键词>` |
+| 开工前通读 `src/App.tsx` 2700+ 行 | 先 `grep` 符号名，只读相关函数 |
+| 通读 630+ 条 git log 了解背景 | 查 `docs/memory/TIMELINE.md` 或 `git log --grep=<关键词>` |
 | 想当然地按 Node.js 能力写代码 | 平台能力在 workerd 上实测（PBKDF2 100k 教训） |
 | 直接改 `styles.css` 的硬编码色值 | 先确认是否已提升为 token；新色必须走 token |
 | 在多个地方判定"这个图片域名安全吗" | 只改 `allowedImage()` |

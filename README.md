@@ -82,12 +82,13 @@ ART/RANK 把"从看过、读过、听过的作品里排出自己的 Top N"拆成
 
 ### 管理后台 (`/admin`)
 
-密码通过 `ADMIN_PASSWORD` 环境变量或 D1 `admin_config` 表设定（可在数据页签修改 DB 密码）。看板分四个页签：
+密码通过 `ADMIN_PASSWORD` 环境变量或 D1 `admin_config` 表设定（可在数据页签修改 DB 密码）。看板分五个页签：
 
 - **概览**：访问统计、14天趋势图、媒介分布饼图、API 调用与错误记录、海报失败与聚合、最近用户事件、系统状态。
 - **用户**：账户列表（禁用/恢复、删除画像或云端清单、删除账户、重置密码），「查看」打开用户数据抽屉——完整画像渲染（各维度榜单奖牌排名+海报缩略图）、全部批注、云端清单、活跃会话数与 OAuth 绑定。
 - **广场（最高管理权限）**：全量帖子列表（含隐藏帖），按媒介筛选、按标题/昵称/邮箱搜索、分页；支持查看完整详情（榜单内容+全部评论）、隐藏/恢复帖子、删除任意帖子（原子清理评论与点赞）与任意评论（连同回复并修正计数）。
 - **数据**：D1 全表存储统计、会话与链接管理（强制下线全部用户、清理过期分享链接、修改管理密码）、日志清理、分级数据重置与管理操作审计日志。
+- **缓存**：服务端缓存状态查看（分类代次）与清除（对接 `/api/admin/cache/status|clear`）。
 
 **分级数据重置**（全部不可恢复，三重防护）：`analytics`（运行数据）/ `plaza`（广场内容）/ `shares`（分享短链）/ `accounts`（全部账户及用户内容，最高危）。执行需精确输入确认短语 `RESET` 并重新验证管理员密码；所有重置与危险操作均写入审计日志。建议重置前用 `wrangler d1 export` 备份。
 
@@ -121,8 +122,8 @@ ART/RANK 把"从看过、读过、听过的作品里排出自己的 Top N"拆成
 
 | 按钮 | 链接格式 | 行为 |
 |------|----------|------|
-| **比较链接** | `/encounter?payload=<8–12位短码>` | 对方打开直接进入比较界面 |
-| **分享链接** | `/share/<8–12位短码>` | 对方打开进入查看页面，展示榜单内容 |
+| **比较链接** | `/encounter?payload=<12位短码>` | 对方打开直接进入比较界面 |
+| **分享链接** | `/share/<12位短码>` | 对方打开进入查看页面，展示榜单内容 |
 
 两种链接在「我的文化索引」和「相遇」页面均可生成，均包含批注数据。画像整体（多维度）分享按钮位于「我的文化索引」页面右上角（「分享链接」胶囊按钮，与「添加画像批注」并排），单个榜单的分享/比较链接在该榜单标题行操作区。「比较链接」按钮复制的是 `/encounter?payload=<短码>` 比较链接（对方打开直接进入比较界面），「分享链接」按钮复制的是 `/share/<短码>` 查看链接。
 
@@ -152,7 +153,7 @@ ART/RANK 把"从看过、读过、听过的作品里排出自己的 Top N"拆成
 - **榜单详情弹窗优化**：共同作品和比较界面点击排名打开的详情弹窗，前三名显示金银铜牌奖牌；每个作品显示批注（📝）；点击海报可打开作品详情。
 - 导出格式：JSON、TXT、Markdown、CSV、PNG（五套版式：编辑 Editorial / 领奖台 Podium / 拼贴 Collage / 胶片 Filmstrip / 极简 Minimal；PNG 跟随当前主题配色，2x 高清）。
 - **年度年鉴 PNG**：印刷年鉴风格的年度报告卡——媒介占比、年代分布、榜单速览一键成图（跟随主题配色）；有进行中排序时自动附上取舍次数与「最纠结的一对」。
-- **十二套内置主题**（主题菜单四组双列 chip 网格收纳：「经典 / 新系列」两组 + 开场特效 + 布局，Esc 可关）——经典七套：现代（默认深色玻璃）/ 复古纸感 / 极简 / 简约 / 古典 / 赛博朋克 / 纸上擂台；新系列五套（组件级差异主题，`docs/PLAN-ui-modernization.md`）：刊物 / 刊物暗色（杂志排印 + 海报堆叠 hero）/ 极光（玻璃 2.0 + 极光绸带特效）/ 画廊（Bento 画像页 + 卡片墙翻转）——顶栏调色板切换，选择持久化，全站设计令牌驱动（非简单换色）。
+- **十二套内置主题**（主题菜单四组双列 chip 网格收纳：「经典 / 新系列」两组 + 开场特效 + 布局，Esc 可关）——经典七套：现代（默认深色玻璃）/ 复古纸感 / 极简 / 简约 / 古典 / 赛博朋克 / 纸上擂台；新系列五套（组件级差异主题，`docs/PLAN-ui-modernization.md`）：刊物 / 刊物暗色（杂志排印 + 海报堆叠 hero）/ 极光（玻璃 2.0 + 极光绸带特效）/ 画廊（Bento 画像页 + 卡片墙翻转）/ 图册（冷灰纸感变量型主题，2026-10-18）——顶栏调色板切换，选择持久化，全站设计令牌驱动（非简单换色）。
 - 点击作品可查看详情弹窗（海报、评分、元数据）；音乐支持试听。
 
 ### URL 路由
@@ -165,10 +166,12 @@ ART/RANK 把"从看过、读过、听过的作品里排出自己的 Top N"拆成
 | `/catalog/sorting` | 排序中 | 1v1 取舍界面 |
 | `/encounter` | 相遇 | 与他人比较 |
 | `/encounter?payload=<code>` | 相遇 | 通过分享链接导入对方索引 |
+| `/depth` | 深度比较 | 比较页的只读第二读法：收缩共识分 + 新指标（2026-10-17） |
 | `/myself` | 我的文化索引 | 已完成的榜单和画像 |
 | `/share/:code` | 查看分享 | 查看他人分享的榜单/画像 |
 | `/plaza` | 广场 | 公共信息流，浏览和互动 |
 | `/plaza/:id` | 广场帖子详情 | 单个帖子详情 + 留言 |
+| `/admin` | 管理后台 | 密码登录后进入 |
 
 - 所有页面支持浏览器前进/后退、直接输入路径访问、书签收藏。
 - `?lang=en` 参数在页面切换时保留。
@@ -187,7 +190,8 @@ ART/RANK 把"从看过、读过、听过的作品里排出自己的 Top N"拆成
 
 ### 导航栏
 
-- 右上角固定工具栏：中英文切换、广场入口、GitHub 项目链接（图标按钮，点击跳转仓库）、用户按钮（未登录显示「登录/同步」，已登录显示「同步/退出」）。
+- 主导航（顶栏中部）：清单 / 相遇 / 深度 / 广场 / 我的文化索引（登录后显示第 5 项）。
+- 右上角固定工具栏：设置（齿轮下拉）、主题（调色板下拉，四组 chip 网格）、中英文切换、GitHub 项目链接（图标按钮，点击跳转仓库）、用户按钮（未登录显示「登录/同步」，已登录显示「同步/退出」）。
 - GitHub 图标使用 Lucide `Github` 图标，hover 显示 tooltip。
 
 ### UI/UX
@@ -207,10 +211,10 @@ ART/RANK 把"从看过、读过、听过的作品里排出自己的 Top N"拆成
 
 「夜间档案馆 / Nocturne Archive」（2026-09 全站焕新，详见 `CHANGELOG.md` 与 `docs/archive/PLAN-ui-refresh.md`）：
 
-- **主题人格**（非色彩差异 ≥2/主题）：现代·夜间档案馆 / 复古·旧式印刷所（直角+宋体主导+信纸纹）/ 极简·瑞士网格 / 简约·亲和蓝 / 古典·文学博物馆（双线框+印章红）/ 赛博·终端 HUD（mono+发光）；2026-09-28 UI 现代化新增组件级差异新系列四套，2026-10-18 S4 再补一套变量型主题「图册」（冷灰纸感 + 青灰绿单一强调色 + 更紧圆角 + 页码式序号块）：刊物·刊物暗色（杂志排印+L3 海报堆叠/回合水印）/ 极光（玻璃 2.0+胶囊导航+极光绸带 orb）/ 画廊（Bento 画像页+雷达图+卡片墙翻转）；
+- **主题人格**（非色彩差异 ≥2/主题）：经典七套——现代·夜间档案馆 / 复古·旧式印刷所（直角+宋体主导+信纸纹）/ 极简·瑞士网格 / 简约·亲和蓝 / 古典·文学博物馆（双线框+印章红）/ 赛博·终端 HUD（mono+发光）/ 纸上擂台（编辑纸擂台，插拔主题包样板）；2026-09-28 UI 现代化新增组件级差异新系列四套，2026-10-18 S4 再补一套变量型主题「图册」（冷灰纸感 + 青灰绿单一强调色 + 更紧圆角 + 页码式序号块）：刊物·刊物暗色（杂志排印+L3 海报堆叠/回合水印）/ 极光（玻璃 2.0+胶囊导航+极光绸带 orb）/ 画廊（Bento 画像页+雷达图+卡片墙翻转）/ 图册；
 - **可选布局模式**（顶栏「主题」菜单内切换，与主题正交）：`archive` 档案（默认，逐像素不变）/ `journey` 胶片盘（横滚卷轴）/ `bento` 档案格（非均匀网格）——用户自由开关，唯一功能新增；
 - 无障碍与触控：对战卡四态规格（非单色线索）、行级 hover 分级治理、44px 触控基线、`prefers-reduced-motion` 全局豁免、内滚区误触防护；
-- 工程护栏：`src/ui-fixes.test.ts` **26 条**回归绊线锁定全部已修事实（测试总数 303）。
+- 工程护栏：`src/ui-fixes.test.ts` 等文件的源码扫描式回归绊线持续累计锁定已修事实（测试随 CI 增长，2026-10-24 时点 63 个测试文件 / 855 passed / 9 skipped）。
 
 ## 快速开始
 
@@ -263,7 +267,7 @@ npx wrangler login
 npx wrangler d1 create film-sort
 # 记下 database_id，填入 wrangler.jsonc
 
-# 应用数据库迁移（共 25 个，最新 0025_runtime_indexes 运行时索引）
+# 应用数据库迁移（共 28 个，最新 0027_comment_replies_index 广场评论回复索引）
 npx wrangler d1 migrations apply film-sort --remote
 
 # 部署
@@ -289,6 +293,8 @@ npm run deploy
 | `MUSIC_PROXY_URL` | 否 | Worker 使用的音乐上游代理地址，例如 Deno Deploy 地址 |
 | `MUSIC_PROXY_KEY` | 否 | 音乐代理共享密钥；与 Deno Deploy 的 `MUSIC_PROXY_KEY` 保持一致 |
 
+**邮件发送（注册验证码，生产环境缺配置时 fail-closed）**：`RESEND_API_KEY`（Resend 通道）/ `MAIL_COLA_KEY`（Cola 通道），以及 `MAIL_FROM`、`MAIL_SMTP_EMAIL` / `MAIL_SMTP_CODE` / `MAIL_SMTP_TYPE`（SMTP 通道）。另有 `ENVIRONMENT`（生产标识）与可选 `ANYSEARCH_API_KEY`（搜索代理）。完整清单见 `docs/API.md` 文末与 `docs/ARCHITECTURE.md` 环境变量节。
+
 > 不要把密钥写入 `wrangler.jsonc`、前端代码或仓库。
 
 ---
@@ -301,7 +307,8 @@ film-sort3/
 │   ├── App.tsx                    # 主应用：全局状态、路由分发、弹窗
 │   ├── main.tsx / types.ts / styles.css
 │   ├── views/                     # 视图层：HomeView / SourceView / SetupView / SortingView
-│   │                              # ProfileView / CompareView / PlazaView / PlazaPostView / ShareView
+│   │                              # ProfileView / CompareView / DepthCompareView（/depth）
+│   │                              # PlazaView / PlazaPostView / ShareView
 │   ├── components/                # Poster / OrbScene / DeferredOrb / ArtworkDetail / RankingDetail
 │   │                              # SettingsMenu / ThemeSwitcher / ExpandableNote / FocusTrap / ErrorBoundary
 │   ├── data/                      # media.ts（媒介定义与内置榜单）/ catalog.ts（电影目录数据）
@@ -322,7 +329,7 @@ film-sort3/
 │   └── imdb-posters.json          # IMDb 海报手动映射表
 │
 ├── shared/storedItem.ts           # 前端与 Worker 共用的「可落库白名单」与编码出口
-├── migrations/                    # D1 迁移，共 23 个（0001 … 0022_poster_urls）
+├── migrations/                    # D1 迁移，共 28 个（0001 … 0027_comment_replies_index）
 ├── docs/                          # 见下方「文档索引」
 ├── gd-proxy/1.ts                  # 部署在 Deno Deploy 的音乐上游透明代理
 ├── package.json / tsconfig*.json / vite.config.ts / vitest.config.ts
@@ -371,111 +378,22 @@ film-sort3/
 
 ## API 端点
 
-### 公开接口
+> **完整清单（全部端点、参数、限流桶配额、错误码）以 [`docs/API.md`](docs/API.md) 为唯一事实源**，此处只给分类速览，避免两处重复维护漂移（2026-10-24 审计前此处曾落后 21 个端点）。
 
-| 方法 | 路径 | 说明 |
-|------|------|------|
-| GET | `/api/health` | 健康检查 |
-| GET | `/api/stats` | 公开统计 |
-| GET | `/api/posters?q=&en=&type=&year=` | 海报 URL（movie/book/music） |
-| GET | `/api/image?url=` | 图片代理 |
-| GET | `/api/douban/top250?limit=` | 电影 Top250 |
-| GET | `/api/douban/books/top250?limit=` | 书籍 Top250 |
-| GET | `/api/douban/music/top250?limit=` | 音乐 Top250 |
-| GET | `/api/douban/suggest?q=` | 电影 suggest |
-| GET | `/api/douban/books/suggest?q=` | 书籍 suggest |
-| GET | `/api/book/list?key=&page=` | 书籍搜索 |
-| GET | `/api/movie/list?key=&page=` | 影视搜索 |
-| GET | `/api/music/list?key=&page=` | 音乐搜索 |
-| GET | `/api/book/detail?name=&year=&creator=` | 书籍详情（豆瓣官方简介优先，维基消歧打分兜底） |
-| GET | `/api/movie/detail?name=&year=&creator=` | 影视详情（同上） |
-| GET | `/api/music/detail?name=&year=&creator=` | 音乐详情（同上） |
-| GET | `/api/other/list?key=` | 其他类别搜索（维基 gsrsearch 评分择优 + pageprops.page_image 封面） |
-| GET | `/api/other/detail?name=&year=` | 其他类别详情（维基中英双语；可选 year 参与消歧，详见 docs/API.md） |
-| GET | `/api/artwork/detail?kind=film|book|music|other&q=` | 统一作品详情入口 |
-| POST | `/api/insights` | AI 点评（榜单/画像/比较三场景；内置或用户自带 API 双通道，详见 docs/API.md） |
-| POST | `/api/ai/test` | 测试用户 AI 配置（探活 + 协议探测回显） |
-| POST | `/api/ai/models` | 获取用户 AI 服务的模型列表（供设置面板点选） |
-| GET | `/api/music/play?q=` | 音乐试听地址代理 |
-| POST | `/api/poster-errors/client` | 浏览器端海报加载失败上报 |
-| POST | `/api/share` | 创建分享短链（可选 expires_days：7/30/90/365 天，返回 url/compareUrl/expires_at） |
-| GET | `/api/share/:code` | 获取分享内容（profile + notes + expires_at） |
-| GET | `/api/import/doulist?url=` | 导入豆瓣豆列（登录用户，IP 限流） |
-| GET | `/api/import/douban-list?url=` | 统一豆瓣导入：自动识别豆列 / subject_collection 清单 / mine 想看已看（登录用户） |
-| GET | `/api/import/netease?url=` | 导入网易云歌单（登录用户，支持连接 Cookie 导入私有歌单；v6+v3 分层链，开放接口→weapi 降级+退避） |
-| GET | `/api/import/netease/mine` | 我的网易云歌单列表（需扫码连接） |
-| GET | `/api/netease/user-playlists?uid=` | 按用户 ID 浏览任意用户的全部歌单（含收藏；开放接口→weapi 分层降级，登录用户） |
-| GET | `/api/netease/qr/issue` | 生成网易云扫码登录二维码（登录用户；开放接口优先/weapi 兜底，返回 ttl） |
-| GET | `/api/netease/qr/poll?unikey=` | 轮询扫码状态 waiting/scanned/confirmed/expired/risk |
-| GET | `/api/netease/status` | 网易云连接状态（含账号昵称头像） |
-| POST | `/api/netease/cookie` | 粘贴 Cookie 连接网易云（校验 MUSIC_U 有效后加密入库） |
-| POST | `/api/netease/disconnect` | 断开网易云连接并删除加密 Cookie |
-| GET | `/api/douban/qr/issue` | 生成豆瓣扫码登录二维码（服务端代理图片，返回 qr_image/ttl） |
-| GET | `/api/douban/qr/poll?code=` | 轮询豆瓣扫码状态 |
-| GET | `/api/douban/status` | 豆瓣连接状态（含昵称头像） |
-| POST | `/api/douban/cookie` | 粘贴 Cookie 连接豆瓣（校验 dbcl2 有效后加密入库） |
-| POST | `/api/douban/disconnect` | 断开豆瓣连接并删除加密 Cookie |
-
-### 用户接口
-
-| 方法 | 路径 | 说明 |
-|------|------|------|
-| POST | `/api/account/register` | 注册 |
-| POST | `/api/account/login` | 登录 |
-| POST | `/api/account/logout` | 退出 |
-| GET | `/api/account/profile` | 读取画像 |
-| PUT | `/api/account/profile` | 保存画像 |
-| PUT | `/api/account/nickname` | 修改昵称 |
-| GET | `/api/account/providers` | 可用 OAuth 提供商 |
-| GET | `/api/account/oauth/:provider` | 发起 OAuth |
-| GET | `/api/account/oauth/callback` | OAuth 回调 |
-| GET | `/api/account/collections` | 获取云端清单 |
-| POST | `/api/account/collections` | 保存云端清单 |
-| DELETE | `/api/account/collections/:id` | 删除云端清单 |
-
-### 广场接口
-
-| 方法 | 路径 | 说明 |
-|------|------|------|
-| GET | `/api/plaza/posts?page=&limit=&kind=&sort=&q=` | 获取广场帖子列表（分页、媒介筛选、最新/最热服务端排序、关键词搜索；瘦身响应仅含前三名与批注数、is_author） |
-| GET | `/api/plaza/posts/:id` | 获取单个帖子详情（含留言、编辑计数/最后编辑时间、当前用户 is_author/liked_by_me） |
-| POST | `/api/plaza/posts` | 发布帖子到广场（ranking 榜单 / profile 画像，需登录） |
-| PUT | `/api/plaza/posts/:id` | 编辑自己的帖子（标题/描述/批注/排序 + edits 操作明细，需登录 + 所有权） |
-| GET | `/api/plaza/posts/:id/edits` | 获取帖子编辑历史（仅作者） |
-| POST | `/api/plaza/posts/:id/visibility` | 作者隐藏/恢复自己的帖子（隐藏后仅自己可见，写入编辑历史） |
-| DELETE | `/api/plaza/posts/:id` | 删除自己的帖子（需登录 + 所有权，级联清理编辑历史/评论/点赞） |
-| POST | `/api/plaza/posts/:id/like` | 点赞/取消点赞（需登录） |
-| GET | `/api/plaza/posts/:id/comments` | 获取留言列表 |
-| POST | `/api/plaza/posts/:id/comments` | 发表留言（需登录） |
-| DELETE | `/api/comments/:id` | 删除自己的留言 |
-
-### 管理接口（需 ADMIN_PASSWORD）
-
-| 方法 | 路径 | 说明 |
-|------|------|------|
-| POST | `/api/admin/login` | 管理员登录 |
-| GET | `/api/admin/dashboard` | 仪表盘数据 |
-| GET | `/api/admin/accounts` | 用户列表 |
-| DELETE | `/api/admin/accounts/:id` | 删除用户 |
-| POST | `/api/admin/accounts/:id/reset-password` | 重置密码 |
-| POST | `/api/admin/accounts/:id/disable` | 禁用账户 |
-| POST | `/api/admin/accounts/:id/restore` | 恢复账户 |
-| DELETE | `/api/admin/accounts/:id/profile` | 删除用户画像 |
-| DELETE | `/api/admin/accounts/:id/collections` | 删除用户云端清单 |
-| GET | `/api/admin/poster-errors?days=7` | 海报错误查询 |
-| GET | `/api/admin/poster-errors/export?days=30` | 海报错误 CSV 导出 |
-| POST | `/api/admin/logs/clean` | 日志清理 |
-| GET | `/api/admin/plaza/posts` | 广场帖子管理列表（含隐藏帖、可筛选搜索） |
-| GET | `/api/admin/plaza/posts/:id` | 帖子完整详情（含全部评论与作者邮箱） |
-| DELETE | `/api/admin/plaza/posts/:id` | 删除任意帖子（原子清理评论与点赞） |
-| POST | `/api/admin/plaza/posts/:id/visibility` | 隐藏/恢复帖子 |
-| DELETE | `/api/admin/plaza/comments/:id` | 删除任意评论（含其回复并修正计数） |
-| GET | `/api/admin/accounts/:id/detail` | 用户完整数据（画像/批注/清单/会话/OAuth） |
-| POST | `/api/admin/reset` | 分级数据重置（需确认短语 RESET + 管理员密码重验） |
-| GET | `/api/admin/audit` | 管理操作审计日志 |
-| POST | `/api/admin/change-password` | 修改管理后台密码（仅 DB 密码模式） |
-| POST | `/api/admin/sessions/revoke-all` | 强制下线全部用户 |
-| POST | `/api/admin/links/clean-expired` | 清理过期分享链接 |
+| 分类 | 代表端点 | 说明 |
+|------|----------|------|
+| 健康 / 统计 | `GET /api/health`、`GET /api/stats` | 健康检查、公开统计 |
+| 海报与详情 | `GET /api/posters`、`GET /api/image`、`GET /api/{book,movie,music,other}/detail`、`GET /api/artwork/detail`、`POST /api/posters/batch` | 三级来源取图、图片代理、统一作品详情、批量海报（含 outcome 三态） |
+| 搜索与榜单 | `GET /api/{book,movie,music,other}/list`、`GET /api/douban/top250` 系列、`GET /api/douban/suggest` 系列 | 各媒介搜索与 Top250 |
+| AI（点评 / Jev） | `POST /api/insights`、`POST /api/ai/test`、`POST /api/ai/models`、`POST /api/ai/jev/{test,rank,pick,disambiguate}` | AI 点评双通道；Jev 决策四端点（key 只存浏览器） |
+| 导入 | `GET /api/import/{doulist,douban-list,netease}`、`GET /api/import/netease/mine` | 豆列 / 想看已看 / 歌单导入（登录用户） |
+| 网易云 / 豆瓣连接 | `GET /api/{netease,douban}/qr/{issue,poll}`、`GET|POST /api/{netease,douban}/{status,cookie,disconnect}` | 扫码 / Cookie 连接与状态 |
+| 账户 | `POST /api/account/{register,login,logout,send-code,change-password}`、`GET|PUT /api/account/profile`、`GET|POST|DELETE /api/account/collections`、`GET /api/account/oauth/*`、`GET /api/auth/config` | 注册（含邮箱验证码）、登录、画像与清单云同步、OAuth |
+| 分享 | `POST /api/share`、`GET /api/share/:code` | 短链创建与读取（12 位码，可选有效期） |
+| 广场 | `GET|POST|PUT|DELETE /api/plaza/posts*`、`POST /api/plaza/posts/:id/{like,visibility,comments}`、`DELETE /api/comments/:id` | 发布 / 编辑（差异记录）/ 隐藏 / 点赞 / 嵌套留言 |
+| 其他类别辅助 | `GET /api/other/candidates`、`POST /api/other/cover-choice`、`POST /api/poster-errors/client`、`POST /api/events`、`POST|GET /api/challenges*` | 消歧候选诊断、封面二选一裁决、失败上报、分析事件、挑战玩法 |
+| 管理（需 ADMIN_PASSWORD） | `POST /api/admin/login`、`GET /api/admin/dashboard`、`/api/admin/accounts*`、`/api/admin/plaza/*`、`/api/admin/{reset,audit,logs/clean,sessions/revoke-all,links/clean-expired,cache/*,ai/prompts}` | 五页签后台对应的全量管理端点（详见 docs/API.md 管理接口章） |
+| 缓存 | `POST /api/cache/clear` | 用户侧分类缓存清除 |
 
 ---
 
@@ -523,7 +441,7 @@ film-sort3/
 
 ## Agent 协作文档
 
-面向多 agent 协同与接力，让每个 agent **只读取与任务相关的文件**（全仓约 39,600 行代码 / 515 条 commit，不应全量阅读）：
+面向多 agent 协同与接力，让每个 agent **只读取与任务相关的文件**（全仓约 40,000 行代码 / 630+ 条 commit，不应全量阅读）：
 
 | 文件 | 作用 |
 |------|------|
@@ -540,7 +458,7 @@ film-sort3/
 | 文件 | 作用 |
 |------|------|
 | [`MEMORY.md`](MEMORY.md) | 项目长期记忆（git 追踪，跨 agent 共享）：身份、硬约束、协作约定、待办焦点 |
-| `docs/memory/TIMELINE.md` | 515 条 commit 按日倒序的演化时间线 |
+| `docs/memory/TIMELINE.md` | 全部 commit 按日倒序的演化时间线 |
 | `docs/memory/DECISIONS.md` | ADR 风格关键决策与理由（推翻旧决策保留推理链） |
 | `docs/memory/EPISODES.md` | 战役复盘 + 9 条跨战役通用教训 |
 

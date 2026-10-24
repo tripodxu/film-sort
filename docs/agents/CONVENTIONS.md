@@ -14,7 +14,7 @@
 | Lint | 只开两类规则：`react-hooks/recommended`（error）+ `@typescript-eslint/no-unused-vars`（warn，`_`/`caughtErrors` 豁免） |
 | 类型检查 | `tsc -b`（三份 tsconfig：app / worker / node） |
 | 测试 | Vitest，`environment: node`，匹配 `src/**`、`worker/**`、`shared/**` 下的 `*.test.ts` |
-| 门禁顺序 | `check` → `lint` → `format:check` → `test -- --run` → `build`（CI 与本地一致） |
+| 门禁顺序 | `check` → `lint` → `format:check` → `test -- --run` → `build`（CI 与本地一致）；本地聚合入口 **`npm run gates`**（失败即停），浏览器 E2E 用 **`npm run e2e [url]`** |
 
 **ESLint 只开两类的原因**（写在 `eslint.config.js` 注释里）：一次性全仓开火会产生成百上千条告警，把真正的信号淹掉。后续**按目录逐步收紧**，不要一次性放开。
 
@@ -23,7 +23,7 @@
 ## 2. 前端约定
 
 - **React 19 + Hooks**。历史上有过两处 Hook 违规（`604d331` 修复：`useMemo` 写在 map 回调里等），以及一次 Hook 提取引入的三处回归（`f62affa`：草稿无限写循环 / 自动同步无限 PUT / 登出保存竞态）——**这三处本来都能被 `react-hooks/recommended` 拦下**，所以该规则是 error 级。
-- **大视图必须懒加载**：`SourceView` / `ProfileView` / `CompareView` / `ShareView` / `PlazaPostView` 用 `React.lazy` + `Suspense`（对齐 `DeferredOrb` 模式）。新增大视图照此办理。
+- **大视图必须懒加载**：除 `HomeView` / `SortingView` 外的视图与重组件（`SourceView` / `SetupView` / `ProfileView` / `CompareView` / `DepthCompareView` / `ShareView` / `PlazaView` / `PlazaPostView` / `AiConfigDialog` / `RankingDetail` / `SettingsMenu`）均用 `React.lazy` + `Suspense`（以 `src/App.tsx` 顶部 lazy 声明为准）。新增大视图照此办理。
 - **全局状态集中在 `src/App.tsx`**，但已被 `useAuth` / `useSorting` / `useRouter` 分流；改状态前先确认归属，不要往 `App.tsx` 里堆新逻辑。
 - **Three.js 光球不在关键路径**：首屏用 `DeferredOrb`，不要把它拉回同步渲染。
 - **手势 / 判定逻辑抽成纯函数**（`src/lib/swipe.ts` 的 `decideSwipe`），便于单测；DOM 事件层只做转发。
@@ -33,8 +33,8 @@
 
 ## 3. Worker 约定
 
-- **`worker/index.ts` 只做路由与编排**，业务逻辑放独立模块。路由表是一条 `if (url.pathname === ...)` 链（约 1822 行起），新增分支时保持风格一致。
-- **请求体校验走 `worker/payloadGuard.ts`**，不要手写 `if (body.xxx)`。
+- **`worker/index.ts` 只做路由与编排**，业务逻辑放独立模块。路由表是一条 `if (url.pathname === ...)` 链（约 1880 行起），新增分支时保持风格一致。
+- **请求体校验就近在业务模块内实现**（如 `worker/plaza.ts` 的 `plazaRoute`），不要手写散落的 `if (body.xxx)`。不存在独立的 `payloadGuard.ts` 模块——`worker/payloadGuard.test.ts` 是「可落库字符串编码出口唯一性」的静态扫描护栏。
 - **限流走 `worker/rateWindow.ts`**（Map 有上界 + 惰性清扫，见 `9f36ae9`）。
 - **所有对外 fetch 走 `worker/outbound.ts` 的 `fetchBounded`**：精确 host 白名单 + `redirect: 'manual'` 逐跳复核 + 响应字节上限。
 - **错误要可区分**，不要统一吞成「失败」：网络失败 ≠ 上游限流 ≠ 上游风控返空 ≠ 参数错误。（`7f9550d` / `98430e7` 的教训：把 gdApi 网络失败当成预算耗尽，导致音乐服务假死。）
@@ -75,13 +75,13 @@
 
 ## 6. 视觉改动流程（改样式必读）
 
-1. **先确认是否已 token 化**：`src/styles.css` 已全面令牌化（545 var / 194 color-mix）。新颜色必须提升为 token，**不要写裸 hex**。
+1. **先确认是否已 token 化**：`src/styles.css` 已全面令牌化（按行计 589 行含 `var(--` / 204 行含 `color-mix(`，2026-10-24 口径）。新颜色必须提升为 token，**不要写裸 hex**。
 2. **遵循既有档位**：圆角 5 档 / 间距 8px 阶梯（±6px 容差）/ 字号 ±1px 归档 / 阴影 2 级 / 玻璃两级制。
 3. **大批量归一化用工具**：`scripts/ui-normalize.mjs`（**dry-run 优先**、幂等），不要手工改。
 4. **对比度用工具判**：`scripts/ui-contrast.mjs` + `docs/ui-contrast.json`，目标 WCAG AA（`--text-3` 定案 78%）。
-5. **改前后各跑一轮截图**：`scripts/ui-shot.mjs` → `scripts/ui-diff.mjs` 比对 `docs/ui-baseline.json`。
+5. **改前后各跑一轮截图**：`node scripts/ui-shot.mjs --out <dir> --shots scripts/ui-shots*.json` → `node scripts/ui-diff.mjs <dirA> <dirB> --tol 0`（ui-diff 比对的是两轮截图目录的像素，不读 `docs/ui-baseline.json`；后者是 `ui-audit.mjs` 的 CSS 度量档案）。
 6. **⚠️ 构建期间禁止截图**：`dist` 重建会让 ENOENT 杀死整轮 capture（一次报废 204/270 张）。
-7. **每修一个缺陷加一条 tripwire 断言**，锁死防止复发（历史累计 26 条 tripwire / 303 项断言）。
+7. **每修一个缺陷加一条 tripwire 断言**，锁死防止复发（源码扫描式绊线持续累计，以 `grep -rn "绊线\|tripwire" --include="*.test.ts" src worker shared` 的实时计数为准，不在此处维护具体数字）。
 
 ---
 

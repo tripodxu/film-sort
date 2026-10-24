@@ -67,12 +67,12 @@ if (view !== "sorting" || !ranking || !collection || ranking.completed) {
 | P2-3 | `worker/other.ts:83-97` | `wikipediaPolicy` 白名单只有 zh/en 主机、maxRedirects=2。若维基跳到 `zh.m.wikipedia.org` / `api.wikimedia.org`，`fetchBounded` 抛 `disallowed_host`，`queryWikiImages`/`wikiJson` 的 catch **静默返回空**，该维度全站取图变空，只在图消失时暴露 |
 | P2-4 | `src/components/FocusTrap.tsx:54-62` | 弹窗关闭不恢复焦点（无 `previouslyFocused.focus()`），键盘/读屏用户关闭后焦点落回 body —— 12 处弹窗全中 |
 | P2-5 | `src/components/FocusTrap.tsx:25-51` | 监听挂 document 且不判「是否最上层弹窗」，两个 trap 同时挂载会互抢焦点。当前尚不可达，接入面扩大后风险累积 |
-| P2-6 | `src/lib/useRouter.ts:87-100` | `main.focus()` 在首挂载和任意换页都抢焦；弹窗开着时换路由会把焦点从弹窗夺走 |
+| P2-6 | `src/lib/useRouter.ts:100-108` | `main.focus()` 在首挂载和任意换页都抢焦；弹窗开着时换路由会把焦点从弹窗夺走 |
 | P2-7 | `src/lib/useSorting.ts:892-915` | `pagehide` 只写 localStorage 不 `setDraft`，bfcache 返回后内存 draft 仍少最后几次取舍，而 `resume()` 读的是 draft state |
 | P2-8 | `src/lib/useSorting.ts:748-749` | 50 份快照仍是 `serializeRankingState` 全量序列化，N≈1000 时仍可能数十 MB |
 | P2-9 | `src/views/SetupView.tsx:7-35` | 自带一份 `RANK_MODES` 字面量，与 `src/lib/ranking.ts:11` 的 `RANKING_MODES` 构成双份真相源；后续加模式会漏 |
 | P2-10 | `src/App.tsx:1758-1762 / 2058-2062`、`src/views/SourceView.tsx:1351-1366` | 三处弹窗接了 FocusTrap 但仍缺 `aria-labelledby`（其余 9 处已补） |
-| P2-11 | `src/styles.css:553` | `.theme-dot.theme-simple` 仍硬编码旧色 `#2f6fed`，而 `--accent` 已改 `#2b64d8` —— 主题选择器色点与实际主题色不一致（违反「散落 hex 归零」） |
+| P2-11 | `src/styles.css`（`.theme-dot.theme-simple`，2026-10-24 时点约 L565） | 仍硬编码旧色 `#2f6fed`，而 `--accent` 已改 `#2b64d8` —— 主题选择器色点与实际主题色不一致（违反「散落 hex 归零」） |
 | P2-12 | `migrations/0011/0019/0020/0023` + `0008` 重号 | `IF NOT EXISTS` 会掩盖 schema drift：同名但列不同的旧表被静默跳过且仍标记为已应用，缺列只在线上以 `no such column` 暴露；`0008_disabled_at.sql` 与 `0008_user_collections.sql` 前缀重复，部署顺序取决于 wrangler 排序，测试不查重号 |
 | P2-13 | `worker/posterBatchStats.test.ts:132-146` | 两条「无共享状态」用例只 `toMatch` 正则字符串（`const results...= {}`），改名即误报，且挡不住换个名字的模块级状态 |
 
@@ -100,7 +100,7 @@ if (view !== "sorting" || !ranking || !collection || ranking.completed) {
 2. ~~修两条 P1~~ ✅ 已修：导出加 25s 总预算；出站超时不再在返回 Response 时撤销（新增回归用例钉住）。
 3. ~~0014 单语句不变量~~ ✅ 已修：索引拆到 `migrations/0027_comment_replies_index.sql`，并新增 `migrations.test.ts` 断言。
 4. **上线前必做**：确认 `migrations/0027_comment_replies_index.sql` 已进版本库（新迁移必须幂等可重复应用）；线上实机验证导出超时降级与留言树两条路径。
-4. 硬规则 2（C2）**未做完**：全仓仍有 21 处裸 fetch（media 7、netease 4、douban 2、doubanlist 2、gdstudio 2、import 2、account 2）；`outboundCoverage.test.ts` 只锁 6 个文件的计数，新增文件里的裸 fetch 完全不在绊线内。
+5. 硬规则 2（C2）**未做完**：全仓仍有裸 fetch（2026-10-14 时点约 21 处：media 7、netease 4、douban 2、doubanlist 2、gdstudio 2、import 2、account 2；计数口径 `grep -rnE "(^|[^A-Za-z.])fetch\(" worker/*.ts | grep -v test`）；`outboundCoverage.test.ts` 只锁部分文件的计数，新增文件里的裸 fetch 完全不在绊线内。
 
 ---
 

@@ -10,6 +10,14 @@
 
 ## 进行中 / 最近
 
+### T-20261024-03 · 全仓文档全面审计与漂移清零 · ✅ 完成
+
+- **状态**：✅ 完成 —— 纯文档变更（零代码/零测试改动），format:check 过，提交见 git log ｜ **负责人**：本 agent ｜ 任务闭环
+- **背景**：用户指派「全面阅读，查看优化项，优化文档」。四组并行审计（agent 路由文档 / README·FEATURES·USAGE·ARCHITECTURE·API / 计划状态 / 坑档·规范·归档），逐条对照代码核实后修复。
+- **改了什么**：MEMORY 刷新（十月汇总/快照/待办指针化）；三份计划状态纠正并归档（**PWA Phase 8 实为 09-10 已上线**、BUNDLE-SPLIT 已完成、AI-QUICK-RANK 已完成）；幻影文件引用清除（`worker/payloadGuard.ts` 不存在，三处文档改写；`shared/storedNotes.ts` 同病）；README 五页签/主题枚举/路由表/migration 数/**API 三表收敛为指向 API.md**；ARCHITECTURE 三→四模式；API.md 补 cover-choice/注册 code/cache 桶/章归位；FEATURES/USAGE 五页签与四组菜单口径；PITFALLS 行号与 4.67 回写、4.14–4.17 归位；**ORB-EFFECTS §1/§3 重写为两层注册**（防 three 回主包）；THEME-PACKS 补 5 变量；CLOUDFLARE/DOUBAN/REGRESSION-REVIEW 小修；archive 4 文件补横幅；CHANGELOG 补迭代 1–8/20。完整清单见 CHANGELOG 2026-10-24 条目。
+- **审计中发现的未执行优化项（留给后续，均为低危）**：① `docs/ui-baseline.json` 冻结在 09-28（styles.css 1738→1909 行），下次视觉任务前重立；② `.worktrees/p0-p1-hardening/` 遗留目录会污染全仓 grep，建议清理；③ MAP §2.1/§2.2 的行数列每月必漂移，建议改量级或删列；④ `styles.css` ≤800px 段两条 `.identity` 死规则（T-20261024-02 已登记）；⑤ ROADMAP §二 B/C/D 仍开放的触控目标/token 化/结构项；⑥ Jev Phase 2 判决层接入或撤销评估、Phase 3/4 ⬜。
+- **给下一棒**：文档与代码的现实基线以本日为准（631 commits / 28 migrations / 12 主题 / 4 模式 / 10 视图 / test 63 files·855+9 skipped）。修文档时遵守本次确立的两个防漂移原则：**硬编码计数要么删掉要么带口径与日期**；**两处维护的清单收敛为单一事实源 + 指针**（API 表、限流表已示范）。
+
 ### T-20261024-02 · 首页 identity 胶囊统一右上角定位 · ✅ 完成（线上验证过）
 
 - **状态**：✅ 完成 —— 提交 `5a0393c` 已推送并线上验证 ｜ **负责人**：本 agent ｜ 任务闭环

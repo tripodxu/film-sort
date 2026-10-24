@@ -26,11 +26,14 @@ ART/RANK 后端 API 完整参考。所有接口由 Cloudflare Worker 处理，�
 
 按 `限流桶:客户端 IP` 计数，窗口 10 分钟，超出返回 `429 { "error": "rate_limited" }`。命中缓存、不会回源上游的请求不计数（例如重播同一首歌的 `/api/music/play`）。
 
+> 本表是限流配额的**唯一权威**，其他文档（FEATURES/README/CLOUDFLARE）请引用不复制。
+
 | 桶 | 覆盖接口 | 额度 | `retry-after` |
 |----|----------|------|---------------|
 | `events` | `POST /api/events` | 120 | 60 |
 | `other` | `POST /api/poster-errors/client` | 120 | 60 |
-| `other` | `GET /api/other/list`、`GET /api/other/detail`、`GET /api/other/candidates` | 20 | 60 |
+| `other` | `GET /api/other/list`、`GET /api/other/detail`、`GET /api/other/candidates`、`POST /api/other/cover-choice` | 20 | 60 |
+| `cache` | `POST /api/cache/clear` | 5 | 600 |
 | `auth` | `POST /api/admin/reset`、`/api/admin/change-password`、`/api/admin/sessions/revoke-all` | 30 | 300 |
 | `posters` | `POST /api/posters/batch` | 60 | 600 |
 | `ai` | `POST /api/insights`（内置通道） | 8 | 600 |
@@ -919,14 +922,15 @@ Choice 多选一（迭代 2/20 新增，用于「哪个候选才是用户要的�
 
 ### POST /api/account/register
 
-注册新用户。
+注册新用户（需先 `POST /api/account/send-code` 获取邮箱验证码）。
 
 **请求体：**
 ```json
 {
   "email": "user@example.com",
   "password": "secure123",
-  "nickname": "影迷小王"
+  "nickname": "影迷小王",
+  "code": "123456"
 }
 ```
 
@@ -943,7 +947,7 @@ Choice 多选一（迭代 2/20 新增，用于「哪个候选才是用户要的�
 `token` 为 64 位十六进制（32 字节随机），会话有效期 30 天；后续请求用 `Authorization: Bearer <token>`。
 
 **错误：**
-- `400` — `invalid_email` / `invalid_password`（密码 <6 位） / `invalid_nickname`
+- `400` — `invalid_email` / `invalid_password`（密码 <6 位） / `invalid_nickname` / `invalid_code`（验证码缺失、错误、过期或锁定，详见文末邮箱验证码节）
 - `409` — `email_exists`
 
 ### POST /api/account/login
@@ -1103,11 +1107,15 @@ OAuth 回调。校验 `state` 与 `oauth_state` Cookie 一致（CSRF），自动
 
 ---
 
-## 管理接口
+## 用户侧缓存接口
 
 ### POST /api/cache/clear
 
-同源用户清除服务端缓存（分代失效：本机即刻生效，其余节点 60s 内跟进）。体 `{ scope: "posters"|"intro"|"music"|"misc" }`。限流 5 次/10 分钟。响应 `{ ok, scope, purged, generation }`。用户侧入口：设置菜单「清除服务端缓存」。管理员另有 `POST /api/admin/cache/clear`（scope 可为 `all`）与 `GET /api/admin/cache/status`。
+同源用户清除服务端缓存（分代失效：本机即刻生效，其余节点 60s 内跟进）。体 `{ scope: "posters"|"intro"|"music"|"misc" }`。限流桶 `cache`（5 次/10 分钟）。响应 `{ ok, scope, purged, generation }`。用户侧入口：设置菜单「清除服务端缓存」。管理员另有 `POST /api/admin/cache/clear`（scope 可为 `all`）与 `GET /api/admin/cache/status`。
+
+### POST /api/other/cover-choice
+
+登录用户对「其他」维度封面二选一的**裁决写回**（「让用户选」出口，写入全站 `poster_urls`，前端 `<Poster>` 零改动生效）。体 `{ title, english?, wikiTitle, url, year? }`。三道闸门：同源校验（跨源 403）→ 登录（401）→ `allowedImage` + **仅允许 `upload|thumb.wikimedia.org`**（其余域 400 `invalid_url`）。写入后回读校验并落 `admin_audit` 审计（`cover_choice`）。限流桶 `other`（20 次/10 分钟）。响应 `{ ok, key, url, wikiTitle }`。
 
 ## 管理端点
 

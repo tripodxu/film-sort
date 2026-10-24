@@ -65,19 +65,19 @@ src/
 ├── main.tsx              # React 入口，StrictMode 挂载 + 挂载前应用主题 + 注册 SW
 ├── App.tsx               # 应用外壳：视图编排/弹窗/分享与导出入口
 ├── types.ts              # 内置电影目录类型（Movie / FilmList，由 data/catalog.ts 使用）
-├── styles.css            # 设计令牌 + 六主题变量块 + 组件样式（data-theme 切换）
+├── styles.css            # 设计令牌 + 12 套主题变量块（atlas 在 styles/atlas.css）+ 组件样式（data-theme 切换）
 ├── components/
 │   ├── Poster.tsx         # 海报组件（解析/代理/失败上报）
 │   ├── RankingDetail.tsx  # 统一榜单详情（分享页/比较详情弹窗/广场帖共用）
 │   ├── ArtworkDetail.tsx  # 统一作品详情弹窗（含音乐试听）
-│   ├── ThemeSwitcher.tsx  # 顶栏主题切换器（六主题下拉）
+│   ├── ThemeSwitcher.tsx  # 顶栏主题切换器（12 主题，四组双列 chip 菜单 + 开场特效/布局组，Esc 可关）
 │   ├── SettingsMenu.tsx   # 顶栏设置菜单（单次导入上限）
 │   ├── ExpandableNote.tsx # 长批注截断 + 展开查看
 │   ├── FocusTrap.tsx      # 弹窗焦点陷阱
 │   ├── ErrorBoundary.tsx  # 错误边界
 │   ├── DeferredOrb.tsx    # 光球加载闸门（空闲时 import，省流/2G 不加载）
 │   └── OrbScene.tsx       # 3D 光球场景（reduced-motion 降级）
-├── views/                 # 各视图组件（Home/Source/Setup/Sorting/Profile/Compare/Share/Plaza/PlazaPost + types/helpers/IconButton）
+├── views/                 # 各视图组件（Home/Source/Setup/Sorting/Profile/Compare/Depth/Share/Plaza/PlazaPost + types/helpers/IconButton）
 ├── data/
 │   ├── media.ts           # 媒介定义 + 内置榜单
 │   └── catalog.ts         # 电影目录数据
@@ -102,7 +102,7 @@ src/
 | 子系统 | 入口 | 结构 |
 |---|---|---|
 | 出站请求策略 | `worker/outbound.ts` | 精确 host 白名单 + manual redirect 逐跳复核 + 字节上限；media/ai/mailer/douban 全部接入 |
-| 插拔主题包 | `src/lib/themeRegistry.ts` + `docs/THEME-PACKS.md` | 重建式安全注入；内置 7 主题与用户导入包共用 data-theme 管道 |
+| 插拔主题包 | `src/lib/themeRegistry.ts` + `docs/THEME-PACKS.md` | 重建式安全注入；内置 12 主题与用户导入包共用 data-theme 管道 |
 | 开场光球特效 | `src/lib/orbEffects/` + `docs/ORB-EFFECTS.md` | OrbEffect 接口 + 注册表；OrbScene 为宿主（renderer/camera 归宿主，切换不重建 WebGL）；特效调色随主题 |
 | 缓存分代清除 | `worker/cachePurge.ts` | posters/intro/music/misc 四作用域，D1 代次 + 本地 purger 注册；用户端 `/api/cache/clear`、管理端 `/api/admin/cache/*` |
 | 验证码/OAuth 原子消费 | `worker/verification.ts` | 条件 DELETE 消费（hash/attempts/expiry 进 WHERE，meta.changes 判定）；Google 强制 email_verified |
@@ -115,8 +115,8 @@ src/
 状态按域拆进三个 Hook，`App.tsx` 只保留视图编排、跨域 UI 与弹窗开关。
 
 **路由状态**（`lib/useRouter.ts`）
-- `view`: `home / source / setup / sorting / profile / compare / share / plaza / plazaPost`，另有 `plazaPostId`
-- 路径映射：`/`、`/catalog/source`、`/catalog/setup`、`/catalog/sorting`、`/myself`、`/encounter`、`/share`、`/plaza`、`/plaza/:id`
+- `view`: `home / source / setup / sorting / profile / compare / depth / share / plaza / plazaPost`，另有 `plazaPostId`
+- 路径映射：`/`、`/catalog/source`、`/catalog/setup`、`/catalog/sorting`、`/myself`、`/encounter`、`/depth`、`/share`、`/plaza`、`/plaza/:id`
 - 通过 `history.pushState` 和 `popstate` 事件实现，支持浏览器前进/后退
 
 **排序状态**（`lib/useSorting.ts`）
@@ -254,15 +254,16 @@ interface RankingState {
 3. 验证结果不改变排序，但记录偏好证据
 4. 验证数量：`min(MAX_BASELINE_VERIFICATIONS, max(1, ceil(topN/3)))`
 
-### 3.6 排序三模式（quick/classic/precise）
+### 3.6 排序四模式（quick/classic/precise/adaptive）
 
-`RankingState.mode` 三选一（缺省 classic，零迁移）。模式真相源是 SetupView 的
+`RankingState.mode` 四选一（缺省 classic，零迁移）。模式真相源是 SetupView 的
 rankMode state，随 `startRanking(mode)` 显式传入（localStorage 只记忆选择，不再是
 起跑真相源——隐私模式下存储失效时旧写法会无声回退 classic）：
 
 - **quick（简易）**：未满员二分建榜；满员后候选先与**守门员**（末位）比较（`ActiveInsertion.stage="gate"`），输则 1 次出局，赢则升级 bisect 于守门员之前定位；验证仅守门员边界 1 次（topN<2 时无验证）；
 - **classic（经典，默认）**：二分插入 + 冷却 + 回环检测 + 验证阶段（上文 §3.2–3.5）；
-- **precise（精确）**：验证数 max(4, ceil(topN/2)) + TopK 内未直接比较的相邻对主动入队 + 回环确认阈值 2× + `calibration` 校准一致率统计（完成时 notice 汇报）。
+- **precise（精确）**：验证数 max(4, ceil(topN/2)) + TopK 内未直接比较的相邻对主动入队 + 回环确认阈值 2× + `calibration` 校准一致率统计（完成时 notice 汇报）；
+- **adaptive（自适应，2026-10-17）**：不再走二分插入，改由在线 Bradley-Terry 模型驱动——`src/lib/preferenceModel.ts`（批量 `fitPreferenceModel` 坐标上升 MAP）+ `adaptiveQueue.ts`（信息量选对 `p(1-p)(σ_i²+σ_j²)` + 对手覆盖度，预算约 4×件数次）+ `adaptiveRanking.ts`（**不新增任何持久化字段**，θ/σ 与 90% 名次区间全部由 `decisionLog` 重推）；`ranking.ts` 内六处前置早退分支接入，旧三模式执行路径逐字不变（golden 回归 + 截图零差异双证）。
 
 旧快照/旧草稿反序列化自动补 `mode`/`calibration`/`stage`；`undoLastAction` 重放透传 mode。
 
@@ -360,7 +361,7 @@ interface RankedArtwork extends Artwork {  // Artwork 定义见 data/media.ts
 
 ### 5.1 Worker 路由
 
-`worker/index.ts` 是入口文件，`route()` 按 `url.pathname` 顺序分发：`/api/health`、`/api/events`、`/api/stats`、`/api/poster-errors/client`、`/api/admin/*`、`/api/douban/*`、`/api/posters`、`/api/posters/batch`、`/api/image`、`/api/{movie,book,music}/{list,detail}`、`/api/artwork/detail`、`/api/other/{list,detail}`、`/api/insights`、`/api/music/{play,lyric}`、`/api/auth/config`、`/api/{netease,douban}/*`、`/api/import/*`、`/api/plaza/*`、`/api/comments/*`、`/api/account/*`、`/api/share` 与 `/api/share/:code`、`/api/challenges*`、`/admin`；其余请求交给 `serveAssets()`（静态资源，未命中且 `Accept: text/html` 时回退 `/`）。
+`worker/index.ts` 是入口文件，`route()` 按 `url.pathname` 顺序分发：`/api/health`、`/api/events`、`/api/stats`、`/api/poster-errors/client`、`/api/admin/*`、`/api/douban/*`、`/api/posters`、`/api/posters/batch`、`/api/image`、`/api/{movie,book,music}/{list,detail}`、`/api/artwork/detail`、`/api/other/*`（list/detail/candidates/cover-choice）、`/api/insights`、`/api/ai/*`（test/models/jev 系列）、`/api/music/{play,lyric}`、`/api/auth/config`、`/api/{netease,douban}/*`、`/api/import/*`、`/api/plaza/*`、`/api/comments/*`、`/api/account/*`、`/api/share` 与 `/api/share/:code`、`/api/challenges*`、`/api/cache/clear`、`/admin`；其余请求交给 `serveAssets()`（静态资源，未命中且 `Accept: text/html` 时回退 `/`）。
 
 完整接口清单与参数见 `API.md`。广场路由（`/api/plaza/*`、`/api/comments/*`）由 `worker/plaza.ts` 处理，`index.ts` 只做分发。
 
@@ -382,12 +383,17 @@ Worker 模块划分：
 | `douban.ts` | 豆瓣扫码登录（qrlogin）、dbcl2 入库、Cookie 保险库 |
 | `audit.ts` | 管理操作审计写入 |
 | `ai.ts` | AI 点评通道：四协议适配（Chat/Responses/Anthropic/Gemini）+ auto 探测、模块化提示词（composePrompt）、自定义配置 SSRF 校验、模型列表代理、管理端提示词覆盖 |
+| `typesafe.ts` | Jev（TypeSafe System One）REST 客户端：入参校验、30s 超时、错误映射 |
+| `og.ts` | `/share/:code`、`/plaza/:id` 的 OG 元数据注入（用户文本先转义，异常降级无 OG） |
+| `mailer.ts` + `VerificationCodeEmail.tsx` | 注册验证码邮件双通道（Resend/Cola/SMTP），生产缺配置 fail-closed |
+
+> 插件子系统（`outbound.ts` 出站策略 / `cachePurge.ts` 分代清缓存 / `qrTransactions.ts` 扫码事务 / `verification.ts` 验证码与 OAuth 原子消费）见 §2.2.1 扩展点表。`payloadGuard.test.ts` / `posterBatchStats.test.ts` 是静态扫描与统计护栏测试，对应实现分别在业务模块与 `media.ts`，不是独立模块。
 
 `worker/imdb-posters.json` 是内置海报索引数据（由 `media.ts` 导入）。
 
 ### 5.2 数据库 Schema
 
-**权威定义在 `migrations/*.sql`**（共 26 个文件，编号 0001–0026，其中 0008 有两支）；下表只做索引，不复制 DDL。
+**权威定义在 `migrations/*.sql`**（共 28 个文件，编号 0001–0027，其中 0008 有两支；0025 运行时索引、0026 海报批次统计、0027 广场评论回复索引）；下表只做索引，不复制 DDL。
 
 | 表 | 用途 | 迁移 |
 |----|------|------|
@@ -415,6 +421,7 @@ Worker 模块划分：
 | `verification_codes` | 邮箱验证码（SHA-256 散列、10 分钟过期、5 次上限） | 0023 |
 | `qr_transactions` | 扫码登录事务：provider+key → 发起账户绑定与 TTL（凭证只写入 owner 的 vault） | 0024 |
 | （0025） | 运行时索引：user_sessions/user_oauth/verification_codes/plaza 用户查询 | 0025 |
+| （0027） | `plaza_comments` 回复索引（评论楼内回复查询） | 0027 |
 
 **索引**：`0018_plaza_perf.sql` 为广场补 `(kind, created_at DESC)` 与 `like_count DESC`，其余索引随建表语句创建。
 
@@ -592,4 +599,4 @@ npm run lint          # eslint（react-hooks/recommended + no-unused-vars=warn�
 npm run format:check  # prettier --check（printWidth 100）
 ```
 
-测试使用 Vitest（`vitest.config.ts` 只收集 `src/**`、`worker/**`、`shared/**` 下的 `*.test.ts`），当前 18 个测试文件、273 passed / 9 skipped，覆盖排序算法、画像比较/解析、集合导入、海报管线、限流窗口、批注白名单与 Worker 载荷校验。CI 步骤见 `OPTIMIZATION.md` §7.1。
+测试使用 Vitest（`vitest.config.ts` 只收集 `src/**`、`worker/**`、`shared/**` 下的 `*.test.ts`），数量随 CI 增长（2026-10-24 时点 63 个测试文件、855 passed / 9 skipped），覆盖排序算法、画像比较/解析、集合导入、海报管线、限流窗口、批注白名单、Worker 载荷校验与大量源码扫描式回归绊线。CI 步骤见 `.github/workflows/ci.yml`（本地聚合入口 `npm run gates`）。

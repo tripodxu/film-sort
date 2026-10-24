@@ -1,8 +1,8 @@
 # ART/RANK 功能总文档（FEATURES）
 
 > 本文档是**已实现功能的全量清单与回归基线**：每条功能标注入口路径与后端端点。任何重构/UI 改版后，逐条走查本文档即完成回归验证。
-> 端点的请求/响应细节见 `API.md`；算法与架构细节见 `ARCHITECTURE.md`；优化历史见 `OPTIMIZATION.md`。
-> 最后更新：2026-09-19
+> 端点的请求/响应细节见 `API.md`；算法与架构细节见 `ARCHITECTURE.md`；优化历史见 `docs/archive/OPTIMIZATION.md`（已归档）。
+> 最后更新：2026-10-24
 
 ## 0. 路由总表（SPA，History API）
 
@@ -14,6 +14,7 @@
 | `/catalog/sorting` | Sorting | 1v1 取舍排序 |
 | `/myself` | Profile | 我的文化索引（榜单管理/导出/发布） |
 | `/encounter` | Compare | 相遇比较（粘贴对方链接/JSON） |
+| `/depth` | Depth | 深度比较页（比较的只读第二读法：收缩共识分 + 新指标，2026-10-17） |
 | `/share/:code` | Share | 分享只读页（服务端短码） |
 | `/plaza` | Plaza | 广场列表 |
 | `/plaza/:id` | PlazaPost | 广场帖子详情 |
@@ -83,7 +84,7 @@
 | 功能 | 入口 | 实现 |
 |---|---|---|
 | 比较链接（服务端短码 `/encounter?payload=<code>`） | 「复制比较链接」 | `POST /api/share` → `compareUrl` |
-| 分享短链（服务端 8–12 位码）+ 有效期 7/30/90/365 天 | 「分享链接」弹窗 | `POST /api/share`、`GET /api/share/:code` |
+| 分享短链（服务端 12 位码）+ 有效期 7/30/90/365 天 | 「分享链接」弹窗 | `POST /api/share`、`GET /api/share/:code` |
 | 二维码 | 「复制比较链接」生成后出现在导出面板 | qrcode 动态 import |
 | 单榜单分享/比较 | 榜单动作栏 | `shareSingleRanking` |
 | 分享查看页（只读 + 比较/用其排序/批注展示） | `/share/:code` | ShareView |
@@ -159,11 +160,12 @@
 | 用户 | 列表、画像查看抽屉、禁用/恢复、重置密码、删画像/清单、删除账户(级联) | `/api/admin/accounts*` |
 | 广场 | 筛选/搜索/分页、隐藏/恢复、删除、评论管理 | `/api/admin/plaza/*` |
 | 数据 | 存储统计、日志清理、过期短链清理、分级重置(四档,密码重验)、审计日志、改密、全端退登 | `/api/admin/reset,audit,logs/clean,links/clean-expired,change-password,sessions/revoke-all` |
+| 缓存 | 服务端缓存代次查看与分类清除 | `/api/admin/cache/status`、`/api/admin/cache/clear` |
 
 ## 10. 横切能力
 
 - 埋点：`POST /api/events`（16 事件白名单 + payload 键白名单 + 同源校验）；`GET /api/stats` 公开聚合。
-- 限流：10 分钟窗、按 IP（`allowUpstreamRequest` 的桶上限）：auth 30 / share 30 / challenge 30 / ai 8 / music_play 12 / music_lyric 12 / import 8 / netease 120 / douban 120 / posters 60 / other 20（海报失败上报为 120）/ events 120。音乐试听与歌词是两个独立桶，命中缓存时不计额度。
+- 限流：10 分钟窗、按 IP（`allowUpstreamRequest` 桶上限）。**权威配额表见 `API.md` 开篇的限流总表**（本行不重复维护明细，防两处漂移）；音乐试听与歌词是独立桶，命中缓存时不计额度。
 - 安全头：CSP（img 白名单含 doubanio/amazon/imdb/tmdb/126.net/github/wikimedia/bkimg）、COOP、nosniff、X-Frame DENY、写接口 CSRF（assertSameOrigin）。
 - 边缘缓存：`/api/douban/top250`、`/api/douban/suggest`、`/api/posters`、`/api/image`；GET 详情 86400s。
 - cron：每周一清 90 天前日志/180 天前海报错误/过期会话与短链。
@@ -186,7 +188,6 @@
 | SSRF 防护（https-only、拒 IP/localhost/metadata） | — | `worker/ai.ts validateUserConfig`（自定义通道唯一入口） |
 | 限流：内置 8 / 自定义 15 / test 5 / models 10（次/10 分钟） | — | `allowUpstreamRequest` 桶 `ai / ai_custom / ai_test / ai_models` |
 
-## 回归走查清单（改版后必查）
 ## 12. Jev 决策集成（2026-09-28 新增）
 
 | 功能 | 入口 | 实现 |
@@ -197,6 +198,7 @@
 | 分享/广场 OG 卡片（爬虫可取，豆瓣图走代理） | worker HTML 注入 | `worker/og.ts` + `/share/:code`、`/plaza/:id` 路由 |
 | 广场品味相似度（卡片「重合 N/3」、详情「重合 NN%」） | PlazaView / PlazaPostView | `lib/similarity.ts rankingSimilarity`（workIdentity 口径） |
 
+## 回归走查清单（改版后必查）
 
 1. 首页→选维度→精选/搜索/批量导入→TopN→排序（键盘+撤销+回环提示）→完成落画像
 2. 画像：切换胶囊、改名/删除(⋯+确认条)、手动调整拖拽、编辑作品增删搜、三级批注、点海报详情
@@ -206,6 +208,6 @@
 6. 广场：发布→列表(排序/筛选/搜索/滚动)→点赞/评论/回复→作者编辑/历史/隐藏/删除→与曾经的我比较→同步提示
 7. 导入：豆列/subject_collection/mine(连接后一键)/网易云按 UID 浏览全部歌单(含收藏)点选导入/网易云直链/other 维基搜索带海报；分批进度条+右上角设置调单次上限(100~1000)+清单折叠/全选/仅保存不排序
 8. 账号：注册/登录/OAuth/同步/冲突弹窗/退出清数据
-9. 主题：十二内置主题切换（经典/新系列分组）、刷新持久化、PNG 跟随
-10. /admin 四页签各一操作
+9. 主题：十二内置主题切换（主题菜单四组双列 chip 网格：经典/新系列/开场特效/布局，Esc 可关）、刷新持久化、PNG 跟随
+10. /admin 五页签各一操作
 11. AI 点评：三场景各生成一次（含长度三档切换）；设置→配置自己的 API→获取模型列表→测试连接→再生成（来源徽标变「我的」）；清除配置回落内置；错误注入（错 key / 错 base / 连打限流）文案正确

@@ -76,6 +76,7 @@
 | `--sp-1 … --sp-8` | 间距 |
 | `--ls-mid --ls-wide` | 字距 |
 | `--reader-dim --reader-poster-opacity` | 阅读弹窗 |
+| `--text-4 --text-hi --ease-out --toast-bg-2 --toast-border` | 文字层级扩展 / 缓动曲线 / 提示条第二套配色（白名单内但此前未列出，2026-10-24 补记） |
 
 ## 5. 配色可读性底线（强烈建议 agent 自查）
 

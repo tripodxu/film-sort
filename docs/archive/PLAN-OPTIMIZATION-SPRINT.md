@@ -1,5 +1,7 @@
 # 优化冲刺计划(2026-09-28)
 
+> ⚠️ **【已完成 · 归档】**（2026-10-24 归档）P1–P8 全部完成并线上验证。Phase 8 状态于 2026-10-24 回写：PWA 实为 2026-09-10 已上线（`76b290c`），此前误标 ⬜。现行计划见 `docs/ROADMAP.md` 与 `docs/PLAN-ADDITIVE-UPGRADE.md`。
+
 > 执行方式:内联逐个推进,每个 Phase 独立提交并「推送 → 自动部署 → sort.logicc.top 线上验证」后再进下一个。状态标记:⬜ 未开始 / 🔄 进行中 / ✅ 完成 / ⏸ 缓行。
 
 背景与动机见 2026-09-28 会话讨论;事实核查结论:分享页无 OG 元数据、对战卡无触摸手势、Kendall τ 数学已有、qrcode 已动态引入(主包体积来自四个千行视图全量打包)。
@@ -68,9 +70,11 @@
 
 **落地**:数据边界先行确认——decisionLog/cycleEvents 仅存于进行中草稿,画像里没有;年鉴主体用画像统计(复用 galleryStats),取舍+最纠结一对从草稿条件性附加(无草稿省略该节)。`lib/wrapped.ts`(纯函数 ×8 单测)+ `renderWrappedPng`(exportPng 印刷年鉴版式)+ 画像页侧栏「年度年鉴 PNG」按钮。**验证**:五道门禁绿(492 passed);本地烟测捕获生成 blob(2400×2620)逐节核对正确;线上验证随推送进行。
 
-## Phase 8 ⬜ PWA 离线
+## Phase 8 ✅ PWA 离线（2026-10-24 状态回写：实为 2026-09-10 已上线）
 
 **目标**:app shell 缓存 SW,主链路(清单→排序→画像)离线可用、可安装。沿用 P0 报告的 SW 导航缓存教训(network-first 导航、cache-first 静态)。
+
+**落地（回写）**：`76b290c`（2026-09-10）即已交付 manifest + `public/sw.js`（navigate network-first / 静态 cache-first / 跳过 `/api`）+ SW 注册（`src/main.tsx`，非 localhost 生效）+ 安装图标；后续 `c70729b`、`8763da0`、`6bdcde1`（SW 导航缓存污染修复）持续加固，2026-10-14 T-08（`d38ee84`）补三图标 / manifest `id`+`scope` / apple-touch-icon 并线上验收（`/manifest.json` 200、`/sw.js` 与构建产物逐字节一致、`src/pwa.test.ts` 绊线在库）。本计划 P1–P8 至此全部完结，文档归档。
 
 ---
 

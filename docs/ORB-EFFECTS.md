@@ -8,17 +8,22 @@
 ```
 OrbScene.tsx（宿主）           持有 WebGLRenderer / PerspectiveCamera / ResizeObserver /
                                指针缓动 / prefers-reduced-motion 时钟
-        │ create(host, palette)
+        │ await createOrbEffectById(id, host, palette)   ← 异步加载（防 three 进主包）
         ▼
 src/lib/orbEffects/
-  types.ts      OrbEffect / OrbInstance / OrbPalette / OrbHost 接口
-  registry.ts   效果注册表 + 选择持久化（localStorage art-rank:orb-effect）
-  plasma.ts     等离子球（原默认光球，shader 驱动）
-  halo.ts       极光环场（参考实现：无 shader，~150 行）
-  <your>.ts     你的新效果
+  types.ts              OrbEffect / OrbInstance / OrbPalette / OrbHost 接口
+  registry.ts           EFFECT_META 纯元数据（id/name）+ 选择持久化 + 主题推荐默认
+  orbEffectLoaders.ts   动态 import 字面量表（唯一的 three 引入点）
+  plasma.ts             等离子球（默认，shader 驱动）
+  halo.ts               极光环场（无 shader 参考实现）
+  blackhole.ts          呼吸黑洞
+  ribbon.ts             极光绸带（aurora 主题推荐）
+  <your>.ts             你的新效果
 ```
 
-关键约束：**宿主持有 renderer 与 camera，效果只操作 scene 内容**。切换效果时宿主
+关键约束：**宿主持有 renderer 与 camera，效果只操作 scene 内容**；**特效模块只允许经
+`orbEffectLoaders.ts` 的 `await import("./<id>")` 动态引入**（静态 import 会把 three 拖回
+首屏主包——`src/ui-fixes.test.ts` 的首屏依赖图绊线会拦）。切换效果时宿主
 调用旧实例 `dispose()` → 新实例 `create()`，WebGL 上下文不重建、不闪黑。
 
 ## 2. 最小可行特效（模板）
@@ -61,20 +66,33 @@ export function createMyEffect(host: OrbHost, palette: OrbPalette): OrbInstance 
 }
 ```
 
-## 3. 注册（一行）
+## 3. 注册（两处，缺一不可）
+
+> 2026-10-24 更新：注册表已为拆包改为「纯元数据 + 动态 loader」两层（PLAN-BUNDLE-SPLIT，
+> 归档于 `docs/archive/PLAN-BUNDLE-SPLIT.md`）。**不要**在 `registry.ts` 里静态 import 特效
+> 模块或把 `create` 实例塞进注册表——那会把 three 拖回首屏主包（PITFALLS 4.21 复发）。
 
 ```ts
-// src/lib/orbEffects/registry.ts
-import { createMyEffect } from "./myEffect";
-
-const EFFECTS: OrbEffect[] = [
+// ① src/lib/orbEffects/registry.ts —— 只加纯元数据（零依赖）
+const EFFECT_META = [
   /* ...既有项... */
-  { id: "my-effect", name: { zh: "我的特效", en: "My Effect" }, create: createMyEffect },
+  { id: "my-effect", name: { zh: "我的特效", en: "My Effect" } },
 ];
+
+// ② src/lib/orbEffects/orbEffectLoaders.ts —— 动态 import 字面量（唯一的 three 引入点）
+export async function createOrbEffectById(id: string, /* host, palette */) {
+  switch (id) {
+    /* ...既有分支... */
+    case "my-effect":
+      return (await import("./myEffect")).createMyEffect(/* host, palette */);
+  }
+}
 ```
 
 保存后「主题」菜单 → 「开场特效」组会自动出现新选项。`id` 用小写连字符，一旦发布
-不要更改（用户选择按 id 持久化；未注册的存量 id 自动回退默认 plasma）。
+不要更改（用户选择按 id 持久化；未注册的存量 id 先回退**主题推荐默认**（aurora →
+ribbon），其余回退 plasma）。宿主侧实例化是**异步**的，注意用 mountToken 类代际守卫
+丢弃迟到的挂载（参考 `OrbScene.tsx`）。
 
 ## 4. 接口契约（必须遵守）
 

@@ -33,7 +33,7 @@
 
 **最小上下文**：
 - `docs/agents/MAP.md` §2.3
-- `docs/agents/PITFALLS.md` §4（视觉类 17 条）
+- `docs/agents/PITFALLS.md` §4（视觉类陷阱，条目持续增长，以文件为准）
 - `docs/memory/EPISODES.md` E-20260922（完整战役复盘）
 - `docs/THEME-PACKS.md` / `docs/ORB-EFFECTS.md`（改扩展点时）
 
@@ -49,11 +49,11 @@
 
 **最小上下文**：
 - `docs/agents/MAP.md` §2.4（+ 若涉及外部平台则 §2.6）
-- `worker/index.ts` 的路由链（约 1822 行起）+ 目标模块
+- `worker/index.ts` 的路由链（约 1880 行起）+ 目标模块
 - `docs/agents/CONVENTIONS.md` §3
 - `docs/agents/PITFALLS.md` §1（平台类）+ §2（网络类）
 
-**必守**：`fetchBounded` 出站；`payloadGuard` 校验；`rateWindow` 限流；错误可区分；凭据不落盘；`undefined` 转 `null`。
+**必守**：`fetchBounded` 出站；请求体校验就近在业务模块实现（见 MAP §2.4，无独立 payloadGuard 模块）；`rateWindow` 限流；错误可区分；凭据不落盘；`undefined` 转 `null`。
 
 **不要碰**：前端视图；数据库 migration（那是 R4）。
 

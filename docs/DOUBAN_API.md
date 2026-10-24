@@ -351,7 +351,7 @@ GET /api/douban/books/suggest?q={关键词}   # 书籍
 | HTTP 状态码 | 说明 |
 |------------|------|
 | 200 | 成功（列表/详情以 `status` 字段判断；豆瓣限流与抓取失败也走 200 + `status: false`） |
-| 400 | 参数错误（`invalid_query` / `invalid_limit` / `invalid_key` 等） |
+| 400 | 参数错误（`invalid_query` / `invalid_limit` 等） |
 | 401 | 需要认证（仅 `/api/douban/qr/*`、`/api/douban/cookie` 等连接类接口） |
 | 403 | 权限不足（跨域写入） |
 | 404 | 资源不存在（详情未找到） |
