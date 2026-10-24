@@ -10,14 +10,18 @@
 
 ## 进行中 / 最近
 
-### T-20261024-01 · 主题菜单收纳整理（分组 chip 网格化，不改任何主题本体）· 🔄 进行中
+### T-20261024-01 · 主题菜单收纳整理（分组 chip 网格化，不改任何主题本体）· ✅ 完成（线上验证过）
 
-- **状态**：🔄 进行中（已认领，开工 2026-10-24）｜ **负责人**：本 agent
+- **状态**：✅ 完成 —— 提交 `1fd8b09` 已推送并线上验证 ｜ **负责人**：本 agent ｜ 无交接对象（任务闭环）
 - **任务类型**：MAP.md §2.2/§2.3（前端视图 + 视觉）
-- **背景**：用户报「主题太多太杂乱，在不影响内容的情况下优化」。现状 = 主题菜单 180px 单列 ~27 行平铺（12 主题 + 4 特效 + 3 布局 + 导入 + 自定义）。方案 = 套用 settings-menu 已上线的 `settings-group-label` + `settings-chip-grid` 双列网格模式；**不删/不藏任何主题**（只增不减约束 + theme-atlas 绊线锁 12 套）。
-- **文件边界**：只碰 `src/components/ThemeSwitcher.tsx`（菜单开态 DOM 重组，行为/aria 零变化，顺带补 Escape 关闭）+ `src/styles.css` 主题切换器段（新增 `.theme-menu` 作用域规则，不动 `.rank-menu` 共享类/主题 token 块/atlas.css）+ `src/ui-fixes.test.ts`（新增绊线 describe）。**不碰** `src/lib/theme.ts` / `THEMES` / 任何 `[data-theme=…]` 块。
-- **验证计划**：HEAD 基线（270 主清单 + 24 主题清单 + 4 张开态菜单 `.tmp` 清单）→ 改后复拍 → 主/主题清单 `ui-diff --tol 0` 必须 changed 0（关闭态顶栏不变 = 不影响内容的证据），开态 4 张人工签收；五道门禁；线上验证后收尾。
-- 完成时更新本条目（交接四件套）。
+- **改了什么**：`src/components/ThemeSwitcher.tsx`（四组改 `settings-chip-grid` 双列网格 + 布局组补组名标签 + Escape 关闭；chip 复用 `.settings-chip`，`menuitemradio`/`aria-checked` 语义不变；自定义主题与导入入口保持整宽行）、`src/styles.css` 主题切换器段（新规则全锁 `.theme-menu-grid` 作用域；chip 皮肤以 `button.settings-chip`(0,2,1) 重申压过 `.rank-menu button`(0,1,1) 共享行样式；≤540px max-width 防溢出）、`src/ui-fixes.test.ts`（+6 例收纳绊线）。**零改动**：`THEMES` / `NEW_SERIES` / 主题 token 块 / `.rank-menu` 共享类 / atlas.css。
+- **为什么**：用户报「主题太多太杂乱」——单列菜单 ~27 行平铺，900px 视口下开场特效组被裁掉、布局组不可见。项目内已有同类问题的成熟解法（settings-menu 的「分组标签 + chip 网格」），对齐即可；不删/不藏主题（只增不减约束 + theme-atlas 绊线锁 12 套 + 存量用户 localStorage 指向）。
+- **验证到哪一步**：五道门禁全绿（test 63 files / 853 passed / 9 skipped，+6）；46 张截图前后对照——主清单 + 主题清单 41 张 `tol=0` **逐像素零差异**（关闭态页面零变化），开态 5 张（1300/800/540 + aurora/paper）人工签收通过；线上首页引用 `index-D8G1ZXh5.js` / `index-DV7_IvA2.css` SHA256 与本地**逐字节一致**、`/api/health` 200（D1 ok）、真实浏览器走查（4 组网格 / 19 chip / 296×614 完整在视口 / Escape 生效 / 移动 540 完整在屏）。CHANGELOG / README / FEATURES / USAGE 已同步。
+- **遗留风险 / 给下一棒**：
+  1. **踩坑（已写入本条，未进 PITFALLS）**：`.theme-switcher` 容器内有**两个** icon-button——SettingsMenu 的触发钮也挂在该包装层（历史复用），自动化脚本按容器找按钮会点错到「设置」；E2E/截图脚本必须用 `title="主题"` 精确锁定。
+  2. `.settings-chip` 本体特异性只有 (0,1,0)，在 `.rank-menu button` (0,1,1) 面板内其 border/background 会被吃掉——设置菜单里其实一直如此（靠 active/hover 高特异性态撑住观感）。本次主题菜单在 `.theme-menu-grid button.settings-chip` (0,2,1) 重申了完整皮肤；若将来给 `.rank-menu` 面板加第三处 chip 网格，照此办理或考虑一次性上提 `.settings-chip` 特异性（动它需回归设置菜单）。
+  3. 开态菜单截图清单 `.tmp/theme-menu-shots.json` 未入库（与 S2/S3 的 `.tmp` 清单同口径）；若日后正式化，需先给 `scripts/ui-shot.mjs` 加多步 steps 能力（承 T-20261017-01 下一步 ②）。
+  4. 主题菜单 Escape 已补；S5 剩余项（ProfileView rename `aria-label` / WorkEditor `htmlFor` / rank 菜单 Escape / PlazaPostView `aria-pressed`）仍待逐项做，与本任务无冲突。
 
 ### T-20261017-01 · 纯增量升级计划（前端 UI 设计 + 1v1 排名算法 + 榜单比较算法）· 🔄 进行中（S1–S4 已上线，S5 第 1 项已上线，余项待逐项做）
 
