@@ -13,6 +13,9 @@ export function FocusTrap({ children, onEscape }: { children: ReactNode; onEscap
   useEffect(() => {
     const el = ref.current;
     if (!el) return;
+    // 焦点归还（ROADMAP A / S5-2）：挂载时记下触发元素，卸载时归还——
+    // 读屏/键盘用户关弹窗后焦点不再落回 body。元素已从文档移除则跳过。
+    const previouslyFocused = document.activeElement as HTMLElement | null;
 
     function handleKeyDown(e: KeyboardEvent) {
       // 监听挂 document 而非 el：焦点落在 trap 外（如点击了非按钮区域后
@@ -58,7 +61,10 @@ export function FocusTrap({ children, onEscape }: { children: ReactNode; onEscap
     firstFocusable?.focus();
 
     document.addEventListener("keydown", handleKeyDown);
-    return () => document.removeEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("keydown", handleKeyDown);
+      if (previouslyFocused && previouslyFocused.isConnected) previouslyFocused.focus();
+    };
   }, []);
 
   return <div ref={ref}>{children}</div>;

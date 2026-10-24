@@ -211,7 +211,7 @@ export function PlazaView({
               </button>
             ))}
           </div>
-          <label className="search-field plaza-search" style={{ padding: 0, marginLeft: 8 }}>
+          <label className="search-field" style={{ padding: 0, marginLeft: 8 }}>
             <Search size={14} />
             <input
               aria-label={t("搜索榜单或作者", "Search posts or authors")}

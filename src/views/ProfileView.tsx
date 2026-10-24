@@ -34,7 +34,7 @@ import { AiInsightCard } from "../components/AiInsightCard";
 import { buildProfileData, buildRankingData } from "../lib/aiInsight";
 import type { ProfileViewProps } from "./types";
 import type { RankedArtwork } from "../lib/profile";
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 export function ProfileView({
   profile,
@@ -100,6 +100,15 @@ export function ProfileView({
   const [plazaSyncPostId, setPlazaSyncPostId] = useState<number | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
+  // S5-2：rank 菜单打开期间 Escape 关闭（与 ThemeSwitcher 同款键盘可达性）
+  useEffect(() => {
+    if (!menuOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setMenuOpen(false);
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [menuOpen]);
   // AI 点评：画像级 / 榜单级两个入口，同一时刻只展开一个（同一位置渲染）。
   const [profileInsightOpen, setProfileInsightOpen] = useState(false);
   const [rankingInsightOpen, setRankingInsightOpen] = useState(false);
@@ -306,6 +315,7 @@ export function ProfileView({
                     if (e.key === "Enter") renameRank(profileRankIdx);
                     if (e.key === "Escape") setEditingRankIdx(null);
                   }}
+                  aria-label={t("重命名榜单", "Rename list")}
                   style={{
                     fontSize: 18,
                     fontWeight: 600,
@@ -1220,13 +1230,17 @@ function WorkEditor({
         }}
       >
         <div>
-          <label style={{ fontSize: 12, color: "var(--muted)", display: "block", marginBottom: 6 }}>
+          <label
+            htmlFor="work-editor-manual"
+            style={{ fontSize: 12, color: "var(--muted)", display: "block", marginBottom: 6 }}
+          >
             {t(
               "手动添加（每行一件，支持「标题 - 创作者（年份）」格式）",
               "Add manually (one per line: Title - Creator (Year))",
             )}
           </label>
           <textarea
+            id="work-editor-manual"
             value={manual}
             onChange={(e) => setManual(e.target.value)}
             rows={3}
@@ -1248,6 +1262,7 @@ function WorkEditor({
         {
           <div>
             <label
+              htmlFor="work-editor-search"
               style={{ fontSize: 12, color: "var(--muted)", display: "block", marginBottom: 6 }}
             >
               {kind === "other"
@@ -1256,6 +1271,7 @@ function WorkEditor({
             </label>
             <div style={{ display: "flex", gap: 8 }}>
               <input
+                id="work-editor-search"
                 value={searchKey}
                 onChange={(e) => setSearchKey(e.target.value)}
                 onKeyDown={(e) => {

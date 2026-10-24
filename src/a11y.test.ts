@@ -51,7 +51,7 @@ describe("S5 · PlazaView 的 ARIA 语义补全", () => {
     expect(code).toContain('style={{ display: "contents" }}');
     const wrapper = code.indexOf('aria-label={t("排序方式", "Sort order")}');
     const closer = code.indexOf("</div>", wrapper);
-    const search = code.indexOf('className="search-field plaza-search"');
+    const search = code.indexOf('className="search-field"');
     expect(wrapper).toBeGreaterThan(-1);
     expect(closer).toBeGreaterThan(wrapper);
     expect(search).toBeGreaterThan(closer);
@@ -59,5 +59,56 @@ describe("S5 · PlazaView 的 ARIA 语义补全", () => {
 
   it("没有动搜索框自身的可访问名称", () => {
     expect(code).toContain('aria-label={t("搜索榜单或作者", "Search posts or authors")}');
+  });
+});
+
+/**
+ * S5 第二批（S5-2，T-20261024-04）：ProfileView / PlazaPostView / FocusTrap 的
+ * 纯追加修补——rename 输入 aria-label、WorkEditor label htmlFor/id 对、rank 菜单
+ * Escape、点赞 aria-pressed + 在途防连点、FocusTrap 卸载焦点归还触发元素。
+ * 全部为属性追加 / 行为补全，零节点增删、零布局改动。
+ */
+describe("S5-2 · ProfileView / PlazaPostView / FocusTrap 无障碍补全", () => {
+  it("rename 输入有可访问名称", () => {
+    const code = read("./views/ProfileView.tsx");
+    expect(code).toContain('aria-label={t("重命名榜单", "Rename list")}');
+  });
+
+  it("WorkEditor 的手动文本域与搜索输入都有 htmlFor/id 关联", () => {
+    const code = read("./views/ProfileView.tsx");
+    expect(code).toContain('htmlFor="work-editor-manual"');
+    expect(code).toContain('id="work-editor-manual"');
+    expect(code).toContain('htmlFor="work-editor-search"');
+    expect(code).toContain('id="work-editor-search"');
+  });
+
+  it("rank 菜单打开期间 Escape 关闭（document 级监听，挂/卸随 menuOpen）", () => {
+    const code = read("./views/ProfileView.tsx");
+    expect(code).toMatch(/addEventListener\("keydown"/);
+    expect(code).toContain('if (e.key === "Escape") setMenuOpen(false);');
+  });
+
+  it("点赞按钮带 aria-pressed 且在途防连点", () => {
+    const code = read("./views/PlazaPostView.tsx");
+    expect(code).toContain("aria-pressed={liked}");
+    expect(code).toContain("disabled={likeBusy}");
+    expect(code).toContain("if (likeBusy) return;");
+    expect(code).toContain("setLikeBusy(true);");
+  });
+
+  it("FocusTrap 卸载时把焦点归还打开弹窗前的触发元素", () => {
+    const code = read("./components/FocusTrap.tsx");
+    expect(code).toContain("const previouslyFocused = document.activeElement");
+    expect(code).toContain("previouslyFocused.isConnected) previouslyFocused.focus();");
+  });
+
+  it("死代码清理不回退：plaza-search 死类不再出现，theme-simple 色点与主题 accent 一致", () => {
+    const plaza = read("./views/PlazaView.tsx");
+    expect(plaza).not.toContain("plaza-search");
+    const css = read("./styles.css");
+    expect(css).not.toContain(".theme-menu-sep{");
+    expect(css).not.toContain(".identity{top:18px}");
+    expect(css).toContain(".theme-dot.theme-simple{--dot-a:#f5f7fa;--dot-b:#2b64d8;");
+    expect(css).not.toContain("#2f6fed");
   });
 });

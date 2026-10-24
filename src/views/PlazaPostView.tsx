@@ -44,6 +44,7 @@ export function PlazaPostView({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [liked, setLiked] = useState(false);
+  const [likeBusy, setLikeBusy] = useState(false);
   const [likeCount, setLikeCount] = useState(0);
   const [commentText, setCommentText] = useState("");
   const [commentBusy, setCommentBusy] = useState(false);
@@ -115,6 +116,9 @@ export function PlazaPostView({
       setNotice(t("请先登录。", "Please sign in first."));
       return;
     }
+    // S5-2：在途防连点——旧实现连点会排队多次 toggle，最终态取决于完成顺序
+    if (likeBusy) return;
+    setLikeBusy(true);
     try {
       const response = await fetch(`/api/plaza/posts/${postId}/like`, {
         method: "POST",
@@ -125,6 +129,8 @@ export function PlazaPostView({
       setLikeCount((prev) => (data.liked ? prev + 1 : Math.max(0, prev - 1)));
     } catch {
       setNotice(t("操作失败，请重试。", "Action failed. Please retry."));
+    } finally {
+      setLikeBusy(false);
     }
   }
 
@@ -895,6 +901,8 @@ export function PlazaPostView({
         <button
           className={`button ${liked ? "primary" : "secondary"}`}
           onClick={() => void handleLike()}
+          aria-pressed={liked}
+          disabled={likeBusy}
           style={{ minHeight: 38, fontSize: 13 }}
         >
           <Heart size={15} fill={liked ? "currentColor" : "none"} />
