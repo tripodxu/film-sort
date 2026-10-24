@@ -1,5 +1,23 @@
 # Changelog
 
+## 2026-10-24 · 首页 identity 胶囊统一右上角定位（T-20261024-02）
+
+**背景**：用户报「本地游客 / 登录·同步的位置太偏下了，应该要更加右上方」。根因：桌面端该胶囊被 v2 玻璃卡的 `position:relative`（`.identity.glass-capsule`，0,2,0）压过 modern 基座的 `absolute`（`.identity`，0,1,0），退回 hero v2 网格流 col2-row1 且被残留 `top:26px` 再下推，落在**顶栏下方 ~104px**；而 ≤800px 的 P6 补丁（`top:14px`）与刊物家族（`top:0`）又各有定位——三处不一致。
+
+**改了什么**（提交 `5a0393c`，仅 `src/styles.css` 一条规则 + 2 条绊线）
+
+- 把 ≤800px 补丁放开为全宽度规则：`.orb-hero:not(.ed-hero) .identity.glass-capsule{position:absolute;top:14px;right:0;z-index:2;margin:0}`。
+- 桌面：顶栏下方 104px → **14px**，右缘与顶栏图标列对齐；平板/移动端计算样式与改前逐字相同（本就是 14px 绝对定位）。
+- `:not(.ed-hero)` 排除刊物家族，其沿用自有 `.ed-hero-inner` 规则——editorial 桌面首页截图零差异；editorial 移动端随自身约定统一为 `top:0`（14px 上移）。
+- `src/ui-fixes.test.ts` +2 绊线（统一规则在位且不再裹媒体查询 / editorial 自有规则在位）。
+
+**验证**
+
+- 五道门禁全绿（test 63 files / **855 passed / 9 skipped**，+2）。
+- 41 张截图前后对照：**全部画像页与非首页 26 张 `tol=0` 逐像素零差异**；15 张首页 hero 变化经差异叠加图逐张确认为胶囊新旧位置（含玻璃模糊光晕）与 orb 计数器微移，**报头 ART/RANK、主按钮、hero 底线均未移动**。
+- 几何复测（1300/800/540 三档）：全部 `absolute; top:14px`，右缘与顶栏图标对齐；桌面/移动/editorial 移动三处视觉签收通过（无遮挡、无碰撞）。
+- 线上：`index-q4v3Skto.js` / `index-D2qqtlK9.css` SHA256 与本地**逐字节一致**，线上 CSS 含新规则；`/api/health` 200（D1 ok）；生产三档视口实测几何与本地一致（桌面 gapBelowTopbar 104 → 14）。
+
 ## 2026-10-24 · 主题菜单收纳整理（T-20261024-01）
 
 **背景**：用户报「主题太多太杂乱，在不影响内容的情况下优化」——主题菜单单列 ~27 行平铺（12 主题 + 4 特效 + 3 布局 + 导入 + 自定义），900px 视口下开场特效组被裁掉、布局组不可见。**不删/不藏任何主题**（只增不减约束 + theme-atlas 绊线锁 12 套），用密度与分组消化杂乱。
