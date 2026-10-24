@@ -1,16 +1,16 @@
 {
-  "generatedAt": "2026-09-28T13:50:58.595Z",
+  "generatedAt": "2026-10-24T05:16:37.694Z",
   "convention": "行数 = split(/\\r?\\n/) 去单一尾空串（ReadAllLines 兼容，含空行/含尾行）；其余为正则 occurrence 计数",
   "lines": {
     "src/styles.css": {
-      "total": 1738,
-      "blank": 113,
-      "nonEmpty": 1625
+      "total": 1909,
+      "blank": 117,
+      "nonEmpty": 1792
     },
     "src/App.tsx": {
-      "total": 2545,
-      "blank": 14,
-      "nonEmpty": 2531
+      "total": 2730,
+      "blank": 15,
+      "nonEmpty": 2715
     }
   },
   "important": {
@@ -29,7 +29,9 @@
   },
   "media": [
     "@media (max-width:520px)",
+    "@media (max-width:720px)",
     "@media (max-width:850px)",
+    "@media 规则清零；截图基线（强制 reduced-motion）不受影响。 */\n@keyframes home-rise",
     "@media(hover:hover)",
     "@media(hover:none)",
     "@media(max-width:360px)",
@@ -66,6 +68,7 @@
     "0 0 var(--r-lg)",
     "0 0 var(--r-sm)",
     "0!important",
+    "10px",
     "12px",
     "12px 12px 0 0",
     "12px!important",
@@ -75,6 +78,7 @@
     "50%",
     "6px",
     "6px 6px 0 0",
+    "8px",
     "999px",
     "var(--r-lg)",
     "var(--r-lg) var(",
@@ -97,9 +101,9 @@
     }
   },
   "fontSizePx": {
-    "10px": 27,
-    "11px": 56,
-    "12px": 4,
+    "10px": 28,
+    "11px": 59,
+    "12px": 7,
     "13px": 85,
     "14px": 2,
     "15px": 22,

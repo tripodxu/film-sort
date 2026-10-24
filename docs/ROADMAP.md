@@ -85,18 +85,13 @@ Jev 是 TypeSafe AI 的「System One」决策模型(2026-09-15 发布):输入 st
 
 ### A. 可访问性与键盘
 
-> 2026-10-24 修剪：以下条目已完成并从表中移除——CompareView/PlazaView 的 tablist 与组名、手动模式 checkbox aria-label、ranking-card-poster 的 role/tabIndex/键盘（以上 `79a84ff` S5 第 1 项）、ArtworkDetail 的 FocusTrap/Escape/audio aria-label（`03f1cbb` 迭代 11）、全局 IconButton aria-label（`src/views/IconButton.tsx` 已内置）。仍开放的条目如下。
+> 2026-10-24 两轮修剪：S5 第 1 项（`79a84ff`）与 S5-2（`388d10a`）完成后，本表原有的 rename aria-label / WorkEditor htmlFor / rank 菜单 Escape / 点赞 aria-pressed / FocusTrap 焦点归还 / ArtworkDetail / audio / 全局 IconButton 各行均已落地并移除。仍开放的条目如下。
 
 | 位置 | 问题 | 修法 |
 |---|---|---|
-| `ProfileView.tsx` rename 输入(~275) | 无 accessible label;`minHeight:'auto'` 与 44px 输入基线冲突 | 补 `aria-label`;min-height ≥36 |
-| `ProfileView.tsx` WorkEditor(~1167,1194) | `<label>` 无 htmlFor/id 关联,搜索框与手动文本域无标签 | 补 htmlFor/id 对 |
-| `ProfileView.tsx` rank 菜单(~418) | 菜单无 Escape 关闭 | backdrop onKeyDown Escape |
 | `CompareView.tsx`(~500) | 对端导入输入 38px、busy 态只显示「…」 | 恢复 44px;显示「导入中…」 |
 | `CompareView.tsx`(~1012) | `.comparison-row` `<button>` 内嵌 `.rank-clickable` 可点击 span——嵌套交互,键盘不可达 | 行改 div + 单元格各自按钮 |
 | `PlazaView.tsx`(~289) | 整卡 `role="button"` 内嵌真实 `<button>`(管理/排序)——嵌套交互 | 动作区移出 role 容器或 overlay link 模式 |
-| `PlazaPostView.tsx`(~863) | 点赞按钮无 `aria-pressed`、无 busy 防连点 | 补 aria-pressed + in-flight 禁用 |
-| FocusTrap(仓级组件) | 卸载时不把焦点归还打开弹窗的触发元素(影响三处调用点) | cleanup 记录 trigger 并归还 |
 
 ### B. 触控目标(<40px)
 
@@ -126,7 +121,6 @@ Jev 是 TypeSafe AI 的「System One」决策模型(2026-09-15 发布):输入 st
 | `CompareView.tsx` / `AiInsightCard.tsx` | 多处内联 `marginBottom:0` 覆盖 `.segmented` | 加 `.segmented.inline` 修饰类 |
 | `ProfileView.tsx`(~943,1131) / `PlazaPostView.tsx`(~707) | 重排/编辑行裸 `<Poster>` 缺 `.ranking-card-poster` 包裹,与只读行尺寸/边距不一致(52×76 vs 50×72) | 统一包裹 |
 | `PlazaPostView.tsx`(~1023) | 嵌套回复每层 `marginLeft:24` 无上限,深楼挤爆移动端 | 深度 ≥3 拍平或封顶缩进 |
-| `PlazaView.tsx`(~305) | `.plaza-search` 类无任何 CSS 规则(死类);搜索框下划线式样与广场卡片语言不符 | 定义 `.plaza-search` 或删类 |
 | `PlazaView.tsx`(~383) | 「加载更多」内联 `borderRadius:999` 绕过 token | 用 `--r-pill` |
 | `src/components/Poster.tsx`(~298) | cover-fallback(图标 + 9px 标题)在网格里观感弱 | 兜底卡视觉重设计(维持档案语言) |
 

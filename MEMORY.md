@@ -135,8 +135,7 @@ scripts/       gates.mjs（五道门禁聚合）/ ui-e2e.mjs（浏览器 E2E）/
 
 ## 5. 当前待办焦点（按优先级；进行中任务以 TASK-LEDGER 顶部为准）
 
-1. **S5 剩余项**（`docs/PLAN-ADDITIVE-UPGRADE.md` §10 下一步）：ProfileView rename 输入 `aria-label`、WorkEditor `label htmlFor/id`、rank 菜单 Escape、PlazaPostView `aria-pressed`；触控目标类需单独评估（改视觉，tol=0 纪律）。
+1. **S5 收尾**（`docs/PLAN-ADDITIVE-UPGRADE.md` §10）：纯追加类五项已全部落地（第 1 项 `79a84ff` + S5-2 五项 `388d10a`）；剩**触控目标类**（ProfileView 28px 按钮、PlazaPostView 回复框、AiInsightCard 徽章、CompareView 导入输入 38→44px 与「导入中…」文案）——会改视觉，按「透明命中区扩大 → 纯文案 → 否则登记不做」的顺序逐项评估，任一项 tol=0 不为零就回退。
 2. **Jev Phase 2 收尾**（`docs/ROADMAP.md`）：「让用户选」UI 已落地（CoverChoice + coverMemory，走规则候选端点），剩「band 触发 Jev Choice 判决」接入或撤销评估；Phase 3（Noul 护栏）/ Phase 4（Score 校准）⬜ 未开始。
-3. P2 打磨池残留（触控目标 44px、内联样式 token 化、CompareView 结构 D 项、`.plaza-search` 死类清理）。
-4. 工具/基线债：`docs/ui-baseline.json` 冻结在 2026-09-28（styles.css 已 1738→1909 行）需重立；`ui-shot.mjs` 补多步 steps；`.worktrees/p0-p1-hardening/` 遗留目录清理；`styles.css` ≤800px 段两条 `.identity` 死规则清理（T-20261024-02 台账登记）。
-5. FocusTrap 卸载时焦点归还触发元素（仓级组件语义，影响三处调用点）；封面链第 5 档「超时但前 4 档成功」运行时用例（现为源码扫描绊线覆盖）。
+3. P2 打磨池残留（ROADMAP §二 B/C/D：触控目标 44px、内联样式 token 化、CompareView 结构 D 项、嵌套交互两处）。
+4. 工具/基线债：`ui-shot.mjs` 补多步 steps（才能把 /sorting、/depth 纳入正式清单）；封面链第 5 档「超时但前 4 档成功」运行时用例（现为源码扫描绊线覆盖）。（ui-baseline 已于 2026-10-24 重立；`.worktrees` 已清理；identity 死规则与 plaza-search 死类已清。）

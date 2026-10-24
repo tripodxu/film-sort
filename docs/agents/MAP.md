@@ -44,18 +44,18 @@
 
 ### §2.1 排序 / 比较算法
 
-| 文件 | 行数 | 职责 |
+| 文件 | 规模 | 职责 |
 |------|------|------|
-| `src/lib/ranking.ts` | 1278 | 排序引擎（简易/经典/精确/**自适应**四模式：前三者为二分插入族，自适应走 `adaptiveRanking.ts` 前置分支）、插入定位、回环检测、序列化兼容 |
-| `src/lib/useSorting.ts` | 977 | 排序状态机：草稿、撤销、略过/暂放、Jev 代判挂钩、竞态守卫 |
-| `src/lib/adaptiveRanking.ts` | 274 | 自适应模式的「由决策重推」层：不新增持久化字段，模型/名次区间全部由 `decisionLog` 重算 |
-| `src/lib/preferenceModel.ts` | 462 | 在线 Bradley-Terry 能力模型（一步 Newton）与批量 `fitPreferenceModel`（坐标上升 MAP），输出 θ/σ 与名次区间 |
-| `src/lib/adaptiveQueue.ts` | 222 | 自适应选对：信息量 `p(1-p)(σ_i²+σ_j²)` + 对手覆盖度，冷却常量作入参；一遍扫描三级各保留当前最优（d47bd98 性能重写） |
-| `src/lib/compareMetrics.ts` | 243 | 比较页新指标：头部加权 τ、位置折扣一致度、bootstrap 置信区间、样本量收缩共识分（旧字段一个不删） |
-| `src/views/SortingView.tsx` | 417 | 对战界面（duel card）、键盘快捷键、滑动手势接入、自适应模式的名次区间条与信息量提示 |
+| `src/lib/ranking.ts` | ~1.3k | 排序引擎（简易/经典/精确/**自适应**四模式：前三者为二分插入族，自适应走 `adaptiveRanking.ts` 前置分支）、插入定位、回环检测、序列化兼容 |
+| `src/lib/useSorting.ts` | ~1.0k | 排序状态机：草稿、撤销、略过/暂放、Jev 代判挂钩、竞态守卫 |
+| `src/lib/adaptiveRanking.ts` | ~0.3k | 自适应模式的「由决策重推」层：不新增持久化字段，模型/名次区间全部由 `decisionLog` 重算 |
+| `src/lib/preferenceModel.ts` | ~0.5k | 在线 Bradley-Terry 能力模型（一步 Newton）与批量 `fitPreferenceModel`（坐标上升 MAP），输出 θ/σ 与名次区间 |
+| `src/lib/adaptiveQueue.ts` | ~0.2k | 自适应选对：信息量 `p(1-p)(σ_i²+σ_j²)` + 对手覆盖度，冷却常量作入参；一遍扫描三级各保留当前最优（d47bd98 性能重写） |
+| `src/lib/compareMetrics.ts` | ~0.2k | 比较页新指标：头部加权 τ、位置折扣一致度、bootstrap 置信区间、样本量收缩共识分（旧字段一个不删） |
+| `src/views/SortingView.tsx` | ~0.4k | 对战界面（duel card）、键盘快捷键、滑动手势接入、自适应模式的名次区间条与信息量提示 |
 | `src/lib/swipe.ts` | — | 纯函数 `decideSwipe(dx, dy, threshold=56)`，滑动判定可单测 |
-| `src/views/CompareView.tsx` | 1190 | 相遇比较界面（`/encounter`）+ 三档深度；旧指标原样保留 |
-| `src/views/DepthCompareView.tsx` | 415 | 深度比较页（`/depth`，只读）：收缩共识分 + 四格新指标 + 分歧作品点阵条 + 13 行旧指标对照 |
+| `src/views/CompareView.tsx` | ~1.2k | 相遇比较界面（`/encounter`）+ 三档深度；旧指标原样保留 |
+| `src/views/DepthCompareView.tsx` | ~0.4k | 深度比较页（`/depth`，只读）：收缩共识分 + 四格新指标 + 分歧作品点阵条 + 13 行旧指标对照 |
 
 **改这里前必读**：`docs/agents/PITFALLS.md` §3（异步覆盖与撤销一致性）、`docs/USAGE.md` 的排序模式章节（四模式）。**自适应模式的隐藏约束**：任何改动都必须保持「既有三模式执行路径逐字不变」，且不得往 `RankingState` 增加持久化字段（见 `docs/PLAN-ADDITIVE-UPGRADE.md` §10 的 S2 记录）。
 
@@ -63,18 +63,18 @@
 
 ### §2.2 前端视图 / 交互 / 路由
 
-| 文件 | 行数 | 职责 |
+| 文件 | 规模 | 职责 |
 |------|------|------|
-| `src/App.tsx` | 2730 | 全局状态与事件编排；大视图已 `React.lazy` 拆包 |
-| `src/lib/useRouter.ts` | 116 | URL 路径路由（`/`、`/catalog/source|setup|sorting`、`/encounter`、`/depth`、`/myself`、`/share/:code`、`/plaza/:id`）；`View` 联合扩容时会强制补全 `VIEW_PATH` / `VIEW_TITLE` 两个 Record |
-| `src/lib/useAuth.ts` | 545 | 登录态、云同步、会话代际 |
-| `src/views/SetupView.tsx` | 228 | 准备页：四种排序模式（简易/经典/精确/自适应）+ 三个动作（自行排序 / 仅保存不排序 / AI 快排） |
-| `src/views/SourceView.tsx` | 1810 | 来源与导入页（最大的视图） |
-| `src/views/ProfileView.tsx` | 1331 | 我的文化索引（品味年轮、榜单管理） |
-| `src/views/CompareView.tsx` | 1190 | 比较 |
-| `src/views/PlazaView.tsx` / `PlazaPostView.tsx` | 467 / 1174 | 广场列表 / 帖子详情 |
-| `src/views/ShareView.tsx` | 252 | 分享查看页 |
-| `src/views/HomeView.tsx` | 507 | 首页 |
+| `src/App.tsx` | ~2.7k | 全局状态与事件编排；大视图已 `React.lazy` 拆包 |
+| `src/lib/useRouter.ts` | ~0.1k | URL 路径路由（`/`、`/catalog/source|setup|sorting`、`/encounter`、`/depth`、`/myself`、`/share/:code`、`/plaza/:id`）；`View` 联合扩容时会强制补全 `VIEW_PATH` / `VIEW_TITLE` 两个 Record |
+| `src/lib/useAuth.ts` | ~0.5k | 登录态、云同步、会话代际 |
+| `src/views/SetupView.tsx` | ~0.2k | 准备页：四种排序模式（简易/经典/精确/自适应）+ 三个动作（自行排序 / 仅保存不排序 / AI 快排） |
+| `src/views/SourceView.tsx` | ~1.8k | 来源与导入页（最大的视图） |
+| `src/views/ProfileView.tsx` | ~1.3k | 我的文化索引（品味年轮、榜单管理） |
+| `src/views/CompareView.tsx` | ~1.2k | 比较 |
+| `src/views/PlazaView.tsx` / `PlazaPostView.tsx` | ~0.5k / ~1.2k | 广场列表 / 帖子详情 |
+| `src/views/ShareView.tsx` | ~0.3k | 分享查看页 |
+| `src/views/HomeView.tsx` | ~0.5k | 首页 |
 | `src/components/` | — | `Poster`、`ArtworkDetail`、`RankingDetail`、`AiConfigDialog`、`ThemeSwitcher`、`OrbScene`（Three.js）、`FocusTrap`、`ErrorBoundary`、`ExpandableNote`、`SettingsMenu` |
 
 **改这里前必读**：`docs/agents/CONVENTIONS.md` §2（React Hook 约定 —— 历史上有两处 Hook 违规与三处 Hook 提取回归）。

@@ -1,5 +1,20 @@
 # Changelog
 
+## 2026-10-24 · 优化项执行批：S5-2 无障碍五项 + 死代码清理 + 仓库卫生（T-20261024-04）
+
+**背景**：执行文档审计（T-20261024-03）登记的优化项。
+
+**改了什么**
+
+- **S5 第二批（`388d10a`，纯属性追加/行为补全，零节点增删）**：ProfileView rename 输入 `aria-label`；WorkEditor 两个表单 `htmlFor/id` 关联；rank 菜单 Escape 关闭；PlazaPostView 点赞 `aria-pressed` + 在途防连点（`likeBusy` guard）；**FocusTrap 卸载焦点归还触发元素**（`isConnected` 守卫，惠及 App/AiConfigDialog/ArtworkDetail 三处弹窗）。至此 S5 纯追加类九项全部完成，仅剩触控目标类（需单独评估视觉）。
+- **死代码清理**：`.theme-menu-sep` 死规则（零引用）、≤800px `.identity{top:18px}` 整条与 ≤540px 段 `top/right` 死声明（P6 起即被压住）、PlazaView `plaza-search` 死类；`theme-simple` 色点 `#2f6fed`→`#2b64d8` 与主题实际 accent 一致（ROADMAP P2-11）。
+- **仓库卫生**：`docs/ui-baseline.json` 重立（09-28 → 10-24，styles.css 1738→1909 行）；移除 406MB 的 `.worktrees/p0-p1-hardening` 遗留 worktree（分支保留）；MAP §2.1/§2.2 行数列改量级（~1.3k，10 倍漂移容忍）。
+- 绊线：`a11y.test.ts` +6（S5-2 五项 + 死代码不回退）；`ui-fixes` 的 FocusTrap 形状绊线升级为锁定「摘监听→归还焦点」新清理函数。
+
+**验证**
+
+- 五道门禁全绿（test 63 files / **861 passed / 9 skipped**，+6）；41 张关闭态截图 `tol=0` **逐像素零差异**；开态菜单人工签收（简约色点新色正确、四组网格无缺陷）。
+
 ## 2026-10-24 · 文档全面审计与漂移清零（T-20261024-03）
 
 **背景**：用户指派「全面阅读，查看优化项，优化文档」。四组并行审计（agent 路由文档 / 主文档 / 计划状态 / 坑档规范）+ 逐条对照代码修复全仓文档漂移。本条目同时补记 2026-10-02 迭代 1–8/20 的 CHANGELOG 缺口（当时仅记台账）。

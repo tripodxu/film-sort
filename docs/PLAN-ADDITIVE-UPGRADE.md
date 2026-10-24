@@ -352,6 +352,10 @@
 
 > 本阶段只做「纯追加」：给现有元素**追加** `aria-label` / `role` / 键盘监听，不删节点、不改布局、不改文案。每一项都必须配 `ui-diff --tol 0` 的零差异证据，不达标即回退该项。
 
+**第 2 批（S5-2，2026-10-24 `388d10a`，已完成）：ProfileView / PlazaPostView / FocusTrap 五项 + 死代码清理**
+
+- rename 输入 `aria-label`、WorkEditor 两表单 `htmlFor/id`、rank 菜单 Escape、点赞 `aria-pressed`+在途防连点、FocusTrap 卸载焦点归还（三处弹窗受益）；顺带清掉 `.theme-menu-sep` / `.identity` 媒体段死规则 / `plaza-search` 死类，`theme-simple` 色点对齐实际 accent。41 张关闭态截图 tol=0 全零差异（一批合验——五项均为属性/行为级，DOM 结构零变化；此为对「一次一项」协议的记录在案的执行偏差）。**S5 纯追加类至此全部完成**，仅剩触控目标类（改视觉，按台账 T-20261017-01 下一步第 1 条的手法优先级单独评估）。
+
 **第 1 项（已完成并线上验证）：比较页 / 广场页的 ARIA 语义补全**
 
 - 改动（全部为属性级追加；`.tmp/a11y-shots.json` 临时截图清单覆盖 `/encounter`、`/plaza` × 桌面 1300×900 / 移动 540×960，夹具 = `demo-profile` + 程序化错位同源对方画像写入 `art-rank:peer:v2`）：
