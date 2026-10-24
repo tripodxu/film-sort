@@ -3,6 +3,7 @@ import { ConfidenceBadge } from "../components/ConfidenceBadge";
 import { MetricExplainer } from "../components/MetricExplainer";
 import { mediaLabels, type MediaKind } from "../data/media";
 import { computeCompareMetrics, type CompareMetrics } from "../lib/compareMetrics";
+import { computeTasteDistance, type TasteDistanceResult } from "../lib/tasteDistance";
 import { compareProfiles, type DimensionComparison } from "../lib/profile";
 import type { DepthCompareViewProps } from "./types";
 
@@ -12,6 +13,8 @@ interface KindRow {
   kind: MediaKind;
   result: DimensionComparison;
   metrics: CompareMetrics;
+  /** 批四：PL 似然品味一致度（共同作品 <2 件为 null）。 */
+  taste: TasteDistanceResult | null;
 }
 
 /**
@@ -81,6 +84,12 @@ export function DepthCompareView({ profile, peer, t, navigateTo }: DepthCompareV
       metrics: computeCompareMetrics(entry.result.shared, {
         rawConsensus: entry.result.consensusScore,
       }),
+      taste: computeTasteDistance(
+        entry.result.shared.map((item) => ({
+          ownRank: item.ownRank,
+          peerRank: item.peerRank,
+        })),
+      ),
     }));
   }, [comparison]);
 
@@ -145,7 +154,7 @@ export function DepthCompareView({ profile, peer, t, navigateTo }: DepthCompareV
   }
 
   const active = rows.find((row) => row.kind === activeKind) ?? rows[0];
-  const { result, metrics } = active;
+  const { result, metrics, taste } = active;
   const level = confidenceLevel(metrics);
   const maxRank = Math.max(
     1,
@@ -286,6 +295,30 @@ export function DepthCompareView({ profile, peer, t, navigateTo }: DepthCompareV
               )}
             </span>
           </article>
+          <article className="depth-metric">
+            <span className="depth-metric-label">{t("品味似然一致度", "PL likelihood fit")}</span>
+            <strong className="depth-metric-value">{formatScore(taste?.symmetric)}</strong>
+            <span className="depth-metric-note">
+              {taste
+                ? t(
+                    "双向 " +
+                      taste.peerUnderMine +
+                      " / " +
+                      taste.mineUnderPeer +
+                      "，共同作品 " +
+                      taste.pairCount +
+                      " 件",
+                    "both ways " +
+                      taste.peerUnderMine +
+                      " / " +
+                      taste.mineUnderPeer +
+                      ", " +
+                      taste.pairCount +
+                      " shared",
+                  )
+                : t("共同作品不足两件", "fewer than two shared works")}
+            </span>
+          </article>
         </div>
 
         <div className="depth-explainers">
@@ -310,6 +343,14 @@ export function DepthCompareView({ profile, peer, t, navigateTo }: DepthCompareV
               {t(
                 "两边把同一件作品排在同一位时，谁高谁低没有信息量，留下只会把一致率整体拉低（同一份榜单自比也到不了 100%）。本页与相遇页共用同一口径，所以两页数字可以互相核对。",
                 "When both sides put a work at the same rank there is nothing to learn, and keeping it drags agreement down (a chart compared with itself would not reach 100%). Both pages share the rule, so the numbers can be cross-checked.",
+              )}
+            </p>
+          </MetricExplainer>
+          <MetricExplainer title={t("品味似然一致度怎么读", "How to read the likelihood fit")}>
+            <p>
+              {t(
+                "用你的完整排序拟合一个 Plackett-Luce 品味模型，再算「对方的排序在这个模型下、每一步从剩余作品里选中对方所选」的平均概率，除以你自己排序的同一概率再映射到 0–100——完全一致恒为 100，且分数不随共同作品件数变化。与 τ 只数「顺序是否一致」不同，似然还计入「错得有多远」：把你的第 1 名排到第 3 和排到第 30，扣的分不一样。双向各算一次取几何平均；共同作品少于两件不计算。",
+                "Fit a Plackett-Luce taste model to your full ordering, then ask how likely it is to pick, at every step, exactly what the other person picked — divided by the same probability for your own ordering and mapped to 0–100, so perfect agreement always scores 100 regardless of sample size. Unlike τ, which only counts whether an order agrees, the likelihood also weighs how far a mistake lands: dropping your number 1 to 3 costs far less than dropping it to 30. Both directions are computed and averaged; fewer than two shared works means no score.",
               )}
             </p>
           </MetricExplainer>

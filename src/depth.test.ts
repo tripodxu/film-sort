@@ -106,6 +106,14 @@ describe("S3 新页面独立性：旧 CompareView 一行不改", () => {
     expect(DEPTH).toMatch(/rawConsensus: entry\.result\.consensusScore/);
   });
 
+  it("批四：品味似然一致度（PL）作为第五张指标卡接入，与 compareMetrics 同源输入", () => {
+    expect(DEPTH).toContain("computeTasteDistance");
+    // 输入与旧指标同一份 shared（口径一致，两页数字可互证）
+    expect(DEPTH).toMatch(/entry\.result\.shared\.map\(\(item\) => \(\{/);
+    expect(DEPTH).toContain('t("品味似然一致度", "PL likelihood fit")');
+    expect(DEPTH).toContain('t("品味似然一致度怎么读"');
+  });
+
   it("新页面不引用 adaptive 专用的 RankIntervalBar（记录该偏差，勿误接）", () => {
     expect(stripComments(DEPTH)).not.toContain("RankIntervalBar");
   });
