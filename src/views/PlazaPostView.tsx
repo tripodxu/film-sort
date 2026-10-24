@@ -564,7 +564,7 @@ export function PlazaPostView({
             gap: 8,
             margin: "0 0 16px",
             padding: "10px 14px",
-            borderRadius: 10,
+            borderRadius: "var(--r-md)",
             background: "color-mix(in srgb,var(--warn) 6%,transparent)",
             border: "1px solid color-mix(in srgb,var(--warn) 35%,transparent)",
             fontSize: 12,
@@ -618,7 +618,7 @@ export function PlazaPostView({
             margin: "0 0 16px",
             padding: "12px 16px",
             border: "1px solid var(--line)",
-            borderRadius: 10,
+            borderRadius: "var(--r-md)",
             fontSize: 12,
           }}
         >
@@ -653,7 +653,7 @@ export function PlazaPostView({
           style={{
             padding: 16,
             border: "1px solid var(--line)",
-            borderRadius: 12,
+            borderRadius: "var(--r-md)",
             marginBottom: 16,
             display: "grid",
             gap: 10,
@@ -791,7 +791,7 @@ export function PlazaPostView({
               marginTop: 16,
               padding: 16,
               border: "1px solid var(--line)",
-              borderRadius: 12,
+              borderRadius: "var(--r-md)",
             }}
           >
             <label style={{ fontSize: 12, color: "var(--muted)" }}>
@@ -978,7 +978,7 @@ export function PlazaPostView({
               style={{
                 margin: "0 0 16px",
                 padding: "12px 16px",
-                borderRadius: 10,
+                borderRadius: "var(--r-md)",
                 background: "color-mix(in srgb,var(--music) 5%,transparent)",
                 borderLeft: "2px solid color-mix(in srgb,var(--accent) 20%,transparent)",
               }}
@@ -1124,7 +1124,7 @@ export function PlazaPostView({
                     className="button primary"
                     disabled={commentBusy || !replyText.trim()}
                     onClick={() => void handleAddComment(comment.id)}
-                    style={{ minHeight: 32, fontSize: 12, paddingInline: 12 }}
+                    style={{ minHeight: 36, fontSize: 12, paddingInline: 12 }}
                   >
                     {t("回复", "Reply")}
                   </button>

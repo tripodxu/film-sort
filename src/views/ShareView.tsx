@@ -97,7 +97,7 @@ export function ShareView({
           style={{
             margin: "16px 0",
             padding: "12px 16px",
-            borderRadius: 8,
+            borderRadius: "var(--r-sm)",
             background: "color-mix(in srgb,var(--music) 6%,transparent)",
             border: "1px solid var(--line)",
           }}
@@ -182,7 +182,7 @@ export function ShareView({
           style={{
             margin: "24px 0",
             padding: "20px 24px",
-            borderRadius: 14,
+            borderRadius: "var(--r-md)",
             border: "1px solid var(--line)",
             background: "color-mix(in srgb,var(--surface-3) 40%,transparent)",
           }}

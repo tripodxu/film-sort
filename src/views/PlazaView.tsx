@@ -430,7 +430,7 @@ export function PlazaView({
             className="button secondary"
             disabled={loading}
             onClick={() => void loadPosts(page + 1, kindFilter, sort, search, true)}
-            style={{ minWidth: 160, borderRadius: 999, paddingInline: 28 }}
+            style={{ minWidth: 160, borderRadius: "var(--r-pill)", paddingInline: 28 }}
           >
             {loading ? t("加载中…", "Loading…") : t("加载更多", "Load more")}
           </button>

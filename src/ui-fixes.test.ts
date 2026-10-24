@@ -1011,3 +1011,53 @@ describe("懒加载失败与迟到响应守卫（回归审查 2026-10）", () =>
     expect(code).toMatch(/onClick=\{\(\) => location\.reload\(\)\}/);
   });
 });
+
+describe("打磨批 T-20261024-06：内联圆角归 token + segmented.inline", () => {
+  const POLISH_FILES = [
+    "src/views/ProfileView.tsx",
+    "src/views/ShareView.tsx",
+    "src/views/PlazaPostView.tsx",
+    "src/views/PlazaView.tsx",
+    "src/views/CompareView.tsx",
+    "src/components/AiInsightCard.tsx",
+  ];
+
+  it("六个视图的内联 borderRadius 全部走主题 token（retro 等方角主题不再被像素值甩下）", () => {
+    // ROADMAP 登记项：内联像素圆角绕过 --r-* token，主题改圆角时这些组件掉队。
+    // 归 token 后圆角随主题走（"50%" 圆点与字符串 token 不受此限）。
+    for (const f of POLISH_FILES) {
+      const code = readFileSync(f, "utf8");
+      expect(code, f).not.toMatch(/borderRadius:\s*\d+(?:px)?,/);
+    }
+  });
+
+  it("styles.css 提供 .segmented.inline 修饰类（行内用法不再逐处手写 marginBottom:0）", () => {
+    expect(css).toMatch(/\.segmented\.inline\{margin-bottom:0\}/);
+    const compare = readFileSync("src/views/CompareView.tsx", "utf8");
+    expect(compare.match(/className="segmented inline"/g) ?? []).toHaveLength(2);
+    expect(compare).not.toMatch(/className="segmented"[\s\S]{0,120}marginBottom: 0/);
+    const insight = readFileSync("src/components/AiInsightCard.tsx", "utf8");
+    expect(insight).toContain('className="segmented inline"');
+  });
+
+  it("广场回复按钮触控高度提到 36px（与 text-button 基线一致）", () => {
+    const post = readFileSync("src/views/PlazaPostView.tsx", "utf8");
+    expect(post).not.toContain("minHeight: 32, fontSize: 12, paddingInline: 12");
+    expect(post).toContain("minHeight: 36, fontSize: 12, paddingInline: 12");
+  });
+
+  it("小号海报兜底走 slim 修饰类（gap:32 不再把 9px 文字挤出格子底边）", () => {
+    // GLM-5.3-Flash 审查 + DOM 探针坐实：32×45px 格子里 16px 图标 + 32px gap + 文字
+    // 溢出 25px 被 overflow:hidden 裁掉半行；且全局 overflow-wrap:anywhere 把
+    // 「Substance」折成「Substan/ce」。slim = 纯文字 + break-word 空格断行优先。
+    const poster = readFileSync("src/components/Poster.tsx", "utf8");
+    expect(poster).toContain('cover-fallback${large ? "" : " cover-fallback-slim"}');
+    expect(css).toMatch(/\.cover-fallback-slim\{gap:0;padding:4%\}/);
+    expect(css).toMatch(/\.cover-fallback-slim svg\{display:none\}/);
+    expect(css).toMatch(/\.cover-fallback-slim span\{overflow-wrap:break-word\}/);
+  });
+
+  it("首页引语开启 text-wrap:pretty（末行不再只剩「个。」孤字）", () => {
+    expect(css).toMatch(/\.home-heading p\{[^}]*text-wrap:pretty/);
+  });
+});

@@ -195,7 +195,7 @@ export function CompareView({
             }}
             style={{ fontSize: 12, color: "var(--muted)" }}
           >
-            <X size={14} style={{ verticalAlign: "middle", marginRight: 4 }} />
+            <X size={14} />
             {t("退出比较", "Exit comparison")}
           </button>
         </div>
@@ -204,12 +204,7 @@ export function CompareView({
         <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 16 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
             <span style={{ fontSize: 11, color: "var(--muted)" }}>{t("比较模式", "Mode")}:</span>
-            <div
-              className="segmented"
-              role="tablist"
-              aria-label={t("比较模式", "Mode")}
-              style={{ marginBottom: 0 }}
-            >
+            <div className="segmented inline" role="tablist" aria-label={t("比较模式", "Mode")}>
               <button
                 role="tab"
                 aria-selected={compareMode === "auto"}
@@ -230,12 +225,7 @@ export function CompareView({
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
             <span style={{ fontSize: 11, color: "var(--muted)" }}>{t("比较深度", "Depth")}:</span>
-            <div
-              className="segmented"
-              role="tablist"
-              aria-label={t("比较深度", "Depth")}
-              style={{ marginBottom: 0 }}
-            >
+            <div className="segmented inline" role="tablist" aria-label={t("比较深度", "Depth")}>
               {LEVELS.map((level) => (
                 <button
                   key={level.value}
@@ -988,7 +978,7 @@ export function CompareView({
                   <div
                     style={{
                       height: 6,
-                      borderRadius: 3,
+                      borderRadius: "var(--r-xs)",
                       background: "var(--line)",
                       overflow: "hidden",
                     }}
@@ -998,7 +988,7 @@ export function CompareView({
                         height: "100%",
                         width: `${Math.max(0, Math.min(100, factor.value))}%`,
                         background: "var(--accent)",
-                        borderRadius: 3,
+                        borderRadius: "var(--r-xs)",
                       }}
                     />
                   </div>

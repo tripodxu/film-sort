@@ -157,7 +157,7 @@ export function AiInsightCard({
                   style={{
                     width: 60,
                     height: 8,
-                    borderRadius: 4,
+                    borderRadius: "var(--r-xs)",
                     background: "var(--line)",
                     animation: `plaza-pulse 1.5s ease-in-out ${i * 0.2}s infinite`,
                   }}
@@ -246,8 +246,8 @@ export function AiInsightCard({
         }}
       >
         <div
-          className="segmented"
-          style={{ marginBottom: 0, fontSize: 11 }}
+          className="segmented inline"
+          style={{ fontSize: 11 }}
           role="group"
           aria-label={t("点评长度", "Commentary length")}
         >

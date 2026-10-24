@@ -420,7 +420,9 @@ export function Poster({
           )}
         </>
       ) : (
-        <div className={`cover-fallback${retryable ? " cover-fallback-retry" : ""}`}>
+        <div
+          className={`cover-fallback${large ? "" : " cover-fallback-slim"}${retryable ? " cover-fallback-retry" : ""}`}
+        >
           <Icon size={large ? 36 : 16} />
           {large ? (
             <span>{work.title}</span>

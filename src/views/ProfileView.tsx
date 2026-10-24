@@ -608,7 +608,7 @@ export function ProfileView({
                 gap: 10,
                 padding: "10px 14px",
                 marginBottom: 14,
-                borderRadius: 10,
+                borderRadius: "var(--r-md)",
                 background: "color-mix(in srgb,var(--accent) 6%,transparent)",
                 border: "1px solid color-mix(in srgb,var(--accent) 25%,transparent)",
                 fontSize: 12,
@@ -1226,7 +1226,7 @@ function WorkEditor({
           marginTop: 18,
           padding: 16,
           border: "1px solid var(--line)",
-          borderRadius: 12,
+          borderRadius: "var(--r-md)",
         }}
       >
         <div>
@@ -1300,7 +1300,7 @@ function WorkEditor({
                       gap: 10,
                       padding: "8px 10px",
                       border: "1px solid var(--line)",
-                      borderRadius: 8,
+                      borderRadius: "var(--r-sm)",
                       fontSize: 13,
                     }}
                   >
