@@ -1,5 +1,24 @@
 # Changelog
 
+## 2026-10-24 · 前端全量打磨闭环（T-20261024-06，四 skill 指导 + GLM-5.3-Flash 子代理审查）
+
+**背景**：用户指派「调用 frontend-design / ui-ux-pro-max / impeccable / taste-skill 四个前端设计 skill 全量打磨前端，上线后检验优化，做成闭环」。模式 = impeccable **Refinement**（夜间档案馆世界观为 committed world，skill 默认项不覆盖既有签名）。视觉审查按用户指定由 **GLM-5.3-Flash 子代理**（dynamic workflow）执行。
+
+**改了什么**（提交 `0c3198f`）
+
+- **海报兜底缺陷修复（Flash 审查发现 + DOM 探针坐实）**：小号海报文字兜底复用大号 `.cover-fallback{gap:32px}`，32×45px 格子里「16px 图标 + 32px 间距 + 文字」被 `overflow:hidden` 裁掉最多 **25px**（半行以上）；且全局 `overflow-wrap:anywhere` 把「The Substance」折成「Substan/ce」。新增 `.cover-fallback-slim`（非 large 分支自动挂载：纯文字、gap:0、padding:4%、`overflow-wrap:break-word` 空格断行优先）——探针复测溢出 ≤1px（行盒内垫，不可见），拉丁词不再断词。
+- **首页引语孤字**：`.home-heading p` 加 `text-wrap:pretty`，末行从「个。」（30px）变为「一个。」（45px）。
+- **内联圆角归 token（16 处 / 六视图）**：ProfileView/ShareView/PlazaPostView/PlazaView/CompareView/AiInsightCard 的像素值 `borderRadius` 全部改 `var(--r-*)`——retro 等方角主题（--r-md:2px）不再被写死像素甩下；广场「加载更多」999→`--r-pill`。
+- **杂项**：`.segmented.inline` 修饰类替换三处手写 `marginBottom:0`；比较页退出按钮 X 图标死内联样式清理（间距 12→8px 对齐 house gap）；广场回复按钮 32→36px（对齐 text-button 基线）。
+- 绊线 +5（`ui-fixes.test.ts`）：六视图禁数字内联圆角 / slim 修饰类形状 / `text-wrap:pretty` 在位 / 回复按钮高度 / segmented.inline 用法。
+
+**验证（闭环）**
+
+- 五道门禁全绿；52 张前后截图（7 组清单）`tol=0` diff 足迹**全部落在预期区域**——home 类仅引语+样例封面（~0.02%）、profile 类仅海报兜底块（~1%）、encounter 海报+X 图标，plaza/depth/sorting **逐像素零差异**。
+- 审查闭环：GLM-5.3-Flash 首轮审 8 张（4 条发现：1 medium 3 low）→ 主会话 DOM 探针独立坐实全部 4 条（溢出像素/断词宽度/末行宽度均有实测值）→ 修复 → Flash 复检 3 张关键页 **4/4 已解决、0 新问题**（两轮 run：首轮缓存重放零成本）。
+- `impeccable detect`：新增代码**零检出**；9 条既有签名样式警告（侧边引注线/吐司描边/缓动）按 refinement 契约保留。
+- **线上 ✅（`0c3198f` 推送后）**：主包 `index-IUw2Isqp.js` + `index-CuGSGY-6.css` + CompareView/ProfileView/PlazaPostView/PlazaView/ShareView/AiInsightCard 六个分包 SHA256 均与本地**逐字节一致**；`/api/health` 200（D1 ok）；SPA 路由 `/depth` `/encounter` `/myself` `/plaza` `/compare` 全 200。
+
 ## 2026-10-24 · 排序/比较算法优化批（T-20261024-05，四批三提交 + 一项回退登记）
 
 **背景**：用户指派「优化比较与排序的逻辑，评估现有方法与是否引入新方法」。深读四模式排序与 13+5 比较指标后按优先级分批执行。

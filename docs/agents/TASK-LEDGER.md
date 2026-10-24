@@ -10,6 +10,14 @@
 
 ## 进行中 / 最近
 
+### T-20261024-06 · 前端全量打磨闭环（四 skill 指导 + GLM-5.3-Flash 子代理审查）· ✅ 完成
+
+- **状态**：✅ 完成（代码 `0c3198f` 已推送并线上验证）｜ **负责人**：本 agent
+- **改了什么**：① 海报兜底缺陷——小号文字兜底复用大号 gap:32px 被 overflow:hidden 裁最多 25px + `overflow-wrap:anywhere` 断词「Substan/ce」，新增 `.cover-fallback-slim`（纯文字/gap:0/break-word），溢出降至 ≤1px、拉丁词不再断词；② 首页引语 `text-wrap:pretty` 消孤字；③ 六视图 16 处内联像素圆角全部归 `--r-*` token（retro 等方角主题不再掉队）；④ `.segmented.inline` 修饰类、比较页 X 图标死样式清理、广场回复按钮 32→36px。绊线 +5（`ui-fixes.test.ts`）。
+- **怎么发现的**：按用户指定用 **GLM-5.3-Flash 子代理**（dynamic workflow，`subagent_model` 直指定）审查 8 张基线截图得 4 条发现（1 medium 3 low）→ 主会话 DOM 探针（`--dump-dom` 注入测量）**全部坐实**并挖出 gap:32px 根因 → 修复 → 探针复测 + Flash 复检 **4/4 已解决、0 新问题**。impeccable detect：新增代码零检出，9 条既有签名样式按 Refinement 契约保留。
+- **验证到哪一步**：五道门禁全绿；52 张前后 `tol=0` diff 足迹全部落在预期区域（plaza/depth/sorting 逐像素零差异）；**线上 ✅**：主包 `index-IUw2Isqp.js` / `index-CuGSGY-6.css` / 六个分包 SHA256 逐字节一致、`/api/health` 200（D1 ok）、`/depth` `/encounter` `/myself` `/plaza` `/compare` 全 200。
+- **交接给下一棒**：视觉审查工作流模式已跑通（Flash 审查 → 探针坐实 → 修复 → 复检，首轮可缓存重放）；`.zcode/agents/ui-reviewer.md` 已备（会话重启后可作子代理类型）。遗留两项不阻塞——S5 触控目标类（28px 密集行按钮加透明命中区需单独视觉评估，本次只做了回复按钮 32→36）、ROADMAP §二 E 组横幅类抽取未做（本次只做零视觉 token 化）。
+
 ### T-20261024-05 · 排序/比较算法优化批（四批三提交 + 一项回退登记）· ✅ 完成
 
 - **状态**：✅ 完成 —— 批一 `1916c75` / 批二 `1817dc1` / 批四 `371b990` 已提交，批三实验后回退 ｜ **负责人**：本 agent
