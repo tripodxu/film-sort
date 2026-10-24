@@ -16,6 +16,9 @@ import { ThemeImportDialog } from "./ThemeImportDialog";
 // 插拔主题：内置 THEMES 之外枚举 themeRegistry 导入的自定义主题（可删除），
 // 菜单底部提供「导入主题包」入口。
 // P4（PLAN-ui-modernization）：内置主题分「经典 / 新系列」两组展示（11 个平铺太长）。
+// T-20261024-01：四个分组（经典/新系列/开场特效/布局）改套 settings-menu 同款
+// 「分组标签 + settings-chip-grid 双列网格」，单列 ~27 行收纳到 ~16 行；
+// 组名、NEW_SERIES 集合、所有 role/aria 与行为不变，布局组补了组名标签。
 
 /** 新系列（组件级差异主题，PLAN-ui-modernization）；其余内置主题归经典组。 */
 const NEW_SERIES: ReadonlySet<string> = new Set([
@@ -36,13 +39,21 @@ export function ThemeSwitcher({ zh, onNotice }: { zh: boolean; onNotice?: (m: st
   const ref = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    // 菜单打开期间才需要监听外部点击（此前写反成关闭期挂载=永不生效）
+    // 菜单打开期间才需要监听外部点击（此前写反成关闭期挂载=永不生效）；
+    // T-20261024-01：同一生命周期补 Escape 关闭（键盘可达性）
     if (!open) return;
     const onDown = (e: MouseEvent) => {
       if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
     };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setOpen(false);
+    };
     document.addEventListener("mousedown", onDown);
-    return () => document.removeEventListener("mousedown", onDown);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onDown);
+      document.removeEventListener("keydown", onKey);
+    };
   }, [open]);
 
   const t = (zhText: string, en: string) => (zh ? zhText : en);
@@ -83,17 +94,25 @@ export function ThemeSwitcher({ zh, onNotice }: { zh: boolean; onNotice?: (m: st
     onNotice?.(t("自定义主题已删除。", "Custom theme removed."));
   }
 
-  const themeButton = (id: string, dot: React.ReactNode, label: string) => (
+  // T-20261024-01：内置主题/开场特效/布局统一走 chip（settings-chip 双列网格），
+  // role="menuitemradio" / aria-checked 与旧行按钮一致，仅外观收纳。
+  const chip = (
+    id: string,
+    dot: React.ReactNode,
+    label: string,
+    active: boolean,
+    onPick: () => void,
+  ) => (
     <button
       key={id}
       role="menuitemradio"
-      aria-checked={theme === id}
-      className={theme === id ? "active" : ""}
-      onClick={() => pick(id)}
+      aria-checked={active}
+      className={active ? "settings-chip active" : "settings-chip"}
+      onClick={onPick}
     >
       {dot}
       <span className="theme-name">{label}</span>
-      {theme === id && <Check size={14} className="theme-check" />}
+      {active && <Check size={13} className="theme-check" />}
     </button>
   );
 
@@ -116,24 +135,32 @@ export function ThemeSwitcher({ zh, onNotice }: { zh: boolean; onNotice?: (m: st
         </span>
       </button>
       {open && (
-        <div className="rank-menu theme-menu" role="menu">
+        <div className="rank-menu theme-menu theme-menu-grid" role="menu">
           <div className="settings-group-label">{t("经典", "Classic")}</div>
-          {THEMES.filter((item) => !NEW_SERIES.has(item.id)).map((item) =>
-            themeButton(
-              item.id,
-              <span className={`theme-dot theme-${item.id}`} />,
-              zh ? item.zh : item.en,
-            ),
-          )}
+          <div className="settings-chip-grid" role="group" aria-label={t("经典", "Classic")}>
+            {THEMES.filter((item) => !NEW_SERIES.has(item.id)).map((item) =>
+              chip(
+                item.id,
+                <span className={`theme-dot theme-${item.id}`} />,
+                zh ? item.zh : item.en,
+                theme === item.id,
+                () => pick(item.id),
+              ),
+            )}
+          </div>
           <div className="rank-menu-sep" role="separator" />
           <div className="settings-group-label">{t("新系列", "New Series")}</div>
-          {THEMES.filter((item) => NEW_SERIES.has(item.id)).map((item) =>
-            themeButton(
-              item.id,
-              <span className={`theme-dot theme-${item.id}`} />,
-              zh ? item.zh : item.en,
-            ),
-          )}
+          <div className="settings-chip-grid" role="group" aria-label={t("新系列", "New Series")}>
+            {THEMES.filter((item) => NEW_SERIES.has(item.id)).map((item) =>
+              chip(
+                item.id,
+                <span className={`theme-dot theme-${item.id}`} />,
+                zh ? item.zh : item.en,
+                theme === item.id,
+                () => pick(item.id),
+              ),
+            )}
+          </div>
           {customs.length > 0 && <div className="rank-menu-sep" role="separator" />}
           {customs.map((item) => (
             <button
@@ -186,37 +213,38 @@ export function ThemeSwitcher({ zh, onNotice }: { zh: boolean; onNotice?: (m: st
           </button>
           <div className="rank-menu-sep" role="separator" />
           <div className="settings-group-label">{t("开场特效", "Intro effect")}</div>
-          {listOrbEffects().map((effect) => (
-            <button
-              key={effect.id}
-              role="menuitemradio"
-              aria-checked={orbEffect === effect.id}
-              className={orbEffect === effect.id ? "active" : ""}
-              onClick={() => pickOrbEffect(effect.id)}
-            >
-              <span
-                className="theme-dot"
-                style={{ background: "var(--accent)" }}
-                aria-hidden="true"
-              />
-              <span className="theme-name">{zh ? effect.name.zh : effect.name.en}</span>
-              {orbEffect === effect.id && <Check size={14} className="theme-check" />}
-            </button>
-          ))}
+          <div
+            className="settings-chip-grid"
+            role="group"
+            aria-label={t("开场特效", "Intro effect")}
+          >
+            {listOrbEffects().map((effect) =>
+              chip(
+                effect.id,
+                <span
+                  className="theme-dot"
+                  style={{ background: "var(--accent)" }}
+                  aria-hidden="true"
+                />,
+                zh ? effect.name.zh : effect.name.en,
+                orbEffect === effect.id,
+                () => pickOrbEffect(effect.id),
+              ),
+            )}
+          </div>
           <div className="rank-menu-sep" role="separator" />
-          {LAYOUTS.map((item) => (
-            <button
-              key={item.id}
-              role="menuitemradio"
-              aria-checked={layout === item.id}
-              className={layout === item.id ? "active" : ""}
-              onClick={() => pickLayout(item.id)}
-            >
-              <span className={`layout-dot layout-${item.id}`} aria-hidden="true" />
-              <span className="theme-name">{zh ? item.zh : item.en}</span>
-              {layout === item.id && <Check size={14} className="theme-check" />}
-            </button>
-          ))}
+          <div className="settings-group-label">{t("布局", "Layout")}</div>
+          <div className="settings-chip-grid" role="group" aria-label={t("布局", "Layout")}>
+            {LAYOUTS.map((item) =>
+              chip(
+                item.id,
+                <span className={`layout-dot layout-${item.id}`} aria-hidden="true" />,
+                zh ? item.zh : item.en,
+                layout === item.id,
+                () => pickLayout(item.id),
+              ),
+            )}
+          </div>
         </div>
       )}
       {importOpen && (

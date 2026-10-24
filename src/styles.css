@@ -533,6 +533,18 @@ kbd{display:inline-flex;align-items:center;justify-content:center;min-width:22px
 .theme-menu{min-width:180px}
 .theme-menu button{position:relative}
 .theme-menu button.active{color:var(--accent)}
+/* T-20261024-01 主题菜单收纳：四组套 settings-menu 同款「分组标签 + settings-chip-grid 双列网格」。
+   新规则一律挂 .theme-menu-grid——SettingsMenu 面板也带 theme-menu 类，不能共用作用域；
+   chip 选择器写成 button.settings-chip（0,2,1）刻意压过 .rank-menu button（0,1,1）的
+   共享行样式，否则 border/background 会被后者吃掉（.settings-chip 本体只有 (0,1,0)）。 */
+.theme-menu-grid{min-width:296px;padding:8px;box-shadow:var(--ev-3,var(--ev-2));row-gap:2px}
+.theme-menu-grid .rank-menu-sep{margin:6px 4px}
+.theme-menu-grid .settings-group-label{padding:2px 6px 4px}
+.theme-menu-grid button.settings-chip{display:flex;justify-content:flex-start;min-height:34px;padding:0 10px;border:1px solid var(--line);background:color-mix(in srgb,var(--text) 4%,transparent);color:var(--text-2);font-size:12px}
+.theme-menu-grid button.settings-chip:hover{border-color:color-mix(in srgb,var(--accent) 45%,transparent);color:var(--accent)}
+.theme-menu-grid button.settings-chip.active{border-color:color-mix(in srgb,var(--accent) 65%,transparent);background:color-mix(in srgb,var(--accent) 12%,transparent);color:var(--accent)}
+.theme-menu-grid button.settings-chip .theme-name{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+@media(max-width:540px){.theme-menu-grid{max-width:calc(100vw - 24px)}}
 /* ===== 设置下拉（齿轮）：分组 + chip 网格，避免纵向拖长 ===== */
 .settings-menu{min-width:272px;padding:8px;border-radius:var(--r-lg,12px);box-shadow:var(--ev-3,var(--ev-2));row-gap:2px}
 .settings-menu .rank-menu-sep{margin:6px 4px}

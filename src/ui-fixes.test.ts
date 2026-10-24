@@ -371,6 +371,70 @@ describe("P4 收尾绊线（PLAN-ui-modernization）", () => {
 });
 
 /**
+ * 主题菜单收纳绊线（T-20261024-01）。
+ *
+ * 用户报「主题太多太杂乱」：单列菜单 ~27 行平铺（12 主题 + 4 特效 + 3 布局 + 导入 + 自定义），
+ * 900px 视口下开场特效组都会被裁掉。修法 = 套用 settings-menu 已上线的「分组标签 +
+ * settings-chip-grid 双列网格」，不删/不藏任何主题。本组绊线锁住三件事：
+ * ① 四组都走网格、chip 保留 menuitemradio 语义（收纳不降语义）；
+ * ② 导入/自定义删除/特效/布局功能一个不少；
+ * ③ 样式只挂 .theme-menu-grid 作用域（SettingsMenu 面板也带 theme-menu 类，
+ *    作用域泄漏会改坏设置菜单），且不新增第二条 .rank-menu button 共享规则。
+ */
+describe("主题菜单收纳绊线（T-20261024-01）", () => {
+  const sw = readFileSync("src/components/ThemeSwitcher.tsx", "utf8");
+
+  it("四个分组（经典/新系列/开场特效/布局）都是 settings-chip-grid 双列网格 + 命名 group", () => {
+    expect((sw.match(/className="settings-chip-grid"/g) ?? []).length).toBe(4);
+    expect((sw.match(/role="group"/g) ?? []).length).toBe(4);
+    // 面板仍是玻璃 rank-menu（与设置/排名菜单同款），只叠加收纳作用域类
+    expect(sw).toContain('className="rank-menu theme-menu theme-menu-grid" role="menu"');
+  });
+
+  it("chip 复用 settings-chip 且保留 menuitemradio / aria-checked 语义", () => {
+    expect(sw).toContain('className={active ? "settings-chip active" : "settings-chip"}');
+    expect(sw).toContain('role="menuitemradio"');
+    expect(sw).toContain("aria-checked={active}");
+  });
+
+  it("功能零删减：导入主题包 / 自定义主题删除 / 开场特效 / 布局全在", () => {
+    expect(sw).toContain("导入主题包");
+    expect(sw).toContain("custom-theme-delete");
+    expect(sw).toContain("listOrbEffects().map");
+    expect(sw).toContain("LAYOUTS.map");
+    // 布局组原先天生没有组名标签，收纳时补上（杂乱的一部分）
+    expect(sw).toContain('t("布局", "Layout")');
+  });
+
+  it("菜单打开期间 Escape 关闭（键盘可达性，与外点关闭同一生命周期）", () => {
+    expect(sw).toMatch(/addEventListener\("keydown"/);
+    expect(sw).toContain('if (e.key === "Escape") setOpen(false);');
+  });
+
+  it("样式全部锁在 .theme-menu-grid 作用域，压过 .rank-menu button 共享行样式", () => {
+    expect(css).toContain(".theme-menu-grid{min-width:296px");
+    // (0,2,1) 特异性声明：.settings-chip 本体只有 (0,1,0)，会输给 .rank-menu button
+    // 的 border:0 / background:none，chip 皮肤必须在此重申
+    expect(css).toContain(".theme-menu-grid button.settings-chip{");
+    expect(css).toContain(".theme-menu-grid button.settings-chip.active{");
+    expect(css).toContain(".theme-menu-grid button.settings-chip .theme-name{");
+    // 长名（Editorial Dark / Aurora Ribbon）在半宽 chip 内允许省略号收尾
+    expect(css).toContain(".theme-menu-grid button.settings-chip .theme-name{min-width:0");
+    // 窄屏防溢出
+    expect(css).toContain(
+      "@media(max-width:540px){.theme-menu-grid{max-width:calc(100vw - 24px)}}",
+    );
+  });
+
+  it("不新增第二条 .rank-menu button 共享规则；SettingsMenu 不受作用域影响", () => {
+    // ProfileView 排名菜单与设置菜单共用 .rank-menu button，改它 = 改三个菜单
+    expect((css.match(/\.rank-menu button\{/g) ?? []).length).toBe(1);
+    const settings = readFileSync("src/components/SettingsMenu.tsx", "utf8");
+    expect(settings).not.toContain("theme-menu-grid");
+  });
+});
+
+/**
  * 首屏关键路径体积绊线（PLAN-BUNDLE-SPLIT.md）。
  *
  * Three.js 曾整块躺在主包里：`ThemeSwitcher` → `registry.ts` → 四个特效模块 → `three`，
