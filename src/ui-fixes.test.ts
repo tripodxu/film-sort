@@ -435,6 +435,31 @@ describe("主题菜单收纳绊线（T-20261024-01）", () => {
 });
 
 /**
+ * 首页 identity 胶囊定位绊线（T-20261024-02）。
+ *
+ * 用户报「本地游客 / 登录·同步位置太偏下」：桌面端该胶囊被 v2 玻璃卡的
+ * position:relative（0,2,0）拉回 hero 网格流（col2-row1，顶栏下方 ~104px），
+ * 而移动端 P6 补丁与刊物家族又各有各的绝对定位——三处不一致。统一为全宽度
+ * 右上绝对定位（top:14px，对齐顶栏图标右缘），并用 :not(.ed-hero) 排除刊物
+ * 家族（其 DOM 分支自带 .ed-hero-inner 规则，top:0）。
+ */
+describe("首页 identity 胶囊定位绊线（T-20261024-02）", () => {
+  it("全宽度统一右上绝对定位的规则在位，且不再包裹在 ≤800px 媒体查询里", () => {
+    expect(css).toContain(
+      ".orb-hero:not(.ed-hero) .identity.glass-capsule{position:absolute;top:14px;right:0;z-index:2;margin:0}",
+    );
+    // 旧的移动端专属补丁应被取代（避免两处规则漂移）
+    expect(css).not.toContain(
+      "@media(max-width:800px){\n  .orb-hero .identity.glass-capsule{position:absolute",
+    );
+  });
+
+  it("刊物家族保持自有定位：.ed-hero-inner 规则在位且不被 :not(.ed-hero) 规则波及", () => {
+    expect(css).toContain(".ed-hero-inner .identity.glass-capsule{position:absolute;top:0;right:0");
+  });
+});
+
+/**
  * 首屏关键路径体积绊线（PLAN-BUNDLE-SPLIT.md）。
  *
  * Three.js 曾整块躺在主包里：`ThemeSwitcher` → `registry.ts` → 四个特效模块 → `three`，

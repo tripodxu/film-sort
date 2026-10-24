@@ -1466,9 +1466,12 @@ body[data-theme=classic]{
   content:"";position:absolute;inset:0;z-index:0;pointer-events:none;
   background:linear-gradient(90deg,color-mix(in srgb,var(--bg) 58%,transparent) 0%,color-mix(in srgb,var(--bg) 22%,transparent) 44%,transparent 66%)
 }
-@media(max-width:800px){
-  .orb-hero .identity.glass-capsule{position:absolute;top:14px;right:0;z-index:2;margin:0}
-}
+/* T-20261024-02：identity 胶囊全宽度统一为右上角绝对定位（用户报「本地游客/登录·同步
+   位置太偏下，应更靠右上方」）。桌面此前被 v2 玻璃卡的 position:relative（0,2,0）拉回
+   网格流 col2-row1，落在顶栏下方 ~104px，与 ≤800px 补丁、ed-hero 家族（top:0）三处
+   不一致——统一为 top:14px 右上（对齐顶栏图标右缘）。:not(.ed-hero) 让刊物家族完全
+   沿用自有 .ed-hero-inner 规则（top:0，L732 附近），互不干扰。 */
+.orb-hero:not(.ed-hero) .identity.glass-capsule{position:absolute;top:14px;right:0;z-index:2;margin:0}
 @media(max-width:540px){
   .orb-hero::before{
     background:linear-gradient(180deg,color-mix(in srgb,var(--bg) 34%,transparent) 0%,transparent 26%,color-mix(in srgb,var(--bg) 26%,transparent) 62%,color-mix(in srgb,var(--bg) 60%,transparent) 100%)
