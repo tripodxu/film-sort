@@ -2,6 +2,7 @@ import {
   adaptiveComparisonBudget,
   removeAdaptiveWork,
   scheduleAdaptiveCandidate,
+  syncAdaptiveRanking,
 } from "./adaptiveRanking";
 
 export const RANKING_STATE_VERSION = 2 as const;
@@ -457,7 +458,13 @@ function lastPairIndex(state: RankingState, key: string): number {
 
 function scheduleNextVerification(state: RankingState): RankingState {
   if (state.activeVerification) return state;
-  if (state.verificationQueue.length === 0) return { ...state, phase: "complete", completed: true };
+  if (state.verificationQueue.length === 0) {
+    // adaptive（T-20261024-05 批二）：复测结论自本批起作为观测进入 BT 模型
+    // （adaptiveObservations 含 verification 阶段），全部复测结束后按完整模型
+    // 重建最终榜单——复测不再「问了白问」。旧三模式不走此分支，行为不变。
+    const done: RankingState = { ...state, phase: "complete", completed: true };
+    return state.mode === "adaptive" ? syncAdaptiveRanking(done) : done;
+  }
   const recent = recentlyPresentedPairKeys(state);
   const recentWorks = recentlyPresentedWorkIds(state);
   const eligibleIndex = state.verificationQueue.findIndex((task) => {

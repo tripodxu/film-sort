@@ -65,13 +65,15 @@ export function adaptivePoolIds(state: RankingState): string[] {
   return state.sourceIds.filter((id) => !skipped.has(id));
 }
 
-/** 从决策日志还原观测序列（只取 ranking 阶段、双方都还在池内的 choose）。 */
+/** 从决策日志还原观测序列（双方都还在池内的 choose；ranking 与 verification
+ * 阶段都计入——T-20261024-05 批二起复测结论也更新模型，最终榜单在全部复测
+ * 结束后重同步。排序进行期间日志里不存在 verification 条目（复测队列只在
+ * 排序预算耗尽后才开始排干），因此去掉阶段过滤不改变调度期行为，golden 可证）。 */
 export function adaptiveObservations(state: RankingState): PreferenceObservation[] {
   const pool = new Set(adaptivePoolIds(state));
   const observations: PreferenceObservation[] = [];
   for (const decision of state.decisionLog) {
     if (decision.kind !== "choose" || !decision.preferredId) continue;
-    if (decision.phase !== "ranking") continue;
     const otherId =
       decision.preferredId === decision.candidateId ? decision.opponentId : decision.candidateId;
     if (!pool.has(decision.preferredId) || !pool.has(otherId)) continue;

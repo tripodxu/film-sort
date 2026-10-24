@@ -16,11 +16,13 @@ import {
 import {
   ADAPTIVE_COMPARISONS_PER_ITEM,
   adaptiveComparisonBudget,
+  adaptiveObservations,
   adaptivePairKey,
   adaptivePoolIds,
   buildAdaptiveModel,
   getAdaptiveOrder,
   getAdaptivePairInsight,
+  syncAdaptiveRanking,
 } from "./adaptiveRanking";
 import { fitPreferenceModel, getPreferenceOrder } from "./preferenceModel";
 
@@ -190,6 +192,29 @@ describe("adaptive 模式：略过/暂放与冷却", () => {
   it("冷却键与 ranking.ts 同款（\\u0000 分隔），顺序无关", () => {
     expect(adaptivePairKey("b", "a")).toBe("a\u0000b");
     expect(adaptivePairKey("a", "b")).toBe(adaptivePairKey("b", "a"));
+  });
+});
+
+describe("adaptive 复测回流模型（T-20261024-05 批二）", () => {
+  it("完成态的观测含 verification 阶段条目，最终榜单与完整模型一致且重同步幂等", () => {
+    const { state } = run("adaptive");
+    expect(state.completed).toBe(true);
+    const phases = new Set(state.decisionLog.map((d) => d.phase));
+    expect(phases.has("verification")).toBe(true);
+    const observations = adaptiveObservations(state);
+    expect(observations.length).toBeGreaterThan(
+      state.decisionLog.filter((d) => d.phase === "ranking" && d.kind === "choose").length,
+    );
+    // 最终榜单 = 完整模型（含复测观测）的 topN；再同步一次不变化（幂等）
+    expect(state.rankedIds).toEqual(getPreferenceOrder(buildAdaptiveModel(state)).slice(0, 5));
+    expect(syncAdaptiveRanking(state).rankedIds).toEqual(state.rankedIds);
+  });
+
+  it("排序进行期间的观测不含 verification 条目（调度期行为与回流前逐字一致）", () => {
+    const mid = run("adaptive", 5).state;
+    expect(mid.phase).toBe("ranking");
+    expect(adaptiveObservations(mid).every((o) => o.winnerId !== "")).toBe(true);
+    expect(mid.decisionLog.every((d) => d.phase !== "verification")).toBe(true);
   });
 });
 
