@@ -279,10 +279,12 @@ function findPath(
   startId: string,
   targetId: string,
 ): string[] | null {
+  // T-20261024-05：queue.shift() 是 O(队列长) 的数组搬移，回环边多时是热点；
+  // 改头指针推进，出队语义与遍历顺序（FIFO）逐字不变。
   const queue: string[][] = [[startId]];
   const visited = new Set([startId]);
-  while (queue.length) {
-    const path = queue.shift()!;
+  for (let head = 0; head < queue.length; head += 1) {
+    const path = queue[head];
     const node = path[path.length - 1];
     if (node === targetId) return path;
     for (const edge of edges) {
@@ -485,8 +487,18 @@ function startVerification(state: RankingState): RankingState {
   let verificationQueue = state.verificationQueue;
   const baselineCount = estimateVerificationCount(state.sourceIds.length, state.topN, state.mode);
   for (let index = 0; index < baselineCount; index += 1) {
-    const leftId = state.rankedIds[index];
-    const rightId = state.rankedIds[index + 1];
+    // quick 的误差集中在守门员边界（谁进出 Top N），基线复测从尾部取对
+    // （末两位 = 守门员边界）；classic/precise 维持头部相邻对不变。
+    // T-20261024-05 修正：此前 quick 也走头部对，与 estimateVerificationCount
+    // 的注释语义（「仅复测守门员边界一次」）不符。
+    const leftId =
+      state.mode === "quick"
+        ? state.rankedIds[state.rankedIds.length - 2 - index]
+        : state.rankedIds[index];
+    const rightId =
+      state.mode === "quick"
+        ? state.rankedIds[state.rankedIds.length - 1 - index]
+        : state.rankedIds[index + 1];
     if (leftId && rightId)
       verificationQueue = enqueueTask(verificationQueue, {
         leftId,

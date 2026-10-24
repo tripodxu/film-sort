@@ -165,8 +165,29 @@ export interface AdaptiveScheduleResult {
 
 /** 选下一对：信息量 + 覆盖率打分，冷却沿用旧语义；预算用完返回 done。 */
 export function scheduleAdaptiveCandidate(state: RankingState): AdaptiveScheduleResult {
-  const synced = syncAdaptiveRanking(state);
-  const pool = adaptivePoolIds(synced);
+  // T-20261024-05 性能：此前本函数经 syncAdaptiveRanking 与 selectAdaptivePair
+  // 各算一遍模型/对手计数/日志扫描（两次批量拟合）。三者的输入只依赖
+  // decisionLog/sourceIds/skippedIds——与 sync 产出的差异字段无关，两次结果
+  // 逐字等价——故在此合并为一次计算，同步字段照旧内联生成（golden 指纹锁定等价）。
+  const pool = adaptivePoolIds(state);
+  const observations = adaptiveObservations(state);
+  const model = fitPreferenceModel(pool, observations);
+  const order = getPreferenceOrder(model);
+  const compared = new Set<string>();
+  for (const observation of observations) {
+    compared.add(observation.winnerId);
+    compared.add(observation.loserId);
+  }
+  const contacts = adaptiveOpponentCounts(state);
+  const topN = Math.max(0, state.topN);
+  const synced: RankingState = {
+    ...state,
+    rankedIds: order.slice(0, topN),
+    outsideTopIds: order.slice(topN),
+    pendingIds: pool.filter((id) => (contacts[id] ?? 0) < ADAPTIVE_MIN_OPPONENTS),
+    deferredIds: state.deferredIds.filter((id) => pool.includes(id)),
+    processedCount: Math.max(state.processedCount, compared.size),
+  };
   if (
     pool.length < 2 ||
     synced.comparisonCount >= adaptiveComparisonBudget(synced.sourceIds.length)
@@ -178,10 +199,10 @@ export function scheduleAdaptiveCandidate(state: RankingState): AdaptiveSchedule
   const recentWorks = recentWorkIdsForCooldown(synced);
   const pair = selectAdaptivePair({
     ids: selectable.length >= 2 ? selectable : pool,
-    model: buildAdaptiveModel(synced),
+    model,
     recentPairKeys: recentPairs,
     recentWorkIds: recentWorks,
-    opponentCounts: adaptiveOpponentCounts(synced),
+    opponentCounts: contacts,
     pairKeyOf: adaptivePairKey,
     options: {
       minOpponents: ADAPTIVE_MIN_OPPONENTS,

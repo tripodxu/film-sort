@@ -15,6 +15,35 @@ import {
 const ids = (n: number) => Array.from({ length: n }, (_, i) => `item-${i}`);
 const seed = "test-seed-123";
 
+describe("基线复测对象（T-20261024-05）", () => {
+  const driveToStability = (mode: "quick" | "classic") => {
+    let state = createRankingState(ids(6), { seed, topN: 3, mode });
+    let stabilityPair: [string, string] | null = null;
+    for (let i = 0; i < 60 && !state.completed; i++) {
+      const task = state.activeVerification?.task;
+      if (state.phase === "verification" && task && task.reason === "stability") {
+        if (!stabilityPair) stabilityPair = [task.leftId, task.rightId];
+      }
+      state = chooseSide(state, "left");
+    }
+    return { state, stabilityPair };
+  };
+
+  it("quick 的 stability 任务取守门员边界（榜单末两位），与注释语义一致", () => {
+    const { state, stabilityPair } = driveToStability("quick");
+    expect(stabilityPair).not.toBeNull();
+    const last = state.rankedIds[state.rankedIds.length - 1];
+    const secondLast = state.rankedIds[state.rankedIds.length - 2];
+    expect([...stabilityPair!].sort()).toEqual([secondLast, last].sort());
+  });
+
+  it("classic 的 stability 任务维持头部相邻对（不变量）", () => {
+    const { state, stabilityPair } = driveToStability("classic");
+    expect(stabilityPair).not.toBeNull();
+    expect([...stabilityPair!].sort()).toEqual([state.rankedIds[0], state.rankedIds[1]].sort());
+  });
+});
+
 describe("createRankingState", () => {
   it("creates a valid initial state", () => {
     const state = createRankingState(ids(5), { seed });
