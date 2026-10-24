@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Play, Save, Sparkles } from "lucide-react";
 import { Poster } from "../components/Poster";
+import { ADAPTIVE_RELIABLE_ITEM_LIMIT } from "../lib/adaptiveRanking";
 import { heading } from "./helpers";
 import type { SetupViewProps } from "./types";
 
@@ -118,6 +119,14 @@ export function SetupView({
           <p style={{ fontSize: 11, color: "var(--muted)", margin: "4px 0 12px", lineHeight: 1.5 }}>
             {activeHint}
           </p>
+          {rankMode === "adaptive" && selected.length > ADAPTIVE_RELIABLE_ITEM_LIMIT && (
+            <p style={{ fontSize: 11, color: "var(--warn)", margin: "0 0 12px", lineHeight: 1.5 }}>
+              {t(
+                `已选 ${selected.length} 件：这个规模下自适应模式可能排不准 Top N（实测 20 件内可靠），建议改用「经典」或「简易」。`,
+                `Adaptive mode can mis-rank the Top N at this size (${selected.length} selected; reliable up to about 20). Prefer Classic or Quick.`,
+              )}
+            </p>
+          )}
           <label htmlFor="top-n">
             Top N <strong>{topN}</strong>
           </label>

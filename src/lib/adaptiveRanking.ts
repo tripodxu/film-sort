@@ -42,6 +42,11 @@ export const ADAPTIVE_COMPARISONS_PER_ITEM = 4;
 export const ADAPTIVE_MIN_OPPONENTS = 2;
 /** 名次区间的置信水平（90%，与 preferenceModel 默认一致，这里显式写死便于 UI 文案）。 */
 export const ADAPTIVE_INTERVAL_LEVEL = 0.9;
+/** 实测可靠上限（PLAN-ADDITIVE-UPGRADE §9 未决 5，2026-10-24）：固定 4n 预算 +
+ * 全一致回答下，n ≤ 20 Top N 全对、n ≥ 30（30/50/100 三组实测）会排错——
+ * 信息量公式中未比较对的先验 σ²≈40 主导调度，边界序对信息不足。SetupView
+ * 据此提示大清单改用 quick/classic；根治需「大清单标定」（等线上真实数据回放）。 */
+export const ADAPTIVE_RELIABLE_ITEM_LIMIT = 20;
 
 /** ranking 阶段比较预算：clamp(n*4, n-1, 全部序对数)。n < 2 时为 0（无可比）。 */
 export function adaptiveComparisonBudget(itemCount: number): number {

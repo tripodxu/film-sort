@@ -33,4 +33,17 @@ describe("rankMode 显式传参", () => {
     const code = read("./lib/ranking.ts");
     expect(code).toMatch(/export const RANKING_MODES/);
   });
+
+  it("大清单选 adaptive 时给出可靠度提示（T-20261024-05 批五，PLAN §9 未决 5 的 UI 护栏）", () => {
+    const adaptive = read("./lib/adaptiveRanking.ts");
+    expect(adaptive).toContain("export const ADAPTIVE_RELIABLE_ITEM_LIMIT = 20;");
+    const code = read("./views/SetupView.tsx");
+    expect(code).toContain("ADAPTIVE_RELIABLE_ITEM_LIMIT");
+    // 条件三要素：adaptive 选中 + 已选件数超限；提示文案指向 quick/classic 替代
+    expect(code).toMatch(
+      /rankMode === "adaptive" && selected\.length > ADAPTIVE_RELIABLE_ITEM_LIMIT/,
+    );
+    expect(code).toMatch(/实测 20 件内可靠/);
+    expect(code).toMatch(/「经典」或「简易」/);
+  });
 });
