@@ -25,7 +25,9 @@ npm run deploy   # = npm run build && wrangler d1 migrations apply film-sort --r
 
 `npm run deploy` 已把远端迁移包含在内（迁移脚本必须幂等，`IF NOT EXISTS`；历史教训见 `migrations/0017` 注释），不要把 `wrangler d1 migrations apply` 再当成部署后的独立步骤。
 
-> 若在 Cloudflare Dashboard 启用了 Workers Builds / Git integration，`git push` 到 `main` 即可触发部署，日常发布不必手动跑 `wrangler deploy`。该集成的 Build/Deploy command 在 Dashboard 上配置，仓库内没有对应配置文件，无法从代码核实。
+> 若在 Cloudflare Dashboard 启用了 Workers Builds / Git integration，`git push` 到 `main` 即可触发部署，日常发布不必手动跑 `wrangler deploy`。该集成的 Build/Deploy command 在 Dashboard 上配置，仓库内没有对应配置文件。
+>
+> **实证（2026-10-25，T-20261025-04）**：push 后静态资产会更新（asset SHA 变化可在线核对），但 **worker 代码当次未随 push 部署**（8 分钟后行为探针仍为旧逻辑，`npm run deploy` 手动部署后立即生效）。**改了 `worker/` 的变更，收尾必须 `npm run deploy` 并用行为探针（非资产 SHA）验证**。另：本地旧 wrangler 4.129 的 assets-upload-session 会报 `10013`，用 `npx -y wrangler@latest deploy` 成功。
 
 本地调试：
 

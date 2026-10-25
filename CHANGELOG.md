@@ -1,5 +1,23 @@
 # Changelog
 
+## 2026-10-25 · 安全审计修复批：M1-M4/L3/L4 全部修复上线（T-20261025-04）
+
+**背景**：执行全量安全审计（T-20261025-03，`docs/SECURITY-AUDIT-2026-10-25.md`）的修复建议。提交 `19b54f2` + `3996f9f`，worker 手动部署版本 `c5b6d923`。
+
+**改了什么**
+
+- **M1 登录时序枚举**：用户不存在也执行同轮数 PBKDF2（哑盐固定零盐——盐值无安全意义只需等耗时；模块全局 `crypto.getRandomValues` 会被 workerd 部署校验 10021 拒绝，首次部署实抓后修正）；禁用判定后置到验密之后（未持正确密码的探测不再得知「账号存在且被禁用」）。**勘误**：审计称「登录无限流」有误——分派层 `account_auth` 桶（8 次/10 分/IP）早已存在，审计漏看 index.ts 分派段，已在报告头部勘误。
+- **M2 管理登录**：挂 `auth` 限流桶（30 次/10 分/IP）；管理新密码下限 6→10 位。
+- **M3 出站逐跳复核**：media.ts 三处裸 fetch（`upstream()` 主体 + search.douban.com ×2）收敛到新 `fetchValidated()`——`redirect:"manual"` + 域后缀白名单（douban/doubanio/163/126/wikimedia/bcebos/amazon/imdb/tmdb）+ 3 跳上限 + content-length 12MB 门；`proxyImage` 改实读并 12MB 封顶。
+- **M4 /api/image**：匿名图片代理挂独立限流桶（120 次/10 分/IP）。
+- **L3/L4**：用户密码下限 6→8（注册/改密/管理重置三处 + 客户端文案 + API.md）；PBKDF2 实现注释不再误称 600k。
+- **测试**：`worker/security.test.ts` ×8 修复绊线；`outboundCoverage.test.ts` 注释剥离器改**字符串感知**（旧纯正则会把 accept 头里的星斜杠序列当注释开头、吞掉后续真实代码，计数随无关行数漂移）+ media 裸 fetch 棘轮 7→6。
+
+**验证与重要发现**
+
+- 五道门禁全绿（911 tests）；主清单截图 tol=0 零差异；**线上行为验证 ✅**：7 位密码注册探针返回 `invalid_password 密码至少8位`（新代码生效直接证据）、health 200、SPA 路由 200。429 类限流受 isolate 分散限制无法从单客户端复现（机制已部署，源码绊线 + rateWindow 单测锁定）。
+- **流程发现：git push 只部署静态资产、不部署 worker 代码**——本次 8 分钟后探针仍是旧行为，`npm run deploy` 手动部署才生效（旧 wrangler 4.129 assets API 报 10013，`npx -y wrangler@latest deploy` 成功）。CLOUDFLARE.md 已补部署实证与守则：改 `worker/` 的变更收尾必须 `npm run deploy` 并用行为探针（非资产 SHA）验证。
+
 ## 2026-10-25 · 触控目标收尾：全站 <36px 可交互元素清零（T-20261025-02）
 
 **背景**：二轮打磨（T-20261025-01）时上轮遗留的「移动端贴纸小按钮命中区」及全站机械清点出的漏网项。提交 `1c2ee04`。

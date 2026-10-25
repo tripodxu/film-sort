@@ -10,6 +10,14 @@
 
 ## 进行中 / 最近
 
+### T-20261025-04 · 安全审计修复批（M1-M4/L3/L4）· ✅ 完成
+
+- **状态**：✅ 完成（`19b54f2` + `3996f9f` 已推送，worker 手动部署 `c5b6d923`）｜ **负责人**：本 agent
+- **改了什么**：M1 登录时序哑哈希（固定零盐——模块全局 `crypto.getRandomValues` 会被 workerd 部署校验 10021 拒绝，**部署时实抓**，已修）+ 禁用判定后置；M2 admin 登录挂 auth 桶限流（30/10 分/IP）+ 管理新密码下限 10；M3 media.ts 三处裸 fetch（upstream 主体 + search.douban ×2）收敛到新 `fetchValidated()`（redirect:manual + 域后缀白名单 + 3 跳上限 + content-length 12MB 门），proxyImage 实读 12MB 封顶；M4 /api/image 独立限流桶（120/10 分/IP）；L3 用户密码下限 6→8（三处 + 客户端文案 + API.md）；L4 PBKDF2 注释修正。测试：`worker/security.test.ts` ×8 绊线；`outboundCoverage.test.ts` 注释剥离器改**字符串感知**（旧纯正则把 accept 头字符串当注释开头吞掉后续真实代码、计数随无关行数漂移——本批插入常量后触发）+ 棘轮 media 7→6。
+- **验证**：五道门禁全绿（911 tests）；主清单 8 张 tol=0 零差异；**线上行为验证 ✅**：7 位密码注册探针返回 `invalid_password 密码至少8位`（新代码生效的直接证据）；health 200（D1 ok）；SPA 200。admin 429 未从单客户端复现——35 发探针散落多 isolate 单窗口聚不到阈值（isolate 级限流既有特性，机制已部署、源码绊线+rateWindow 单测锁定）。
+- **重要发现（给下一棒）**：① **git push 不会部署 worker**——git 集成只发静态资产（asset SHA 会更新），worker 代码变更必须 `npm run deploy` 手动发（本次发现旧 wrangler 4.129 的 assets-upload-session 报 10013，`npx -y wrangler@latest deploy` 成功；CLOUDFLARE.md 的「无法从代码核实」如今有了实证）。② 改 worker 全局作用域代码时留意 workerd 禁令（异步 IO/随机值），本地门禁测不出，只有部署校验会拦。
+- **审计勘误**：M1「登录无限流」主张撤回（分派层 account_auth 桶 8/10 分早已存在，审计漏看 index.ts 分派段）——已在 `docs/SECURITY-AUDIT-2026-10-25.md` 头部勘误注明。
+
 ### T-20261025-03 · 全量安全审计（发现漏洞与缺陷，纯审计未修）· ✅ 完成
 
 - **状态**：✅ 审计完成，**未改任何代码**（等用户拍板修复范围）｜ **负责人**：本 agent
