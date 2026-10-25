@@ -266,6 +266,56 @@ function buildHeaders(
   };
 }
 
+/** upstream() 允许的重定向目标域后缀（fetchBounded 逐跳复核语义的媒体域版；
+ * 目标主机必须命中其一，否则视为被劫持的重定向直接拒绝）。 */
+const UPSTREAM_REDIRECT_SUFFIXES = [
+  "douban.com",
+  "doubanio.com",
+  "163.com",
+  "126.net",
+  "wikimedia.org",
+  "bcebos.com",
+  "media-amazon.com",
+  "media-imdb.com",
+  "tmdb.org",
+];
+/** 单次上游响应的字节上限（content-length 声明值与 proxyImage 实读值共用）。 */
+const UPSTREAM_MAX_BYTES = 12 * 1024 * 1024;
+
+function redirectHostAllowed(hostname: string): boolean {
+  return UPSTREAM_REDIRECT_SUFFIXES.some((s) => hostname === s || hostname.endsWith("." + s));
+}
+
+/** 带逐跳域复核的媒体 fetch（安全审计 2026-10-25 M3）：
+ * redirect:"manual" + 每跳 UPSTREAM_REDIRECT_SUFFIXES 白名单——白名单 CDN 被塞
+ * 任意 Location 也不会被跟随到内网/任意主机。 */
+async function fetchValidated(url: string, headers: Record<string, string>): Promise<Response> {
+  let current = url;
+  let response = await fetch(current, {
+    headers,
+    signal: AbortSignal.timeout(15000),
+    redirect: "manual",
+  });
+  for (let hops = 0; hops < 3 && response.status >= 300 && response.status < 400; hops++) {
+    const location = response.headers.get("location");
+    let next: URL;
+    try {
+      next = new URL(location ?? "", current);
+    } catch {
+      throw new Error("upstream_redirect_invalid");
+    }
+    if (!redirectHostAllowed(next.hostname))
+      throw new Error(`upstream_redirect_forbidden: ${next.hostname}`);
+    current = next.href;
+    response = await fetch(current, {
+      headers,
+      signal: AbortSignal.timeout(15000),
+      redirect: "manual",
+    });
+  }
+  return response;
+}
+
 export async function upstream(
   url: string,
   retries = 2,
@@ -283,11 +333,10 @@ export async function upstream(
     // 节流只为避免抓取 HTML/API 时被豆瓣限流，用在图片上只会把画廊拖成每张 800ms。
     if (isDouban && !isImage) await throttle(domain);
     try {
-      const response = await fetch(url, {
-        headers: requestHeaders,
-        signal: AbortSignal.timeout(15000),
-        redirect: "follow",
-      });
+      const response = await fetchValidated(url, requestHeaders);
+      // 字节上限：声明超限直接拒绝；缺 content-length 的流式响应由 proxyImage 实读兜底。
+      const declaredLength = Number(response.headers.get("content-length") ?? "0");
+      if (declaredLength > UPSTREAM_MAX_BYTES) throw new Error("upstream_too_large");
       if (response.status === 403 || response.status === 418) {
         // Rate limited - activate per-domain cooldown
         cooldownMap.set(domain, Date.now() + (attempt + 1) * 5000);
@@ -1278,11 +1327,7 @@ async function searchCover(
     const cat = type === "movie" ? "1002" : type === "book" ? "1001" : "1003";
     const url = `https://search.douban.com/${type}/subject_search?search_text=${encodeURIComponent(query)}&cat=${cat}`;
     await throttle("search.douban.com");
-    const response = await fetch(url, {
-      headers: buildHeaders(url, false),
-      signal: AbortSignal.timeout(15000),
-      redirect: "follow",
-    });
+    const response = await fetchValidated(url, buildHeaders(url, false));
     if (response.status === 403 || response.status === 418) {
       // 只做短冷却并重试一次。原先给整个域名设 10s 冷却：一首歌触发 418，
       // 同一批次里剩下的全部被迫排队等冷却，等于连坐。
@@ -1993,11 +2038,7 @@ async function fetchSearchList(
   const start = (page - 1) * 15;
   const url = `https://search.douban.com/${type}/subject_search?search_text=${encodeURIComponent(query)}&cat=${cat}&start=${start}`;
   await throttle("search.douban.com");
-  const response = await fetch(url, {
-    headers: buildHeaders(url, false),
-    signal: AbortSignal.timeout(15000),
-    redirect: "follow",
-  });
+  const response = await fetchValidated(url, buildHeaders(url, false));
   if (response.status === 403 || response.status === 418) {
     cooldownMap.set("search.douban.com", Date.now() + 10000);
     throw new Error(`Rate limited: ${response.status}`);
@@ -2524,7 +2565,11 @@ export async function proxyImage(raw: string): Promise<Response> {
     // 网易云 126.net 返回非标准的 image/jpg
     if (!/^image\/(jpe?g|png|webp|avif)(;|$)/i.test(type))
       return new Response(null, { status: 415 });
-    return new Response(response.body, {
+    // 实读上限（安全审计 2026-10-25 M3）：缺 content-length 的超大响应不再无界占内存；
+    // 海报量级远小于 12MB，超限按 413 拒绝。
+    const buffer = await response.arrayBuffer();
+    if (buffer.byteLength > UPSTREAM_MAX_BYTES) return new Response(null, { status: 413 });
+    return new Response(buffer, {
       headers: {
         "content-type": type,
         "cache-control": "public, max-age=86400",

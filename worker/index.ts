@@ -225,6 +225,7 @@ async function allowUpstreamRequest(
     | "other"
     | "events"
     | "challenge"
+    | "image"
     | "cache",
   limit: number,
 ): Promise<boolean> {
@@ -1582,8 +1583,8 @@ async function handleAdminChangePassword(request: Request, env: Env): Promise<Re
   const body = await readJson(request);
   const oldPassword = cleanOptionalString(body.old_password, "old_password", 128) ?? "";
   const newPassword = cleanOptionalString(body.new_password, "new_password", 128) ?? "";
-  if (!newPassword || newPassword.length < 6)
-    return json({ error: "invalid_password", msg: "新密码至少6位" }, 400);
+  if (!newPassword || newPassword.length < 10)
+    return json({ error: "invalid_password", msg: "新密码至少10位" }, 400);
   const stored = await env.DB.prepare(
     "SELECT value FROM admin_config WHERE key = 'password_hash'",
   ).first<{ value: string }>();
@@ -1942,6 +1943,10 @@ async function route(request: Request, env: Env): Promise<Response> {
     return json({ ok: true, scope, ...result });
   }
   if (url.pathname === "/api/admin/login" && request.method === "POST") {
+    // 管理登录与 reset/change-password 共用 auth 桶（30 次/10 分/IP）：管理面可
+    // 一键清库，撞库必须被频控拦住（安全审计 2026-10-25 M2）。
+    if (!(await allowUpstreamRequest(request, "auth", 30)))
+      return json({ error: "rate_limited" }, 429, { "retry-after": "300" });
     return handleAdminLogin(request, env);
   }
   if (url.pathname === "/api/admin/logout" && request.method === "POST") {
@@ -2255,8 +2260,13 @@ async function route(request: Request, env: Env): Promise<Response> {
     // 不发出去的话前端只能把「维基没这个条目」和「维基现在取不到」渲染成同一个空格子。
     return json({ results, keys, outcomes }, 200, { "cache-control": "private, max-age=86400" });
   }
-  if (url.pathname === "/api/image" && request.method === "GET")
+  if (url.pathname === "/api/image" && request.method === "GET") {
+    // 匿名图片代理必须有频控（白名单已收窄 SSRF 面，这里补带宽面）：
+    // 120 次/10 分/IP 对单页几十张海报的画廊足够（审计 2026-10-25 M4）。
+    if (!(await allowUpstreamRequest(request, "image", 120)))
+      return withSecurityHeaders(json({ error: "rate_limited" }, 429, { "retry-after": "600" }));
     return withSecurityHeaders(await proxyImage(url.searchParams.get("url") ?? ""));
+  }
 
   // Search list APIs
   if (url.pathname === "/api/book/list" && request.method === "GET") {

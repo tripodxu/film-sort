@@ -252,7 +252,7 @@ ART/RANK 后端 API 完整参考。所有接口由 Cloudflare Worker 处理，�
 
 ### GET /api/image
 
-代理访问允许域名的图片，避免浏览器跨域和 Referer 限制。
+代理访问允许域名的图片，避免浏览器跨域和 Referer 限制。匿名接口，限流 120 次/10 分/IP（`429 rate_limited`）；响应超过 12MB 返回 `413`。
 
 **参数：**
 
@@ -947,7 +947,7 @@ Choice 多选一（迭代 2/20 新增，用于「哪个候选才是用户要的�
 `token` 为 64 位十六进制（32 字节随机），会话有效期 30 天；后续请求用 `Authorization: Bearer <token>`。
 
 **错误：**
-- `400` — `invalid_email` / `invalid_password`（密码 <6 位） / `invalid_nickname` / `invalid_code`（验证码缺失、错误、过期或锁定，详见文末邮箱验证码节）
+- `400` — `invalid_email` / `invalid_password`（密码 <8 位） / `invalid_nickname` / `invalid_code`（验证码缺失、错误、过期或锁定，详见文末邮箱验证码节）
 - `409` — `email_exists`
 
 ### POST /api/account/login
@@ -1123,7 +1123,7 @@ OAuth 回调。校验 `state` 与 `oauth_state` Cookie 一致（CSRF），自动
 
 ### POST /api/admin/login
 
-管理员登录。
+管理员登录。与 reset / change-password 共享限流桶：30 次/10 分/IP（`429 rate_limited`）。
 
 **请求体：**
 ```json
@@ -1172,7 +1172,7 @@ OAuth 回调。校验 `state` 与 `oauth_state` Cookie 一致（CSRF），自动
 
 重置用户密码并使其所有会话失效。
 
-**请求体：** `{ "password": "新密码" }`（≥6 位，否则 `400 invalid_password`）。
+**请求体：** `{ "password": "新密码" }`（≥10 位，否则 `400 invalid_password`）。
 
 ### GET /api/admin/poster-errors
 
@@ -1369,7 +1369,7 @@ OAuth 回调。校验 `state` 与 `oauth_state` Cookie 一致（CSRF），自动
 | DELETE | `/api/admin/plaza/comments/:id` | 管理员删评论（连删直接回复，按实际数修正计数；响应带 `removed`） |
 | POST | `/api/admin/reset` | 分级重置（`scope` ∈ `analytics`/`plaza`/`shares`/`accounts` 四档，需 `confirm=RESET` + `password` 重验） |
 | GET | `/api/admin/audit` | 审计日志列表（`limit` 默认 100、最大 500） |
-| POST | `/api/admin/change-password` | 修改管理密码（体 `{ old_password, new_password }`，新密码 ≥6 位；使用 `ADMIN_PASSWORD` 环境变量时返回 `400 env_password_immutable`） |
+| POST | `/api/admin/change-password` | 修改管理密码（体 `{ old_password, new_password }`，新密码 ≥10 位；使用 `ADMIN_PASSWORD` 环境变量时返回 `400 env_password_immutable`） |
 | POST | `/api/admin/sessions/revoke-all` | 强制**所有用户**会话下线（清空 `user_sessions`） |
 | POST | `/api/admin/links/clean-expired` | 立即清理过期短链 |
 | GET | `/api/admin/ai/prompts` | 三场景 AI 提示词覆盖现状（`{ prompts: { ranking/profile/compare: { override, value } } }`） |
@@ -1387,6 +1387,6 @@ OAuth 回调。校验 `state` 与 `oauth_state` Cookie 一致（CSRF），自动
 | 方法 | 路径 | 说明 |
 |---|---|---|
 | POST | `/api/account/send-code` | 下发验证码（注册/修改密码共用）。体 `{ email, purpose: "register"\|"reset" }`。同邮箱同用途 **60s 冷却**（429 `code_cooldown`）；register 撞已注册 → 409，reset 未注册 → 404；邮件发送失败 → 502 `mail_failed`（`detail` 带双通道病因）。发信双通道：**Resend 主**（`RESEND_API_KEY`，可选 `MAIL_FROM`）+ luckycola 兜底（`MAIL_COLA_KEY` / `MAIL_SMTP_EMAIL` / `MAIL_SMTP_CODE` / `MAIL_SMTP_TYPE`，契约同 `scripts/mail_sender.py`）；全未配置时**生产 fail-closed**（502 `mail_failed`，reason `mailer_unconfigured`）；仅 `ENVIRONMENT=development|test` 时启用开发兜底，此时响应带 `dev_code` 字段、验证码不写日志 |
-| POST | `/api/account/change-password` | 修改密码（**免旧密码**，码证身份）。体 `{ email, code, password }`，password ≥6 位；成功后吊销该用户全部旧会话 |
+| POST | `/api/account/change-password` | 修改密码（**免旧密码**，码证身份）。体 `{ email, code, password }`，password ≥8 位；成功后吊销该用户全部旧会话 |
 
 `POST /api/account/register` 新增必填字段 `code`（purpose=register 的验证码）。验证码规格：6 位数字、**10 分钟有效**、**5 次容错**（超限作废）、一次性消耗（SHA-256 散列入库，`verification_codes` 表，迁移 `0023`）。

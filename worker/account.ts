@@ -44,6 +44,8 @@ export async function adminAuthLocal(request: Request, db: D1Database): Promise<
 // 600k（OWASP 2023 HMAC-SHA256 建议量级）在 CF 侧直接抛错——散列格式自带 iterations 字段，
 // 未来迁离 Cloudflare 可对新散列无痛调回更高轮数（存量按存储值验证）。
 const PBKDF2_ITERATIONS = 100_000;
+/** 登录时序哑盐：用户不存在也执行同轮数 PBKDF2（结果弃用），消除邮箱枚举信号。 */
+const TIMING_DUMMY_SALT = crypto.getRandomValues(new Uint8Array(16));
 
 function toHex(bytes: ArrayBuffer | Uint8Array): string {
   const view = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
@@ -63,7 +65,8 @@ export async function hashPasswordStrong(password: string): Promise<string> {
 async function pbkdf2(password: string, salt: Uint8Array, iterations: number): Promise<string> {
   // workerd 的 crypto.subtle PBKDF2 有 100k 轮硬上限（600k 直接抛错）；
   // node:crypto（nodejs_compat）走 OpenSSL 实现无此限制。PBKDF2 为标准构造，
-  // 同参数同输出——存量 pbkdf2$ 散列与 subtle 实现产物互验互通，轮数保持 OWASP 600k。
+  // 同参数同输出——存量 pbkdf2$ 散列与 subtle 实现产物互验互通；轮数遵守平台
+  // 100k 上限（MEMORY C1），将来上调只改上面的常量。
   return toHex(pbkdf2Sync(password, salt, iterations, 32, "sha256"));
 }
 
@@ -370,8 +373,8 @@ export async function accountRoute(request: Request, env: Env): Promise<Response
     const nickname = cleanString(body?.nickname, 40);
     const code = cleanString(body?.code, 12);
     if (!email || !isValidEmail(email)) return json({ error: "invalid_email" }, 400);
-    if (!password || password.length < 6)
-      return json({ error: "invalid_password", msg: "密码至少6位" }, 400);
+    if (!password || password.length < 8)
+      return json({ error: "invalid_password", msg: "密码至少8位" }, 400);
     if (!nickname || nickname.length < 1)
       return json({ error: "invalid_nickname", msg: "昵称必填" }, 400);
     const existing = await env.DB.prepare("SELECT id FROM user_accounts WHERE email = ?")
@@ -426,9 +429,16 @@ export async function accountRoute(request: Request, env: Env): Promise<Response
         nickname: string | null;
         disabled_at: string | null;
       }>();
-    if (user?.disabled_at) return json({ error: "account_disabled" }, 403);
-    if (!user || !(await verifyPassword(password, user.password_hash)))
+    if (!user) {
+      // 等耗时哑哈希：用户不存在也烧同轮数 PBKDF2，抹平「邮箱存在与否」的时序差
+      // （频控在 index.ts 分派层：account_auth 桶 8 次/10 分/IP）。
+      await pbkdf2(password, TIMING_DUMMY_SALT, PBKDF2_ITERATIONS).catch(() => undefined);
       return json({ error: "invalid_credentials" }, 401);
+    }
+    if (!(await verifyPassword(password, user.password_hash)))
+      return json({ error: "invalid_credentials" }, 401);
+    // 禁用判定后置：未持正确密码的探测不再得知「账号存在且被禁用」。
+    if (user.disabled_at) return json({ error: "account_disabled" }, 403);
     if (needsPasswordUpgrade(user.password_hash)) {
       await env.DB.prepare("UPDATE user_accounts SET password_hash = ? WHERE id = ?")
         .bind(await hashPasswordStrong(password), user.id)
@@ -469,8 +479,8 @@ export async function accountRoute(request: Request, env: Env): Promise<Response
     const code = cleanString(body?.code, 12);
     const password = cleanString(body?.password, 128);
     if (!email || !isValidEmail(email)) return json({ error: "invalid_email" }, 400);
-    if (!password || password.length < 6)
-      return json({ error: "invalid_password", msg: "密码至少6位" }, 400);
+    if (!password || password.length < 8)
+      return json({ error: "invalid_password", msg: "密码至少8位" }, 400);
     if (!code) return json({ error: "invalid_code", msg: "请输入邮箱验证码" }, 400);
     const user = await env.DB.prepare(
       "SELECT id, password_hash, disabled_at FROM user_accounts WHERE email = ?",
@@ -991,8 +1001,8 @@ export async function accountRoute(request: Request, env: Env): Promise<Response
     const userId = Number(resetMatch[1]);
     const body = await readJsonObject(request);
     const newPassword = cleanString(body?.password, 128);
-    if (!newPassword || newPassword.length < 6)
-      return json({ error: "invalid_password", msg: "密码至少6位" }, 400);
+    if (!newPassword || newPassword.length < 8)
+      return json({ error: "invalid_password", msg: "密码至少8位" }, 400);
     const hash = await hashPasswordStrong(newPassword);
     await env.DB.batch([
       env.DB.prepare("UPDATE user_accounts SET password_hash = ? WHERE id = ?").bind(hash, userId),

@@ -18,18 +18,73 @@ import { readFileSync } from "node:fs";
 
 function load(relativePath: string): string {
   const raw = readFileSync(new URL(relativePath, import.meta.url), "utf8");
-  return raw.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^[^\S\n]*\/\/.*$/gm, "");
+  return stripComments(raw);
+}
+
+/** 字符串感知的注释剥离：只有字符串字面量之外的 // 与 块注释 才视为注释，
+ * 且被删内容按行数保留换行——行号与真实文件一致。
+ * （旧实现是纯正则：accept 头与「星斜杠星」字符串会被当成注释开头，把后续
+ * 数十行真实代码吞进「幽灵注释」，计数随无关行数增删漂移——2026-10-25
+ * 安全修复批在 media.ts 插入常量后触发，机制修正。
+ * 已知局限：正则字面量里出现引号时可能误判，本仓源码无此形态。） */
+function stripComments(code: string): string {
+  let out = "";
+  let i = 0;
+  let str: string | null = null; // 当前所在字符串的引号字符
+  while (i < code.length) {
+    const ch = code[i];
+    if (str) {
+      out += ch;
+      if (ch === "\\") {
+        out += code[i + 1] ?? "";
+        i += 2;
+        continue;
+      }
+      if (ch === str) str = null;
+      i += 1;
+      continue;
+    }
+    if (ch === '"' || ch === "'" || ch === "`") {
+      str = ch;
+      out += ch;
+      i += 1;
+      continue;
+    }
+    if (ch === "/" && code[i + 1] === "/") {
+      const nl = code.indexOf("\n", i);
+      const end = nl === -1 ? code.length : nl;
+      out += "\n".repeat((code.slice(i, end).match(/\n/g) ?? []).length);
+      i = end;
+      continue;
+    }
+    if (ch === "/" && code[i + 1] === "*") {
+      const close = code.indexOf("*/", i + 2);
+      const end = close === -1 ? code.length : close + 2;
+      out += "\n".repeat((code.slice(i, end).match(/\n/g) ?? []).length);
+      i = end;
+      continue;
+    }
+    out += ch;
+    i += 1;
+  }
+  return out;
 }
 
 /** 返回源码中裸 `fetch(` 调用的行号（1-based）。排除项：
  *  - `fetchBounded(` / `fetchImpl(`（合法出口与注入点）；
+ *  - `fetchValidated(`（media.ts 的逐跳域复核出口，M3 修复引入，同属合法出口）；
  *  - `async fetch(`（Worker 入口方法定义，index.ts:3401）；
  *  - `*.test.ts`（测试桩，根本不扫描）。 */
 function bareFetchLines(code: string): number[] {
   const out: number[] = [];
   code.split("\n").forEach((line, index) => {
     if (!/(?<![.a-zA-Z_])fetch\s*\(/.test(line)) return;
-    if (line.includes("fetchBounded(") || line.includes("fetchImpl(")) return;
+    if (
+      line.includes("fetchBounded(") ||
+      line.includes("fetchImpl(") ||
+      line.includes("fetchValidated(")
+    )
+      return;
     if (line.includes("async fetch(")) return;
     out.push(index + 1);
   });
@@ -51,18 +106,19 @@ describe("出站收敛（C2 / T-20261014-06）", () => {
     expect(media.match(/readBoundedJson\(/g) ?? []).toHaveLength(3);
   });
 
-  it("media.ts 残留裸 fetch 只许减少（当前 7 处，各有去留理由）", () => {
+  it("media.ts 残留裸 fetch 只许减少（当前 6 处 = 合法出口本体 2 + 待收敛 4）", () => {
     const media = load("./media.ts");
     const lines = bareFetchLines(media);
-    // 残留清单（行号会漂移，只锁数量；收敛一处就把期望数减一）：
+    // 构成（行号会漂移，只锁数量；收敛一处就把期望数减一）：
+    //  合法出口本体 ×2 —— fetchValidated() 定义体内的两处 fetch（redirect:"manual"
+    //   + 域后缀白名单的逐跳复核出口，2026-10-25 安全批 M3 引入；同 fetchBounded
+    //   的地位：出口自身总要真的调 fetch）；
     //  ① fetchWithRetry 通用重试封装（调用方 URL 各异，需逐调用方拆策略）；
     //  ② api.anysearch.com MCP POST（固定 host，可收敛）；
     //  ③ baike.baidu.com openapi（固定 host，可收敛）；
-    //  ④ baike.baidu.com/item 词条页（固定 host + 96KB 截断，可收敛）；
-    //  ⑤ search.douban.com subject_search（searchCover，需保留 403/418 语义）；
-    //  ⑥ music.163.com search/get（需保留 Cookie/UA 轮换语义）；
-    //  ⑦ search.douban.com subject_search（fetchSearchList 同⑤）。
-    expect(lines, `media.ts 裸 fetch 数量变化：${lines.join(",")}`).toHaveLength(7);
+    //  ④ baike.baidu.com/item 词条页（固定 host + 96KB 截断，可收敛）。
+    // M3 批收敛了 3 处：upstream() 主体 + search.douban.com ×2 → 改走 fetchValidated。
+    expect(lines, `media.ts 裸 fetch 数量变化：${lines.join(",")}`).toHaveLength(6);
   });
 
   it("douban/doubanlist/gdstudio/import/netease/account 残留只许减少", () => {

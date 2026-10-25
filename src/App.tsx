@@ -2346,8 +2346,8 @@ export default function App() {
                     type="password"
                     placeholder={
                       authMode === "reset"
-                        ? t("新密码（至少6位）", "New password (6+ chars)")
-                        : t("密码（至少6位）", "Password (6+ chars)")
+                        ? t("新密码（至少8位）", "New password (8+ chars)")
+                        : t("密码（至少8位）", "Password (8+ chars)")
                     }
                     value={authPassword}
                     onChange={(e) => setAuthPassword(e.target.value)}
