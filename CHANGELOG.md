@@ -1,5 +1,21 @@
 # Changelog
 
+## 2026-10-25 · 前端打磨第二轮：ROADMAP §二 A/B/C/D 剩余项全消化（T-20261025-01）
+
+**背景**：用户再次指派四 skill 全量打磨。上轮（T-20261024-06）后 §二 仅剩 A/B/C/D 四组 13 项，本批全部消化，**2026-09-27 审查遗留待办清零**。提交 `21a74bc`。
+
+**改了什么**
+
+- **A 嵌套交互（键盘可达）**：比较页共识表行 `<button>` 内嵌可点 span（键盘不可达）→ 行改 div、海报+标题合为 `.comparison-open` 真实按钮（跨列 grid 对齐原布局）、名次格各自成按钮；广场贴纸卡整卡 `role=button` 内嵌真实按钮 → 标题链 stretched-link 覆盖卡面、动作按钮 z-index 抬升、焦点圈全卡；对端导入输入 38→44px，busy「…」→「导入中…」。
+- **B 触控目标（视觉不动）**：8 个 28px 密集行按钮挂 `.hit-expand`（`::after inset:-4px` 透明命中 36px）；广场回复输入 `minHeight:auto`(≈33px)→36；AI 卡徽章 10→11px。
+- **C 抽取与墨色**：手搓着色横幅抽 `.notice-banner-warn/-accent`，隐藏帖墨色 `color-mix(in srgb,var(--warn) 55%,var(--text))`——**探针实测 retro 浅色主题 2.62:1（不达 AA）→ 5.43:1**，modern 14.64:1；RankingDetail 高亮内联三件套 → `.ranking-hit`（值逐字相同）；sync-dot 角标几何 → `.sync-dot-pinned`。
+- **D 结构**：共识分解行内联 grid `110px 1fr 64px` → `.consensus-factor`（`auto` 列，英文标签不再折行）；**删除 `.metrics-wide>div::after` 死装饰**（`--metric-pct` 从未逐格传入，下划线永远 0% 宽——ROADMAP 给的「传值或删装饰」二选一，数字已表达同一信息，取删除）；重排/编辑行裸海报统一包 `.ranking-card-poster`（与只读行同尺寸）；嵌套回复缩进第 3 层起封顶（移动端深楼不再挤爆）。
+
+**验证**
+
+- 五道门禁全绿（890 passed / 9 skipped，绊线 +10）；**52 张前后 `tol=0` 全零差异**——本批全部为结构/等值改造，像素级证明视觉等价；DOM 探针坐实墨色对比度与 hit-expand 挂载；比较页导入输入 fixture 不渲染该态，源码绊线锁定；Flash 复审因画面与已签收基线逐像素相同无新信息，按 impeccable 有界轮纪律省略。
+- **线上 ✅（`21a74bc` 推送后）**：主包 `index-B79xriZ7.js` + `index-CIYbNAXW.css` + CompareView/ProfileView/PlazaPostView/PlazaView/AiInsightCard/RankingDetail 六分包 SHA256 逐字节一致；`/api/health` 200；SPA 路由全 200。
+
 ## 2026-10-24 · 前端全量打磨闭环（T-20261024-06，四 skill 指导 + GLM-5.3-Flash 子代理审查）
 
 **背景**：用户指派「调用 frontend-design / ui-ux-pro-max / impeccable / taste-skill 四个前端设计 skill 全量打磨前端，上线后检验优化，做成闭环」。模式 = impeccable **Refinement**（夜间档案馆世界观为 committed world，skill 默认项不覆盖既有签名）。视觉审查按用户指定由 **GLM-5.3-Flash 子代理**（dynamic workflow）执行。

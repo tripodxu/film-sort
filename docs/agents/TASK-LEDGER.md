@@ -10,11 +10,12 @@
 
 ## 进行中 / 最近
 
-### T-20261025-01 · 前端打磨第二轮（ROADMAP §二 A/B/C/D 剩余项全消化）· 🔄 进行中
+### T-20261025-01 · 前端打磨第二轮（ROADMAP §二 A/B/C/D 剩余项全消化）· ✅ 完成
 
-- **状态**：🔄 进行中（已认领）｜ **负责人**：本 agent
-- **任务**：用户再次指派「调用四 skill 全量打磨前端」。范围 = ROADMAP §二 上轮（T-20261024-06）未消化的全部登记项：A 组嵌套交互（CompareView 导入行/comparison-row、PlazaView 整卡）、B 组触控目标（ProfileView 28px 透明命中区、回复输入、AiInsightCard 徽章）、C 组抽取（.notice-banner、隐藏帖墨色、sync-dot、.ranking-hit）、D 组结构（consensus-factor + --metric-pct、Poster 包裹统一、嵌套回复缩进封顶）。
-- **纪律**：Refinement（档案馆世界观权威）；零视觉项过 `ui-diff --tol 0`，改视觉项单独签收；GLM-5.3-Flash 工作流复审；上线 SHA/health 验证收口。
+- **状态**：✅ 完成（代码 `21a74bc` 已推送并线上验证）｜ **负责人**：本 agent
+- **改了什么**（13 项 + 绊线 10 条）：**A 嵌套交互**——比较页共识表行 button 内嵌可点 span → 行 div + `.comparison-open` 真实按钮 + 名次格各自成按钮；广场贴纸卡整卡 role=button 内嵌真实按钮 → 标题链 stretched-link（`.plaza-sticker-link::after` 覆盖卡面，动作按钮 z-index:2，焦点圈全卡）；对端导入输入 38→44px + busy「导入中…」。**B 触控目标（视觉不动）**——8 个 28px 密集行按钮挂 `.hit-expand`（::after inset:-4px 命中 36px）；回复输入 auto(≈33)→36；AI 卡徽章 10→11px。**C 抽取与墨色**——横幅抽 `.notice-banner-warn/-accent`，隐藏帖墨色 `color-mix(warn 55%, text)`（探针实测 retro 2.62:1→5.43:1，modern 14.64:1）；RankingDetail 高亮 → `.ranking-hit`（值逐字相同）；sync-dot 几何 → `.sync-dot-pinned`。**D 结构**——共识分解行 `.consensus-factor`（110px 定宽→auto，英文标签不折行）；metrics-wide `--metric-pct` 死下划线删除；重排/编辑行海报统一包 `.ranking-card-poster`（与只读行同尺寸）；嵌套回复缩进第 3 层封顶。
+- **验证到哪一步**：五道门禁全绿（测试 65 files / 890 passed / 9 skipped）；**52 张前后 `tol=0` 全零差异**（所有结构改造视觉等价的像素级证明；Flash 复审因与已签收基线逐像素相同无新信息，按有界轮纪律省略并记录）；DOM 探针坐实墨色对比度与 hit-expand 挂载（myself 页 10 处）；比较页导入输入因 fixture 不渲染该态改源码绊线锁定；impeccable detect 零新增模式（`.ranking-hit` 系既有内联行为入表后首次可见）。**线上 ✅**：主包 `index-B79xriZ7.js` / `index-CIYbNAXW.css` / 6 分包 SHA256 逐字节一致；health 200；/depth /encounter /myself /plaza /compare 全 200。
+- **交接给下一棒**：ROADMAP §二 P2 待办至此**全部消化**（2026-09-27 审查遗留 A/B/C/D 四组清零，E 组此前已清）。后续值得做的已移出 §二：大清单标定（PLAN §9）、移动端广场 sticker-btn 28px 命中区（本批范围外，同 hit-expand 手法可做）。
 
 ### T-20261024-06 · 前端全量打磨闭环（四 skill 指导 + GLM-5.3-Flash 子代理审查）· ✅ 完成
 
