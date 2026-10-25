@@ -10,6 +10,9 @@ describe("安全审计修复绊线（2026-10-25）", () => {
   it("M1：登录哑哈希抹平时序差，禁用判定后置到验密之后", () => {
     const src = read("worker/account.ts");
     expect(src).toContain("TIMING_DUMMY_SALT");
+    // 哑盐必须是模块级合法的固定值（workerd 禁止全局作用域 crypto.getRandomValues，
+    // 部署校验 10021 直接拒绝——2026-10-25 部署时实抓）
+    expect(src).toMatch(/const TIMING_DUMMY_SALT = new Uint8Array\(16\)/);
     const dummy = src.indexOf("TIMING_DUMMY_SALT, PBKDF2_ITERATIONS");
     const verify = src.indexOf("verifyPassword(password, user.password_hash)");
     const disabled = src.indexOf("user.disabled_at) return json");

@@ -44,8 +44,11 @@ export async function adminAuthLocal(request: Request, db: D1Database): Promise<
 // 600k（OWASP 2023 HMAC-SHA256 建议量级）在 CF 侧直接抛错——散列格式自带 iterations 字段，
 // 未来迁离 Cloudflare 可对新散列无痛调回更高轮数（存量按存储值验证）。
 const PBKDF2_ITERATIONS = 100_000;
-/** 登录时序哑盐：用户不存在也执行同轮数 PBKDF2（结果弃用），消除邮箱枚举信号。 */
-const TIMING_DUMMY_SALT = crypto.getRandomValues(new Uint8Array(16));
+/** 登录时序哑盐：用户不存在也执行同轮数 PBKDF2（结果弃用），消除邮箱枚举信号。
+ * 固定零盐即可——它不保护任何东西，只需要让哑哈希与真哈希耗时相同；
+ * 不能在模块全局调 crypto.getRandomValues（workerd 禁止全局作用域产生随机值，
+ * 部署校验 10021 会直接拒绝）。 */
+const TIMING_DUMMY_SALT = new Uint8Array(16);
 
 function toHex(bytes: ArrayBuffer | Uint8Array): string {
   const view = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
