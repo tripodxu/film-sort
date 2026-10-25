@@ -231,6 +231,7 @@ export function HomeView({
                 ).map(([m, Icon]) => (
                   <button
                     key={m}
+                    className="hit-expand"
                     aria-label={
                       m === "row" ? t("行式布局", "Row layout") : t("列式布局", "Column layout")
                     }
@@ -242,6 +243,7 @@ export function HomeView({
                       } catch {}
                     }}
                     style={{
+                      position: "relative",
                       width: 28,
                       height: 28,
                       borderRadius: 6,
@@ -357,7 +359,9 @@ export function HomeView({
                                 }}
                                 title={t("重命名", "Rename")}
                                 aria-label={t("重命名", "Rename")}
+                                className="hit-expand"
                                 style={{
+                                  position: "relative",
                                   width: 22,
                                   height: 22,
                                   display: "flex",
@@ -388,7 +392,9 @@ export function HomeView({
                                 }}
                                 title={t("删除", "Delete")}
                                 aria-label={t("删除", "Delete")}
+                                className="hit-expand"
                                 style={{
+                                  position: "relative",
                                   width: 22,
                                   height: 22,
                                   display: "flex",

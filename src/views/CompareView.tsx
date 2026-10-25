@@ -744,7 +744,7 @@ export function CompareView({
               <span>
                 {t("作品重合度", "Work overlap")}
                 <i
-                  className="metric-help"
+                  className="metric-help hit-expand"
                   tabIndex={0}
                   data-tip={t("共同作品 ÷ 双方去重总数", "Shared works ÷ union of both lists")}
                 >
@@ -760,7 +760,7 @@ export function CompareView({
               <span>
                 {t("顺序一致率", "Order agreement")}
                 <i
-                  className="metric-help"
+                  className="metric-help hit-expand"
                   tabIndex={0}
                   data-tip={t(
                     "共同作品中，双方相对先后次序一致的比例（并列名次不计）",
@@ -776,7 +776,7 @@ export function CompareView({
               <span>
                 {t("加权偏好一致", "Weighted agreement")}
                 <i
-                  className="metric-help"
+                  className="metric-help hit-expand"
                   tabIndex={0}
                   data-tip={t(
                     "越靠前的共同作品权重越高",
@@ -799,7 +799,7 @@ export function CompareView({
                     <span>
                       {t("Kendall τ", "Kendall tau")}
                       <i
-                        className="metric-help"
+                        className="metric-help hit-expand"
                         tabIndex={0}
                         data-tip={t(
                           "秩相关（含并列），50=无关，100=完全一致",
@@ -815,7 +815,7 @@ export function CompareView({
                     <span>
                       {t("Spearman 一致", "Spearman")}
                       <i
-                        className="metric-help"
+                        className="metric-help hit-expand"
                         tabIndex={0}
                         data-tip={t("名次差的平方和换算", "Derived from squared rank differences")}
                       >
@@ -830,7 +830,7 @@ export function CompareView({
                     <span>
                       {t("前五重合", "Top-5 overlap")}
                       <i
-                        className="metric-help"
+                        className="metric-help hit-expand"
                         tabIndex={0}
                         data-tip={t(
                           "双方前五名作品的 Jaccard 相似度",
@@ -849,7 +849,7 @@ export function CompareView({
                     <span>
                       {t("年代偏好", "Era affinity")}
                       <i
-                        className="metric-help"
+                        className="metric-help hit-expand"
                         tabIndex={0}
                         data-tip={t(
                           "双方榜单年代中位数越接近分越高",
@@ -865,7 +865,7 @@ export function CompareView({
                     <span>
                       {t("名次距离", "Rank distance")}
                       <i
-                        className="metric-help"
+                        className="metric-help hit-expand"
                         tabIndex={0}
                         data-tip={t(
                           "共同作品的平均名次差，越低越一致",
@@ -884,7 +884,7 @@ export function CompareView({
                     <span>
                       {t("冠军一致", "Same champion")}
                       <i
-                        className="metric-help"
+                        className="metric-help hit-expand"
                         tabIndex={0}
                         data-tip={t(
                           "双方的第 1 名是否为同一作品",
@@ -906,7 +906,7 @@ export function CompareView({
                     <span>
                       {t("Top 3 共识", "Top 3 consensus")}
                       <i
-                        className="metric-help"
+                        className="metric-help hit-expand"
                         tabIndex={0}
                         data-tip={t("同时进入双方前三的作品数", "Works in both Top-3 lists")}
                       >
@@ -995,7 +995,7 @@ export function CompareView({
                     <span className="col-me">
                       {t("我", "Me")}
                       <button
-                        className="sort-swap"
+                        className="sort-swap hit-expand"
                         onClick={() => setCompareSortBy(compareSortBy === "own" ? "peer" : "own")}
                         title={
                           compareSortBy === "own"

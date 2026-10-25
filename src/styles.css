@@ -1955,3 +1955,5 @@ body[data-theme=classic]{
 .comparison-open .comparison-poster{display:flex}
 .reorder-item .ranking-card-poster{cursor:default}
 .plaza-sticker-arrow{pointer-events:none}
+/* T-20261025-02：贴纸卡小按钮（32/26/28px）无定位上下文，hit-expand 的 ::after 需要锚点 */
+.plaza-sticker-btn{position:relative}

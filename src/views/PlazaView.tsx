@@ -391,7 +391,7 @@ export function PlazaView({
               <div className="plaza-sticker-actions">
                 {post.is_author && (
                   <button
-                    className="plaza-sticker-btn"
+                    className="plaza-sticker-btn hit-expand"
                     onClick={(e) => {
                       e.stopPropagation();
                       navigateTo(`plazaPost:${post.id}`);
@@ -402,7 +402,7 @@ export function PlazaView({
                   </button>
                 )}
                 <button
-                  className="plaza-sticker-btn"
+                  className="plaza-sticker-btn hit-expand"
                   onClick={(e) => {
                     e.stopPropagation();
                     sortWithPost(post);

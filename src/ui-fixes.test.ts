@@ -1150,3 +1150,24 @@ describe("打磨第二轮 T-20261025-01（ROADMAP §二 A/B/C/D）", () => {
     expect(css).toMatch(/\.reorder-item \.ranking-card-poster\{cursor:default\}/);
   });
 });
+
+describe("打磨第三小轮 T-20261025-02：漏网 <36px 触控目标全数挂透明命中区", () => {
+  it("比较页 sort-swap(22px) 与全部 metric-help(16px) 挂 hit-expand", () => {
+    const compare = readFileSync("src/views/CompareView.tsx", "utf8");
+    expect(compare).toContain('className="sort-swap hit-expand"');
+    expect((compare.match(/className="metric-help hit-expand"/g) ?? []).length).toBe(10);
+  });
+
+  it("广场贴纸按钮（32/26/28px）挂 hit-expand 且有定位锚点", () => {
+    const plaza = readFileSync("src/views/PlazaView.tsx", "utf8");
+    expect((plaza.match(/className="plaza-sticker-btn hit-expand"/g) ?? []).length).toBe(2);
+    expect(css).toMatch(/\.plaza-sticker-btn\{position:relative\}/);
+  });
+
+  it("HomeView 布局切换(28px) 与重命名/删除圆点(22px) 挂 hit-expand", () => {
+    const home = readFileSync("src/views/HomeView.tsx", "utf8");
+    expect(home).toMatch(/className="hit-expand"[\s\S]{0,200}aria-pressed/);
+    expect((home.match(/className="hit-expand"/g) ?? []).length).toBe(3);
+    expect((home.match(/position: "relative",/g) ?? []).length).toBeGreaterThanOrEqual(3);
+  });
+});
