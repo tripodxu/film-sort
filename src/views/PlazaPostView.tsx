@@ -557,21 +557,8 @@ export function PlazaPostView({
       )}
 
       {isAuthor && !post.is_public && (
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: 8,
-            margin: "0 0 16px",
-            padding: "10px 14px",
-            borderRadius: "var(--r-md)",
-            background: "color-mix(in srgb,var(--warn) 6%,transparent)",
-            border: "1px solid color-mix(in srgb,var(--warn) 35%,transparent)",
-            fontSize: 12,
-            color: "var(--yellow)",
-          }}
-        >
-          <EyeOff size={14} style={{ flexShrink: 0 }} />
+        <div className="notice-banner notice-banner-warn">
+          <EyeOff size={14} />
           {t(
             "该帖子已隐藏，其他用户无法看到（仅你可见），可随时恢复。",
             "Hidden — only you can see this post. Restore anytime.",
@@ -740,7 +727,9 @@ export function PlazaPostView({
                   <GripVertical size={16} />
                 </span>
                 <span className="row-number">{String(idx + 1).padStart(2, "0")}</span>
-                <Poster work={work} kind={post.kind as MediaKind} />
+                <span className="ranking-card-poster">
+                  <Poster work={work} kind={post.kind as MediaKind} />
+                </span>
                 <div>
                   <strong>{work.title}</strong>
                   <small>
@@ -749,7 +738,7 @@ export function PlazaPostView({
                 </div>
                 <div style={{ display: "flex", gap: 2, marginLeft: "auto", flexShrink: 0 }}>
                   <button
-                    className="icon-button"
+                    className="icon-button hit-expand"
                     title={t("上移", "Move up")}
                     disabled={idx === 0}
                     onClick={() => moveEditItem(idx, idx - 1)}
@@ -758,7 +747,7 @@ export function PlazaPostView({
                     <ArrowUp size={14} />
                   </button>
                   <button
-                    className="icon-button"
+                    className="icon-button hit-expand"
                     title={t("下移", "Move down")}
                     disabled={idx === editItems.length - 1}
                     onClick={() => moveEditItem(idx, idx + 1)}
@@ -767,7 +756,7 @@ export function PlazaPostView({
                     <ArrowDown size={14} />
                   </button>
                   <button
-                    className="icon-button"
+                    className="icon-button hit-expand"
                     title={t("移除", "Remove")}
                     disabled={editItems.length <= 1}
                     onClick={() => setEditItems((cur) => (cur ?? []).filter((_, i) => i !== idx))}
@@ -1066,7 +1055,12 @@ export function PlazaPostView({
               className="comment-item"
               style={
                 depth > 0
-                  ? { marginLeft: 24, borderLeft: "2px solid var(--line)", paddingLeft: 12 }
+                  ? {
+                      // 深度封顶：第 3 层起不再递进缩进（移动端深楼挤爆，ROADMAP §二 D）
+                      marginLeft: depth < 3 ? 24 : 0,
+                      borderLeft: "2px solid var(--line)",
+                      paddingLeft: 12,
+                    }
                   : undefined
               }
             >
@@ -1110,7 +1104,7 @@ export function PlazaPostView({
                     onChange={(e) => setReplyText(e.target.value)}
                     placeholder={t("写下你的回复…", "Write your reply…")}
                     maxLength={500}
-                    style={{ fontSize: 12, padding: "6px 10px", minHeight: "auto", flex: 1 }}
+                    style={{ fontSize: 12, padding: "6px 10px", minHeight: 36, flex: 1 }}
                     autoFocus
                     onKeyDown={(e) => {
                       if (e.key === "Enter") void handleAddComment(comment.id);

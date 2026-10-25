@@ -602,18 +602,8 @@ export function ProfileView({
           )}
           {plazaSyncPostId !== null && !editWorksOpen && (
             <div
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: 10,
-                padding: "10px 14px",
-                marginBottom: 14,
-                borderRadius: "var(--r-md)",
-                background: "color-mix(in srgb,var(--accent) 6%,transparent)",
-                border: "1px solid color-mix(in srgb,var(--accent) 25%,transparent)",
-                fontSize: 12,
-                color: "var(--muted)",
-              }}
+              className="notice-banner notice-banner-accent"
+              style={{ gap: 10, marginBottom: 14 }}
             >
               <span>
                 {t(
@@ -697,7 +687,7 @@ export function ProfileView({
                     </small>
                   </div>
                   <button
-                    className="icon-button"
+                    className="icon-button hit-expand"
                     title={t("批注", "Note")}
                     onClick={(e) => {
                       e.stopPropagation();
@@ -1006,7 +996,9 @@ function ReorderList({
               <GripVertical size={16} />
             </span>
             <span className="row-number">{String(idx + 1).padStart(2, "0")}</span>
-            <Poster work={work} kind={kind} />
+            <span className="ranking-card-poster">
+              <Poster work={work} kind={kind} />
+            </span>
             <div>
               <strong>{work.title}</strong>
               <small>
@@ -1015,7 +1007,7 @@ function ReorderList({
             </div>
             <div style={{ display: "flex", gap: 2, marginLeft: "auto", flexShrink: 0 }}>
               <button
-                className="icon-button"
+                className="icon-button hit-expand"
                 title={t("上移", "Move up")}
                 disabled={idx === 0}
                 onClick={() => moveItem(idx, idx - 1)}
@@ -1024,7 +1016,7 @@ function ReorderList({
                 <ArrowUp size={14} />
               </button>
               <button
-                className="icon-button"
+                className="icon-button hit-expand"
                 title={t("下移", "Move down")}
                 disabled={idx === items.length - 1}
                 onClick={() => moveItem(idx, idx + 1)}
@@ -1033,7 +1025,7 @@ function ReorderList({
                 <ArrowDown size={14} />
               </button>
               <button
-                className="icon-button"
+                className="icon-button hit-expand"
                 title={t("批注", "Note")}
                 onClick={(e) => {
                   e.stopPropagation();
@@ -1202,7 +1194,7 @@ function WorkEditor({
               </small>
             </div>
             <button
-              className="icon-button"
+              className="icon-button hit-expand"
               title={t("移除", "Remove")}
               disabled={items.length <= 1}
               onClick={() => setItems((cur) => cur.filter((_, i) => i !== idx))}

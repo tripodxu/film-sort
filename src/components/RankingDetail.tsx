@@ -115,18 +115,7 @@ export function RankingDetail({
           const isHit = highlightId === work.id;
           const workNote = notes[`work:${kind}:${work.id}`]?.trim();
           return (
-            <li
-              key={work.id}
-              style={
-                isHit
-                  ? {
-                      background: "color-mix(in srgb,var(--accent) 8%,transparent)",
-                      borderLeft: "3px solid var(--accent)",
-                      paddingLeft: 14,
-                    }
-                  : undefined
-              }
-            >
+            <li key={work.id} className={isHit ? "ranking-hit" : undefined}>
               <span className="row-number" style={isHit ? { color: "var(--accent)" } : undefined}>
                 {String(rank).padStart(2, "0")}
               </span>

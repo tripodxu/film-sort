@@ -534,15 +534,15 @@ export function CompareView({
                   onKeyDown={(e) => {
                     if (e.key === "Enter") void importPeerFromUrl();
                   }}
-                  style={{ flex: 1, minHeight: 38, fontSize: 13 }}
+                  style={{ flex: 1, minHeight: 44, fontSize: 13 }}
                 />
                 <button
                   className="button secondary"
                   disabled={!peerUrl.trim() || peerUrlBusy}
                   onClick={() => void importPeerFromUrl()}
-                  style={{ minHeight: 38, padding: "0 12px" }}
+                  style={{ padding: "0 12px" }}
                 >
-                  {peerUrlBusy ? "…" : t("导入", "Import")}
+                  {peerUrlBusy ? t("导入中…", "Importing…") : t("导入", "Import")}
                 </button>
               </div>
               {fileInput("peer", t("或上传 JSON 文件", "or upload JSON"), importProfile)}
@@ -961,40 +961,18 @@ export function CompareView({
                   },
                 ] as Array<{ key: string; zh: string; en: string; weight: number; value: number }>
               ).map((factor) => (
-                <div
-                  key={factor.key}
-                  style={{
-                    display: "grid",
-                    gridTemplateColumns: "110px 1fr 64px",
-                    gap: 10,
-                    alignItems: "center",
-                    fontSize: 12,
-                  }}
-                >
-                  <span style={{ color: "var(--muted)" }}>
+                <div className="consensus-factor" key={factor.key}>
+                  <span>
                     {t(factor.zh, factor.en)}
-                    <small style={{ opacity: 0.7 }}> ×{Math.round(factor.weight * 100)}%</small>
+                    <small> ×{Math.round(factor.weight * 100)}%</small>
                   </span>
-                  <div
-                    style={{
-                      height: 6,
-                      borderRadius: "var(--r-xs)",
-                      background: "var(--line)",
-                      overflow: "hidden",
-                    }}
-                  >
+                  <div className="consensus-factor-bar">
                     <div
-                      style={{
-                        height: "100%",
-                        width: `${Math.max(0, Math.min(100, factor.value))}%`,
-                        background: "var(--accent)",
-                        borderRadius: "var(--r-xs)",
-                      }}
+                      className="consensus-factor-fill"
+                      style={{ width: `${Math.max(0, Math.min(100, factor.value))}%` }}
                     />
                   </div>
-                  <strong style={{ textAlign: "right" }}>
-                    {Math.round(factor.value * factor.weight)}
-                  </strong>
+                  <strong>{Math.round(factor.value * factor.weight)}</strong>
                 </div>
               ))}
             </div>
@@ -1044,24 +1022,24 @@ export function CompareView({
                         ? peerSrc.reduce((a, b) => (a.rank < b.rank ? a : b))
                         : null;
                       return (
-                        <button
-                          className="comparison-row"
-                          key={`${item.title}-${item.ownRank}`}
-                          onClick={() =>
-                            item.ownItem && openArtworkDetail(item.ownItem, compareKind)
-                          }
-                        >
-                          <span className="comparison-poster">
-                            <Poster
-                              work={item.ownItem ?? { id: item.title, title: item.title }}
-                              kind={compareKind}
-                            />
-                          </span>
-                          <strong>{item.title}</strong>
-                          <span
+                        <div className="comparison-row" key={`${item.title}-${item.ownRank}`}>
+                          <button
+                            className="comparison-open"
+                            onClick={() =>
+                              item.ownItem && openArtworkDetail(item.ownItem, compareKind)
+                            }
+                          >
+                            <span className="comparison-poster">
+                              <Poster
+                                work={item.ownItem ?? { id: item.title, title: item.title }}
+                                kind={compareKind}
+                              />
+                            </span>
+                            <strong className="comparison-title">{item.title}</strong>
+                          </button>
+                          <button
                             className="rank-clickable"
-                            onClick={(e) => {
-                              e.stopPropagation();
+                            onClick={() => {
                               if (bestOwn) {
                                 const ranking =
                                   profile?.rankings.find(
@@ -1088,11 +1066,10 @@ export function CompareView({
                                 {ownSrc.length > 1 ? ` +${ownSrc.length - 1}` : ""}
                               </span>
                             )}
-                          </span>
-                          <span
+                          </button>
+                          <button
                             className="rank-clickable"
-                            onClick={(e) => {
-                              e.stopPropagation();
+                            onClick={() => {
                               if (bestPeer) {
                                 const ranking =
                                   peer?.rankings.find(
@@ -1119,8 +1096,8 @@ export function CompareView({
                                 {peerSrc.length > 1 ? ` +${peerSrc.length - 1}` : ""}
                               </span>
                             )}
-                          </span>
-                        </button>
+                          </button>
+                        </div>
                       );
                     })}
                 </div>

@@ -1061,3 +1061,92 @@ describe("打磨批 T-20261024-06：内联圆角归 token + segmented.inline", (
     expect(css).toMatch(/\.home-heading p\{[^}]*text-wrap:pretty/);
   });
 });
+
+describe("打磨第二轮 T-20261025-01（ROADMAP §二 A/B/C/D）", () => {
+  it("28px 密集行按钮挂透明命中区 .hit-expand（ProfileView 5 处 + PlazaPostView 3 处）", () => {
+    expect(css).toMatch(/\.hit-expand::after\{content:"";position:absolute;inset:-4px\}/);
+    for (const f of ["src/views/ProfileView.tsx", "src/views/PlazaPostView.tsx"]) {
+      const code = readFileSync(f, "utf8");
+      const n = (code.match(/icon-button hit-expand/g) ?? []).length;
+      expect(n, `${f} 应有 4/3 处`).toBe(f.endsWith("ProfileView.tsx") ? 5 : 3);
+    }
+  });
+
+  it("广场回复输入 ≥36px（原 minHeight:auto 实高仅 ~33px）", () => {
+    const post = readFileSync("src/views/PlazaPostView.tsx", "utf8");
+    expect(post).toMatch(/padding: "6px 10px", minHeight: 36/);
+    expect(post).not.toContain('minHeight: "auto"');
+  });
+
+  it("着色横幅抽 .notice-banner（warn 墨色 color-mix 可读性 + accent 态）", () => {
+    expect(css).toMatch(/\.notice-banner\{display:flex/);
+    expect(css).toMatch(
+      /\.notice-banner-warn\{[^}]*color:color-mix\(in srgb,var\(--warn\) 55%,var\(--text\)\)/,
+    );
+    const post = readFileSync("src/views/PlazaPostView.tsx", "utf8");
+    expect(post).toContain('className="notice-banner notice-banner-warn"');
+    expect(post).not.toMatch(/background: "color-mix\(in srgb,var\(--warn\) 6%/);
+    const profile = readFileSync("src/views/ProfileView.tsx", "utf8");
+    expect(profile).toContain("notice-banner notice-banner-accent");
+  });
+
+  it("RankingDetail 高亮行走 .ranking-hit（内联三件套删除，值逐字相同）", () => {
+    expect(css).toMatch(
+      /\.ranking-hit\{background:color-mix\(in srgb,var\(--accent\) 8%,transparent\);border-left:3px solid var\(--accent\);padding-left:14px\}/,
+    );
+    const rd = readFileSync("src/components/RankingDetail.tsx", "utf8");
+    expect(rd).toContain('className={isHit ? "ranking-hit" : undefined}');
+    expect(rd).not.toContain("borderLeft:");
+  });
+
+  it("共识分解行抽 .consensus-factor，110px 定宽改 auto（英文标签不折行）", () => {
+    expect(css).toMatch(
+      /\.consensus-factor\{display:grid;grid-template-columns:auto minmax\(0,1fr\) 64px/,
+    );
+    const compare = readFileSync("src/views/CompareView.tsx", "utf8");
+    expect(compare).toContain('className="consensus-factor"');
+    expect(compare).not.toContain('gridTemplateColumns: "110px 1fr 64px"');
+  });
+
+  it("死装饰删除：metrics-wide 的 --metric-pct 下划线不再存在", () => {
+    expect(css).not.toMatch(/\.metrics-wide>div::after/);
+  });
+
+  it("广场贴纸卡：标题链 stretched-link 替代整卡 role=button（无嵌套交互）", () => {
+    const plaza = readFileSync("src/views/PlazaView.tsx", "utf8");
+    expect(plaza).not.toMatch(/plaza-sticker [^>]*role="button"/);
+    expect(plaza).toContain('className="plaza-sticker-link"');
+    expect(css).toMatch(
+      /\.plaza-sticker-link::after\{content:"";position:absolute;inset:0;z-index:1/,
+    );
+    expect(css).toMatch(/\.plaza-sticker-actions\{position:relative;z-index:2\}/);
+  });
+
+  it("比较页共识表：行改 div + 真实按钮（海报+标题一格、名次两格），无嵌套 span 点击", () => {
+    const compare = readFileSync("src/views/CompareView.tsx", "utf8");
+    expect(compare).toContain('<div className="comparison-row"');
+    expect(compare).toContain('className="comparison-open"');
+    expect(compare).not.toMatch(/<button\s+className="comparison-row"/);
+    expect((compare.match(/className="rank-clickable"/g) ?? []).length).toBe(2);
+  });
+
+  it("嵌套回复缩进第 3 层起封顶", () => {
+    const post = readFileSync("src/views/PlazaPostView.tsx", "utf8");
+    expect(post).toMatch(/marginLeft: depth < 3 \? 24 : 0/);
+  });
+
+  it("比较页对端导入输入恢复 44px，busy 态显示「导入中…」", () => {
+    const compare = readFileSync("src/views/CompareView.tsx", "utf8");
+    expect(compare).toMatch(/flex: 1, minHeight: 44, fontSize: 13/);
+    expect(compare).toContain('t("导入中…", "Importing…")');
+    expect(compare).not.toContain('? "…"');
+  });
+
+  it("重排/编辑行海报统一包 .ranking-card-poster（与只读行同尺寸）", () => {
+    const profile = readFileSync("src/views/ProfileView.tsx", "utf8");
+    const post = readFileSync("src/views/PlazaPostView.tsx", "utf8");
+    expect((profile.match(/ranking-card-poster/g) ?? []).length).toBeGreaterThanOrEqual(2);
+    expect(post).toMatch(/ranking-card-poster/);
+    expect(css).toMatch(/\.reorder-item \.ranking-card-poster\{cursor:default\}/);
+  });
+});

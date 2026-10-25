@@ -302,15 +302,6 @@ export function PlazaView({
             <div
               key={post.id}
               className={`plaza-sticker ${colCount >= 4 ? "plaza-sticker-compact" : ""}`}
-              onClick={() => navigateTo(`plazaPost:${post.id}`)}
-              role="button"
-              tabIndex={0}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" || e.key === " ") {
-                  e.preventDefault();
-                  navigateTo(`plazaPost:${post.id}`);
-                }
-              }}
             >
               <div className="plaza-sticker-posters">
                 {(post.top_items ?? post.items ?? []).slice(0, 3).map((work, idx) => (
@@ -321,7 +312,14 @@ export function PlazaView({
                 ))}
               </div>
               <div className="plaza-sticker-info">
-                <h3 className="plaza-sticker-title">{post.collection_title}</h3>
+                <h3 className="plaza-sticker-title">
+                  <button
+                    className="plaza-sticker-link"
+                    onClick={() => navigateTo(`plazaPost:${post.id}`)}
+                  >
+                    {post.collection_title}
+                  </button>
+                </h3>
                 {(post.note_count ?? 0) > 0 && (
                   <span
                     style={{

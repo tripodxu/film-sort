@@ -10,6 +10,12 @@
 
 ## 进行中 / 最近
 
+### T-20261025-01 · 前端打磨第二轮（ROADMAP §二 A/B/C/D 剩余项全消化）· 🔄 进行中
+
+- **状态**：🔄 进行中（已认领）｜ **负责人**：本 agent
+- **任务**：用户再次指派「调用四 skill 全量打磨前端」。范围 = ROADMAP §二 上轮（T-20261024-06）未消化的全部登记项：A 组嵌套交互（CompareView 导入行/comparison-row、PlazaView 整卡）、B 组触控目标（ProfileView 28px 透明命中区、回复输入、AiInsightCard 徽章）、C 组抽取（.notice-banner、隐藏帖墨色、sync-dot、.ranking-hit）、D 组结构（consensus-factor + --metric-pct、Poster 包裹统一、嵌套回复缩进封顶）。
+- **纪律**：Refinement（档案馆世界观权威）；零视觉项过 `ui-diff --tol 0`，改视觉项单独签收；GLM-5.3-Flash 工作流复审；上线 SHA/health 验证收口。
+
 ### T-20261024-06 · 前端全量打磨闭环（四 skill 指导 + GLM-5.3-Flash 子代理审查）· ✅ 完成
 
 - **状态**：✅ 完成（代码 `0c3198f` 已推送并线上验证）｜ **负责人**：本 agent

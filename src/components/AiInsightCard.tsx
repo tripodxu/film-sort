@@ -188,7 +188,7 @@ export function AiInsightCard({
                 color: "var(--muted)",
               }}
             >
-              <span className="badge badge-visit" style={{ fontSize: 10 }}>
+              <span className="badge badge-visit" style={{ fontSize: 11 }}>
                 {result.source === "custom"
                   ? t(`我的 · ${result.model || "model"}`, `Mine · ${result.model || "model"}`)
                   : t(`内置 · ${result.model || "model"}`, `Built-in · ${result.model || "model"}`)}
@@ -278,21 +278,7 @@ export function AiInsightCard({
         </button>
         <button className="icon-button" title={t("AI 设置", "AI settings")} onClick={onOpenConfig}>
           <Settings2 size={16} />
-          {hasCustom && (
-            <span
-              className="sync-dot"
-              data-status="saved"
-              style={{
-                position: "absolute",
-                top: 4,
-                right: 4,
-                width: 7,
-                height: 7,
-                borderRadius: "50%",
-                border: "1.5px solid var(--bg)",
-              }}
-            />
-          )}
+          {hasCustom && <span className="sync-dot sync-dot-pinned" data-status="saved" />}
         </button>
       </div>
     </div>
