@@ -1046,15 +1046,15 @@ describe("打磨批 T-20261024-06：内联圆角归 token + segmented.inline", (
     expect(post).toContain("minHeight: 36, fontSize: 12, paddingInline: 12");
   });
 
-  it("小号海报兜底走 slim 修饰类（gap:32 不再把 9px 文字挤出格子底边）", () => {
-    // GLM-5.3-Flash 审查 + DOM 探针坐实：32×45px 格子里 16px 图标 + 32px gap + 文字
-    // 溢出 25px 被 overflow:hidden 裁掉半行；且全局 overflow-wrap:anywhere 把
-    // 「Substance」折成「Substan/ce」。slim = 纯文字 + break-word 空格断行优先。
+  it("小号海报兜底只留媒介图标（9px 标题在小格子里会被挤成孤立单字）", () => {
+    // 2026-10-27 线上截图：26×38 / 42×60 的格子里塞 9px 标题，实际只渲染出 1 个字符
+    // 贴在左上角、其余留白，读起来像「图片加载失败」。改为图标 + title 提示。
+    // 历史：更早的 gap:32px 会把它挤出格子底边（T-20261024-06 已修）。
     const poster = readFileSync("src/components/Poster.tsx", "utf8");
     expect(poster).toContain('cover-fallback${large ? "" : " cover-fallback-slim"}');
-    expect(css).toMatch(/\.cover-fallback-slim\{gap:0;padding:4%\}/);
-    expect(css).toMatch(/\.cover-fallback-slim svg\{display:none\}/);
-    expect(css).toMatch(/\.cover-fallback-slim span\{overflow-wrap:break-word\}/);
+    expect(poster).toContain("{large && <span>{work.title}</span>}");
+    expect(poster).toContain("title={work.title}");
+    expect(css).toMatch(/\.cover-fallback-slim svg\{display:block/);
   });
 
   it("首页引语开启 text-wrap:pretty（末行不再只剩「个。」孤字）", () => {
@@ -1169,5 +1169,50 @@ describe("打磨第三小轮 T-20261025-02：漏网 <36px 触控目标全数挂�
     expect(home).toMatch(/className="hit-expand"[\s\S]{0,200}aria-pressed/);
     expect((home.match(/className="hit-expand"/g) ?? []).length).toBe(3);
     expect((home.match(/position: "relative",/g) ?? []).length).toBeGreaterThanOrEqual(3);
+  });
+});
+
+describe("2026-10-27 视觉审查批（线上真机截图驱动）", () => {
+  it("换页聚焦 <main> 不再给整页套 2px 描边", () => {
+    // useRouter 每次换视图都 main.focus()，:focus-visible 会把整页框起来；
+    // 首页满宽被裁到视口外才看不见，其余路由全部露馅（/myself /plaza /plaza/:id）。
+    expect(css).toMatch(/\.main:focus,\s*\.main:focus-visible\{outline:none\}/);
+  });
+
+  it("榜单卡头部窄屏独占一行、按钮文字不折行", () => {
+    const profile = readFileSync("src/views/ProfileView.tsx", "utf8");
+    expect(profile).toContain('className="section-heading rank-heading"');
+    expect(css).toMatch(/\.rank-pill\{white-space:nowrap\}/);
+    expect(css).toMatch(/\.rank-heading>h2,\.rank-heading>\.rank-actions\{flex:1 1 100%\}/);
+  });
+
+  it("名次 04 起墨色 52%（原 30% 读起来像禁用态）", () => {
+    expect(css).toMatch(/\.row-number\{color:color-mix\(in srgb,var\(--text\) 52%,transparent\)\}/);
+  });
+
+  it("广场列数切换在单列宽度（≤800px）隐藏", () => {
+    expect(css).toMatch(/@media\(max-width:800px\)\{\.plaza-toolbar-right\{display:none\}\}/);
+  });
+
+  it("深链空态视口内居中", () => {
+    expect(readFileSync("src/App.tsx", "utf8")).toContain(
+      'className="empty-state empty-state-standalone"',
+    );
+    expect(css).toMatch(/\.empty-state-standalone\{[^}]*justify-content:center/);
+  });
+
+  it("帖子详情不再重复渲染同名标题", () => {
+    expect(readFileSync("src/components/RankingDetail.tsx", "utf8")).toContain(
+      "{!hideTitle && <h2>{collectionTitle}</h2>}",
+    );
+    expect(readFileSync("src/views/PlazaPostView.tsx", "utf8")).toMatch(
+      /<RankingDetail[\s\S]{0,400}hideTitle/,
+    );
+  });
+});
+
+describe("2026-10-27 视觉审查批（续）", () => {
+  it("/depth 空态动作行与居中标题对齐", () => {
+    expect(css).toMatch(/\.depth-view \.empty-state \.action-row\{justify-content:center\}/);
   });
 });

@@ -879,6 +879,7 @@ export function PlazaPostView({
             notes={parsedNotes}
             kindLabel={label}
             t={t}
+            hideTitle
             onNoteView={openNoteView}
             onArtworkClick={openArtworkDetail}
           />

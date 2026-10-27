@@ -334,6 +334,9 @@ html{scroll-behavior:smooth}
 /* ===== Better Focus States ===== */
 :focus-visible{outline:2px solid var(--accent);outline-offset:3px}
 .button:focus-visible{outline-offset:4px}
+/* 换页时 useRouter 把焦点交给 <main> 只为读屏播报路线变化，:focus-visible 会顺带
+   给整个视口套一圈 2px 亮框（首页因满宽被裁到视口外才看不见）。焦点环属于可操作控件。 */
+.main:focus,.main:focus-visible{outline:none}
 
 /* ===== Improved Contrast ===== */
 
@@ -1957,3 +1960,39 @@ body[data-theme=classic]{
 .plaza-sticker-arrow{pointer-events:none}
 /* T-20261025-02：贴纸卡小按钮（32/26/28px）无定位上下文，hit-expand 的 ::after 需要锚点 */
 .plaza-sticker-btn{position:relative}
+
+/* ===== 2026-10-27 视觉审查批（线上真机截图发现，逐条对应缺陷） ===== */
+
+/* 1) 榜单卡头部：≤600px 时标题被挤成「2025 年…」、按钮文字折成「添加/批注」两行。
+   标题与动作各占一整行，按钮文字永不折行。 */
+.rank-pill{white-space:nowrap}
+@media(max-width:600px){
+  .rank-heading{flex-wrap:wrap;row-gap:10px}
+  .rank-heading>h2,.rank-heading>.rank-actions{flex:1 1 100%}
+  .rank-heading>.rank-actions{justify-content:flex-start}
+}
+
+/* 2) 名次 04 起墨色 30%→52%：截图里 04/05 读起来像禁用态（对底 ~2.1:1）。
+   前三名仍是满版 accent 墨块，层级不变。 */
+.row-number{color:color-mix(in srgb,var(--text) 52%,transparent)}
+
+/* 3) 广场列数切换：≤800px 的 .plaza-grid 已被强制单列（1fr!important），
+   控件仍在却点了没反应 —— 该宽度下隐藏。 */
+@media(max-width:800px){.plaza-toolbar-right{display:none}}
+
+/* 4) 首页引言末行只剩「一个。」（孤行）：balance 让两行长度接近。 */
+.home-heading p{text-wrap:balance}
+
+/* 5) 26–44px 小海报缺封面时，9px 标题被格子挤成孤立单字（看起来像坏图）。
+   改为只描媒介图标：一眼可知「这条暂无封面」，而不是「加载失败」。 */
+.cover-fallback-slim{justify-content:center;align-items:center}
+.cover-fallback-slim svg{display:block;opacity:.7}
+
+/* 6) 深链空态（/catalog/setup 直开等）：文案贴顶、下方近一屏纯黑 —— 视口内居中。 */
+.empty-state-standalone{
+  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;
+  min-height:calc(100svh - 320px);text-align:center
+}
+
+/* 7) 深度比较空态：标题与说明居中，动作行却贴左（flex 不吃 text-align）—— 一起居中。 */
+.depth-view .empty-state .action-row{justify-content:center}

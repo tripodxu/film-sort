@@ -1,5 +1,24 @@
 # Changelog
 
+## 2026-10-27 · 视觉审查批：对线上真页截图找缺陷（T-20261027-01）
+
+**背景**：用户要求「用对真实网页的视觉发现问题的方式」优化前端。做法不是读代码猜，而是对 `https://sort.logicc.top` 真页批量出图（playwright + 系统 Chrome，10 路由 × 3–4 档宽度，DSF=2），逐张看图后 DOM 探针坐实。开工前先核对线上资产与本地构建哈希一致（`index-mIaO7SEz.js` / `index-CQPq2HOc.css`），确保图纸即源码。
+
+**改了什么（7 条缺陷 + 2 条附修）**
+
+- **整页描边（最重）**：`useRouter` 换视图时 `main.focus()` 供读屏播报，命中全局 `:focus-visible` → 整个视口套 2px 亮黄框；首页满宽裁到视口外才看不见。→ `.main:focus,.main:focus-visible{outline:none}`。
+- **榜单卡头部窄屏挤爆**：≤600px 标题压成「2025 年…」、`添加批注` 折成两行、动作散三行 → `.rank-pill{white-space:nowrap}` + `.rank-heading` 标题/动作各占一行。
+- **名次 04 起 30% 墨色**（对底 ~2.1:1，像禁用态）→ 52%。
+- **广场列数切换死按钮**：≤800px `.plaza-grid` 已强制单列，2/3/4 控件仍在 → 该宽度隐藏。
+- **首页引言孤行**（末行只剩「一个。」）→ `text-wrap:balance`。
+- **小海报兜底像坏图**：9px 标题在 26–44px 格里只渲染出 1 个字符 → 小格只留媒介图标 + `title`，改写 `ui-fixes.test.ts` 原 slim 断言。
+- **`/depth` 空态错位**：标题居中、按钮贴左 → `.action-row{justify-content:center}`。
+- 附：深链空态改视口内居中（`.empty-state-standalone`）；帖子详情 h1 与区块 h2 同名重复 → 新增 `RankingDetail.hideTitle` 仅该页隐藏。
+
+**验证**
+
+五道门禁全绿（909 passed / 9 skipped，绊线 +7）；本地 dist + 线上 `/api` 透传实拍 after 图逐条核对；360/540/800/1300 + paper/minimal 浅色主题无横向溢出。**线上验证待部署**（未跑 `npm run deploy`）。复核清单见 `docs/agents/TASK-LEDGER.md` T-20261027-01。
+
 ## 2026-10-25 · 安全审计修复批：M1-M4/L3/L4 全部修复上线（T-20261025-04）
 
 **背景**：执行全量安全审计（T-20261025-03，`docs/SECURITY-AUDIT-2026-10-25.md`）的修复建议。提交 `19b54f2` + `3996f9f`，worker 手动部署版本 `c5b6d923`。

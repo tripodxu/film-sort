@@ -304,7 +304,7 @@ export function ProfileView({
       )}
       <div className="profile-layout">
         <section>
-          <div className="section-heading">
+          <div className="section-heading rank-heading">
             {isRenamingProfile ? (
               <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
                 <input

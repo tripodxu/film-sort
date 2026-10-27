@@ -10,6 +10,23 @@
 
 ## 进行中 / 最近
 
+### T-20261027-01 · 视觉审查批：对线上真实页面截图找缺陷并修复 · 👀 待线上验证
+
+- **状态**：👀 代码完成、五道门禁全绿、本地构建实拍验证通过；**尚未部署到 sort.logicc.top**（未跑 `npm run deploy`，线上仍是旧资产）｜ **负责人**：本 agent
+- **怎么发现的**：不用静态阅读，直接对 `https://sort.logicc.top` 真页出图（playwright + 系统 Chrome，DSF=2，10 个路由 × 3–4 档宽度 = 22 张全页 + 首屏图），再逐张看图 + DOM 探针坐实。**先确认线上资产与本地构建哈希一致**（`index-mIaO7SEz.js` / `index-CQPq2HOc.css`），所以线上图即当前源码的渲染结果。
+- **7 条缺陷（均已修）**：
+  1. **整页 2px 亮黄描边（最重）**。`useRouter` 每次换视图 `main.focus()`（为读屏播报路线），命中全局 `:focus-visible` → 整个视口被框住。首页满宽把描边裁到视口外才看不见，`/myself` `/plaza` `/plaza/:id` `/catalog/setup` 全部露馅。→ `.main:focus,.main:focus-visible{outline:none}`（焦点环只属于可操作控件）。
+  2. **榜单卡头部 ≤600px 挤爆**：标题被压成「2025 年…」省略号、`添加批注` 折成「添加/批注」两行、动作散成 3 行。→ `.rank-pill{white-space:nowrap}` + `.rank-heading` 窄屏把标题与动作各占一行。
+  3. **名次 04 起墨色 30%**，截图里读起来像禁用态（对底 ~2.1:1）。→ 52%（前三名满版 accent 墨块层级不变）。
+  4. **广场列数切换（2/3/4）在 ≤800px 是死按钮**：`.plaza-grid` 已 `1fr!important` 强制单列，控件还在。→ 该宽度隐藏。
+  5. **首页引言孤行**：末行只剩「一个。」（540 与 1300 都中）。→ `text-wrap:balance`（在 `pretty` 之上叠加）。
+  6. **小海报兜底像坏图**：26–44px 格子里塞 9px 标题，实际只渲染出 1 个字符贴在角上。→ 小格只留媒介图标（`{large && <span>}` + `title` 供悬停/读屏），并改写原 `ui-fixes.test.ts` 的 slim 断言。
+  7. **`/depth` 空态错位**：标题与说明居中、两个按钮却贴左（flex 不吃 `text-align`）。→ `.depth-view .empty-state .action-row{justify-content:center}`。
+  - 附：深链空态（`/catalog/setup` 直开）文案贴顶、下方近一屏纯黑 → `.empty-state-standalone` 视口居中；帖子详情页 h1 与 `RankingDetail` 的 h2 是同一标题（隔 176px 重复）→ 新增 `hideTitle` 只在该页隐藏。
+- **验证**：五道门禁全绿（909 passed / 9 skipped）；绊线 +7（`src/ui-fixes.test.ts` 新增两个 describe）；本地 `dist` + 线上 `/api` 透传（`page.route` + `route.fetch`）实拍 after 图逐条核对；360/540/800/1300 四档 + paper/minimal 浅色主题回归无横向溢出。
+- **明确不改的（避免下一棒重复踩）**：广场贴纸卡「圆形播放键 + chevron」双箭头是**两个不同动作**（用此榜单排序 / 打开详情，后者是 stretched-link 的视觉指示），保留；首页 hero 右侧的大片空白是 **Three.js 光球在 headless 里不渲染**，不是布局缺陷（真实浏览器有 orb），勿按「留白过多」去改；帖子描述区的单字母 `w` 是用户真实内容。
+- **给下一棒 / 收尾动作**：`npm run deploy` 后按顺序复核——① `/myself` `/plaza` `/plaza/33` 打开即**不应**有整页黄框；② 540 宽榜单卡标题完整、`添加批注` 单行；③ 第 04 名次肉眼可读；④ ≤800 宽广场右上无 2/3/4；⑤ `/depth` 空态两按钮居中。**注意 T-20261025-04 的教训：git push 只发静态资产，worker 不必重发，但静态资产需要等 Cloudflare 构建完成再验。**
+
 ### T-20261025-04 · 安全审计修复批（M1-M4/L3/L4）· ✅ 完成
 
 - **状态**：✅ 完成（`19b54f2` + `3996f9f` 已推送，worker 手动部署 `c5b6d923`）｜ **负责人**：本 agent

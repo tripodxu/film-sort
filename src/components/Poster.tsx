@@ -422,23 +422,12 @@ export function Poster({
       ) : (
         <div
           className={`cover-fallback${large ? "" : " cover-fallback-slim"}${retryable ? " cover-fallback-retry" : ""}`}
+          title={work.title}
         >
           <Icon size={large ? 36 : 16} />
-          {large ? (
-            <span>{work.title}</span>
-          ) : (
-            <span
-              style={{
-                fontSize: 9,
-                opacity: 0.7,
-                lineHeight: 1.3,
-                textAlign: "center",
-                padding: "0 2px",
-              }}
-            >
-              {work.title}
-            </span>
-          )}
+          {/* 小格（26–44px）放不下标题：9px 文字会被挤成孤立单字、看起来像坏图。
+              只留媒介图标，标题走 title/alt 供悬停与读屏。 */}
+          {large && <span>{work.title}</span>}
           {/* 只在 large（弹窗/对照大图）里给一行说明：26px 的小格塞不下文字，
               贴纸卡整卡是 <button> 也不能塞。role="status" 让「为什么是空的」对读屏
               也成立——只有按钮出现的视觉变化是不够的（PLAN-EMPTY-COVER-STATE §A8）。 */}

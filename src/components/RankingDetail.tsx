@@ -26,6 +26,7 @@ export function RankingDetail({
   onArtworkClick,
   highlightId,
   showRankingNote = true,
+  hideTitle = false,
   t,
 }: {
   kind: MediaKind;
@@ -44,6 +45,8 @@ export function RankingDetail({
   /** 高亮某个作品行（比较界面跳转定位用） */
   highlightId?: string;
   showRankingNote?: boolean;
+  /** 页面 h1 已经展示同一标题时隐藏组件内重复的 h2（广场帖子详情：标题在 176px 上方已出现一次） */
+  hideTitle?: boolean;
   /** 双语函数；缺省时按钮保持中文文案 */
   t?: (zh: string, en: string) => string;
 }) {
@@ -96,7 +99,7 @@ export function RankingDetail({
           <span className="eyebrow">
             {eyebrow ?? `${kindLabel ? kindLabel(kind) : kind} / TOP ${items.length}`}
           </span>
-          <h2>{collectionTitle}</h2>
+          {!hideTitle && <h2>{collectionTitle}</h2>}
           {showRankingNote && rankingNote && (
             <ExpandableNote
               text={rankingNote}

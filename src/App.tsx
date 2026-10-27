@@ -1500,7 +1500,7 @@ export default function App() {
     );
   else
     content = (
-      <div className="empty-state">
+      <div className="empty-state empty-state-standalone">
         <p style={{ marginBottom: 12 }}>
           {t(
             "此页面的内容还未创建（例如直接打开了配置或排序地址）。请从首页开始。",
