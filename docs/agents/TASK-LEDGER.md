@@ -10,9 +10,22 @@
 
 ## 进行中 / 最近
 
-### T-20261027-01 · 视觉审查批：对线上真实页面截图找缺陷并修复 · 👀 待线上验证
+### T-20261027-01 · 视觉审查批：对线上真实页面截图找缺陷并修复 · ✅ 完成（线上已验证）
 
-- **状态**：👀 代码完成、五道门禁全绿、本地构建实拍验证通过；**尚未部署到 sort.logicc.top**（未跑 `npm run deploy`，线上仍是旧资产）｜ **负责人**：本 agent
+- **部署**：提交 `16b6305` → `npm run deploy` → Worker 版本 `53e92360-…`，线上资产已更新为 `index-6BmjiI3x.js` / `index-GIT2-scr.css`（迁移检查：`No migrations to apply!`，本批不动库）。
+- **线上复核（DOM 断言 + 截图双证，全部通过）**：
+  | 缺陷 | 线上证据 |
+  |------|---------|
+  | 整页亮黄描边 | `<main>` 为 `activeElement`，computed `outline: 3px none`（规则生效） |
+  | ≤600px 榜单头部挤爆 | 540 宽 `h2.scrollWidth == clientWidth`（不截断）、`添加批注` `white-space:nowrap` 且高 28px 单行 |
+  | 名次 04 像禁用态 | color 变 `color(srgb … / 0.52)`；01–03 仍为墨底 `rgb(8,10,10)` |
+  | 广场列数死按钮 | `.plaza-toolbar-right`：540/800 = `display:none`，1300 = `flex` |
+  | `/depth` 空态错位 | 标题中心 650px == 动作行中心 650px（1300 视口） |
+  | 首页引言孤行 | `p` 高 60px / lh 30px = 两行均衡 |
+  | 帖子详情标题重复 | `/plaza/33` 的 `h1/h2` 文本 = `["我的电影清单（2）"]`，只一次 |
+  | 深链空态贴顶 | `.empty-state-standalone` 高 640px、居中 |
+- **遗留一处洁癖级**：首页 `<main>` computed 描边仍是 UA 默认 `1px auto`（`/myself` 才是 `outline:none`），因首次 `:focus` 触发时机不同；首页满宽 Ring 被裁到视口外，肉眼不可见。彻底统一需把选择器改 `main:focus, main:focus-visible`。
+- **后续**：同批产出全仓审查报告 `docs/REVIEW-2026-10-27.md`（P0 两条：撤销全量重放实测冻结 / Jev effect 依赖不稳定），**尚未动手改**，待确认优先级。
 - **怎么发现的**：不用静态阅读，直接对 `https://sort.logicc.top` 真页出图（playwright + 系统 Chrome，DSF=2，10 个路由 × 3–4 档宽度 = 22 张全页 + 首屏图），再逐张看图 + DOM 探针坐实。**先确认线上资产与本地构建哈希一致**（`index-mIaO7SEz.js` / `index-CQPq2HOc.css`），所以线上图即当前源码的渲染结果。
 - **7 条缺陷（均已修）**：
   1. **整页 2px 亮黄描边（最重）**。`useRouter` 每次换视图 `main.focus()`（为读屏播报路线），命中全局 `:focus-visible` → 整个视口被框住。首页满宽把描边裁到视口外才看不见，`/myself` `/plaza` `/plaza/:id` `/catalog/setup` 全部露馅。→ `.main:focus,.main:focus-visible{outline:none}`（焦点环只属于可操作控件）。
