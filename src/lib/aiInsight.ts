@@ -23,6 +23,7 @@ export type AiErrorCode =
   | "upstream_auth_failed"
   | "upstream_not_found"
   | "upstream_rate_limited"
+  | "upstream_blocked"
   | "upstream_error"
   | "unavailable";
 

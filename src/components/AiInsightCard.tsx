@@ -125,6 +125,11 @@ export function AiInsightCard({
       );
     if (result.error === "upstream_rate_limited")
       return t("AI 服务限流，请稍后再试。", "The AI service is rate-limited — retry later.");
+    if (result.error === "upstream_blocked")
+      return t(
+        "该 AI 服务在你所在地区不可用，换一个服务商或自建通道试试。",
+        "This AI service is unavailable in your region — try another provider or your own endpoint.",
+      );
     if (result.error === "unavailable")
       return t("网络异常或服务无响应，请稍后再试。", "Network error or no response — retry later.");
     return result.msg ?? t("生成失败，请稍后再试。", "Generation failed — retry later.");

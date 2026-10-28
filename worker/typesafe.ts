@@ -150,7 +150,27 @@ async function callSystemOne(
     throw new AiError("upstream_auth_failed", 502, "TypeSafe API key rejected");
   if (response.status === 429)
     throw new AiError("upstream_rate_limited", 502, "TypeSafe rate limited");
-  if (!response.ok) throw new AiError("upstream_error", 502, `Jev upstream ${response.status}`);
+  // 451：TypeSafe 按请求来源拒绝（"Typesafe is not available in your region"）。
+  // ⚠️ 实测口径（2026-10-28）：同一端点，终端 curl（代理 / 直连两种走法）稳定 451，
+  // 而**真实浏览器里「测试」是成功的**（模型 jev-1.14.0，jev-pick 返回 200）。
+  // 也就是说 451 是**出口路径**的属性，不是产品属性 —— 不能据此断言「Jev 在国内不可用」，
+  // 本轮已按这个错误推论白跑过一轮。单独成码只为把罕见情况说实话，不改主链路行为。
+  if (response.status === 451)
+    throw new AiError("upstream_blocked", 502, "TypeSafe region blocked (451)");
+  if (!response.ok) {
+    // 上游非 2xx 原先把状态码只塞进 AiError.message，而 aiErrorPayload 会把它折叠成
+    // 「AI 服务暂不可用」——线上排障时无法区分「地区限制 451 / 参数错 400 / 上游抖动 5xx」。
+    // 这里补一条日志：只有状态码 + 200 字内片段，不含 key，也不含用户清单内容
+    // （TypeSafe 的错误体固定是 {title,status}，不含回显）。
+    let detail = "";
+    try {
+      detail = (await response.text()).replace(/\s+/g, " ").slice(0, 200);
+    } catch {
+      /* 读不到正文就只记状态码 */
+    }
+    console.error("jev upstream failed", response.status, detail);
+    throw new AiError("upstream_error", 502, `Jev upstream ${response.status}`);
+  }
   return (await readBoundedJson(response, MAX_RESPONSE_BYTES)) as SystemOneResponse;
 }
 

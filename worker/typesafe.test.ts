@@ -124,6 +124,26 @@ describe("jevRank", () => {
     });
   });
 
+  // 451 是 TypeSafe 按请求来源拒绝。单独成码，是为了让设置里的「测试」说清原因，
+  // 而不是折叠成「服务暂不可用」让用户反复换 key —— 2026-10-28 真机复核就被这条误导过。
+  // 注意：终端 curl 拿到 451 不代表浏览器也会（实测浏览器是成功的），别用 curl 结论替代真机。
+  it("451 → upstream_blocked（地区限制独立成码，不混进 upstream_error）", async () => {
+    const blocked = stubFetch(
+      () =>
+        new Response(JSON.stringify({ title: "Typesafe is not available in your region." }), {
+          status: 451,
+        }),
+    );
+    await expect(jevRank(input, { apiKey: "ts_key12345" }, blocked)).rejects.toMatchObject({
+      code: "upstream_blocked",
+    });
+    // 上游拒绝后仍要能正常读错因，不因读正文而抛出二次错误
+    const noBody = stubFetch(() => new Response(null, { status: 451 }));
+    await expect(jevRank(input, { apiKey: "ts_key12345" }, noBody)).rejects.toMatchObject({
+      code: "upstream_blocked",
+    });
+  });
+
   it("works 数量越界直接拒绝,不发起上游调用", async () => {
     const fetchImpl = stubFetch(() => okResponse({}));
     const tooMany = { ...input, works: Array.from({ length: 256 }, () => ({ title: "x" })) };

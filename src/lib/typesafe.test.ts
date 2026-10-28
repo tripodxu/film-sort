@@ -54,4 +54,11 @@ describe("jevFailureText", () => {
     );
     expect(jevFailureText({ ok: false, error: "upstream_auth_failed" }, t)).toContain("Key");
   });
+
+  it("地区限制（451）说白了是「服务方限制」，不能让用户去查自己的 key", () => {
+    const zh = (text: string) => text;
+    const text = jevFailureText({ ok: false, error: "upstream_blocked" }, zh);
+    expect(text).toContain("地区");
+    expect(text).toContain("与 key 无关");
+  });
 });

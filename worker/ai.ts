@@ -52,6 +52,7 @@ export type AiErrorCode =
   | "upstream_auth_failed"
   | "upstream_not_found"
   | "upstream_rate_limited"
+  | "upstream_blocked"
   | "upstream_error";
 
 export class AiError extends Error {
@@ -890,6 +891,7 @@ export function aiErrorPayload(error: unknown): { error: AiErrorCode; msg: strin
     upstream_not_found:
       "接口地址不正确，或协议不匹配（试试切换 Chat / Responses / Anthropic / Gemini），也请检查模型名",
     upstream_rate_limited: "AI 服务限流，请稍后再试",
+    upstream_blocked: "该 AI 服务在你所在地区不可用（上游拒绝访问，451）",
     upstream_error: "AI 服务暂不可用",
   };
   return { error: error.code, msg: messages[error.code] };

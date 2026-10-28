@@ -12,6 +12,7 @@ export type JevErrorCode =
   | "rate_limited"
   | "upstream_auth_failed"
   | "upstream_rate_limited"
+  | "upstream_blocked"
   | "upstream_error"
   | "unavailable";
 
@@ -158,6 +159,10 @@ const FAILURE_MESSAGES: Record<JevErrorCode, [string, string]> = {
     "TypeSafe API key rejected — check the key",
   ],
   upstream_rate_limited: ["Jev 服务限流,请稍后再试", "Jev is rate-limited — retry later"],
+  upstream_blocked: [
+    "Jev(TypeSafe)在你所在地区不可用,这是服务方的地区限制,与 key 无关",
+    "Jev (TypeSafe) is unavailable in your region — a restriction on their side, not a key issue",
+  ],
   upstream_error: ["Jev 服务暂时不可用,请稍后再试", "Jev is temporarily unavailable"],
   unavailable: ["AI 快排暂时不可用,请稍后再试", "AI quick rank is unavailable right now"],
 };
