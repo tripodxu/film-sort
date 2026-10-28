@@ -49,9 +49,22 @@ export function SortingView({
   const [assistMarker, setAssistMarker] = useState<string | null>(null);
   const assistKeyRef = useRef<string | null>(null);
 
+  // 代判 effect 只允许被「当前对」三元组驱动。`t` 是 App 里内联的箭头函数、`act` 是
+  // useSorting 里的普通函数、`worksById` 每次渲染重建 Map——三者引用每轮都变。
+  // 若把它们写进 deps，请求飞行期间任意一次重渲染（notice 弹出、草稿落盘、主题切换、
+  // 进度保存）都会触发 cleanup 把 stale 置真，结果被丢弃；而 effect 重跑时
+  // `assistKeyRef.current === key` 早退，这一对就永不重试。现象是「AI 代判随机失灵」，
+  // 且 busy 已复位，用户无从判断。这里与 useSorting 的 depsRef 同法：不稳定引用走 ref 兜最新值。
+  const latestAssist = useRef({ t, act, worksById, kind, locale, tasteContext });
+  // 无依赖数组 ⇒ 每次 commit 都刷新；声明在主 effect 之前 ⇒ 主 effect 读到的必是本次渲染的值。
+  useEffect(() => {
+    latestAssist.current = { t, act, worksById, kind, locale, tasteContext };
+  });
+
   useEffect(() => {
     const key = `${comparison.leftId}|${comparison.rightId}|${comparison.phase}`;
     if (assistKeyRef.current === key) return;
+    const { t, act, worksById, kind, locale, tasteContext } = latestAssist.current;
     if (comparison.phase === "verification") {
       setAssistMarker(null);
       return;
@@ -103,17 +116,9 @@ export function SortingView({
     return () => {
       stale = true;
     };
-  }, [
-    comparison.leftId,
-    comparison.rightId,
-    comparison.phase,
-    kind,
-    locale,
-    tasteContext,
-    t,
-    worksById,
-    act,
-  ]);
+    // 只留「当前对」三元组：换对才该重发请求。`kind` / `locale` / `tasteContext` 变化
+    // 只影响下一次请求的入参（走 latestAssist 兜最新值），不必打断飞行中的这一次。
+  }, [comparison.leftId, comparison.rightId, comparison.phase]);
 
   // ===== S2 新增：adaptive 模式的名次区间与信息量 =====
   // 只在 adaptive 模式计算（其余模式为 null，不渲染、也不付建模型的成本）。

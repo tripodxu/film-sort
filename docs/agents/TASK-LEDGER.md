@@ -10,6 +10,30 @@
 
 ## 进行中 / 最近
 
+### T-20261028-PERF · 审查清单落地：撤销不再重放 + Jev 代判依赖收口 · 🔄 门禁全绿，**待部署**
+
+- **做了什么**：`REVIEW-2026-10-27.md` 的 2 条 P0 + 收口时发现的 2 条边界。
+- **P0-1 撤销**：`useSorting.rewindLastChoice()` 走快照栈栈顶（`act()` 早已维护、上限 50），
+  画像页 `if (!rewindLastChoice()) setRanking(undoLastAction(ranking))`。
+  **实测 n=300 / 1309 步：16,384 ms → 2 ms（8515×）**；n=100：683 ms → 1 ms。
+  - ⚠️ **归因更正**：原报告把 `findPath` 的 O(V×E) 当主因。实测改成邻接表后耗时几乎没变——
+    真正成本是 `replayDecision` 每步重算 BT 模型（~12 ms/步）。邻接表改动保留（确实更优），
+    但已在源码注释里标明「别再把这条当性能病灶」。
+  - 栈空时才退回重放，重放**保留为兜底**（绊线反向锁住：不许从 `rewindLastChoice` 里删掉它）。
+- **P0-2 Jev 依赖**：deps 从 9 项收敛为「当前对」三元组，`t`/`act`/`worksById`/`kind`/`locale`/`tasteContext`
+  走 `latestAssist` ref。原现象是请求飞行期任意重渲染即丢结果且永不重试。
+- **两条边界**：`fetchValidated` 超跳抛 `upstream_redirect_too_many`（原先 3xx 被当成功静默下传）；
+  `/api/image` 120 → 300 次/10 分（画像页 ~90 次 + 导出再走一遍，120 必撞，撞线只表现为海报静默变占位）。
+- **新增绊线 8 条**：`src/assistGuard.test.ts`（3）+ `src/undoPath.test.ts`（5，含
+  classic/adaptive **每一步**「快照撤销 == 重放撤销」逐字段等价的语义证明）。
+- **验证**：五道门禁全绿，`test` **933 passed / 9 skipped**（父提交 925 ⇒ +8）。
+- **⚠️ 未部署**：本批改了 `worker/index.ts`，**必须 `npm run deploy` 才对线上生效**；
+  前端部分随 push 自动上线（见 `PITFALLS` 1.8）。按铁律**未线上验证前不标 ✅**。
+- **部署后验收清单**：① adaptive 大清单完成排序 → 画像页点「返回最后一次取舍」，应**瞬时**回到上一步、
+  且进度/榜单不跳变；② 打开设置里开启 Jev 代判，请求飞行中触发一次 notice（如改主题），预测仍应落位；
+  ③ `/api/image` 连着刷新画像页多次不应出现成片占位海报。
+- **交接给谁**：谁部署谁验收；验收后把本条目改为 ✅ 并记录 Worker Version。
+
 ### T-20261028-CLOSE · 五天收口（10-24 → 10-28，31 个提交）· 👀 待审（1 件事待用户裁决）
 
 - **产出**：[`docs/CONSOLIDATION-2026-10-28.md`](../CONSOLIDATION-2026-10-28.md)（批次矩阵 + 回归判定 + 文档漂移清单）

@@ -351,6 +351,7 @@ export default function App() {
     loadDouban,
     startRanking,
     act,
+    rewindLastChoice,
     resume,
     saveWithoutSorting,
     startJevRanking,
@@ -1357,6 +1358,7 @@ export default function App() {
         setActiveKind={setActiveKind}
         ranking={ranking}
         setRanking={setRanking}
+        rewindLastChoice={rewindLastChoice}
         collection={collection}
         notes={notes}
         openNoteModal={openNoteModal}

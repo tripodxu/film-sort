@@ -814,6 +814,32 @@ export function useSorting(deps: SortingDeps) {
     }
   }
 
+  /**
+   * 回到「上一次取舍之前」。**优先走快照栈**（`deserializeRankingState`，毫秒级）；
+   * 栈空时返回 false，让调用方自行决定是否退回 `undoLastAction` 重放。
+   *
+   * 为什么必须从这里走（全仓审查 2026-10-27 P0-1）：`undoLastAction` 是从头
+   * `createRankingState` + 逐步 `replayDecision`，而 adaptive 模式下每一步都要重算
+   * BT 模型。实测 n=300（1309 步）一次撤销 **18.4 秒**、n=100（419 步）784 毫秒，
+   * 主线程同步阻塞，浏览器会弹「页面无响应」。快照栈在 `act()` 里已经维护
+   * （每次取舍前 push，上限 50），栈顶恰好就是「最后一步之前」的状态。
+   *
+   * 注意本函数不依赖 `collection`：排序完成后 collection 可能已被清掉，而画像页的
+   * 撤销按钮仍然要能用（`act("undo")` 会因 `!collection` 提前 return）。
+   */
+  function rewindLastChoice(): boolean {
+    if (!ranking || rankingSnapshots.current.length === 0) return false;
+    const previous = rankingSnapshots.current.pop();
+    if (previous === undefined) return false;
+    try {
+      setRanking(deserializeRankingState(previous));
+      return true;
+    } catch {
+      // 快照损坏（跨版本结构变更）：交回调用方走重放兜底，不静默吞掉。
+      return false;
+    }
+  }
+
   function resume() {
     const d = depsRef.current;
     if (!draft) return;
@@ -968,6 +994,7 @@ export function useSorting(deps: SortingDeps) {
     loadDouban,
     startRanking,
     act,
+    rewindLastChoice,
     resume,
     saveWithoutSorting: saveWithoutSortingFn,
     startJevRanking,

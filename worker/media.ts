@@ -313,6 +313,10 @@ async function fetchValidated(url: string, headers: Record<string, string>): Pro
       redirect: "manual",
     });
   }
+  // 跳数用尽仍是 3xx：不能把它当正常响应交给调用方——上游会拿一个空体的 302 当
+  // 「200 但没内容」处理（proxyImage 判成 415、upstream 判成成功），故障会静默下传。
+  if (response.status >= 300 && response.status < 400)
+    throw new Error("upstream_redirect_too_many");
   return response;
 }
 

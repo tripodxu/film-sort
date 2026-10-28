@@ -45,11 +45,14 @@ describe("安全审计修复绊线（2026-10-25）", () => {
     expect(idx).toContain("newPassword.length < 10");
   });
 
-  it("M4：/api/image 匿名代理有独立限流桶（120 次/10 分/IP）", () => {
+  it("M4：/api/image 匿名代理有独立限流桶（300 次/10 分/IP）", () => {
     const idx = read("worker/index.ts");
     const img = idx.indexOf('"/api/image"');
     expect(img).toBeGreaterThan(-1);
-    expect(idx.indexOf('allowUpstreamRequest(request, "image", 120)', img)).toBeGreaterThan(img);
+    // 额度 2026-10-28 由 120 → 300：正常「看画像 → 导出 PNG → 逛广场」连招会撞 120
+    // （画像页约 90 次 + 导出再走一遍），撞线只表现为海报静默降级成占位，用户难以归因。
+    // 这一条守护的是「有独立桶」而不是「额度必须最小」。
+    expect(idx.indexOf('allowUpstreamRequest(request, "image", 300)', img)).toBeGreaterThan(img);
   });
 
   it("M3：media 出站全量逐跳复核——不再存在 redirect:follow，三处调用走 fetchValidated", () => {

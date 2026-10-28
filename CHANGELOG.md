@@ -1,5 +1,50 @@
 # Changelog
 
+## 2026-10-28 · 审查清单落地：撤销不再重放（16.4 秒 → 2 毫秒）+ Jev 代判不再随机失灵（T-20261028-PERF）
+
+**背景**：收口时把 `docs/REVIEW-2026-10-27.md` 里挂了一天未动的 P0/P1 拿出来做，只挑「改法固定、
+收益可量化」的两条 P0，外加两条收口时发现的边界问题。
+
+**P0-1 · 「返回最后一次取舍」不再全量重放**
+
+- 根因不是原先猜的 `findPath`：实测把 `findPath` 改成邻接表（O(V×E) → O(V+E)）之后，
+  adaptive n=300 的撤销**仍是 16.4 秒**，几乎没变。真正的成本是 `replayDecision` 每步重算 BT 模型
+  （约 12 ms/步 × 1309 步）。**任何形式的「从头重放」都救不回来。**
+- 改法：`useSorting` 新增 `rewindLastChoice()`，直接取 `act()` 里已有的快照栈栈顶
+  （每次取舍前 push、上限 50），一次 `deserializeRankingState` 即可；画像页按钮改为
+  `if (!rewindLastChoice()) setRanking(undoLastAction(ranking))`——栈空才退回重放。
+- 实测（`n=300 / 1309 步`，同一份状态）：重放 **16,384 ms** → 快照 **2 ms**，**提速 8515×**；
+  `n=100 / 419 步`：683 ms → 1 ms。主线程不再阻塞，浏览器不会弹「页面无响应」。
+- 顺带记录了 `P1-1` 的真实量级：单次 `serializeRankingState` 在 300 件（661 KB）下只有 **2 ms**，
+  远低于审查时的估计，不构成交互卡顿，暂不处理。
+
+**P0-2 · Jev 代判的 effect 依赖收口**
+
+- deps 由 9 项收敛为「当前对」三元组；`t` / `act` / `worksById` / `kind` / `locale` / `tasteContext`
+  走 `latestAssist` ref 兜最新值（与 `useSorting` 的 `depsRef` 同法）。
+- 原现象：请求飞行期间任意一次重渲染（notice 弹出、草稿落盘、主题切换、进度保存）都会 cleanup
+  把 `stale` 置真 → 结果被丢；而重跑时 `assistKeyRef.current === key` 早退 ⇒ **这一对永不重试**。
+  用户看到的是「AI 代判随机失灵」，且 busy 已复位，无从判断。
+
+**顺带修的两条边界**（收口报告 §四·B）
+
+- `fetchValidated` 跳数用尽仍是 3xx 时改为抛 `upstream_redirect_too_many`。原先直接把 3xx 当正常响应
+  返回，上游会把空体 302 当成「200 但没内容」（`proxyImage` 判 415、`upstream` 判成功），故障静默下传。
+- `/api/image` 限流 120 → **300 次/10 分/IP**。一个 3 榜单 × 30 条的画像页约 90 次，导出 PNG 会逐张
+  再走一遍代理，120 在「看画像 → 导出 → 逛广场」的正常连招里就撞线；撞线只表现为海报静默降级成
+  占位方块，不报错。300 次（≈30 张/分钟）仍足以拦单 IP 批量抓图。`docs/API.md` 同步。
+
+**新增绊线**
+
+- `src/assistGuard.test.ts`（3 条）：deps 只含三元组、不稳定引用不许回到 deps、ref 每次 commit 刷新。
+- `src/undoPath.test.ts`（5 条）：画像页先快照后重放、`rewindLastChoice` 不碰重放、栈上限仍 50，
+  以及**语义等价**——classic / adaptive 每一步「快照撤销」与「重放撤销」逐字段一致
+  （`rankedIds` / `comparisonCount` / `processedCount` / `decisionLog` / `preferenceEdges`）。
+
+**验证**：五道门禁全绿（`test` **933 passed / 9 skipped**，较父提交 925 ⇒ +8）；基准脚本临时使用后已删除。
+**未上线验证，按项目铁律不标完成**——本批改了 `worker/index.ts`，需 `npm run deploy` 才对线上生效
+（前端部分随 push 自动上线，见 `PITFALLS` 1.8）。
+
 ## 2026-10-28 · 前端现代化重构：统一设计语言 + 消除重复 + 修三类真机缺陷（T-20261028-UI）
 
 **背景**：通读全部前端代码（10 视图 / 20 组件 / 14 lib 模块，约 19,400 行）后定位到核心问题不是"不好看"，

@@ -282,16 +282,29 @@ function findPath(
 ): string[] | null {
   // T-20261024-05：queue.shift() 是 O(队列长) 的数组搬移，回环边多时是热点；
   // 改头指针推进，出队语义与遍历顺序（FIFO）逐字不变。
+  //
+  // 全仓审查 2026-10-27 P0-1 曾把「每个出队节点线性扫全部 edges」也列为主因。实测纠正：
+  // 改成邻接表（O(V+E)）后 adaptive n=300 的撤销仍是 16.4 秒，几乎没变——真正的耗时
+  // 在 replayDecision 每步重算 BT 模型（约 12ms/步 × 1309 步），不在这里。
+  // 保留邻接表是因为它确实更优（长路径下少扫一遍全表），但它不是那一刀的解药：
+  // 撤销已改走快照栈（见 useSorting.rewindLastChoice）。**别再把这条当性能病灶来改。**
+  // 邻接表按 edges 原序 push，遍历顺序与旧实现逐字一致。
+  const adjacency = new Map<string, string[]>();
+  for (const edge of edges) {
+    const losers = adjacency.get(edge.winnerId);
+    if (losers) losers.push(edge.loserId);
+    else adjacency.set(edge.winnerId, [edge.loserId]);
+  }
   const queue: string[][] = [[startId]];
   const visited = new Set([startId]);
   for (let head = 0; head < queue.length; head += 1) {
     const path = queue[head];
     const node = path[path.length - 1];
     if (node === targetId) return path;
-    for (const edge of edges) {
-      if (edge.winnerId !== node || visited.has(edge.loserId)) continue;
-      visited.add(edge.loserId);
-      queue.push([...path, edge.loserId]);
+    for (const loserId of adjacency.get(node) ?? []) {
+      if (visited.has(loserId)) continue;
+      visited.add(loserId);
+      queue.push([...path, loserId]);
     }
   }
   return null;

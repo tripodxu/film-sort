@@ -151,6 +151,8 @@ export interface ProfileViewProps {
   setActiveKind: (kind: string) => void;
   ranking: RankingState | null;
   setRanking: (ranking: RankingState | null) => void;
+  /** 优先走快照栈的「回到上一步」，返回 false 表示栈空需退回重放（见 P0-1）。 */
+  rewindLastChoice: () => boolean;
   collection: MediaCollection | null;
   notes: Record<string, string>;
   openNoteModal: (

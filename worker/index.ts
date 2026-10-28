@@ -2261,9 +2261,13 @@ async function route(request: Request, env: Env): Promise<Response> {
     return json({ results, keys, outcomes }, 200, { "cache-control": "private, max-age=86400" });
   }
   if (url.pathname === "/api/image" && request.method === "GET") {
-    // 匿名图片代理必须有频控（白名单已收窄 SSRF 面，这里补带宽面）：
-    // 120 次/10 分/IP 对单页几十张海报的画廊足够（审计 2026-10-25 M4）。
-    if (!(await allowUpstreamRequest(request, "image", 120)))
+    // 匿名图片代理必须有频控（白名单已收窄 SSRF 面，这里补带宽面）。
+    // 额度从 120 提到 300（收口 2026-10-28）：一个 3 榜单 × 30 条的画像页就要 ~90 次，
+    // 紧接着导出 PNG 会再逐张走一遍代理（exportPng 的解码池只控并发、不控总数），
+    // 120 在正常「看画像 → 导出 → 逛广场」连招里就会撞线。撞线后 Poster 只是静默
+    // 降级成占位方块（不报错、不白屏），用户只会觉得「图没了」，极难归因。
+    // 300 次/10 分（≈30 张/分钟）仍足以拦住单 IP 的批量抓图。
+    if (!(await allowUpstreamRequest(request, "image", 300)))
       return withSecurityHeaders(json({ error: "rate_limited" }, 429, { "retry-after": "600" }));
     return withSecurityHeaders(await proxyImage(url.searchParams.get("url") ?? ""));
   }

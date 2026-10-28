@@ -70,6 +70,8 @@ export function ProfileView({
   setActiveKind,
   ranking,
   setRanking,
+  /** 优先走快照栈的「回到上一步」；栈空返回 false，由本视图退回 undoLastAction 重放。 */
+  rewindLastChoice,
   collection,
   notes,
   openNoteModal,
@@ -799,7 +801,9 @@ export function ProfileView({
             <button
               className="button quiet"
               onClick={() => {
-                setRanking(undoLastAction(ranking));
+                // 快照栈命中时是毫秒级反序列化；只有栈空（快照超过 50 步上限、
+                // 或本会话没做过取舍）才退回全量重放——adaptive 大清单下那是十几秒。
+                if (!rewindLastChoice()) setRanking(undoLastAction(ranking));
                 navigateTo("sorting");
               }}
             >
