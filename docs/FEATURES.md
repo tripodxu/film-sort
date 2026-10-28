@@ -35,7 +35,7 @@
 | 撤销（O(1) 快照栈，上限 500）/ 略过 / 暂放 | 排序页底部工具 | `undoLastAction/skipWork/deferWork` |
 | 偏好回环检测（A>B>C>A）+ 二次确认 | 排序页 evidence 条 | `recordPreference/recordCycleConfirmation` |
 | 触屏滑动选择（往哪边甩选哪边，56px 阈值 + 垂直意图否决；鼠标不启用） | 排序页 duel-grid | `lib/swipe.ts decideSwipe` + SortingView pointer 处理 |
-| Jev 辅助模式（AI 代判：置信 ≥0.8 自动落位可撤销，复测不代判；默认关） | 排序页 +「AI 服务」开关 | `/api/ai/jev-pick` + `lib/typesafe.ts requestJevPick`（键控防竞态） |
+| Jev 辅助模式（AI 代判：置信 ≥ 阈值自动落位可撤销；阈值默认 0.8，「AI 服务」弹窗 50–90% 五档可调；复测不代判；默认关） | 排序页 +「AI 服务」开关与阈值档位 | `/api/ai/jev-pick` + `lib/typesafe.ts requestJevPick`（键控防竞态 + `readJevAssistThreshold`） |
 | 验证阶段（终局少量反证对局） | 排序尾段 | `startVerification` |
 | 草稿自动保存/恢复 | 首页「继续」 | `art-rank:draft:v2` |
 | 精选清单（`data/catalog.ts` 32 份内置片单，另含书籍/音乐/其他内置清单）+ 搜索 | Source/精选 | `data/media.ts getCollectionsByKind` |

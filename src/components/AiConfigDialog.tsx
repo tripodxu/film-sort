@@ -12,11 +12,15 @@ import {
   type AiProtocol,
 } from "../lib/aiInsight";
 import {
+  ASSIST_THRESHOLD_CHOICES,
+  ASSIST_THRESHOLD_DEFAULT,
   jevFailureText,
   readJevAssistEnabled,
+  readJevAssistThreshold,
   readTypesafeConfig,
   testJevConfig,
   writeJevAssistEnabled,
+  writeJevAssistThreshold,
   writeTypesafeConfig,
 } from "../lib/typesafe";
 
@@ -55,6 +59,8 @@ export function AiConfigDialog({
   const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null);
   const [jevKey, setJevKey] = useState(readTypesafeConfig()?.apiKey ?? "");
   const [jevAssistOn, setJevAssistOn] = useState(readJevAssistEnabled());
+  const [jevThreshold, setJevThreshold] = useState(readJevAssistThreshold());
+  const assistPct = Math.round(jevThreshold * 100);
   const [jevTestBusy, setJevTestBusy] = useState(false);
   const [jevMessage, setJevMessage] = useState<{ ok: boolean; text: string } | null>(null);
   const canSaveJev = jevKey.trim().length >= 8;
@@ -419,7 +425,15 @@ export function AiConfigDialog({
               {jevMessage.text}
             </p>
           )}
-          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 8,
+              marginBottom: 10,
+              flexWrap: "wrap",
+            }}
+          >
             <button
               className={`settings-chip${jevAssistOn ? " active" : ""}`}
               aria-pressed={jevAssistOn}
@@ -432,10 +446,65 @@ export function AiConfigDialog({
             </button>
             <span className="mini-note">
               {t(
-                "置信 ≥80% 的取舍自动落位,可撤销;复测阶段仍由你判断。",
-                "Pairs with ≥80% confidence are auto-picked (undoable); verification stays yours.",
+                `置信 ≥${assistPct}% 的取舍自动落位,可撤销;复测阶段仍由你判断。`,
+                `Pairs with ≥${assistPct}% confidence are auto-picked (undoable); verification stays yours.`,
               )}
             </span>
+          </div>
+          {/* 阈值本身也是 opt-in 的一部分:开关关着时整组降透明,但仍可调,
+              先设好再开、不必来回切。 */}
+          <div style={{ marginBottom: 12, opacity: jevAssistOn ? 1 : 0.6 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <span className="settings-group-label" style={{ padding: 0 }}>
+                {t("代判阈值", "Assist threshold")}
+              </span>
+              {jevThreshold !== ASSIST_THRESHOLD_DEFAULT && (
+                <button
+                  className="text-button"
+                  style={{ minHeight: 0, fontSize: 11, marginLeft: "auto" }}
+                  onClick={() => {
+                    if (writeJevAssistThreshold(ASSIST_THRESHOLD_DEFAULT)) {
+                      setJevThreshold(ASSIST_THRESHOLD_DEFAULT);
+                    }
+                  }}
+                >
+                  {t("恢复默认", "Reset")}
+                </button>
+              )}
+            </div>
+            <div
+              className="settings-chip-grid"
+              role="radiogroup"
+              aria-label={t("代判置信阈值", "Assist confidence threshold")}
+              style={{
+                gridTemplateColumns: `repeat(${ASSIST_THRESHOLD_CHOICES.length}, minmax(0, 1fr))`,
+                padding: 0,
+                marginTop: 6,
+              }}
+            >
+              {ASSIST_THRESHOLD_CHOICES.map((value) => {
+                const active = Math.abs(jevThreshold - value) < 1e-9;
+                return (
+                  <button
+                    key={value}
+                    role="menuitemradio"
+                    aria-checked={active}
+                    className={`settings-chip${active ? " active" : ""}`}
+                    onClick={() => {
+                      if (writeJevAssistThreshold(value)) setJevThreshold(value);
+                    }}
+                  >
+                    {Math.round(value * 100)}%
+                  </button>
+                );
+              })}
+            </div>
+            <p className="mini-note" style={{ margin: "6px 0 0", lineHeight: 1.7 }}>
+              {t(
+                "调低更省事：接近平局的对也交给 AI；调高更保守：只接管你几乎板上钉钉的选择。",
+                "Lower means more help — near-ties get auto-picked; higher keeps them for you.",
+              )}
+            </p>
           </div>
           <div className="guide-modal-footer">
             {existing && (

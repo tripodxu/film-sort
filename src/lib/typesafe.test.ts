@@ -1,9 +1,15 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
+  ASSIST_THRESHOLD_CHOICES,
+  ASSIST_THRESHOLD_DEFAULT,
+  ASSIST_THRESHOLD_MAX,
+  ASSIST_THRESHOLD_MIN,
   buildTasteContext,
   clearTypesafeConfig,
   jevFailureText,
+  readJevAssistThreshold,
   readTypesafeConfig,
+  writeJevAssistThreshold,
   writeTypesafeConfig,
 } from "./typesafe";
 
@@ -60,5 +66,59 @@ describe("jevFailureText", () => {
     const text = jevFailureText({ ok: false, error: "upstream_blocked" }, zh);
     expect(text).toContain("地区");
     expect(text).toContain("与 key 无关");
+  });
+});
+
+describe("代判阈值设置项", () => {
+  it("未设置时返回默认 0.8，写入后可读回", () => {
+    expect(readJevAssistThreshold()).toBe(ASSIST_THRESHOLD_DEFAULT);
+    expect(writeJevAssistThreshold(0.6)).toBe(true);
+    expect(readJevAssistThreshold()).toBe(0.6);
+  });
+
+  it("损坏值 / 越界值一律回落默认值，绝不把 NaN 带进阈值比较", () => {
+    store.set("art-rank:jev-assist-threshold", "{oops");
+    expect(readJevAssistThreshold()).toBe(ASSIST_THRESHOLD_DEFAULT);
+    store.set("art-rank:jev-assist-threshold", "0.2");
+    expect(readJevAssistThreshold()).toBe(ASSIST_THRESHOLD_DEFAULT);
+    store.set("art-rank:jev-assist-threshold", "1.4");
+    expect(readJevAssistThreshold()).toBe(ASSIST_THRESHOLD_DEFAULT);
+    store.set("art-rank:jev-assist-threshold", "");
+    expect(readJevAssistThreshold()).toBe(ASSIST_THRESHOLD_DEFAULT);
+  });
+
+  it("写入前夹到 [MIN, MAX]；非数值写默认", () => {
+    writeJevAssistThreshold(0.1);
+    expect(readJevAssistThreshold()).toBe(ASSIST_THRESHOLD_MIN);
+    writeJevAssistThreshold(0.99);
+    expect(readJevAssistThreshold()).toBe(ASSIST_THRESHOLD_MAX);
+    writeJevAssistThreshold(Number.NaN);
+    expect(readJevAssistThreshold()).toBe(ASSIST_THRESHOLD_DEFAULT);
+  });
+
+  it("存储不可用（隐私模式）时读默认、写返回 false，不抛错", () => {
+    const original = globalThis.localStorage;
+    vi.stubGlobal("localStorage", {
+      getItem: () => {
+        throw new Error("denied");
+      },
+      setItem: () => {
+        throw new Error("denied");
+      },
+    });
+    try {
+      expect(readJevAssistThreshold()).toBe(ASSIST_THRESHOLD_DEFAULT);
+      expect(writeJevAssistThreshold(0.7)).toBe(false);
+    } finally {
+      vi.stubGlobal("localStorage", original);
+    }
+  });
+
+  it("档位表覆盖默认值，且都在合法区间内", () => {
+    expect(ASSIST_THRESHOLD_CHOICES).toContain(ASSIST_THRESHOLD_DEFAULT);
+    for (const value of ASSIST_THRESHOLD_CHOICES) {
+      expect(value).toBeGreaterThanOrEqual(ASSIST_THRESHOLD_MIN);
+      expect(value).toBeLessThanOrEqual(ASSIST_THRESHOLD_MAX);
+    }
   });
 });

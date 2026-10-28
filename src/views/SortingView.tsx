@@ -5,13 +5,15 @@ import { RankIntervalBar } from "../components/RankIntervalBar";
 import { IconButton } from "./IconButton";
 import { decideSwipe } from "../lib/swipe";
 import { track } from "../lib/utils";
-import { readJevAssistEnabled, readTypesafeConfig, requestJevPick } from "../lib/typesafe";
+import {
+  readJevAssistEnabled,
+  readJevAssistThreshold,
+  readTypesafeConfig,
+  requestJevPick,
+} from "../lib/typesafe";
 import { getAdaptivePairInsight } from "../lib/adaptiveRanking";
 import { useThemeFamily } from "../lib/useTheme";
 import type { SortingViewProps } from "./types";
-
-/** AI 代判的置信阈值:Jev 概率是校准过的,低于此值说明这对接近 toss-up,交给用户。 */
-const ASSIST_CONFIDENCE_THRESHOLD = 0.8;
 
 export function SortingView({
   collection,
@@ -42,8 +44,9 @@ export function SortingView({
     window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
 
   // ===== Jev 辅助模式(AI 代判,默认关)=====
-  // 每对作品先请求预测:置信 ≥ 0.8 自动落位(进决策日志,可撤销),低于阈值
-  // 或复测阶段交给用户——复测本来就是引擎挑出的接近 toss-up 的对。
+  // 每对作品先请求预测:置信 ≥ 用户设定阈值(默认 0.8)自动落位(进决策日志,可撤销),
+  // 低于阈值或复测阶段交给用户——复测本来就是引擎挑出的接近 toss-up 的对。
+  // 阈值走 localStorage 而非 props:设置改动后从下一对起生效,不必打断飞行中的请求。
   // 键控防竞态:assistKeyRef 记录已处理的对,响应到达时若键已变(用户手动
   // 操作过)则丢弃——绝不覆盖用户的真实选择。
   const [assistMarker, setAssistMarker] = useState<string | null>(null);
@@ -97,7 +100,8 @@ export function SortingView({
         config,
       );
       if (stale || assistKeyRef.current !== key) return; // 用户已手动操作
-      if (!result.ok || result.confidence < ASSIST_CONFIDENCE_THRESHOLD) return; // 静默交还用户
+      // 阈值在这里读而不是提前读:设置里刚调高一档，飞行中的这一次也按新标准判定。
+      if (!result.ok || result.confidence < readJevAssistThreshold()) return; // 静默交还用户
       const confidencePct = Math.round(result.confidence * 100);
       setAssistMarker(
         t(
@@ -115,6 +119,11 @@ export function SortingView({
     })();
     return () => {
       stale = true;
+      // cleanup 后若键未变（dev 的 StrictMode 双跑就是这种），把占位让出来：
+      // 否则重跑的 effect 会因 assistKeyRef 已登记而早退，而飞行的响应又被
+      // stale 丢弃——这一对就永远无人代判。键真的变了时这里不动，新 effect
+      // 自然覆盖；迟到响应仍被 stale + 键比对双重丢弃，不碰用户的选择。
+      if (assistKeyRef.current === key) assistKeyRef.current = null;
     };
     // 只留「当前对」三元组：换对才该重发请求。`kind` / `locale` / `tasteContext` 变化
     // 只影响下一次请求的入参（走 latestAssist 兜最新值），不必打断飞行中的这一次。

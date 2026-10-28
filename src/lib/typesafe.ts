@@ -193,6 +193,49 @@ export function writeJevAssistEnabled(enabled: boolean): boolean {
   }
 }
 
+// ===== 代判置信阈值(用户可调) =====
+// 0.8 是「概率校准良好」时的保守默认值;但实测常见采样落在 0.44–0.68,
+// 硬编码等于把代判关死。改为设置项:用户自己决定「多像我才算我说了算」。
+
+export const ASSIST_THRESHOLD_DEFAULT = 0.8;
+export const ASSIST_THRESHOLD_MIN = 0.5;
+export const ASSIST_THRESHOLD_MAX = 0.95;
+/** 设置面板呈现的档位;读写层接受区间内任意值,将来换滑杆不必改存取契约。 */
+export const ASSIST_THRESHOLD_CHOICES = [0.5, 0.6, 0.7, 0.8, 0.9] as const;
+
+const ASSIST_THRESHOLD_KEY = "art-rank:jev-assist-threshold";
+
+/**
+ * 读取代判阈值。缺失/损坏/越界一律回落默认值——阈值直接参与浮点比较,
+ * 让 NaN 或 0 漏进判断会让代判要么全开要么全关,且现象难以归因。
+ */
+export function readJevAssistThreshold(): number {
+  try {
+    const raw = localStorage.getItem(ASSIST_THRESHOLD_KEY);
+    if (raw === null) return ASSIST_THRESHOLD_DEFAULT;
+    const value = Number(raw);
+    if (!Number.isFinite(value)) return ASSIST_THRESHOLD_DEFAULT;
+    if (value < ASSIST_THRESHOLD_MIN || value > ASSIST_THRESHOLD_MAX)
+      return ASSIST_THRESHOLD_DEFAULT;
+    return value;
+  } catch {
+    return ASSIST_THRESHOLD_DEFAULT;
+  }
+}
+
+/** 写入前夹到合法区间;返回 false 表示浏览器存储不可用(隐私模式)。 */
+export function writeJevAssistThreshold(value: number): boolean {
+  const clamped = Number.isFinite(value)
+    ? Math.min(ASSIST_THRESHOLD_MAX, Math.max(ASSIST_THRESHOLD_MIN, value))
+    : ASSIST_THRESHOLD_DEFAULT;
+  try {
+    localStorage.setItem(ASSIST_THRESHOLD_KEY, String(clamped));
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export interface JevPickInput {
   kind: string;
   left: { title: string; creator?: string; year?: number };
