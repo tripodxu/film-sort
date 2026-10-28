@@ -1,6 +1,9 @@
 import { useEffect, useMemo, useState, type CSSProperties } from "react";
 import { ArrowLeftRight, ArrowRight, Link, Play, Plus, Share2, X } from "lucide-react";
 import { Poster } from "../components/Poster";
+import { MetricHelp } from "../components/MetricHelp";
+import { RankingEntryRow } from "../components/RankingEntryRow";
+import type { RankingExport } from "../lib/profile";
 import { AiInsightCard } from "../components/AiInsightCard";
 import { JevDivergenceCard } from "../components/JevDivergenceCard";
 import { buildCompareData } from "../lib/aiInsight";
@@ -57,6 +60,15 @@ export function CompareView({
   notes,
   openShareModal,
 }: CompareViewProps) {
+  /** 「打开榜单详情」的唯一入口。此前两侧各写一遍 side 判定，共 4 处调用点；
+   *  同一份榜单同时出现在两侧时，判定规则必须一致。 */
+  const openRankDetail = (entry: RankingExport) => {
+    setCompareRankDetail({
+      side: profile?.rankings.includes(entry) ? "own" : "peer",
+      collectionTitle: entry.collectionTitle,
+      ranking: entry,
+    });
+  };
   const sharedKinds = kinds.filter(
     (item) =>
       profile?.rankings.some((entry) => entry.kind === item) &&
@@ -264,125 +276,26 @@ export function CompareView({
                   .filter((r) => r.kind === entry.kind)
                   .indexOf(entry);
                 const showCheck = compareMode === "manual" && entry.kind === compareKind;
+                const soleOfSide = Boolean(
+                  // 一侧只有一份榜单时，这一行才有余量展开成 Top3 卡片
+                  (profile?.rankings.includes(entry) && profile.rankings.length === 1) ||
+                  (peer?.rankings.includes(entry) && peer.rankings.length === 1),
+                );
                 return (
-                  <div
+                  <RankingEntryRow
                     key={idx}
-                    style={{
-                      display: "flex",
-                      alignItems: "center",
-                      gap: 8,
-                      fontSize: 13,
-                      opacity: showCheck && !manualOwnSelections.has(kindIdx) ? 0.4 : 1,
+                    entry={entry}
+                    label={label}
+                    showCheck={showCheck}
+                    checked={manualOwnSelections.has(kindIdx)}
+                    onToggleCheck={() => {
+                      const next = new Set(manualOwnSelections);
+                      next.has(kindIdx) ? next.delete(kindIdx) : next.add(kindIdx);
+                      setManualOwnSelections(next);
                     }}
-                  >
-                    {showCheck && (
-                      <input
-                        type="checkbox"
-                        aria-label={`${label(entry.kind)} · ${entry.collectionTitle}`}
-                        checked={manualOwnSelections.has(kindIdx)}
-                        onChange={() => {
-                          const next = new Set(manualOwnSelections);
-                          next.has(kindIdx) ? next.delete(kindIdx) : next.add(kindIdx);
-                          setManualOwnSelections(next);
-                        }}
-                        style={{ flexShrink: 0 }}
-                      />
-                    )}
-                    <span
-                      style={{
-                        color: "var(--accent)",
-                        fontSize: 11,
-                        fontWeight: 600,
-                        width: 28,
-                        flexShrink: 0,
-                      }}
-                    >
-                      {label(entry.kind)}
-                    </span>
-                    {(profile?.rankings.includes(entry) && profile.rankings.length === 1) ||
-                    (peer?.rankings.includes(entry) && peer.rankings.length === 1) ? (
-                      <>
-                        <span
-                          style={{
-                            overflow: "hidden",
-                            textOverflow: "ellipsis",
-                            whiteSpace: "nowrap",
-                            minWidth: 0,
-                          }}
-                        >
-                          {entry.collectionTitle}
-                        </span>
-                        <div style={{ flex: 1 }} />
-                        <div
-                          className="ranking-card-top3"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setCompareRankDetail({
-                              side: profile?.rankings.includes(entry) ? "own" : "peer",
-                              collectionTitle: entry.collectionTitle,
-                              ranking: entry,
-                            });
-                          }}
-                          role="button"
-                          tabIndex={0}
-                          onKeyDown={(e) => {
-                            if (e.key === "Enter" || e.key === " ") {
-                              e.preventDefault();
-                              setCompareRankDetail({
-                                side: profile?.rankings.includes(entry) ? "own" : "peer",
-                                collectionTitle: entry.collectionTitle,
-                                ranking: entry,
-                              });
-                            }
-                          }}
-                        >
-                          {entry.items.slice(0, 3).map((item, i) => (
-                            <div className="ranking-card-top3-item" key={item.id}>
-                              <span className="ranking-card-top3-medal">
-                                {String(i + 1).padStart(2, "0")}
-                              </span>
-                              <Poster work={item} kind={entry.kind} />
-                              <span className="ranking-card-top3-name">{item.title}</span>
-                            </div>
-                          ))}
-                        </div>
-                        <div style={{ flex: 1 }} />
-                        <span style={{ color: "var(--muted)", fontSize: 11, flexShrink: 0 }}>
-                          TOP {entry.items.length}
-                        </span>
-                      </>
-                    ) : (
-                      <>
-                        <div
-                          className="ranking-card-poster"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setCompareRankDetail({
-                              side: profile?.rankings.includes(entry) ? "own" : "peer",
-                              collectionTitle: entry.collectionTitle,
-                              ranking: entry,
-                            });
-                          }}
-                        >
-                          <Poster work={entry.items[0]} kind={entry.kind} />
-                        </div>
-                        <span
-                          style={{
-                            flex: 1,
-                            minWidth: 0,
-                            overflow: "hidden",
-                            textOverflow: "ellipsis",
-                            whiteSpace: "nowrap",
-                          }}
-                        >
-                          {entry.collectionTitle}
-                        </span>
-                        <span style={{ color: "var(--muted)", fontSize: 11, flexShrink: 0 }}>
-                          TOP {entry.items.length}
-                        </span>
-                      </>
-                    )}
-                  </div>
+                    expanded={soleOfSide}
+                    onOpenDetail={() => openRankDetail(entry)}
+                  />
                 );
               })}
             </div>
@@ -398,125 +311,25 @@ export function CompareView({
               {peer.rankings.map((entry, idx) => {
                 const kindIdx = peer.rankings.filter((r) => r.kind === entry.kind).indexOf(entry);
                 const showCheck = compareMode === "manual" && entry.kind === compareKind;
+                const soleOfSide = Boolean(
+                  (profile?.rankings.includes(entry) && profile.rankings.length === 1) ||
+                  (peer?.rankings.includes(entry) && peer.rankings.length === 1),
+                );
                 return (
-                  <div
+                  <RankingEntryRow
                     key={idx}
-                    style={{
-                      display: "flex",
-                      alignItems: "center",
-                      gap: 8,
-                      fontSize: 13,
-                      opacity: showCheck && !manualPeerSelections.has(kindIdx) ? 0.4 : 1,
+                    entry={entry}
+                    label={label}
+                    showCheck={showCheck}
+                    checked={manualPeerSelections.has(kindIdx)}
+                    onToggleCheck={() => {
+                      const next = new Set(manualPeerSelections);
+                      next.has(kindIdx) ? next.delete(kindIdx) : next.add(kindIdx);
+                      setManualPeerSelections(next);
                     }}
-                  >
-                    {showCheck && (
-                      <input
-                        type="checkbox"
-                        aria-label={`${label(entry.kind)} · ${entry.collectionTitle}`}
-                        checked={manualPeerSelections.has(kindIdx)}
-                        onChange={() => {
-                          const next = new Set(manualPeerSelections);
-                          next.has(kindIdx) ? next.delete(kindIdx) : next.add(kindIdx);
-                          setManualPeerSelections(next);
-                        }}
-                        style={{ flexShrink: 0 }}
-                      />
-                    )}
-                    <span
-                      style={{
-                        color: "var(--accent)",
-                        fontSize: 11,
-                        fontWeight: 600,
-                        width: 28,
-                        flexShrink: 0,
-                      }}
-                    >
-                      {label(entry.kind)}
-                    </span>
-                    {(profile?.rankings.includes(entry) && profile.rankings.length === 1) ||
-                    (peer?.rankings.includes(entry) && peer.rankings.length === 1) ? (
-                      <>
-                        <span
-                          style={{
-                            overflow: "hidden",
-                            textOverflow: "ellipsis",
-                            whiteSpace: "nowrap",
-                            minWidth: 0,
-                          }}
-                        >
-                          {entry.collectionTitle}
-                        </span>
-                        <div style={{ flex: 1 }} />
-                        <div
-                          className="ranking-card-top3"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setCompareRankDetail({
-                              side: profile?.rankings.includes(entry) ? "own" : "peer",
-                              collectionTitle: entry.collectionTitle,
-                              ranking: entry,
-                            });
-                          }}
-                          role="button"
-                          tabIndex={0}
-                          onKeyDown={(e) => {
-                            if (e.key === "Enter" || e.key === " ") {
-                              e.preventDefault();
-                              setCompareRankDetail({
-                                side: profile?.rankings.includes(entry) ? "own" : "peer",
-                                collectionTitle: entry.collectionTitle,
-                                ranking: entry,
-                              });
-                            }
-                          }}
-                        >
-                          {entry.items.slice(0, 3).map((item, i) => (
-                            <div className="ranking-card-top3-item" key={item.id}>
-                              <span className="ranking-card-top3-medal">
-                                {String(i + 1).padStart(2, "0")}
-                              </span>
-                              <Poster work={item} kind={entry.kind} />
-                              <span className="ranking-card-top3-name">{item.title}</span>
-                            </div>
-                          ))}
-                        </div>
-                        <div style={{ flex: 1 }} />
-                        <span style={{ color: "var(--muted)", fontSize: 11, flexShrink: 0 }}>
-                          TOP {entry.items.length}
-                        </span>
-                      </>
-                    ) : (
-                      <>
-                        <div
-                          className="ranking-card-poster"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setCompareRankDetail({
-                              side: profile?.rankings.includes(entry) ? "own" : "peer",
-                              collectionTitle: entry.collectionTitle,
-                              ranking: entry,
-                            });
-                          }}
-                        >
-                          <Poster work={entry.items[0]} kind={entry.kind} />
-                        </div>
-                        <span
-                          style={{
-                            flex: 1,
-                            minWidth: 0,
-                            overflow: "hidden",
-                            textOverflow: "ellipsis",
-                            whiteSpace: "nowrap",
-                          }}
-                        >
-                          {entry.collectionTitle}
-                        </span>
-                        <span style={{ color: "var(--muted)", fontSize: 11, flexShrink: 0 }}>
-                          TOP {entry.items.length}
-                        </span>
-                      </>
-                    )}
-                  </div>
+                    expanded={soleOfSide}
+                    onOpenDetail={() => openRankDetail(entry)}
+                  />
                 );
               })}
             </div>
@@ -743,13 +556,9 @@ export function CompareView({
             <div>
               <span>
                 {t("作品重合度", "Work overlap")}
-                <i
-                  className="metric-help hit-expand"
-                  tabIndex={0}
-                  data-tip={t("共同作品 ÷ 双方去重总数", "Shared works ÷ union of both lists")}
-                >
-                  ?
-                </i>
+                <MetricHelp
+                  tip={t("共同作品 ÷ 双方去重总数", "Shared works ÷ union of both lists")}
+                />
               </span>
               <strong>
                 {result.overlap}
@@ -759,32 +568,24 @@ export function CompareView({
             <div>
               <span>
                 {t("顺序一致率", "Order agreement")}
-                <i
-                  className="metric-help hit-expand"
-                  tabIndex={0}
-                  data-tip={t(
+                <MetricHelp
+                  tip={t(
                     "共同作品中，双方相对先后次序一致的比例（并列名次不计）",
                     "Share of comparable pairs ranked in the same order (ties excluded)",
                   )}
-                >
-                  ?
-                </i>
+                />
               </span>
               <strong>{result.orderAgreement === null ? "--" : `${result.orderAgreement}%`}</strong>
             </div>
             <div>
               <span>
                 {t("加权偏好一致", "Weighted agreement")}
-                <i
-                  className="metric-help hit-expand"
-                  tabIndex={0}
-                  data-tip={t(
+                <MetricHelp
+                  tip={t(
                     "越靠前的共同作品权重越高",
                     "Shared works weighted by rank (top ranks matter more)",
                   )}
-                >
-                  ?
-                </i>
+                />
               </span>
               <strong>
                 {result.weightedTopAgreement}
@@ -798,29 +599,21 @@ export function CompareView({
                   <div>
                     <span>
                       {t("Kendall τ", "Kendall tau")}
-                      <i
-                        className="metric-help hit-expand"
-                        tabIndex={0}
-                        data-tip={t(
+                      <MetricHelp
+                        tip={t(
                           "秩相关（含并列），50=无关，100=完全一致",
                           "Rank correlation with ties; 50=noise, 100=identical",
                         )}
-                      >
-                        ?
-                      </i>
+                      />
                     </span>
                     <strong>{result.kendallTau === null ? "--" : result.kendallTau}</strong>
                   </div>
                   <div>
                     <span>
                       {t("Spearman 一致", "Spearman")}
-                      <i
-                        className="metric-help hit-expand"
-                        tabIndex={0}
-                        data-tip={t("名次差的平方和换算", "Derived from squared rank differences")}
-                      >
-                        ?
-                      </i>
+                      <MetricHelp
+                        tip={t("名次差的平方和换算", "Derived from squared rank differences")}
+                      />
                     </span>
                     <strong>
                       {result.spearmanLikeAgreement === null ? "--" : result.spearmanLikeAgreement}
@@ -829,16 +622,12 @@ export function CompareView({
                   <div>
                     <span>
                       {t("前五重合", "Top-5 overlap")}
-                      <i
-                        className="metric-help hit-expand"
-                        tabIndex={0}
-                        data-tip={t(
+                      <MetricHelp
+                        tip={t(
                           "双方前五名作品的 Jaccard 相似度",
                           "Jaccard similarity of both Top-5 sets",
                         )}
-                      >
-                        ?
-                      </i>
+                      />
                     </span>
                     <strong>
                       {result.topJaccard}
@@ -848,32 +637,24 @@ export function CompareView({
                   <div>
                     <span>
                       {t("年代偏好", "Era affinity")}
-                      <i
-                        className="metric-help hit-expand"
-                        tabIndex={0}
-                        data-tip={t(
+                      <MetricHelp
+                        tip={t(
                           "双方榜单年代中位数越接近分越高",
                           "Closer median release years score higher",
                         )}
-                      >
-                        ?
-                      </i>
+                      />
                     </span>
                     <strong>{result.eraAffinity === null ? "--" : result.eraAffinity}</strong>
                   </div>
                   <div>
                     <span>
                       {t("名次距离", "Rank distance")}
-                      <i
-                        className="metric-help hit-expand"
-                        tabIndex={0}
-                        data-tip={t(
+                      <MetricHelp
+                        tip={t(
                           "共同作品的平均名次差，越低越一致",
                           "Average rank gap of shared works; lower is closer",
                         )}
-                      >
-                        ?
-                      </i>
+                      />
                     </span>
                     <strong>
                       {result.rankDistance}
@@ -883,16 +664,12 @@ export function CompareView({
                   <div>
                     <span>
                       {t("冠军一致", "Same champion")}
-                      <i
-                        className="metric-help hit-expand"
-                        tabIndex={0}
-                        data-tip={t(
+                      <MetricHelp
+                        tip={t(
                           "双方的第 1 名是否为同一作品",
                           "Whether both #1 picks are the same work",
                         )}
-                      >
-                        ?
-                      </i>
+                      />
                     </span>
                     <strong>
                       {result.championAgreement === null
@@ -905,13 +682,9 @@ export function CompareView({
                   <div>
                     <span>
                       {t("Top 3 共识", "Top 3 consensus")}
-                      <i
-                        className="metric-help hit-expand"
-                        tabIndex={0}
-                        data-tip={t("同时进入双方前三的作品数", "Works in both Top-3 lists")}
-                      >
-                        ?
-                      </i>
+                      <MetricHelp
+                        tip={t("同时进入双方前三的作品数", "Works in both Top-3 lists")}
+                      />
                     </span>
                     <strong>{result.top3Agreement}</strong>
                   </div>

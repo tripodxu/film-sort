@@ -23,9 +23,13 @@ describe("S5 · CompareView 的 ARIA 语义补全", () => {
   });
 
   it("手动模式的两个 checkbox 都有可访问名称（维度 + 清单名）", () => {
-    expect(occurrence(code, "aria-label={`${label(entry.kind)} · ${entry.collectionTitle}`}")).toBe(
-      2,
+    // 两侧同一行已收敛成 <RankingEntryRow>：名称只有一处定义，不可能漏给某一侧。
+    const row = stripComments(read("./components/RankingEntryRow.tsx"));
+    expect(occurrence(row, "aria-label={`${label(entry.kind)} · ${entry.collectionTitle}`}")).toBe(
+      1,
     );
+    // 勾选状态必须由 own / peer **各自的 Set** 分别喂给组件——两侧共用一份 Set 的话
+    // 这里会直接掉到 0，比原先只数 2 次更能防「左右联动」这类回归。
     expect(occurrence(code, "checked={manualOwnSelections.has(kindIdx)}")).toBe(1);
     expect(occurrence(code, "checked={manualPeerSelections.has(kindIdx)}")).toBe(1);
   });

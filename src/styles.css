@@ -219,6 +219,11 @@ details > div, details > .tech-body{padding:16px 16px}
 /* ===== Note Modal ===== */
 
 /* ===== Ranking Card in Comparison ===== */
+/* 一行榜单条目：此前 own / peer 两侧各内联一次同一套属性（且已开始漂移），
+   现由 <RankingEntryRow> 独享，这里是唯一落点。 */
+.ranking-entry-row{display:flex;align-items:center;gap:var(--sp-2);font-size:var(--t-small)}
+.ranking-entry-kind{color:var(--accent);font-size:var(--t-meta);font-weight:600;width:28px;flex-shrink:0}
+.u-shrink0{flex-shrink:0}
 .ranking-card-poster{flex-shrink:0;cursor:pointer}
 .ranking-card-top3{display:flex;flex-direction:column;gap:4px;min-width:0}
 .ranking-card-top3-item{display:flex;align-items:center;gap:4px;font-size:13px}
@@ -2038,6 +2043,8 @@ body[data-theme=classic]{
   .comparison-inputs{gap:var(--sp-4)}
   /* Top3 作品名 100px 定宽（既有规则 styles.css 中段）在窄屏会被截到 2 个字 */
   .ranking-card-top3-name{max-width:none}
+  /* 媒介标签同理：28px 是为对齐中文两字测出来的，窄屏下让位给清单名 */
+  .ranking-entry-kind{width:auto;min-width:0}
 }
 
 /* Z.12 密集小控件的一致性兜底：全站出现 28 / 22 / 16px 三种小控件尺寸，

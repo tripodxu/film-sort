@@ -88,9 +88,35 @@ describe("P1b/P2/P3 收敛绊线", () => {
     expect(css).toContain("--dur-pulse:1.5s");
     expect(css).toMatch(/\.artwork-info,\.candidate-scroll\{[^}]*mask-image/);
   });
-  it("dialog 面板 role/aria-modal 覆盖不回退（无障碍等价）", () => {
+  it("dialog 面板 role/aria-modal 覆盖不回退（9 份外壳已收敛到 <Modal>，覆盖强度不降）", () => {
     const app = readFileSync("src/App.tsx", "utf8");
-    expect((app.match(/role="dialog"/g) ?? []).length).toBeGreaterThanOrEqual(9);
+    // 同 P4b：剥掉注释再扫，否则我写的解释性注释会把断言喂绿。
+    const strip = (s: string) =>
+      s.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^[^\S\n]*\/\/.*$/gm, "");
+    const modal = strip(readFileSync("src/components/Modal.tsx", "utf8"));
+    const appCode = strip(app);
+    // 收敛前是「9 个弹窗各写一份 role=dialog」，计数 ≥9 只能证明「有 9 份」。
+    // 收敛后改用**更强的两条**锁：① 9 个调用点都真用了 <Modal>；
+    // ② App 里不许再出现任何手写的 dialog ARIA —— 否则外壳会重新散开成第 10 份。
+    expect((appCode.match(/<Modal\b/g) ?? []).length).toBeGreaterThanOrEqual(9);
+    expect(appCode).not.toContain('role="dialog"');
+    expect(appCode).not.toContain("aria-modal");
+    // note-reader 的背景层多一个修饰类，走 backdropClassName 传值；这里按
+    // 「谁的属性写的」判，允许它出现在 prop 值里，不允许出现在 className 里。
+    expect(appCode).not.toContain('className="modal-backdrop');
+    // ARIA 三件套 + Esc / 背景点击 / 冒泡拦截，集中在 Modal 内部逐条点名
+    for (const token of [
+      'role="dialog"',
+      'aria-modal="true"',
+      "aria-labelledby={headingId}",
+      "<FocusTrap onEscape={onClose}>",
+      "onClick={onClose}",
+      "event.stopPropagation()",
+    ]) {
+      expect(modal).toContain(token);
+    }
+    // Esc 必须真的接上：只声明 role 不接 pack = 键盘用户关不掉（ArtworkDetail 曾踩过）
+    expect(modal).toMatch(/onKeyDown=\{\(event\) => \{[\s\S]{0,80}Escape[\s\S]{0,60}onClose\(\)/);
   });
 });
 
@@ -1154,8 +1180,19 @@ describe("打磨第二轮 T-20261025-01（ROADMAP §二 A/B/C/D）", () => {
 describe("打磨第三小轮 T-20261025-02：漏网 <36px 触控目标全数挂透明命中区", () => {
   it("比较页 sort-swap(22px) 与全部 metric-help(16px) 挂 hit-expand", () => {
     const compare = readFileSync("src/views/CompareView.tsx", "utf8");
+    // 同 P4b / dialog 绊线：剥掉注释再扫，否则解释性注释会把断言喂绿。
+    const strip = (s: string) =>
+      s.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^[^\S\n]*\/\/.*$/gm, "");
+    const help = strip(readFileSync("src/components/MetricHelp.tsx", "utf8"));
     expect(compare).toContain('className="sort-swap hit-expand"');
-    expect((compare.match(/className="metric-help hit-expand"/g) ?? []).length).toBe(10);
+    // 10 个「?」已收敛成 <MetricHelp>：覆盖改用「调用点全部走组件」来锁，
+    // 反向断言 CompareView 里不许再出现那个 class —— 否则第 11 个最易漏的就是
+    // tabIndex / hit-expand 这两条看不见的要求。
+    expect((compare.match(/<MetricHelp\b/g) ?? []).length).toBe(10);
+    expect(compare).not.toContain("metric-help");
+    expect(help).toContain('className="metric-help hit-expand"');
+    expect(help).toContain("tabIndex={0}");
+    expect(help).toContain("data-tip={tip}");
   });
 
   it("广场贴纸按钮（32/26/28px）挂 hit-expand 且有定位锚点", () => {
