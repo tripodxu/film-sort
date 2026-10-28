@@ -2012,6 +2012,17 @@ body[data-theme=classic]{
 }
 @media(max-width:540px){.qr-stage{flex-direction:column}}
 
+/* Z.10b 扫码弹窗的壳（QrConnectModal 抽取时顺带下沉）：此前弹窗主体是
+   `style={{display:"grid",placeItems:"center",gap:12}}`，状态色与居中对齐
+   各写在三个内联对象里 —— 豆瓣与网易云两份，改一次要改两遍。现在结构在组件里，
+   样式在这里，状态色走 data-state 属性选择器（不再靠 JS 拼颜色字符串）。 */
+.qr-body{display:grid;place-items:center;gap:var(--sp-3)}
+.qr-hint{font-size:13px;line-height:1.7;margin:0;text-align:center;color:var(--muted)}
+.qr-hint[data-state=scanned]{color:var(--accent)}
+.qr-hint[data-state=confirmed]{color:var(--green)}
+.qr-note{text-align:center;margin:0}
+.qr-help-link{align-self:center;font-size:11px}
+
 /* Z.10 清单源宫格：此前由内联 grid-template-columns 直接执政 —— CSS 管不到、也没有
    ≤800px 兜底，4 列在 600px 下每列约 140px，卡片内容被挤成重叠。改由 --collection-cols
    传值（与既有 --plaza-cols 同一手法），列数的事实仍在调用方，降级规则回到 CSS。

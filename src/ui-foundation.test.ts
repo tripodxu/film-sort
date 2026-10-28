@@ -129,12 +129,33 @@ describe("内联 Layout 下沉：不再由 JSX 执政响应式", () => {
   });
 
   it("二维码尺寸下沉为 --qr-size（原 300×300 硬编码在 360px 视口下溢出容器）", () => {
-    const source = read("./views/SourceView.tsx");
-    expect(source).toContain('className="qr-image"');
+    // 二维码现在住在 QrConnectModal 里（两个扫码弹窗已收敛成一份），断言跟着搬过来
+    const modal = read("./components/QrConnectModal.tsx");
+    expect(modal).toContain('className="qr-image"');
     // 布局侧不许再有内联尺寸（生成分辨率的 { width: 300, margin: 1 } 不算布局）
-    expect(source).not.toMatch(/className="qr-image"[\s\S]{0,80}width:/);
-    expect(source).not.toMatch(/height:\s*300/);
+    expect(modal).not.toMatch(/className="qr-image"[\s\S]{0,80}width:/);
+    expect(modal).not.toMatch(/height:\s*300/);
     expect(css).toContain("--qr-size:min(300px,100%)");
+  });
+
+  it("两个扫码弹窗收敛为一份 QrConnectModal（原 SourceView 内 360 行逐行重复）", () => {
+    const source = read("./views/SourceView.tsx");
+    const modal = read("./components/QrConnectModal.tsx");
+    // 调用侧：两个入口各一次，且不再自己写模态外壳
+    expect((source.match(/<QrConnectModal/g) ?? []).length).toBe(2);
+    // 扫码弹窗的结构层不许再留在视图里（headingId 作为 props 传入是必要的，不算残留）
+    expect(source).not.toContain("qr-connect-dialog");
+    expect(source).not.toContain("qr-box");
+    expect(source).not.toContain("qr-mask");
+    expect(source).not.toContain("qr-fallback");
+    // 组件侧：结构与状态机只此一份
+    expect(modal).toContain('role="dialog"');
+    expect(modal).toContain('aria-modal="true"');
+    expect(modal).toMatch(/<FocusTrap onEscape=\{onClose\}>/);
+    // 状态色走 data-state 选择器，不许回到 JS 拼颜色字符串
+    expect(modal).toContain("data-state={state}");
+    expect(modal).not.toMatch(/color:\s*state === /);
+    expect(css).toMatch(/\.qr-hint\[data-state=confirmed\]\{color:var\(--green\)\}/);
   });
 });
 
