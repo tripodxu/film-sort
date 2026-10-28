@@ -10,7 +10,7 @@
 
 ## 进行中 / 最近
 
-### T-20261028-THRESHOLD · 代判置信阈值做成设置项（Jev 结论三的裁决落地）· 🔄 待线上验证
+### T-20261028-THRESHOLD · 代判置信阈值做成设置项（Jev 结论三的裁决落地）· ✅ 完成（线上已验证）
 
 - **起因**：`T-20261028-JEV` 结论三待用户裁决（阈值 0.8 是否下调）。用户裁决：**不单向下调，做成设置项**。
 - **改动**（全部前端，无 Worker/Schema 变更）：
@@ -35,7 +35,12 @@
   - 设置面板 UI：五档 chip 单行铺满、选中态回显、`localStorage` 持久化即时生效（截图核验）。
 - **文档**：`FEATURES.md` / `USAGE.md` / `ROADMAP.md` 三处「≥0.8 / ≥80%」表述改为「阈值可调」；
   `CHANGELOG` 新增条目。
-- **下一步**：push 后 Workers Builds 自动上线 → sort.logicc.top 复验设置面板与档位持久化 → 本条目转 ✅。
+- **部署与线上验证**：提交 `efc3449` push → Workers Builds 自动上线。线上 `index.html` 引
+  `index-DOt28B0D.js`，与本地 `dist` **哈希一致**，且 bundle 内含 `jev-assist-threshold` 特征串。
+  线上真机（`.tmp/verify-prod-threshold.mjs`，只读交互）**6/6 通过**：
+  ① 弹窗出现五档 chip、默认选中 80%；② 点 60% → `localStorage` 存 `0.6` 且文案同步；
+  ③ 非默认档出现「恢复默认」；④ 刷新后仍选中 60%（跨会话持久化）；
+  ⑤ 恢复默认 → 回 80% 且存储 `0.8`；⑥ 全程无未捕获 JS 错误。
 
 ### T-20261028-JEV · Jev 代判真机复核（补 PERF 批的遗留项）· ✅ 完成（线上已验证）
 
