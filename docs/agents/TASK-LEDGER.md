@@ -30,11 +30,16 @@
 - **改动**：`src/styles.css`（删 46 条死规则 + 新增 §Z 设计语言层）、`src/App.tsx`、`src/views/{HomeView,PlazaView,PlazaPostView,ProfileView,ShareView,SourceView}.tsx`、
   `src/components/AiInsightCard.tsx`；新增 `src/components/ui/{EmptyState,Skeleton}.tsx`、`src/ui-foundation.test.ts`(15 条)。
 - **文档**：[`docs/REFACTOR-UI-2026-10.md`](../REFACTOR-UI-2026-10.md)（改动说明 / 优化点 / 前后对比 / 已知未做）
-- **交接给谁 / 下一步**：遗留三项需用户确认后做 ——
+- **后续一刀（已完成，同日上线）**：提交 `28346bd` 把 SourceView 两个扫码弹窗收敛为
+  `src/components/QrConnectModal.tsx`（1797 → 1522 行，**−275**）。状态机与轮询仍留在调用方
+  （两家后端接口不同，搬进组件只会让它同时认识两个后端）；弹窗里三处内联样式下沉为
+  `.qr-body` / `.qr-hint` / `.qr-note` / `.qr-help-link`，状态色改走 `data-state` 选择器。
+  部署 Version `ec2ba81d-…`：新增 5 条断言全绿（页面无 JS 错误、四个类 computed 生效、`--qr-size` 未回归），
+  回归 15/15 + E2E 6/6。
+- **交接给谁 / 下一步**：遗留两项需用户确认后做 ——
   1. **App.tsx 模态外壳收口**（15 份 → 1 份）：需先把 `ui-fixes.test.ts` 里「App.tsx 中 `role="dialog"` ≥9 次」
      改写成「`<Modal>` 内部含完整 dialog ARIA + App 中出现 9 次 `<Modal`」，**须经用户确认**，勿擅自放宽绊线；
-  2. **CompareView 120 行双栏复制**抽 `<RankingEntryRow>`：同样受「`metric-help hit-expand` 必须 10 次」计数断言限制；
-  3. **SourceView 两个扫码弹窗**约 180 行近乎逐行重复，抽 `QrConnectModal` 是最划算的第一刀（无绊线拦截）。
+  2. **CompareView 120 行双栏复制**抽 `<RankingEntryRow>`：同样受「`metric-help hit-expand` 必须 10 次」计数断言限制。
 - **遗留风险**：① 自动化删 CSS 时曾误删活类 `.poster-small`（已回滚修正，并改为只认单一简单类的白名单后重跑验证），
   后续如再做批量删 CSS，务必先备份 + 逐条人工核对；② `--qr-bg` 写在文件头颜色 token 行，
   是为了绕过 `depth.test.ts` 对 S3 之后区块的裸 hex 断言，这条约束将来别忘。

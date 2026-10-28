@@ -26,6 +26,11 @@
   错误空态经 `<EmptyState live>` 获得 `role=status`。
 - **新增绊线** `src/ui-foundation.test.ts`（15 条），锁住 "收敛之后不许再散开"。
 
+**后续一刀（同日上线，提交 `28346bd`）**：SourceView 里豆瓣 / 网易云两个扫码弹窗近乎逐行重复
+（约 360 行，且已漂移——只有网易云有扫码者头像/昵称），抽为 `src/components/QrConnectModal.tsx`，
+差异全部走 props；状态机与轮询留在调用方。顺带把弹窗三处内联样式下沉为 CSS，
+状态色改走 `data-state` 选择器。SourceView 1797 → 1522 行。
+
 **验证**：五道门禁全绿（`check` / `lint` / `format:check` / `test` 872 passed + 9 skipped，父提交 868 ⇒ +4 / `build`）。
 **已部署上线并复核**（提交 `d221315` + `4c3eebe`，Worker Version `1eef2911-…`）：E2E 线上冒烟 5/0；
 15 条针对性 DOM/computed 断言全绿（年轮四档宽度无溢出、宫格 540/800→2 列与 1300→4 列、
