@@ -10,20 +10,31 @@
 
 ## 进行中 / 最近
 
-### T-20261028-UI · 前端现代化重构：统一设计语言 + 消除重复 + 修三类真机缺陷 · 👀 待审（门禁已绿，**未上线验证**）
+### T-20261028-UI · 前端现代化重构：统一设计语言 + 消除重复 + 修三类真机缺陷 · ✅ 完成（线上已验证）
 
-- **状态**：代码改动完成，`check` / `lint` / `format:check` / `test`(872 passed + 9 skipped，父提交 868 ⇒ +4) / `build` 五道全绿。
-  **未到 sort.logicc.top 线上截图复核，按项目铁律不标 ✅。**
+- **部署**：提交 `d221315`（重构主体）+ `4c3eebe`（线上复核修复）→ `npm run deploy` → Worker Version `1eef2911-…`；
+  线上资产与本地构建哈希一致（`index-CoAcsR39.js` / `index-DyQ7VIHy.css`）；迁移检查无待应用。
+- **线上验证（全部通过）**：
+  1. **E2E 线上冒烟 5 passed / 1 skipped / 0 failed**（设置菜单开合、chunk 失败兜底、Orb 失败兜底）；
+  2. **15 条针对性 DOM/computed 断言全绿**（`.tmp/verify-online-ui.mjs`，playwright + fixture 注入）：
+     年轮 360/540/800/1300 无横向溢出（grid 328/508/760/1120 恰与视口齐）；
+     `--qr-size:min(300px,100%)` 在线生效；清单宫格 540/800→2 列、1300→4 列；
+     比较页 540 断点（kind `min-width:0` / 名称不限宽）生效；触控 token 44/28px、
+     空状态两档留白 48/24px、`--dur-pulse:1.5s` 全部在线生效；
+  3. **线上 CSS 全文核验**：死类 `guide-help-btn`/`plaza-card-`/`profile-skeleton`/`note-textarea` 等计数为 0，
+     新规则 `prefers-contrast`/`empty-state-pad`/`icon-button-sm` 在线；
+  4. **截图复核**：home/rings 360+1300、profile-1300、plaza-1300 视觉无回归（无重叠/溢出/错位）。
+- **线上复核抓到的真 bug（已修，`4c3eebe`）**：Z.10 第一版用 `@media(max-width:800px){.collection-list{--collection-cols:2}}`
+  想降级列数，**线上实测 540/800 仍是 4 列** —— 调用方是内联设的同名自定义属性，内联优先级高于样式表，
+  覆盖同名变量无效。改为 media 里直接覆盖 `grid-template-columns`，并把该反例写成绊线（不许退回）。
 - **改动**：`src/styles.css`（删 46 条死规则 + 新增 §Z 设计语言层）、`src/App.tsx`、`src/views/{HomeView,PlazaView,PlazaPostView,ProfileView,ShareView,SourceView}.tsx`、
   `src/components/AiInsightCard.tsx`；新增 `src/components/ui/{EmptyState,Skeleton}.tsx`、`src/ui-foundation.test.ts`(15 条)。
 - **文档**：[`docs/REFACTOR-UI-2026-10.md`](../REFACTOR-UI-2026-10.md)（改动说明 / 优化点 / 前后对比 / 已知未做）
-- **交接给谁 / 下一步**：需要一个后台做这四件事 ——
-  1. **线上验证**：部署后按既有截图脚本（360/540/800/1300 × modern/simple/gallery）出图，重点看
-     首页年轮不再横向溢出、二维码弹窗在 360 宽完整、清单宫格 ≤800 自动降级 2 列、比较页 540 宽榜单行不再挤压；
-  2. **App.tsx 模态外壳收口**（15 份 → 1 份）：需先把 `ui-fixes.test.ts` 里「App.tsx 中 `role="dialog"` ≥9 次」
+- **交接给谁 / 下一步**：遗留三项需用户确认后做 ——
+  1. **App.tsx 模态外壳收口**（15 份 → 1 份）：需先把 `ui-fixes.test.ts` 里「App.tsx 中 `role="dialog"` ≥9 次」
      改写成「`<Modal>` 内部含完整 dialog ARIA + App 中出现 9 次 `<Modal`」，**须经用户确认**，勿擅自放宽绊线；
-  3. **CompareView 120 行双栏复制**抽 `<RankingEntryRow>`：同样受「`metric-help hit-expand` 必须 10 次」计数断言限制；
-  4. **SourceView 两个扫码弹窗**约 180 行近乎逐行重复，抽 `QrConnectModal` 是最划算的第一刀（无绊线拦截）。
+  2. **CompareView 120 行双栏复制**抽 `<RankingEntryRow>`：同样受「`metric-help hit-expand` 必须 10 次」计数断言限制；
+  3. **SourceView 两个扫码弹窗**约 180 行近乎逐行重复，抽 `QrConnectModal` 是最划算的第一刀（无绊线拦截）。
 - **遗留风险**：① 自动化删 CSS 时曾误删活类 `.poster-small`（已回滚修正，并改为只认单一简单类的白名单后重跑验证），
   后续如再做批量删 CSS，务必先备份 + 逐条人工核对；② `--qr-bg` 写在文件头颜色 token 行，
   是为了绕过 `depth.test.ts` 对 S3 之后区块的裸 hex 断言，这条约束将来别忘。
