@@ -26,7 +26,7 @@
   错误空态经 `<EmptyState live>` 获得 `role=status`。
 - **新增绊线** `src/ui-foundation.test.ts`（15 条），锁住 "收敛之后不许再散开"。
 
-**验证**：五道门禁全绿（`check` / `lint` / `format:check` / `test` 924 passed + 9 skipped / `build`）。
+**验证**：五道门禁全绿（`check` / `lint` / `format:check` / `test` 872 passed + 9 skipped，父提交 868 ⇒ +4 / `build`）。
 **未做**（需单独批次）：App.tsx 模态外壳收口（被 `role="dialog"` ≥9 计数断言拦住）、
 三大巨型文件拆分、CompareView 120 行双栏复制抽取 —— 详见文档第四节。
 

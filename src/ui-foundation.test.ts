@@ -114,12 +114,18 @@ describe("内联 Layout 下沉：不再由 JSX 执政响应式", () => {
     expect(css).toContain("@media(max-width:720px){");
   });
 
-  it("清单源宫格列数经 --collection-cols 传值，降级规则回到 CSS", () => {
+  it("清单源宫格列数经 --collection-cols 传值，≤800 降级直接覆盖 grid-template-columns", () => {
     const source = read("./views/SourceView.tsx");
     expect(source).toContain('"--collection-cols": colCount');
     expect(source).not.toMatch(/gridTemplateColumns:\s*`repeat\(\$\{colCount\}/);
-    expect(css).toContain("--collection-cols:2");
     expect(css).toContain("grid-template-columns:repeat(var(--collection-cols,2)");
+    // 关键：降级必须覆盖 grid-template-columns 本身，不能只改 --collection-cols。
+    // 调用方是内联设的变量，内联自定义属性优先级高于样式表同名变量，
+    // 第一版就是这么写错的：CSS 里写了规则，线上 540/800 实测仍是 4 列。
+    expect(css).toMatch(
+      /@media\(max-width:800px\)\{\.collection-list\{grid-template-columns:repeat\(2,minmax\(0,1fr\)\)\}\}/,
+    );
+    expect(css).not.toMatch(/@media\(max-width:800px\)\{\.collection-list\{--collection-cols/);
   });
 
   it("二维码尺寸下沉为 --qr-size（原 300×300 硬编码在 360px 视口下溢出容器）", () => {

@@ -2014,9 +2014,11 @@ body[data-theme=classic]{
 
 /* Z.10 清单源宫格：此前由内联 grid-template-columns 直接执政 —— CSS 管不到、也没有
    ≤800px 兜底，4 列在 600px 下每列约 140px，卡片内容被挤成重叠。改由 --collection-cols
-   传值（与既有 --plaza-cols 同一手法），列数的事实仍在调用方，降级规则回到 CSS。 */
-.collection-list{grid-template-columns:repeat(var(--collection-cols,2),minmax(0,1fr))}
-@media(max-width:800px){.collection-list{--collection-cols:2}}
+   传值（与既有 --plaza-cols 同一手法），列数的事实仍在调用方，降级规则回到 CSS。
+   注意：降级必须直接覆盖 grid-template-columns，不能只改 --collection-cols ——
+   调用方是内联设的变量，内联自定义属性优先级高于样式表，覆盖同名变量无效。 */
+.collection-list{--collection-cols:2;grid-template-columns:repeat(var(--collection-cols,2),minmax(0,1fr))}
+@media(max-width:800px){.collection-list{grid-template-columns:repeat(2,minmax(0,1fr))}}
 
 /* Z.11 比较页双栏输入区：原只有 ≤800px 单列一条规则，540px 起两栏各 ~240px，
    「28px 媒介标签 + checkbox + Top3 海报 + 标题 + TOP n」单行必溢。 */

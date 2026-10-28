@@ -1,7 +1,7 @@
 # 前端现代化重构说明（T-20261028-UI）
 
 > 范围：仅 `src/` 前端。业务逻辑、API 契约、Worker 与 D1 迁移一律未动。
-> 门禁：`check` / `lint` / `format:check` / `test`(924 passed) / `build` 五道全绿。
+> 门禁：`check` / `lint` / `format:check` / `test`(872 passed + 9 skipped，父提交 868 ⇒ +4) / `build` 五道全绿。
 > **尚未到 sort.logicc.top 线上截图复核，按项目铁律本次不标 ✅。**
 
 ---

@@ -12,7 +12,7 @@
 
 ### T-20261028-UI · 前端现代化重构：统一设计语言 + 消除重复 + 修三类真机缺陷 · 👀 待审（门禁已绿，**未上线验证**）
 
-- **状态**：代码改动完成，`check` / `lint` / `format:check` / `test`(924 passed + 9 skipped) / `build` 五道全绿。
+- **状态**：代码改动完成，`check` / `lint` / `format:check` / `test`(872 passed + 9 skipped，父提交 868 ⇒ +4) / `build` 五道全绿。
   **未到 sort.logicc.top 线上截图复核，按项目铁律不标 ✅。**
 - **改动**：`src/styles.css`（删 46 条死规则 + 新增 §Z 设计语言层）、`src/App.tsx`、`src/views/{HomeView,PlazaView,PlazaPostView,ProfileView,ShareView,SourceView}.tsx`、
   `src/components/AiInsightCard.tsx`；新增 `src/components/ui/{EmptyState,Skeleton}.tsx`、`src/ui-foundation.test.ts`(15 条)。
