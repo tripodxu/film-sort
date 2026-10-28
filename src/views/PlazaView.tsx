@@ -11,6 +11,8 @@ import {
   StickyNote,
 } from "lucide-react";
 import { Poster } from "../components/Poster";
+import { EmptyState } from "../components/ui/EmptyState";
+import { Skeleton } from "../components/ui/Skeleton";
 import { rankingSimilarity } from "../lib/similarity";
 import type { PlazaViewProps, PlazaPost } from "./types";
 import type { MediaKind } from "../data/media";
@@ -249,19 +251,19 @@ export function PlazaView({
         </div>
       </div>
 
-      {/* Loading skeleton */}
+      {/* Loading skeleton —— 占位块的尺寸对齐真实卡片（海报 42×60），加载完成时不跳版 */}
       {initialLoading && (
         <div className="plaza-grid" style={{ "--plaza-cols": colCount } as React.CSSProperties}>
           {Array.from({ length: 6 }).map((_, i) => (
-            <div key={i} className="plaza-sticker plaza-skeleton">
-              <div className="plaza-skeleton-posters">
-                <div className="plaza-skeleton-img" />
-                <div className="plaza-skeleton-img" />
-                <div className="plaza-skeleton-img" />
+            <div key={i} className="plaza-sticker">
+              <div className="plaza-sticker-posters">
+                <Skeleton variant="block" width={42} height={60} />
+                <Skeleton variant="block" width={42} height={60} />
+                <Skeleton variant="block" width={42} height={60} />
               </div>
-              <div className="plaza-skeleton-info">
-                <div className="plaza-skeleton-line" style={{ width: "70%" }} />
-                <div className="plaza-skeleton-line" style={{ width: "50%" }} />
+              <div className="plaza-sticker-info">
+                <Skeleton width="70%" />
+                <Skeleton width="50%" />
               </div>
             </div>
           ))}
@@ -270,29 +272,30 @@ export function PlazaView({
 
       {/* Error state */}
       {error && (
-        <div className="empty-state" style={{ padding: 40 }}>
-          <p style={{ color: "var(--red)", marginBottom: 12 }}>{error}</p>
+        <EmptyState tone="error" live title={error}>
           <button
             className="button secondary"
             onClick={() => void loadPosts(1, kindFilter, sort, search)}
           >
             {t("重试", "Retry")}
           </button>
-        </div>
+        </EmptyState>
       )}
 
       {/* Empty state — only after initial load completes */}
       {!initialLoading && !loading && !error && posts.length === 0 && (
-        <div className="empty-state" style={{ padding: 40 }}>
-          <p style={{ marginBottom: 12 }}>
-            {t("广场还没有内容，快来发布第一个吧！", "The plaza is empty. Be the first to post!")}
-          </p>
+        <EmptyState
+          title={t(
+            "广场还没有内容，快来发布第一个吧！",
+            "The plaza is empty. Be the first to post!",
+          )}
+        >
           {accountToken && (
             <button className="button primary" onClick={() => navigateTo("profile")}>
               {t("去发布", "Go post")}
             </button>
           )}
-        </div>
+        </EmptyState>
       )}
 
       {/* Post cards */}

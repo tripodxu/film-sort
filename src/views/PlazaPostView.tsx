@@ -649,8 +649,11 @@ export function PlazaPostView({
           <div className="section-heading" style={{ margin: 0 }}>
             <h2>{t("编辑帖子信息", "Edit post info")}</h2>
           </div>
-          <label style={{ fontSize: 12, color: "var(--muted)" }}>{t("描述", "Description")}</label>
+          <label htmlFor="post-info-desc" className="u-meta-sm">
+            {t("描述", "Description")}
+          </label>
           <textarea
+            id="post-info-desc"
             value={infoDesc}
             onChange={(e) => setInfoDesc(e.target.value)}
             rows={3}
@@ -738,31 +741,30 @@ export function PlazaPostView({
                 </div>
                 <div style={{ display: "flex", gap: 2, marginLeft: "auto", flexShrink: 0 }}>
                   <button
-                    className="icon-button hit-expand"
+                    className="icon-button hit-expand icon-button-sm"
+                    aria-label={t("上移", "Move up")}
                     title={t("上移", "Move up")}
                     disabled={idx === 0}
                     onClick={() => moveEditItem(idx, idx - 1)}
-                    style={{ width: 28, height: 28 }}
                   >
                     <ArrowUp size={14} />
                   </button>
                   <button
-                    className="icon-button hit-expand"
+                    className="icon-button hit-expand icon-button-sm"
+                    aria-label={t("下移", "Move down")}
                     title={t("下移", "Move down")}
                     disabled={idx === editItems.length - 1}
                     onClick={() => moveEditItem(idx, idx + 1)}
-                    style={{ width: 28, height: 28 }}
                   >
                     <ArrowDown size={14} />
                   </button>
                   <button
-                    className="icon-button hit-expand"
+                    className="icon-button hit-expand icon-button-sm"
+                    aria-label={t("移除", "Remove")}
                     title={t("移除", "Remove")}
                     disabled={editItems.length <= 1}
                     onClick={() => setEditItems((cur) => (cur ?? []).filter((_, i) => i !== idx))}
                     style={{
-                      width: 28,
-                      height: 28,
                       color: "var(--red)",
                       opacity: editItems.length <= 1 ? 0.3 : 1,
                     }}
@@ -783,23 +785,25 @@ export function PlazaPostView({
               borderRadius: "var(--r-md)",
             }}
           >
-            <label style={{ fontSize: 12, color: "var(--muted)" }}>
+            <label htmlFor="post-edit-desc" className="u-meta-sm">
               {t("描述", "Description")}
             </label>
             <textarea
+              id="post-edit-desc"
               value={editDesc}
               onChange={(e) => setEditDesc(e.target.value)}
               rows={2}
               placeholder={t("介绍这份榜单…（可选）", "Describe this ranking… (optional)")}
               style={{ minHeight: 60, fontSize: 13 }}
             />
-            <label style={{ fontSize: 12, color: "var(--muted)" }}>
+            <label htmlFor="post-edit-manual" className="u-meta-sm">
               {t(
                 "添加作品（每行一件，支持「标题 - 创作者（年份）」）",
                 "Add works (one per line: Title - Creator (Year))",
               )}
             </label>
             <textarea
+              id="post-edit-manual"
               value={editManual}
               onChange={(e) => setEditManual(e.target.value)}
               rows={3}

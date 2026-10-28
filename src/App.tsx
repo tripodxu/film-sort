@@ -1451,7 +1451,7 @@ export default function App() {
       <div className="empty-state">
         {shareError ? (
           <>
-            <p style={{ marginBottom: 12 }}>
+            <p className="u-mb">
               {t(
                 "分享内容加载失败：链接无效、已过期，或网络暂时不可用。",
                 "Couldn't load this share: the link is invalid, expired, or the network is unreachable.",
@@ -1462,7 +1462,7 @@ export default function App() {
             </button>{" "}
           </>
         ) : (
-          <p style={{ marginBottom: 12 }}>{t("正在加载分享内容…", "Loading shared content…")}</p>
+          <p className="u-mb">{t("正在加载分享内容…", "Loading shared content…")}</p>
         )}
         <button className="button secondary" onClick={() => navigateTo("home")}>
           {t("返回首页", "Back home")}
@@ -1501,7 +1501,7 @@ export default function App() {
   else
     content = (
       <div className="empty-state empty-state-standalone">
-        <p style={{ marginBottom: 12 }}>
+        <p className="u-mb">
           {t(
             "此页面的内容还未创建（例如直接打开了配置或排序地址）。请从首页开始。",
             "This page has no content yet (e.g. opening a setup/sorting link directly). Start from the home page.",
@@ -1698,7 +1698,7 @@ export default function App() {
                   "You have local guest data and cloud data. Choose how to proceed:",
                 )}
               </p>
-              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              <div className="u-col">
                 <button
                   className="button primary"
                   onClick={() => {
@@ -1791,13 +1791,12 @@ export default function App() {
                   "Pick how long the link stays valid — it stops working after expiry. The link is copied automatically.",
                 )}
               </p>
-              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              <div className="u-col">
                 {[7, 30, 90, 365].map((days) => (
                   <button
                     key={days}
-                    className="button secondary"
+                    className="button secondary u-row-between"
                     disabled={busy}
-                    style={{ justifyContent: "space-between" }}
                     onClick={() => {
                       const picked = shareModal;
                       setShareModal(null);
@@ -1870,7 +1869,7 @@ export default function App() {
                     {noteDraft.length} {t("字", "chars")}
                   </span>
                 )}
-                <div style={{ flex: 1 }} />
+                <div className="u-spacer" />
                 <button className="note-footer-btn" onClick={() => setNoteModal(null)}>
                   {t("取消", "Cancel")}
                 </button>
@@ -1911,7 +1910,7 @@ export default function App() {
                 <p>{noteViewModal.text}</p>
               </div>
               <div className="note-reader-footer">
-                <div style={{ flex: 1 }} />
+                <div className="u-spacer" />
                 <button
                   className="note-footer-btn note-footer-primary"
                   onClick={() => setNoteViewModal(null)}
@@ -1945,7 +1944,7 @@ export default function App() {
               <p style={{ marginBottom: 16, fontSize: 13, color: "var(--muted)", lineHeight: 1.6 }}>
                 {t("选择一个榜单，用其中的作品进行排序。", "Pick a ranking to sort its works.")}
               </p>
-              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              <div className="u-col">
                 {peer.rankings.map((entry, idx) => (
                   <button
                     key={idx}
@@ -2084,9 +2083,7 @@ export default function App() {
               </div>
               {accountEmail && needNickname ? (
                 <>
-                  <p style={{ marginBottom: 12 }}>
-                    {t("请设置你的昵称", "Please set your nickname")}
-                  </p>
+                  <p className="u-mb">{t("请设置你的昵称", "Please set your nickname")}</p>
                   <input
                     type="text"
                     placeholder={t("昵称", "Nickname")}
@@ -2266,11 +2263,11 @@ export default function App() {
                     </a>
                   </div>
                   <div style={{ display: "flex", alignItems: "center", gap: 8, margin: "8px 0" }}>
-                    <div style={{ flex: 1, height: 1, background: "var(--line)" }} />
+                    <div className="u-divider" />
                     <span style={{ fontSize: 11, color: "var(--muted)" }}>
                       {t("或使用邮箱", "or use email")}
                     </span>
-                    <div style={{ flex: 1, height: 1, background: "var(--line)" }} />
+                    <div className="u-divider" />
                   </div>
                   <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
                     <button
@@ -2469,7 +2466,7 @@ export default function App() {
                 >
                   {t("技术说明", "Technical details")}
                 </button>
-                <div style={{ flex: 1 }} />
+                <div className="u-spacer" />
                 <button
                   className="button quiet"
                   onClick={() => {
@@ -2716,7 +2713,7 @@ export default function App() {
                 >
                   GitHub
                 </a>
-                <div style={{ flex: 1 }} />
+                <div className="u-spacer" />
                 <button className="button primary" onClick={() => setShowTech(false)}>
                   {t("关闭", "Close")}
                 </button>

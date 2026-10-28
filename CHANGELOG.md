@@ -1,5 +1,35 @@
 # Changelog
 
+## 2026-10-28 · 前端现代化重构：统一设计语言 + 消除重复 + 修三类真机缺陷（T-20261028-UI）
+
+**背景**：通读全部前端代码（10 视图 / 20 组件 / 14 lib 模块，约 19,400 行）后定位到核心问题不是"不好看"，
+而是**同一件事有多个正确答案**：17 处手写空状态（留白 40/60/无三档）、3 套卡片外壳、5 处 ellipsis 内联、
+2 套骨架屏动画节奏、15 份手写模态外壳、3 套分段选择器 ARIA 契约。详见
+[`docs/REFACTOR-UI-2026-10.md`](docs/REFACTOR-UI-2026-10.md)。
+
+**改了什么**
+
+- **死代码清理**：删除 46 条已确认无引用的 CSS 规则（`.guide-help-btn`、`.plaza-card-*` 全家、
+  `.profile-skeleton*`、`.note-textarea`、`.ranking-card` 基类、`.ai-insight`、
+  `.coordinate-grid` / `.candidate-grid` / `.collection-grid` / `.list-card`、单数 `.profile-dimension` 及 5 条主题分支）。
+- **新增 §Z 统一设计语言层**（`styles.css` 尾部）：token 补剂（`--tap-min` / `--tap-icon` / `--card-min` / `--qr-size` / `--qr-bg`）
+  + 11 个真实在用的工具类（`u-row` `u-col` `u-spacer` `u-mb` `u-divider` `u-ellipsis` `u-meta` 等），
+  每个类都有调用点，未制造新的死代码；新增 `prefers-contrast: more` 对比度提档。
+- **新增原语** `src/components/ui/EmptyState.tsx`、`src/components/ui/Skeleton.tsx`，
+  已接入 PlazaView（骨架 + 错误态 + 空态）与 AiInsightCard。
+- **修三类必然坏掉的响应式缺陷**（改前会横向溢出 / 挤压）：
+  - 首页品味年轮内联 `minWidth:200` → 360px 视口必然溢出（420px 内容 vs 336px 可用宽）；
+  - SourceView 二维码硬编码 300×300 且 `.qr-stage` 无换行 → 窄屏挤出 `min(460px,100%)` 容器；
+  - SourceView 清单宫格内联 `gridTemplateColumns` → CSS 管不到，≤800px 无单列兜底；
+  - CompareView 榜单行缺 ≤540px 断点，Top3 名称 100px 定宽导致英文长名被截。
+- **可访问性**：PlazaPostView 三个纯图标按钮补 `aria-label`；三处 `<label>` 补 `htmlFor`/`id` 关联；
+  错误空态经 `<EmptyState live>` 获得 `role=status`。
+- **新增绊线** `src/ui-foundation.test.ts`（15 条），锁住 "收敛之后不许再散开"。
+
+**验证**：五道门禁全绿（`check` / `lint` / `format:check` / `test` 924 passed + 9 skipped / `build`）。
+**未做**（需单独批次）：App.tsx 模态外壳收口（被 `role="dialog"` ≥9 计数断言拦住）、
+三大巨型文件拆分、CompareView 120 行双栏复制抽取 —— 详见文档第四节。
+
 ## 2026-10-27 · 视觉审查批：对线上真页截图找缺陷（T-20261027-01）
 
 **背景**：用户要求「用对真实网页的视觉发现问题的方式」优化前端。做法不是读代码猜，而是对 `https://sort.logicc.top` 真页批量出图（playwright + 系统 Chrome，10 路由 × 3–4 档宽度，DSF=2），逐张看图后 DOM 探针坐实。开工前先核对线上资产与本地构建哈希一致（`index-mIaO7SEz.js` / `index-CQPq2HOc.css`），确保图纸即源码。

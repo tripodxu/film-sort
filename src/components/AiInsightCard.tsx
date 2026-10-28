@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { PenLine, RefreshCw, Settings2, Sparkles } from "lucide-react";
+import { Skeleton } from "./ui/Skeleton";
 import {
   cacheKeyOf,
   peekInsight,
@@ -152,15 +153,11 @@ export function AiInsightCard({
             <p>{t("正在生成 AI 点评…", "Generating AI commentary…")}</p>
             <div style={{ display: "flex", gap: 6, marginTop: 8, alignItems: "center" }}>
               {[1, 2, 3].map((i) => (
-                <div
+                <Skeleton
                   key={i}
-                  style={{
-                    width: 60,
-                    height: 8,
-                    borderRadius: "var(--r-xs)",
-                    background: "var(--line)",
-                    animation: `plaza-pulse 1.5s ease-in-out ${i * 0.2}s infinite`,
-                  }}
+                  variant="line-sm"
+                  width={60}
+                  style={{ animationDelay: `${i * 0.2}s` }}
                 />
               ))}
               <button

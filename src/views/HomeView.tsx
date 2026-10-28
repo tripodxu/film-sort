@@ -214,7 +214,7 @@ export function HomeView({
       <section className="profile-overview">
         <div className="section-heading">
           <h2>{t("品味年轮", "Taste Rings")}</h2>
-          <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
+          <div className="u-row">
             {profile && (
               <button className="text-button" onClick={() => navigateTo("profile")}>
                 {t("我的文化索引", "My Cultural Index")}
@@ -287,14 +287,7 @@ export function HomeView({
           </div>
         </div>
         {profile ? (
-          <div
-            style={{
-              display: "flex",
-              flexDirection: ringsLayout === "row" ? "column" : "row",
-              gap: 20,
-              flexWrap: "wrap",
-            }}
-          >
+          <div className="coordinate-grid" data-layout={ringsLayout}>
             {kinds
               .map((kind) => {
                 const entries = profile.rankings
@@ -302,33 +295,9 @@ export function HomeView({
                   .filter((r) => r.kind === kind);
                 if (entries.length === 0) return null;
                 return (
-                  <div
-                    key={kind}
-                    style={{
-                      flex: ringsLayout === "row" ? "none" : "1 1 250px",
-                      minWidth: ringsLayout === "row" ? "auto" : 200,
-                    }}
-                  >
-                    <div
-                      style={{
-                        fontSize: 11,
-                        color: "var(--accent)",
-                        fontWeight: 600,
-                        marginBottom: 8,
-                        textTransform: "uppercase",
-                        letterSpacing: ".5px",
-                      }}
-                    >
-                      {label(kind as MediaKind)}
-                    </div>
-                    <div
-                      style={{
-                        display: "flex",
-                        flexDirection: ringsLayout === "row" ? "row" : "column",
-                        gap: 10,
-                        flexWrap: "wrap",
-                      }}
-                    >
+                  <div className="coordinate-col" key={kind}>
+                    <div className="coordinate-kind">{label(kind as MediaKind)}</div>
+                    <div className="coordinate-rail">
                       {entries.map((entry) => {
                         const idx = entry._idx;
                         const isActive = editingRankIdx === idx;

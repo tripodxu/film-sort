@@ -122,7 +122,7 @@ export function ShareView({
       )}
 
       {/* Action buttons */}
-      <div style={{ display: "flex", gap: 12, flexWrap: "wrap", margin: "24px 0" }}>
+      <div className="u-row u-wrap u-my">
         {!multiRanking && (
           <button
             className="button primary"

@@ -656,7 +656,7 @@ export function SourceView({
           </div>
           <div
             className="collection-list"
-            style={{ gridTemplateColumns: `repeat(${colCount}, minmax(0, 1fr))` }}
+            style={{ "--collection-cols": colCount } as React.CSSProperties}
           >
             {collections.map((item, index) => (
               <button key={item.id} className="collection-row" onClick={() => openCollection(item)}>
@@ -1396,16 +1396,10 @@ export function SourceView({
                       <img
                         src={dbQrImage}
                         alt={t("豆瓣登录二维码", "Douban login QR code")}
-                        style={{
-                          width: 300,
-                          height: 300,
-                          background: "#fff",
-                          padding: 12,
-                          borderRadius: 12,
-                        }}
+                        className="qr-image"
                       />
                     ) : (
-                      <div className="loading" style={{ width: 300, height: 300 }}>
+                      <div className="loading qr-image">
                         {t("正在生成二维码…", "Generating QR…")}
                       </div>
                     )}
@@ -1581,16 +1575,10 @@ export function SourceView({
                       <img
                         src={qrImage}
                         alt={t("网易云音乐登录二维码", "NetEase login QR code")}
-                        style={{
-                          width: 300,
-                          height: 300,
-                          background: "#fff",
-                          padding: 12,
-                          borderRadius: 12,
-                        }}
+                        className="qr-image"
                       />
                     ) : (
-                      <div className="loading" style={{ width: 300, height: 300 }}>
+                      <div className="loading qr-image">
                         {t("正在生成二维码…", "Generating QR…")}
                       </div>
                     )}

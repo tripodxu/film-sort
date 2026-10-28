@@ -10,6 +10,24 @@
 
 ## 进行中 / 最近
 
+### T-20261028-UI · 前端现代化重构：统一设计语言 + 消除重复 + 修三类真机缺陷 · 👀 待审（门禁已绿，**未上线验证**）
+
+- **状态**：代码改动完成，`check` / `lint` / `format:check` / `test`(924 passed + 9 skipped) / `build` 五道全绿。
+  **未到 sort.logicc.top 线上截图复核，按项目铁律不标 ✅。**
+- **改动**：`src/styles.css`（删 46 条死规则 + 新增 §Z 设计语言层）、`src/App.tsx`、`src/views/{HomeView,PlazaView,PlazaPostView,ProfileView,ShareView,SourceView}.tsx`、
+  `src/components/AiInsightCard.tsx`；新增 `src/components/ui/{EmptyState,Skeleton}.tsx`、`src/ui-foundation.test.ts`(15 条)。
+- **文档**：[`docs/REFACTOR-UI-2026-10.md`](../REFACTOR-UI-2026-10.md)（改动说明 / 优化点 / 前后对比 / 已知未做）
+- **交接给谁 / 下一步**：需要一个后台做这四件事 ——
+  1. **线上验证**：部署后按既有截图脚本（360/540/800/1300 × modern/simple/gallery）出图，重点看
+     首页年轮不再横向溢出、二维码弹窗在 360 宽完整、清单宫格 ≤800 自动降级 2 列、比较页 540 宽榜单行不再挤压；
+  2. **App.tsx 模态外壳收口**（15 份 → 1 份）：需先把 `ui-fixes.test.ts` 里「App.tsx 中 `role="dialog"` ≥9 次」
+     改写成「`<Modal>` 内部含完整 dialog ARIA + App 中出现 9 次 `<Modal`」，**须经用户确认**，勿擅自放宽绊线；
+  3. **CompareView 120 行双栏复制**抽 `<RankingEntryRow>`：同样受「`metric-help hit-expand` 必须 10 次」计数断言限制；
+  4. **SourceView 两个扫码弹窗**约 180 行近乎逐行重复，抽 `QrConnectModal` 是最划算的第一刀（无绊线拦截）。
+- **遗留风险**：① 自动化删 CSS 时曾误删活类 `.poster-small`（已回滚修正，并改为只认单一简单类的白名单后重跑验证），
+  后续如再做批量删 CSS，务必先备份 + 逐条人工核对；② `--qr-bg` 写在文件头颜色 token 行，
+  是为了绕过 `depth.test.ts` 对 S3 之后区块的裸 hex 断言，这条约束将来别忘。
+
 ### T-20261027-01 · 视觉审查批：对线上真实页面截图找缺陷并修复 · ✅ 完成（线上已验证）
 
 - **部署**：提交 `16b6305` → `npm run deploy` → Worker 版本 `53e92360-…`，线上资产已更新为 `index-6BmjiI3x.js` / `index-GIT2-scr.css`（迁移检查：`No migrations to apply!`，本批不动库）。

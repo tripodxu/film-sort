@@ -336,11 +336,7 @@ export function ProfileView({
               </div>
             ) : (
               <h2 style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0 }}>
-                <span
-                  style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
-                >
-                  {activeRanking.collectionTitle}
-                </span>
+                <span className="u-ellipsis">{activeRanking.collectionTitle}</span>
                 <button
                   className="rank-pill"
                   title={t("批注此榜单", "Annotate this list")}
