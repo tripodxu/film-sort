@@ -1,6 +1,6 @@
 # AGENTS.md — 所有 Agent 的唯一入口
 
-> **读这个文件就够了。** 不要通读仓库（约 40,000 行代码 / 630+ 条 commit，以 `git rev-list --count HEAD` 为准），按下面的路由表取用你需要的那一两个文件。
+> **读这个文件就够了。** 不要通读仓库（约 40,100 行 TS/TSX / 658 条 commit，以 `git rev-list --count HEAD` 为准），按下面的路由表取用你需要的那一两个文件。
 > 本文件是「目录」，不是「百科」。细节都在 `docs/` 下，需要时才打开。
 
 ---
@@ -58,7 +58,7 @@ npm run build          # 构建
 
 ### L2 — 按需深读（确认需要才打开，别默认读）
 
-`docs/ARCHITECTURE.md`（架构与 Schema）· `docs/API.md`（全部端点）· `docs/FEATURES.md`（功能回归基线）· `docs/USAGE.md`（用户视角）· `docs/CLOUDFLARE.md`（部署）· `docs/THEME-PACKS.md` · `docs/ORB-EFFECTS.md` · `docs/PLAN-*.md`（在办计划）· `docs/ROADMAP.md` · `CHANGELOG.md` · `docs/agents/REGRESSION-REVIEW-*.md`（批次回归复核，含已知遗留缺陷）
+`docs/ARCHITECTURE.md`（架构与 Schema）· `docs/API.md`（全部端点）· `docs/FEATURES.md`（功能回归基线）· `docs/USAGE.md`（用户视角）· `docs/CLOUDFLARE.md`（部署）· `docs/THEME-PACKS.md` · `docs/ORB-EFFECTS.md` · `docs/PLAN-*.md`（在办计划）· `docs/ROADMAP.md` · `CHANGELOG.md` · `docs/agents/REGRESSION-REVIEW-*.md`（批次回归复核，含已知遗留缺陷）· [`docs/CONSOLIDATION-2026-10-28.md`](docs/CONSOLIDATION-2026-10-28.md)（**五天收口：批次矩阵 + 回归判定 + 未修 P0 清单，接棒前必读**）
 
 ### L3 — 历史记忆（需要背景时才查，不要通读）
 

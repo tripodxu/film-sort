@@ -16,6 +16,7 @@
 | 1.5 | 邮件发送报 `code_-14` / `invalid-key` | **PS 管道 stdin 把 CR 混进 secret**，密钥被污染 | 密钥用干净的 Buffer 重新设置（5 个 secret 全部重设才解决） |
 | 1.6 | 后台管理看板登录失效 | 内联脚本里的模板字符串转义错误 | 服务端渲染内联脚本时对模板字面量做转义；看板图表已自托管摆脱外部 CDN |
 | 1.7 | 部署更新不生效 | Service Worker 导航缓存单键污染 | SW 只缓存 SPA 壳；导航请求 network-first |
+| 1.8 | 台账写「未部署 / 未做」，线上却**已经在跑新代码** | Workers Builds 监听 git push：**只改前端时 push 即上线**，「有没有跑 `npm run deploy`」不能作为上线判据 | 判断是否上线看**资产实证**：`curl -s https://sort.logicc.top/assets/index-*.css \| grep <只由该提交引入的类名>` + 本地 `dist` 哈希比对。改 `worker/` 才必须手动 `npm run deploy`（见 `docs/CLOUDFLARE.md`） |
 
 ---
 

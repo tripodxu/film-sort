@@ -19,7 +19,7 @@
 | 仓库 | `git@github.com:tripodxu/film-sort.git`（私有） |
 | 线上 | `sort.logicc.top` |
 | 技术栈 | React 19 + TypeScript + Vite（前端 SPA） / Cloudflare Workers + D1 + KV-free（后端全在 Worker） / Vitest + ESLint + Prettier |
-| 规模 | 631 commits（2026-09-06 → 2026-10-24，48 天，单人开发）；`worker/` + `src/` + `shared/` ≈ 40,000 行 TS/TSX（不含测试，精确数以 `wc -l` / `git rev-list --count` 为准）；28 个 D1 migration（0001 → 0027） |
+| 规模 | 658 commits（2026-09-06 → 2026-10-28，53 天，单人开发）；`worker/` + `src/` + `shared/` ≈ 40,100 行 TS/TSX（不含 66 个测试文件，精确数以 `wc -l` / `git rev-list --count` 为准）；28 个 D1 migration（0001 → 0027） |
 | 关键约束 | **全站零自建服务器**，所有能力必须能在 Cloudflare Workers（workerd）运行时内跑起来 |
 
 ---

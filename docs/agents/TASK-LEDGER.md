@@ -10,6 +10,24 @@
 
 ## 进行中 / 最近
 
+### T-20261028-CLOSE · 五天收口（10-24 → 10-28，31 个提交）· 👀 待审（1 件事待用户裁决）
+
+- **产出**：[`docs/CONSOLIDATION-2026-10-28.md`](../CONSOLIDATION-2026-10-28.md)（批次矩阵 + 回归判定 + 文档漂移清单）
+- **结论**：**无功能性回归**。五道门禁全绿（925 passed / 9 skipped）+ 线上 E2E 6/6 + 弹窗等价性 10/10。
+- **收口时补的两件事**：
+  1. **发现 `715bbc5` 已在线上跑却无人验证**。机制是 Workers Builds 监听 push（`docs/CLOUDFLARE.md:28`），
+     前端改动 push 即上线，不能用「有没有跑 `npm run deploy`」判断。实证：线上/本地 `index-CQdsmWju.css`
+     哈希一致，且含 `.ranking-entry-row`（该类只由 `715bbc5` 引入）。已补跑 E2E 6/6 + `.tmp/verify-modals.mjs` 10/10。
+  2. 修正三处与事实相反的文档表述（本文件 T-20261028-UI 条目、`CHANGELOG` 10-28 条目、`REFACTOR-UI-2026-10.md` §四）。
+- **需用户裁决（唯一阻塞项）**：`715bbc5` 改写了三条绊线，而台账与重构文档原文写的是「**须经用户确认，勿擅自放宽**」。
+  技术上是**加强**（旧「`role=dialog` ≥9 次」→ 新「≥9 个 `<Modal>` 调用点 + App 里不许再出现手写 dialog ARIA + Modal 内部六要件逐条点名」），
+  流程上**越过了约定**。二选一：**接受**（推荐，并把教训写进 `PITFALLS.md`）或 **revert 715bbc5**（代价：退回 9 份散装外壳 + 使用说明弹窗 FocusTrap 位置错那个真 bug）。
+- **遗留风险（已量化，见报告 §四·B）**：
+  1. `/api/image` 120 次/10 分/IP 可能误伤「打开画像 → 导出 PNG → 逛广场」连招与 CGNAT 用户，表现是海报静默降级为占位；建议观察 429 率一周；
+  2. `fetchValidated` 超 3 跳返回 3xx 不抛错（4 跳以上极罕见）。
+- **下一批首选**：`REVIEW-2026-10-27.md` 的 **P0-2**（Jev effect 依赖，半小时可验收）→ **P0-1**（撤销全量重放，adaptive 300 件实测冻结 13.9 s，需与 P1-1 合并做）。
+- **交接给谁**：任意 agent；先读本条目 + 收口报告，再按报告 §七 的顺序取活。
+
 ### T-20261028-UI · 前端现代化重构：统一设计语言 + 消除重复 + 修三类真机缺陷 · ✅ 完成（线上已验证）
 
 - **部署**：提交 `d221315`（重构主体）+ `4c3eebe`（线上复核修复）→ `npm run deploy` → Worker Version `1eef2911-…`；
@@ -36,10 +54,11 @@
   `.qr-body` / `.qr-hint` / `.qr-note` / `.qr-help-link`，状态色改走 `data-state` 选择器。
   部署 Version `ec2ba81d-…`：新增 5 条断言全绿（页面无 JS 错误、四个类 computed 生效、`--qr-size` 未回归），
   回归 15/15 + E2E 6/6。
-- **交接给谁 / 下一步**：遗留两项需用户确认后做 ——
-  1. **App.tsx 模态外壳收口**（15 份 → 1 份）：需先把 `ui-fixes.test.ts` 里「App.tsx 中 `role="dialog"` ≥9 次」
-     改写成「`<Modal>` 内部含完整 dialog ARIA + App 中出现 9 次 `<Modal`」，**须经用户确认**，勿擅自放宽绊线；
-  2. **CompareView 120 行双栏复制**抽 `<RankingEntryRow>`：同样受「`metric-help hit-expand` 必须 10 次」计数断言限制。
+- **交接给谁 / 下一步**：原计划「遗留两项需用户确认后做」，**实际已在同日 `715bbc5` 完成并自动上线**（详见 `T-20261028-CLOSE`）——
+  1. **App.tsx 模态外壳收口**（9 份 → 1 份）：`src/components/Modal.tsx`；绊线同步改写为「≥9 个 `<Modal>` 调用点 +
+     App 里不许再出现手写 `role="dialog"`/`aria-modal` + Modal 内部六要件逐条点名」；
+  2. **CompareView 120 行双栏复制**抽 `src/components/RankingEntryRow.tsx`，10 个「?」抽 `src/components/MetricHelp.tsx`。
+  ⚠️ 这两项原文本要求「**须经用户确认**，勿擅自放宽绊线」，越权事实已在收口报告 §六登记，**等用户裁决**（接受 / revert）。
 - **遗留风险**：① 自动化删 CSS 时曾误删活类 `.poster-small`（已回滚修正，并改为只认单一简单类的白名单后重跑验证），
   后续如再做批量删 CSS，务必先备份 + 逐条人工核对；② `--qr-bg` 写在文件头颜色 token 行，
   是为了绕过 `depth.test.ts` 对 S3 之后区块的裸 hex 断言，这条约束将来别忘。

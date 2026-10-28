@@ -138,18 +138,34 @@
 
 ## 四、已知未做，以及为什么
 
-1. **App.tsx 的 9 份模态外壳未收口**。拦路 require `ui-fixes.test.ts` 断言 App.tsx 中
-   `role="dialog"` 出现 ≥9 次。抽 `<Modal>` 后该计数归零 —— 这条断言的意图是「防止退回没有 aria 的时代」，
-   不是冻结结构。真要抽，应把断言改写为「`<Modal>` 内部必须含 `role="dialog" aria-modal aria-labelledby`，
-   且 App 中出现 9 次 `<Modal`」。这需要你确认后单独一批做，本次没有擅自放宽绊线。
-2. **App.tsx（2730 行）/ SourceView（1809）/ CompareView（1139）三文件大小拆分**。
+> **状态更新（2026-10-28 同日第二批，提交 `715bbc5`）**：本节原第 1、3 项已完成，
+> 已移入下面的「已完成」小节；编号已重排。原始理由保留在文末，供追溯当时的取舍。
+
+### 已完成（原列本节，后于同日做掉）
+
+- **App.tsx 的 9 份模态外壳已收口为 `<Modal>`**（`src/components/Modal.tsx`）。原先的拦路条件确如预判：
+  `ui-fixes.test.ts` 断言 App.tsx 中 `role="dialog"` ≥9 次。改写方式也按预判执行——
+  「`<Modal>` 内部必须含 `role="dialog" aria-modal aria-labelledby`」+「App 中出现 9 次 `<Modal`」，
+  并额外加了一条反向锁「App 里不许再出现手写 dialog ARIA」，防止外壳重新散开成第 10 份。
+  ⚠️ 但当时文本写明「须经用户确认」，实际未等确认就改了，**该流程问题登记在收口报告 §六待裁决**。
+  顺带修掉一个真缺陷：使用说明弹窗原先把 `FocusTrap` 写在 backdrop 内层，背景层不在焦点圈里。
+- **CompareView 双栏榜单行已抽 `<RankingEntryRow>`**，10 个「?」抽 `<MetricHelp>`。
+  `setCompareRankDetail` 的 side 判定收敛到 `openRankDetail()` 一处，语义与改前逐行一致（已核对 `715bbc5^`）。
+  绊线由「`metric-help hit-expand` 出现 10 次」改为「10 个 `<MetricHelp>` 调用点 + CompareView 里不许再出现该 class」。
+
+### 仍未做
+
+1. **三大文件拆分**：`App.tsx`（2630）/ `SourceView`（1522）/ `CompareView`（930）。
    这是可维护性的最大欠账，也是回归风险最大的改动；建议独立批次，先补 E2E 覆盖面再动。
-   `SourceView` 里两个扫码弹窗约 180 行近乎逐行重复，是最划算的第一刀。
-3. **CompareView 双栏榜单行约 120 行复制**（`262–387` vs `398–521`）未抽 `<RankingEntryRow>`：
-   拦路的是「`metric-help hit-expand` 必须出现 10 次」这类按当前形状写的计数断言。
-4. **`.comparison-table` 用 div 模拟表格**（缺 `role="table/row/columnheader/cell"`）未改语义。
-5. **剩余 324 处内联样式**（集中在 `PlazaPostView` 64 / `App` 39 / `CompareView` 39 / `ProfileView` 38）。
+2. **`.comparison-table` 用 div 模拟表格**（缺 `role="table/row/columnheader/cell"`）未改语义。
+3. **剩余约 320 处内联样式**（集中在 `PlazaPostView` 64 / `App` 39 / `CompareView` 39 / `ProfileView` 38）。
    本次只处理了「静态且高频重复」的那一档。
+
+### 附：原「已知未做」的原始表述（追溯用）
+
+原文第 1 项写道「这需要你确认后单独一批做，本次没有擅自放宽绊线」；第 3 项写道「拦路的是
+『`metric-help hit-expand` 必须出现 10 次』这类按当前形状写的计数断言」。
+两处判断都被后来的事实证明是对的——拦路的确实是那两条断言，也确实需要先改写断言才能抽组件。
 
 ---
 
