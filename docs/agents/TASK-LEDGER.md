@@ -1055,9 +1055,12 @@
 - **最小上下文**：`src/components/Poster.tsx`、`src/components/CoverChoice.tsx`、`vitest.config.ts`（现为 `environment:"node"`、无 jsdom）
 - **要点**：一次性 Playwright 脚本，覆盖「导入含两件同名 `other` 作品的清单 → 在弹窗裁决一件 → 断言第二格拿到同一张图」「`degraded` 态重试按钮」「三态空格子文案」。**两轮验收都因为"只能浏览器里验"而把 A 留红，这是本仓最大的结构性测试债。**
 
-### ⬜ P1 · 第 5 档兜底的运行时用例（迭代 8 遗留）
+### ✅ P1 · 第 5 档兜底的运行时用例（迭代 8 遗留）· `worker/otherPosterChain.test.ts`
 - **最小上下文**：`worker/media.ts` 的 other 五档 fallback + `WikiProbe`
-- **要点**：「前 4 档成功、第 5 档超时 ⇒ `absent`」目前**只有源码形状断言**，没有真正的运行时用例。判据：probe 记到了成功答复 ⇒ 不判 `throttled`。
+- **要点**：「前 4 档成功、第 5 档超时 ⇒ `absent`」原先只有源码形状断言。
+- **落地**：把 `resolvePosterEntry` 导出，用 fetch 桩让 zh 维基正常答复、en 维基抛错，
+  走完真实五档链后断言 `outcome === "absent"`；双语全挂时断言 `throttled`。
+  两条用例互为反向判据（写反了必有一条红），并断言 zh/en 都真的被问过（防提前 return）。
 
 ### ⬜ Jev Phase 2 · 维基消歧改用 Choice
 - **任务类型**：§2.6 + §2.7

@@ -1711,7 +1711,7 @@ export async function resolvePosters(
   return (await resolvePosterEntry(title, english, year, type, env, opts)).urls;
 }
 
-async function resolvePosterEntry(
+export async function resolvePosterEntry(
   title: string,
   english: string,
   year?: number,
