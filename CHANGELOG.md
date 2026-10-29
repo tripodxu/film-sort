@@ -3,6 +3,23 @@
 > 2026-10-29 三批收口的完整复核记录（发现项、根因、验证、线上回归清单）见
 > [`docs/REVIEW-2026-10-29.md`](docs/REVIEW-2026-10-29.md)。
 
+## 2026-10-29 · PWA 离线收口：预缓存产物（Phase 8，T-20261029-PWA-OFFLINE）
+
+**背景**：SW 的导航 network-first / 静态 cache-first 早已上线，但预缓存只有 `/` 与 `/index.html`。
+路由 chunk 是懒加载的，用户没进过的路由离线打开必然动态 import 失败——线上实测断网开 `/myself`
+得到 ErrorBoundary「Something went wrong」，而同一次会话 `/catalog/setup` 正常。
+
+**改动**：
+
+- `public/sw.js`：`PRECACHE_ASSETS` + `BUILD_ID` 缓存桶（`art-rank-v4-<hash>`）；
+  install 逐条 `allSettled` 预缓存；activate 按前缀淘汰旧桶；离线兜底 `Response.error()`。
+- `scripts/pwa-precache.mjs`（新增）：`vite build` 后把 `dist/assets` 的 37 个 js/css/字体
+  注入 SW，构建号取清单内容哈希；不在构建期预缓存图片。
+- `package.json`：`build` 串上注入脚本。
+- `src/pwa.test.ts`：4 条绊线；`scripts/ui-e2e.mjs`：新增 T5 离线用例。
+
+**验证**：线上 14:52 CST——离线探针 4/4、浏览器冒烟 7/7；门禁 `967 passed / 9 skipped`。
+
 ## 2026-10-29 · 「其他类」维基链总预算（T-20261029-DEADLINE）
 
 **背景**：`/api/other/detail` 冷缓存实测会挂到 45–60s（同一名称 1.2s / 45s / 60s 交替），

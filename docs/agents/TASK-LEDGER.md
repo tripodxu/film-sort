@@ -10,6 +10,28 @@
 
 ## 进行中 / 最近
 
+### T-20261029-PWA-OFFLINE · Phase 8 收口：预缓存产物，离线可开未访问路由 · ✅ 已上线并线上验证（`7417bbe`）
+
+- **起因（线上实测，2026-10-29 14:41 CST）**：SW 早已版本化、导航 network-first、静态 cache-first，
+  断网后首页与 `/catalog/setup` 都能开，**但 `/myself` 返回 ErrorBoundary「Something went wrong」**。
+  原因：路由 chunk 是 `import()` 懒加载的，用户没进过的路由其 chunk 从没被 fetch 过，
+  自然也不在 Cache Storage 里，离线时动态 import 直接失败。旧的 `STATIC_ASSETS` 只有 `/` 与 `/index.html`。
+- **改动**：
+  - `public/sw.js`：新增 `PRECACHE_ASSETS`（构建期注入）+ `BUILD_ID` 缓存桶 `art-rank-v4-<hash>`；
+    install 用 `Promise.allSettled` 逐条 `cache.add(..., {cache:"reload"})`，单条失败不拖垮安装；
+    activate 只淘汰 `art-rank-` 前缀的旧桶；离线导航兜底 `Response.error()`（旧代码
+    `caches.match` 未命中时 `respondWith(undefined)` 会抛）。
+  - `scripts/pwa-precache.mjs`：`vite build` 后扫 `dist/assets` 的 js/css/woff2 注入清单 +
+    内容哈希构建号（37 个产物，图片不预缓存、靠运行时 cache-first 自然积累）。
+  - `package.json`：`build` 接注入脚本（Cloudflare 构建同路径生效）。
+  - `src/pwa.test.ts`：4 条绊线（占位符、缓存桶带构建号、allSettled、build 接线）。
+  - `scripts/ui-e2e.mjs`：新增 **T5 离线用例**（种最小画像 → 断网 → `/myself` 必须渲染画像）。
+- **验证（线上，2026-10-29 14:52 CST，deployment `06:49:43Z`）**：
+  `.tmp/verify-offline.mjs` **4/4**（SW active / 受控 / 离线 `/myself` 画像可见 / 离线 `/catalog/setup`）；
+  `npm run e2e` **7/7**（T1–T5 全绿）。门禁：`967 passed / 9 skipped`，build 主包 427.76 kB。
+- **已知边界**：首次安装需下载约 1.4 MB 产物（含 three.module 530 kB）；离线只保证
+  「清单→排序→画像」本地链路，AI/广场/详情仍依赖网络（优雅降级）。
+
 ### T-20261029-DEADLINE · 「其他类」维基链总预算（超时 504 / throttled）· ✅ 已上线并线上验证（`40174e2`）
 
 - **起因**：线上实测发现 `/api/other/detail` **冷缓存会挂到 45–60s 不返回**
@@ -1036,11 +1058,6 @@
 ### ⬜ P1 · 第 5 档兜底的运行时用例（迭代 8 遗留）
 - **最小上下文**：`worker/media.ts` 的 other 五档 fallback + `WikiProbe`
 - **要点**：「前 4 档成功、第 5 档超时 ⇒ `absent`」目前**只有源码形状断言**，没有真正的运行时用例。判据：probe 记到了成功答复 ⇒ 不判 `throttled`。
-
-### ⬜ 优化冲刺 Phase 8 · PWA 离线
-- **任务类型**：§2.2 + §2.9
-- **最小上下文**：`public/sw.js` + `public/manifest.json` + `docs/memory/PITFALLS` §1.7
-- **要点**：app shell 缓存，主链路（清单→排序→画像）离线可用。**沿用 SW 导航缓存教训**：network-first 导航、cache-first 静态
 
 ### ⬜ Jev Phase 2 · 维基消歧改用 Choice
 - **任务类型**：§2.6 + §2.7
