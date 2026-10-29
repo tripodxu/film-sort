@@ -10,6 +10,36 @@
 
 ## 进行中 / 最近
 
+### T-20261030-ACCEPT-FIX · 全功能验收修复三件套 + dev 启动冒烟护栏 · ✅ 已上线并线上验证（`6b2a639`）
+
+- **起因（2026-10-29/30 全功能验收：本地 wrangler dev + 浏览器走查 + API 复核）**，三项：
+  - **F1（P1，本地 dev）**：`wrangler dev` 启动即崩——`d1c942d`（2026-09-25）为可测试性把
+    `DASHBOARD_HTML`/`DASHBOARD_JS` 字符串常量 `export` 进 worker 入口，而 workerd 拒绝入口模块
+    的非函数具名导出。五道门禁不含 workerd 启动、E2E 默认打线上，**潜伏一个月**。
+  - **F2（P2，产品）**：广场相对时间在 UTC+8 下恒漂 +8 小时（刚发的帖显示「8 小时前」）——
+    `PlazaView.formatPlazaTime` 的 `new Date("YYYY-MM-DD HH:MM:SS")` 把 D1 无时区标记的
+    UTC 串按本地时区解析；`plaza_post_edits` 等表是 ISO 带 Z 格式故评论/历史显示一直正确。
+  - **F3（P2→护栏，健壮性）**：PNG 导出在后台/被遮挡标签里可能永远停在「导出中…」——
+    `exportPng.ts` 两处 `requestAnimationFrame` 等待在 rAF 永不触发时 Promise 永不 settle
+    （验收沙箱实测；代码画布已同步绘制完成，只差合成时机）。
+- **改动**：`worker/dashboardHtml.ts`（新增，常量迁出+测试改导入）· `src/lib/dbTime.ts`
+  （新增统一解析，space 串补 UTC 标记、ISO 原样）+ `PlazaView` 接入 + 4 单测 ·
+  `exportPng.ts` 两处 rAF 加 300ms 竞争兜底 · `scripts/dev-smoke.mjs`（新增）接入门禁与
+  CI（起真实 wrangler dev 断言 `/` 与 `/admin`，起不来阻断）· `outboundCoverage.test.ts`
+  出站扫描跟随迁移（index + dashboardHtml 两份都扫）。
+- **验证（本地）**：门禁全绿（`974 passed / 9 skipped`，+4 条 dbTime 用例；五道 + dev 冒烟）。
+- **线上验证（2026-10-30，deployment 于推送后 ~60s 生效，bundle `index-BMn7wuWV`）**：
+  - F1：`/admin` 看板外壳由新模块正常伺服（200 + 内容核对）；本地 `wrangler dev` 冒烟
+    `✓ / 伺服 SPA、✓ /admin 伺服看板外壳`。
+  - F2：线上 `PlazaView` chunk 内 `replace(" ","T")+"Z"` 标记 ×1；`/plaza` 渲染无回归。
+  - F3：线上 `exportPng` chunk 内 `Promise.race([...requestAnimationFrame..., setTimeout 300])` ×2。
+  - `npm run e2e`（线上）：**6 passed / 1 skipped（T4 无可点作品帖）/ 0 failed**。
+    （本机到 Cloudflare 的网络抖动会让个别用例的 goto 30s 超时，三次运行互补后全用例均绿。）
+- **遗留**：PNG 导出在验收沙箱（IAB）中的行为级复验被浏览器抽风阻断（三次标签页半卡死），
+  按「运行时不支持」记录；Promise.race 兜底从构造上消除「永久卡死」，建议下次人工在
+  桌面 Chrome 后台标签导出一次 PNG 顺带复核。**环境噪音**：`F:\目录\杂项\enlish` 目录的
+  常驻 `wrangler dev` 会自动复活并抢占 8787（本次验收最大干扰源，建议清理）。
+
 ### T-20261029-PWA-OFFLINE · Phase 8 收口：预缓存产物，离线可开未访问路由 · ✅ 已上线并线上验证（`7417bbe`）
 
 - **起因（线上实测，2026-10-29 14:41 CST）**：SW 早已版本化、导航 network-first、静态 cache-first，
