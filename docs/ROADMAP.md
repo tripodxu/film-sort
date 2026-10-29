@@ -19,7 +19,7 @@ Jev 是 TypeSafe AI 的「System One」决策模型(2026-09-15 发布):输入 st
 3. **降级可用**——每个接入点都必须在未配置 key / 请求失败时回落到现有逻辑或明确提示,主链路永不依赖 Jev;
 4. **非关键路径先行**——早期访问阶段的新服务,先接消歧、护栏、预测预填,不动关键数据链路。
 
-### Phase 1:AI 快排(✅ 已实施,2026-09-28,实施记录见 `docs/PLAN-AI-QUICK-RANK.md`)
+### Phase 1:AI 快排(✅ 已实施,2026-09-28,实施记录见 `docs/archive/PLAN-AI-QUICK-RANK.md`)
 
 把清单变成榜单的第三种方式:除 1v1 自行排序、仅保存不排序之外,调用 Jev 依据用户历史取舍**预测完整顺序**,跳过逐对比较。
 
@@ -52,7 +52,7 @@ Jev 是 TypeSafe AI 的「System One」决策模型(2026-09-15 发布):输入 st
 
 `worker/media.ts`(及「其他」媒介路径)的维基候选消歧,从手写打分(限定标题 / 类型声明 / 年份守卫)换成一条 Choice 问题:「哪个候选是《X》(Y 年)的作品?」——候选列表 ≤255 天然匹配 Choice 基数;概率与 confidence 替代整套启发式。现有规则保留为降级路径(未配 key / 调用失败时)。改动面较大,独立一批提交。
 
-**2026-10-02 迭代 2/20 落地的是出口层,判决层暂不动**。理由见 `docs/PLAN-JEV-DISAMBIGUATION.md`:海报解析跑在 `/api/posters/batch` 里,**拿不到用户 key**(key 只在浏览器 localStorage);一批 8 条 = 8 次外部请求违反 CONVENTIONS §3;再加 70–500ms 会放大 m00079「有点卡」。所以先做两个不改变任何既有判决的出口:
+**2026-10-02 迭代 2/20 落地的是出口层,判决层暂不动**。理由见 `docs/archive/PLAN-JEV-DISAMBIGUATION.md`:海报解析跑在 `/api/posters/batch` 里,**拿不到用户 key**(key 只在浏览器 localStorage);一批 8 条 = 8 次外部请求违反 CONVENTIONS §3;再加 70–500ms 会放大 m00079「有点卡」。所以先做两个不改变任何既有判决的出口:
 
 - `GET /api/other/candidates` —— 无 key 可用的候选池诊断端点,把「为什么是这个 / 为什么不敢给」摊开,并给出结构化置信度(`exact`/`strong`/`shaky`/`weak` + 证据类型 `literal`/`alias`/`hint`);
 - `POST /api/ai/jev-disambiguate` —— Choice 多选一(2–255 选一),未配 key 返 400、上游失败附 `fallback: "rules"`。

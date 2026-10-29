@@ -51,7 +51,7 @@ npx wrangler d1 migrations apply film-sort --local
 npx wrangler d1 migrations apply film-sort --remote
 ```
 
-`wrangler.jsonc` 的 `d1_databases` binding 保持 `DB`。`migrations/` 下现有 28 个迁移文件（编号 0001–0027，其中 0008 有两支，精确数字以 `ls migrations` 为准），覆盖：匿名事件 + 挑战片单、旧版画像表、API 日志 + 管理会话/配置、账户体系（user_accounts/sessions/oauth/exchanges）、画像 v2 + 批注、云端清单（0021 重建为 1000 件上限）、分享短链、广场（帖子/点赞/留言/楼中楼/编辑历史/性能索引）、海报错误日志、Cookie 保险库、管理审计、海报地址侧表（0022）、邮箱验证码（0023）、扫码事务（0024）、运行时索引（0025）、海报批次统计（0026）、评论回复索引（0027）。
+`wrangler.jsonc` 的 `d1_databases` binding 保持 `DB`。`migrations/` 下现有 29 个迁移文件（编号 0001–0028，其中 0008 有两支，精确数字以 `ls migrations` 为准），覆盖：匿名事件 + 挑战片单、旧版画像表、API 日志 + 管理会话/配置、账户体系（user_accounts/sessions/oauth/exchanges）、画像 v2 + 批注、云端清单（0021 重建为 1000 件上限）、分享短链、广场（帖子/点赞/留言/楼中楼/编辑历史/性能索引）、海报错误日志、Cookie 保险库、管理审计、海报地址侧表（0022）、邮箱验证码（0023）、扫码事务（0024）、运行时索引（0025）、海报批次统计（0026）、评论回复索引（0027）、敏感桶限流计数（0028）。
 
 清理策略：Worker cron（每周一 03:00 UTC）自动清理 90 天前 `analytics_events`/`api_logs`、180 天前 `poster_errors`、过期的 `admin_sessions`/`user_sessions`/`oauth_exchanges`/`shared_links`。也可在 `/admin` 数据页签手动清理。
 

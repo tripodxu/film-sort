@@ -19,7 +19,7 @@
 | 仓库 | `git@github.com:tripodxu/film-sort.git`（私有） |
 | 线上 | `sort.logicc.top` |
 | 技术栈 | React 19 + TypeScript + Vite（前端 SPA） / Cloudflare Workers + D1 + KV-free（后端全在 Worker） / Vitest + ESLint + Prettier |
-| 规模 | 658 commits（2026-09-06 → 2026-10-28，53 天，单人开发）；`worker/` + `src/` + `shared/` ≈ 40,100 行 TS/TSX（不含 66 个测试文件，精确数以 `wc -l` / `git rev-list --count` 为准）；28 个 D1 migration（0001 → 0027） |
+| 规模 | 683 commits（2026-09-06 → 2026-10-29，54 天，单人开发）；`worker/` + `src/` + `shared/` 37,868 行 TS/TSX（不含 64 个测试文件，精确数以 `wc -l` / `git rev-list --count` 为准）；29 个 D1 migration 文件（0001 → 0028，其中 0008 有两支） |
 | 关键约束 | **全站零自建服务器**，所有能力必须能在 Cloudflare Workers（workerd）运行时内跑起来 |
 
 ---
@@ -28,7 +28,7 @@
 
 ### 2026-10-24 · 十月冲刺收束：增量升级 S1–S4+S5-1、性能 2.08x、两项 UI 整理与文档全面审计
 
-- **增量升级计划**（`docs/PLAN-ADDITIVE-UPGRADE.md`，T-20261017-01，S1–S4 均已上线验证）：S1 三算法模块（BT 偏好模型 / 自适应配对 / 比较指标）→ S2 第四排序模式 **adaptive**（`src/lib/adaptiveRanking.ts`，不新增持久化字段，名次区间由 decisionLog 重推）→ S3 深度比较页 **`/depth`**（DepthCompareView，旧 `/encounter` 一行未改）→ S4 第 12 套主题 **atlas 图册**（`src/styles/atlas.css`，旧 11 套逐像素零差异）→ S5 第 1 项 ARIA 语义补全。后续 `d47bd98` 把 `selectAdaptivePair` 单次取舍 20.3ms→9.7ms（golden 指纹不变）。
+- **增量升级计划**（`docs/archive/PLAN-ADDITIVE-UPGRADE.md`，T-20261017-01，S1–S4 均已上线验证）：S1 三算法模块（BT 偏好模型 / 自适应配对 / 比较指标）→ S2 第四排序模式 **adaptive**（`src/lib/adaptiveRanking.ts`，不新增持久化字段，名次区间由 decisionLog 重推）→ S3 深度比较页 **`/depth`**（DepthCompareView，旧 `/encounter` 一行未改）→ S4 第 12 套主题 **atlas 图册**（`src/styles/atlas.css`，旧 11 套逐像素零差异）→ S5 第 1 项 ARIA 语义补全。后续 `d47bd98` 把 `selectAdaptivePair` 单次取舍 20.3ms→9.7ms（golden 指纹不变）。
 - **主题菜单收纳**（T-20261024-01，`1fd8b09`）：12 主题单列 ~27 行 → settings-menu 同款「分组标签 + 双列 chip 网格」四组收纳 + Escape 关闭；样式锁 `.theme-menu-grid` 作用域，41 张截图关闭态零差异。
 - **identity 胶囊定位**（T-20261024-02，`5a0393c`）：首页「本地游客/登录·同步」桌面端被 v2 玻璃卡压回网格流（顶栏下 104px）→ 全宽度右上绝对定位（顶栏下 14px、右缘对齐图标列；`:not(.ed-hero)` 不波及刊物家族）。
 - **文档全面审计**（2026-10-24）：三组并行审计修复全仓文档漂移——PWA Phase 8 实为 2026-09-10 已上线（`76b290c`）但计划标 ⬜、BUNDLE-SPLIT 已完成标 🔄，均已改 ✅ 并归档 `docs/archive/`；MAP/CONVENTIONS 引用了不存在的 `payloadGuard.ts`（实为静态扫描测试，形状校验在 `plaza.ts` `plazaRoute`）已改；README API 三张表收敛为分类+指向 `docs/API.md`（消除 21 端点缺口漂移源）。
@@ -53,9 +53,9 @@ T-20260930-02：用户清单（动物森友会 2020 / Inside 2016 / Journey 2012
 - **P5 Jev 辅助模式**：`/api/ai/jev-pick` 二选一，**置信 ≥0.8 才自动落位**并标「AI 代判 · 置信 NN%」；键控竞态守卫丢弃迟到响应——**绝不覆盖用户真实选择**；开关默认关。commit `50e46df`。
 - **Jev Phase 1（AI 快排）**：`/api/ai/jev/test` + `/api/ai/jev-rank` 两端点（限流桶 `ai_jev_test 5` / `ai_jev 10` 次每 10 分钟），准备页第三种成榜方式「AI 快排」。**Jev 集成四原则**（后续所有 AI 接入都要遵守）：① key 不内置，用户自填存 localStorage，worker 不落盘；② 只做**决策**不做生成，生成类继续走 OpenAI 兼容通道；③ 每个接入点必须有降级路径，主链路永不依赖；④ 非关键路径先行。
 - **移动端顶栏抢救**：`overflow-x` 隐式裁剪下拉（设置菜单改锚 topbar）、≤540px 收导航（修复匿名「广场」被 `:last-child` 误伤）、≤360px 紧凑档、触屏 tooltip 关闭。
-- **UI 现代化 P0–P4**（`docs/PLAN-ui-modernization.md` v3）：editorial 双主题 → aurora 极光主题（含 ribbon 光球特效）→ gallery 数据画廊（Bento 画像页 + 卡片墙）→ P4 收尾（主题菜单分组 + `--ev-*` 全局景深 + 11 主题新基线）；旧主题截图零差异回归，均线上实机验证。
+- **UI 现代化 P0–P4**（`docs/archive/PLAN-ui-modernization.md` v3）：editorial 双主题 → aurora 极光主题（含 ribbon 光球特效）→ gallery 数据画廊（Bento 画像页 + 卡片墙）→ P4 收尾（主题菜单分组 + `--ev-*` 全局景深 + 11 主题新基线）；旧主题截图零差异回归，均线上实机验证。
 - **T-20260928-07 报障两批**：「其他」维度接入 wiki 海报管线（上线以来无封面）、other 详情超时 20s→30s、AI 点评按档位放宽截断（2500/5000/9000 字符）。
-- **当前状态**：P1–P5 ✅（均线上验证）；P6（相遇页预测分歧）已实现待线上复核；P7（Wrapped 年度报告）/ P8（PWA 离线）⬜ 未开始；全部计划见 `docs/PLAN-OPTIMIZATION-SPRINT.md`。
+- **当前状态**：P1–P5 ✅（均线上验证）；P6（相遇页预测分歧）已实现待线上复核；P7（Wrapped 年度报告）/ P8（PWA 离线）⬜ 未开始；全部计划见 `docs/archive/PLAN-OPTIMIZATION-SPRINT.md`。
 
 ### 2026-09-27 · 全量审查缺陷清零 + 排序交互收尾
 
@@ -94,7 +94,7 @@ worker/        Cloudflare Worker：index.ts 为路由总入口
   plaza.ts  import.ts  account.ts  verification.ts  mailer.ts  og.ts  typesafe.ts
   audit.ts  cachePurge.ts  qrTransactions.ts  outbound.ts  posterStore.ts  rateWindow.ts
 shared/        前后端共享：storedItem.ts（落库白名单唯一出口）+ posterKey.ts
-migrations/    0001 → 0027，D1 schema
+migrations/    0001 → 0028，D1 schema
 scripts/       gates.mjs（五道门禁聚合）/ ui-e2e.mjs（浏览器 E2E）/
                ui-shot.mjs / ui-diff.mjs / ui-contrast.mjs / ui-audit.mjs / ui-normalize.mjs
 ```
@@ -135,7 +135,7 @@ scripts/       gates.mjs（五道门禁聚合）/ ui-e2e.mjs（浏览器 E2E）/
 
 ## 5. 当前待办焦点（按优先级；进行中任务以 TASK-LEDGER 顶部为准）
 
-1. **S5 收尾**（`docs/PLAN-ADDITIVE-UPGRADE.md` §10）：纯追加类五项已全部落地（第 1 项 `79a84ff` + S5-2 五项 `388d10a`）；剩**触控目标类**（ProfileView 28px 按钮、PlazaPostView 回复框、AiInsightCard 徽章、CompareView 导入输入 38→44px 与「导入中…」文案）——会改视觉，按「透明命中区扩大 → 纯文案 → 否则登记不做」的顺序逐项评估，任一项 tol=0 不为零就回退。
+1. **S5 收尾**（`docs/archive/PLAN-ADDITIVE-UPGRADE.md` §10）：纯追加类五项已全部落地（第 1 项 `79a84ff` + S5-2 五项 `388d10a`）；剩**触控目标类**（ProfileView 28px 按钮、PlazaPostView 回复框、AiInsightCard 徽章、CompareView 导入输入 38→44px 与「导入中…」文案）——会改视觉，按「透明命中区扩大 → 纯文案 → 否则登记不做」的顺序逐项评估，任一项 tol=0 不为零就回退。
 2. **Jev Phase 2 收尾**（`docs/ROADMAP.md`）：「让用户选」UI 已落地（CoverChoice + coverMemory，走规则候选端点），剩「band 触发 Jev Choice 判决」接入或撤销评估；Phase 3（Noul 护栏）/ Phase 4（Score 校准）⬜ 未开始。
 3. P2 打磨池残留（ROADMAP §二 B/C/D：触控目标 44px、内联样式 token 化、CompareView 结构 D 项、嵌套交互两处）。
 4. 工具/基线债：`ui-shot.mjs` 补多步 steps（才能把 /sorting、/depth 纳入正式清单）；封面链第 5 档「超时但前 4 档成功」运行时用例（现为源码扫描绊线覆盖）。（ui-baseline 已于 2026-10-24 重立；`.worktrees` 已清理；identity 死规则与 plaza-search 死类已清。）

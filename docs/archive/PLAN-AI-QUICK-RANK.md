@@ -1,6 +1,6 @@
 # AI 快排(Jev Phase 1)实施计划
 
-> ⚠️ **【已完成 · 归档】**（2026-10-24 归档）本计划已于 **2026-09-28 全部执行完毕并线上验证**（端点 `/api/ai/jev/test`、`/api/ai/jev-rank` 在 `worker/index.ts`；准备页「AI 快排」按钮与 `AiConfigDialog` Jev 小节在库；ROADMAP Phase 1 状态已回写 ✅；checkbox 未逐一勾选）。现行后续见 `docs/ROADMAP.md` Phase 2–4 与 `docs/PLAN-ADDITIVE-UPGRADE.md`。
+> ⚠️ **【已完成 · 归档】**（2026-10-24 归档）本计划已于 **2026-09-28 全部执行完毕并线上验证**（端点 `/api/ai/jev/test`、`/api/ai/jev-rank` 在 `worker/index.ts`；准备页「AI 快排」按钮与 `AiConfigDialog` Jev 小节在库；ROADMAP Phase 1 状态已回写 ✅；checkbox 未逐一勾选）。现行后续见 `docs/ROADMAP.md` Phase 2–4 与 `docs/archive/PLAN-ADDITIVE-UPGRADE.md`。
 
 > **For agentic workers:** 本计划按 writing-plans 规格编写,每个 Task 含可验证的小步与完整代码。步骤使用 checkbox(`- [ ]`)跟踪。执行方式见文末。
 
@@ -1143,7 +1143,7 @@ AI 快排:一次 systemone 调用(state + 每件作品一个 Noul 问题)对最�
 
 - [ ] **Step 7.2:ROADMAP.md Phase 1 状态回写**
 
-把「### Phase 1:AI 快排(已批准,进行中)」改为「(已实施,详见 `docs/PLAN-AI-QUICK-RANK.md`)」。
+把「### Phase 1:AI 快排(已批准,进行中)」改为「(已实施,详见 `docs/archive/PLAN-AI-QUICK-RANK.md`)」。
 
 - [ ] **Step 7.3:全量验证**
 

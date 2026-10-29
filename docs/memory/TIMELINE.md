@@ -44,7 +44,7 @@ T-20260928-07（用户报障两批）的维基取图专项后续，集中在 `wo
 
 - **Jev Phase 1（AI 快排）** `7018e8f` `83ffb0c` `8d7fe78` `a9c4580` `01798ef` `fdc8be6` `835c5a0` `b1818f6` `088fb95` — TypeSafe System One 接入：`/api/ai/jev/test` + `/api/ai/jev-rank` 两端点（限流桶 ai_jev_test 5 / ai_jev 10 次每 10 分钟），准备页第三种成榜方式「AI 快排」；key 用户自填存 localStorage，worker 不落盘（Jev 集成四原则见 D-20260928-01）。
 - **移动端顶栏/交互抢救（上午批次）** `3f180b2` `f327619` `d4dbdda` `d9cf02f` `ad2f320` `5615762` `9796e8f` `bf4f966` — 顶栏 `overflow-x` 隐式裁剪下拉（设置菜单改锚 topbar）、≤540px 收导航（修复匿名「广场」被 `:last-child` 误伤）、≤360px 紧凑档、zh/en 顶栏 390 对齐、触屏 tooltip 关闭、续排芯片与主按钮同行。
-- **UI 现代化 P0–P4**（`docs/PLAN-ui-modernization.md` v3）`2b9847e` `1357b12` `5c0bc4e` `568e426` `22fd11a` `029c3e5` `4cd786f` `ea886a1` `cb8a80e` `7c04db3` — editorial/editorial-dark 双主题 → aurora 极光主题（含 ribbon 光球特效）→ gallery 数据画廊（Bento 画像页 + 海报卡片墙）→ P4 收尾（主题菜单分组 + `--ev-*` 全局景深 + 11 主题新基线）；旧主题 270 张截图零差异回归；沉淀 PITFALLS 4.18/4.19 两条 CSS 特异性陷阱。台账 T-20260928-02…05，均线上实机验证。
+- **UI 现代化 P0–P4**（`docs/archive/PLAN-ui-modernization.md` v3）`2b9847e` `1357b12` `5c0bc4e` `568e426` `22fd11a` `029c3e5` `4cd786f` `ea886a1` `cb8a80e` `7c04db3` — editorial/editorial-dark 双主题 → aurora 极光主题（含 ribbon 光球特效）→ gallery 数据画廊（Bento 画像页 + 海报卡片墙）→ P4 收尾（主题菜单分组 + `--ev-*` 全局景深 + 11 主题新基线）；旧主题 270 张截图零差异回归；沉淀 PITFALLS 4.18/4.19 两条 CSS 特异性陷阱。台账 T-20260928-02…05，均线上实机验证。
 
 - **P5 Jev 辅助模式（AI 代判）** `50e46df` — 排序中每对先经 `/api/ai/jev-pick` 预测，置信 ≥0.8 自动落位并标注「上一对由 Jev 代判 · 置信 NN%」，可撤销；低置信或复测阶段交还用户。键控竞态守卫丢弃迟到响应。
 - **P4 路由拆包** `82b5b2d` — 五个大视图改 `React.lazy` + Suspense，index chunk 1072→964 KB（gzip 307→279）。

@@ -17,7 +17,7 @@ ART/RANK 把"从看过、读过、听过的作品里排出自己的 Top N"拆成
 | **入口** | [`AGENTS.md`](AGENTS.md)（Agent 唯一入口）、[`MEMORY.md`](MEMORY.md)（项目长期记忆） | 任何时候开工前 |
 | **功能文档** | 本文（功能全貌）、`docs/API.md`（接口）、`docs/ARCHITECTURE.md`（架构与 Schema）、`docs/FEATURES.md`（回归基线）、`docs/USAGE.md`（用户指南）、`CHANGELOG.md` | 做具体改动时 |
 | **运维 / 扩展** | `docs/CLOUDFLARE.md`、`docs/DOUBAN_API.md`、`docs/THEME-PACKS.md`、`docs/ORB-EFFECTS.md` | 部署 / 接外部平台 / 加主题与特效时 |
-| **计划** | `docs/ROADMAP.md`、`docs/PLAN-*.md` | 需要了解在办与未来工作时 |
+| **计划** | `docs/ROADMAP.md`、`docs/archive/PLAN-*.md` | 需要了解在办与未来工作时 |
 | **历史记忆** | `docs/memory/TIMELINE.md`（演化时间线）、`DECISIONS.md`（为什么这么做）、`EPISODES.md`（战役复盘） | 需要背景与理由时 |
 | **Agent 协同** | `docs/agents/MAP.md`（任务→文件路由）、`HANDOFF.md`（接力协议）、`CONVENTIONS.md`、`PITFALLS.md`、`ROLES.md`、`TASK-LEDGER.md` | 多 agent 协作 / 接力时 |
 | **归档** | `docs/archive/**` | **已过时**，只读不引用 |
@@ -153,7 +153,7 @@ ART/RANK 把"从看过、读过、听过的作品里排出自己的 Top N"拆成
 - **榜单详情弹窗优化**：共同作品和比较界面点击排名打开的详情弹窗，前三名显示金银铜牌奖牌；每个作品显示批注（📝）；点击海报可打开作品详情。
 - 导出格式：JSON、TXT、Markdown、CSV、PNG（五套版式：编辑 Editorial / 领奖台 Podium / 拼贴 Collage / 胶片 Filmstrip / 极简 Minimal；PNG 跟随当前主题配色，2x 高清）。
 - **年度年鉴 PNG**：印刷年鉴风格的年度报告卡——媒介占比、年代分布、榜单速览一键成图（跟随主题配色）；有进行中排序时自动附上取舍次数与「最纠结的一对」。
-- **十二套内置主题**（主题菜单四组双列 chip 网格收纳：「经典 / 新系列」两组 + 开场特效 + 布局，Esc 可关）——经典七套：现代（默认深色玻璃）/ 复古纸感 / 极简 / 简约 / 古典 / 赛博朋克 / 纸上擂台；新系列五套（组件级差异主题，`docs/PLAN-ui-modernization.md`）：刊物 / 刊物暗色（杂志排印 + 海报堆叠 hero）/ 极光（玻璃 2.0 + 极光绸带特效）/ 画廊（Bento 画像页 + 卡片墙翻转）/ 图册（冷灰纸感变量型主题，2026-10-18）——顶栏调色板切换，选择持久化，全站设计令牌驱动（非简单换色）。
+- **十二套内置主题**（主题菜单四组双列 chip 网格收纳：「经典 / 新系列」两组 + 开场特效 + 布局，Esc 可关）——经典七套：现代（默认深色玻璃）/ 复古纸感 / 极简 / 简约 / 古典 / 赛博朋克 / 纸上擂台；新系列五套（组件级差异主题，`docs/archive/PLAN-ui-modernization.md`）：刊物 / 刊物暗色（杂志排印 + 海报堆叠 hero）/ 极光（玻璃 2.0 + 极光绸带特效）/ 画廊（Bento 画像页 + 卡片墙翻转）/ 图册（冷灰纸感变量型主题，2026-10-18）——顶栏调色板切换，选择持久化，全站设计令牌驱动（非简单换色）。
 - 点击作品可查看详情弹窗（海报、评分、元数据）；音乐支持试听。
 
 ### URL 路由
@@ -267,7 +267,7 @@ npx wrangler login
 npx wrangler d1 create film-sort
 # 记下 database_id，填入 wrangler.jsonc
 
-# 应用数据库迁移（共 28 个，最新 0027_comment_replies_index 广场评论回复索引）
+# 应用数据库迁移（共 29 个，最新 0028_rate_limits 敏感桶限流计数）
 npx wrangler d1 migrations apply film-sort --remote
 
 # 部署
@@ -329,7 +329,7 @@ film-sort3/
 │   └── imdb-posters.json          # IMDb 海报手动映射表
 │
 ├── shared/storedItem.ts           # 前端与 Worker 共用的「可落库白名单」与编码出口
-├── migrations/                    # D1 迁移，共 28 个（0001 … 0027_comment_replies_index）
+├── migrations/                    # D1 迁移，共 29 个（0001 … 0028_rate_limits）
 ├── docs/                          # 见下方「文档索引」
 ├── gd-proxy/1.ts                  # 部署在 Deno Deploy 的音乐上游透明代理
 ├── package.json / tsconfig*.json / vite.config.ts / vitest.config.ts
@@ -362,8 +362,8 @@ film-sort3/
 |------|------|
 | [`docs/archive/PLAN-ui-refresh.md`](docs/archive/PLAN-ui-refresh.md) | UI 焕新总记录（已收官归档：§10 执行盘点 / 运维预案 / 遗留清单） |
 | [`docs/ROADMAP.md`](docs/ROADMAP.md) | **Jev 集成路线图**——Phase 1 快排已实施；消歧/护栏/张力校准排队 |
-| [`docs/PLAN-AI-QUICK-RANK.md`](docs/PLAN-AI-QUICK-RANK.md) | AI 快排实施计划（writing-plans 规格，7 任务 TDD 全记录） |
-| [`docs/PLAN-OPTIMIZATION-SPRINT.md`](docs/PLAN-OPTIMIZATION-SPRINT.md) | 优化冲刺 P1-P8（P1-P5 已完成：滑动/OG/相似度/拆包/代判） |
+| [`docs/archive/PLAN-AI-QUICK-RANK.md`](docs/archive/PLAN-AI-QUICK-RANK.md) | AI 快排实施计划（writing-plans 规格，7 任务 TDD 全记录） |
+| [`docs/archive/PLAN-OPTIMIZATION-SPRINT.md`](docs/archive/PLAN-OPTIMIZATION-SPRINT.md) | 优化冲刺 P1-P8（P1-P5 已完成：滑动/OG/相似度/拆包/代判） |
 | [`docs/FEATURES.md`](docs/FEATURES.md) | **已实现功能全量清单与回归走查基线**——改完 UI 逐条走查 |
 | [`docs/USAGE.md`](docs/USAGE.md) | 面向用户的操作指南 |
 | [`docs/API.md`](docs/API.md) | 后端 API 参考 |
@@ -441,7 +441,7 @@ film-sort3/
 
 ## Agent 协作文档
 
-面向多 agent 协同与接力，让每个 agent **只读取与任务相关的文件**（全仓约 40,000 行代码 / 630+ 条 commit，不应全量阅读）：
+面向多 agent 协同与接力，让每个 agent **只读取与任务相关的文件**（全仓约 37,868 行代码 / 683 条 commit，不应全量阅读）：
 
 | 文件 | 作用 |
 |------|------|

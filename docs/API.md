@@ -34,7 +34,11 @@ ART/RANK 后端 API 完整参考。所有接口由 Cloudflare Worker 处理，�
 | `other` | `POST /api/poster-errors/client` | 120 | 60 |
 | `other` | `GET /api/other/list`、`GET /api/other/detail`、`GET /api/other/candidates`、`POST /api/other/cover-choice` | 20 | 60 |
 | `cache` | `POST /api/cache/clear` | 5 | 600 |
-| `auth` | `POST /api/admin/reset`、`/api/admin/change-password`、`/api/admin/sessions/revoke-all` | 30 | 300 |
+| `auth` | `POST /api/admin/login`、`/api/admin/reset`、`/api/admin/change-password`、`/api/admin/sessions/revoke-all` | 30 | 300 |
+| `account_auth` | `POST /api/account/register`、`/api/account/login`、`/api/account/oauth/exchange`、`/api/account/send-code`、`/api/account/change-password` | 8 | 600 |
+| `account` | 其余 `/api/account/*` 读写（登录态） | 30 | 600 |
+| `image` | `GET /api/image` | 300 | 600 |
+| `plaza_write` | `/api/plaza/*`、`/api/comments/*` 的非 GET/HEAD 请求（发帖/点赞/评论/编辑/可见性） | 30 | 600 |
 | `posters` | `POST /api/posters/batch` | 60 | 600 |
 | `ai` | `POST /api/insights`（内置通道） | 8 | 600 |
 | `ai_custom` | `POST /api/insights`（自定义通道） | 15 | 600 |
@@ -575,7 +579,7 @@ ART/RANK 后端 API 完整参考。所有接口由 Cloudflare Worker 处理，�
 
 ## AI 解读
 
-三个场景（榜单点评 / 画像点评 / 比较解读）共用 `POST /api/insights`；提示词由服务端模块拼装（指令与数据分离，见 `docs/PLAN-ai-insights.md` §6），前端只发送结构化数据。双通道：**内置**（CF 环境变量 `AI_API_URL`/`AI_API_KEY`/`AI_MODEL`/`AI_PROTOCOL`，**仅登录用户可用**）或**用户自带**（请求体带 `config` 三参数，经 Worker 转发，key 不落日志，匿名可用）。
+三个场景（榜单点评 / 画像点评 / 比较解读）共用 `POST /api/insights`；提示词由服务端模块拼装（指令与数据分离，见 `docs/archive/PLAN-ai-insights.md` §6），前端只发送结构化数据。双通道：**内置**（CF 环境变量 `AI_API_URL`/`AI_API_KEY`/`AI_MODEL`/`AI_PROTOCOL`，**仅登录用户可用**）或**用户自带**（请求体带 `config` 三参数，经 Worker 转发，key 不落日志，匿名可用）。
 
 ### POST /api/insights
 

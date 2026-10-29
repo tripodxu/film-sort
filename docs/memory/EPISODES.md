@@ -43,7 +43,7 @@
 ## E-20260928 · 五项优化冲刺（滑动 / OG / 相似度 / 拆包 / AI 代判）
 
 **任务**：一天内交付 5 个独立优化项，互不依赖。
-**打法**：写成 `docs/PLAN-OPTIMIZATION-SPRINT.md` 的 8 个 Phase，**每个 Phase 独立提交 → 推送 → 自动部署 → 到 sort.logicc.top 线上验证 → 再进下一个**。状态标记 ⬜/🔄/✅/⏸ 全程可见。
+**打法**：写成 `docs/archive/PLAN-OPTIMIZATION-SPRINT.md` 的 8 个 Phase，**每个 Phase 独立提交 → 推送 → 自动部署 → 到 sort.logicc.top 线上验证 → 再进下一个**。状态标记 ⬜/🔄/✅/⏸ 全程可见。
 **踩到的坑**：
 - `setPointerCapture` 未守卫，非活跃 pointer 事件打断滑动链 → 加 `isActive` 判定。
 - 默认画像名在 OG 标题里被拼接两次 → 组装 OG 时先判断是否已含前缀。

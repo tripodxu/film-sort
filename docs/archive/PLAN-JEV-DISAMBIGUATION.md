@@ -2,7 +2,7 @@
 
 > 目标：把「猜封面」这件事从**手写启发式打分**推进到**带置信度的决策**。
 > 对应 `docs/ROADMAP.md` 的 **Jev Phase 2：维基消歧 Choice**。
-> 前一轮 `docs/PLAN-BUNDLE-SPLIT.md` 摘掉了 Three.js，本轮继续减主包（`fflate`）的同时，
+> 前一轮 `docs/archive/PLAN-BUNDLE-SPLIT.md` 摘掉了 Three.js，本轮继续减主包（`fflate`）的同时，
 > 引入本项目第一条**真正用上概率**的链路。
 
 ---

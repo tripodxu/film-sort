@@ -1,6 +1,6 @@
 # PLAN-CHOICE-UI · 迭代 5/20（创意类）·「让用户选」消歧出口
 
-> 承接 `docs/PLAN-JEV-DISAMBIGUATION.md`（迭代 2 建的诊断端点 `/api/other/candidates`）与
+> 承接 `docs/archive/PLAN-JEV-DISAMBIGUATION.md`（迭代 2 建的诊断端点 `/api/other/candidates`）与
 > 台账 T-20261002-03 遗留风险①。诊断端点建好了，`band` 四档也已在线上真实数据上跑过，
 > 但**它至今没有任何消费者**。本轮给它接上界。
 

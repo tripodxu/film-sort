@@ -1,6 +1,6 @@
 # MAP — 任务 → 文件路由表
 
-> **本文件是整个 agent 文档体系的核心。** 目的：让每个 agent 只读「与任务相关的那一两个文件」，而不是通读约 40,100 行代码或 658 条 commit。
+> **本文件是整个 agent 文档体系的核心。** 目的：让每个 agent 只读「与任务相关的那一两个文件」，而不是通读约 37,868 行代码或 683 条 commit。
 > 用法：先在 §1 找到你的任务类型 → 跳到对应小节 → 只打开列出的文件。
 > 行号会漂移，**以符号名 / 路由字符串为准**，行号仅作初次定位的提示。
 
@@ -15,7 +15,7 @@
 | 前端页面 | `src/views/*.tsx`（路由在 `src/lib/useRouter.ts` + `src/App.tsx`） |
 | 全局状态 / 事件编排 | `src/App.tsx`（2730 行，改动前先确认是否被 `useAuth` / `useSorting` / `useRouter` 接管） |
 | 样式与主题 | `src/styles.css`（1909 行，全令牌化）+ `src/styles/atlas.css`（第 12 套内置主题的变量块） |
-| 数据库表结构 | `migrations/0001..0027` + `docs/ARCHITECTURE.md` 的 Schema 节 |
+| 数据库表结构 | `migrations/0001..0028` + `docs/ARCHITECTURE.md` 的 Schema 节 |
 | 「什么能落库」 | `shared/storedItem.ts` —— **唯一出口** |
 | 排序 / 比较算法 | `src/lib/ranking.ts`（1278 行，四模式）+ `src/lib/adaptiveRanking.ts` / `preferenceModel.ts` / `adaptiveQueue.ts` / `compareMetrics.ts` |
 | 历史决策理由 | `docs/memory/DECISIONS.md` |
@@ -57,7 +57,7 @@
 | `src/views/CompareView.tsx` | ~1.2k | 相遇比较界面（`/encounter`）+ 三档深度；旧指标原样保留 |
 | `src/views/DepthCompareView.tsx` | ~0.4k | 深度比较页（`/depth`，只读）：收缩共识分 + 四格新指标 + 分歧作品点阵条 + 13 行旧指标对照 |
 
-**改这里前必读**：`docs/agents/PITFALLS.md` §3（异步覆盖与撤销一致性）、`docs/USAGE.md` 的排序模式章节（四模式）。**自适应模式的隐藏约束**：任何改动都必须保持「既有三模式执行路径逐字不变」，且不得往 `RankingState` 增加持久化字段（见 `docs/PLAN-ADDITIVE-UPGRADE.md` §10 的 S2 记录）。
+**改这里前必读**：`docs/agents/PITFALLS.md` §3（异步覆盖与撤销一致性）、`docs/USAGE.md` 的排序模式章节（四模式）。**自适应模式的隐藏约束**：任何改动都必须保持「既有三模式执行路径逐字不变」，且不得往 `RankingState` 增加持久化字段（见 `docs/archive/PLAN-ADDITIVE-UPGRADE.md` §10 的 S2 记录）。
 
 ---
 
@@ -121,7 +121,7 @@
 
 ### §2.5 数据库 / migration
 
-- 迁移文件：`migrations/0001_initial.sql` → `0027_comment_replies_index.sql`。**新增迁移必须幂等可重复应用**（曾因非幂等导致远程迁移失败）。
+- 迁移文件：`migrations/0001_initial.sql` → `0028_rate_limits.sql`。**新增迁移必须幂等可重复应用**（曾因非幂等导致远程迁移失败）。
 - 共享契约：`shared/storedItem.ts`（落库字段白名单唯一出口，289 行，含批注编码 `encodeStoredNotes`：未提供=保留 / 显式空=清空；批注语义测试见 `shared/storedNotes.test.ts`）。
 - Schema 说明：`docs/ARCHITECTURE.md`。
 - 关键表：`user_profiles`、`user_accounts`、`user_collections`、`poster_urls`、`shared_links`、`plaza_posts`、`plaza_post_edits`、`plaza_comments`、`plaza_likes`、`api_logs`、`poster_errors`、`admin_audit`、`user_cookie_vault`、`oauth_bindings`、`oauth_exchanges`、`verification_codes`、`qr_transactions`、`user_sessions`。
@@ -208,7 +208,7 @@
 | `docs/CLOUDFLARE.md` | 部署与环境变量 | 不部署时 |
 | `docs/DOUBAN_API.md` | 豆瓣接口策略 | 不碰豆瓣时 |
 | `docs/THEME-PACKS.md` / `ORB-EFFECTS.md` | 扩展点规范 | 不改主题/特效时 |
-| `docs/ROADMAP.md` / `PLAN-*.md` | 在办与未来计划 | —— |
+| `docs/ROADMAP.md` / `docs/agents/TASK-LEDGER.md` | 在办与未来计划（`docs/archive/PLAN-*.md` 是已完成归档，不是待办来源） | —— |
 | `docs/memory/TIMELINE.md` | 什么时候做的 | 不需要历史时 |
 | `docs/memory/DECISIONS.md` | 为什么这么做 | 不需要理由时 |
 | `docs/memory/EPISODES.md` | 同类任务怎么打 | —— |
@@ -222,7 +222,7 @@
 | ❌ 反模式 | ✅ 正确做法 |
 |-----------|------------|
 | 开工前通读 `src/App.tsx` 2700+ 行 | 先 `grep` 符号名，只读相关函数 |
-| 通读 658 条 git log 了解背景 | 查 `docs/memory/TIMELINE.md` 或 `git log --grep=<关键词>` |
+| 通读 683 条 git log 了解背景 | 查 `docs/memory/TIMELINE.md` 或 `git log --grep=<关键词>` |
 | 想当然地按 Node.js 能力写代码 | 平台能力在 workerd 上实测（PBKDF2 100k 教训） |
 | 直接改 `styles.css` 的硬编码色值 | 先确认是否已提升为 token；新色必须走 token |
 | 在多个地方判定"这个图片域名安全吗" | 只改 `allowedImage()` |

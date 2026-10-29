@@ -394,7 +394,7 @@ Worker 模块划分：
 
 ### 5.2 数据库 Schema
 
-**权威定义在 `migrations/*.sql`**（共 28 个文件，编号 0001–0027，其中 0008 有两支；0025 运行时索引、0026 海报批次统计、0027 广场评论回复索引）；下表只做索引，不复制 DDL。
+**权威定义在 `migrations/*.sql`**（共 29 个文件，编号 0001–0028，其中 0008 有两支；0025 运行时索引、0026 海报批次统计、0027 广场评论回复索引、0028 敏感桶限流计数）；下表只做索引，不复制 DDL。
 
 | 表 | 用途 | 迁移 |
 |----|------|------|
@@ -421,6 +421,7 @@ Worker 模块划分：
 | `poster_urls` | 海报地址侧表（`media_key` = `type\|title\|english\|year`，`urls` JSON） | 0022 |
 | `verification_codes` | 邮箱验证码（SHA-256 散列、10 分钟过期、5 次上限） | 0023 |
 | `qr_transactions` | 扫码登录事务：provider+key → 发起账户绑定与 TTL（凭证只写入 owner 的 vault） | 0024 |
+| `rate_limits` | 敏感桶原子限流计数（`key` / `started_at` / `count`，跨 isolate 一致） | 0028 |
 | （0025） | 运行时索引：user_sessions/user_oauth/verification_codes/plaza 用户查询 | 0025 |
 | （0027） | `plaza_comments` 回复索引（评论楼内回复查询） | 0027 |
 
