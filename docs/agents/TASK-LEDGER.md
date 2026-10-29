@@ -10,6 +10,54 @@
 
 ## 进行中 / 最近
 
+### T-20261029-FRONTEND · 前端存量缺陷收口（广场竞态 / 草稿闸门 / 请求超时 / 海报缓存 / 导出画布）· 👀 待审（本地门禁全绿，未上线）
+
+- **起因**：项目文档已登记的 5 项前端缺陷，均不影响主流程但会造成数据错位或静默失败。
+- **改动**：
+  - `src/views/PlazaView.tsx`：`loadPosts` 加请求序号 + AbortController，迟到响应丢弃；loading 只在最新请求复位。
+  - `src/lib/useSorting.ts`：`DRAFT_MAX_WORKS=1000` 读写共用；超限不写盘、保留旧草稿并提示一次。
+  - `src/lib/useAuth.ts`：`authFetch` 统一 20s 超时，`AbortSignal.any` 合并既有取消信号。
+  - `src/components/Poster.tsx`：sessionStorage 海报缓存改为模块级内存副本，避免逐条 JSON.parse。
+  - `src/lib/exportPng.ts`：`pickExportScale` 按 16M 像素面积降采样；年鉴卡条目上限 240。
+- **验证**：check / lint / format:check / test（951 passed / 9 skipped）/ build；新增 `exportScale.test.ts`。
+- **提交**：`70e43cf`（fix(ui)）；报告见 [`REVIEW-2026-10-29.md`](../REVIEW-2026-10-29.md) §四。
+- **边界**：广场竞态与超时属时序问题，本地单测无法完全覆盖，上线后需弱网 + 快速切筛选手测。
+
+### T-20261029-P2 · 安全 P2 批量收口（CSV/图片内存/URL 校验/错误回显/后台 CSP/邮箱枚举）· 👀 待审（本地门禁全绿，未上线）
+
+- **起因**：`T-20261029-EXPIRY` 同批复核清单中的 P2 项（真实但利用门槛较高）。
+- **改动**：
+  - `worker/index.ts` `csvCell`：海报错误 CSV 导出对 `= + - @ \t \r` 前缀强制文本，防公式注入。
+  - `worker/media.ts`：`proxyImage` 改 `readBoundedBytes` 流式限量（不再先整段 `arrayBuffer()`）；
+    `doubanSuggest` 改 `readBoundedText(2MB)`；`fetchValidated` 首跳前拒绝非 https/带凭据/非 443 端口。
+  - `worker/index.ts` 500 响应去掉 `detail`；`/admin` 加 `ADMIN_SECURITY_HEADERS` + `no-store`。
+  - `worker/account.ts`：reset 未注册返回 200 不发信；change-password 未知邮箱与错码同响应并烧哑哈希；
+    禁用状态后移到验证码通过之后。
+- **验证**：check / lint / format:check / test / build；新增 `worker/csvExport.test.ts`，`security.test.ts` 补断言。
+- **提交**：`d315702`（fix(security)，与 EXPIRY 同一提交）；报告见 [`REVIEW-2026-10-29.md`](../REVIEW-2026-10-29.md) §三。
+- **已知边界**：后台 CSP 因内联 onclick 仍需 `'unsafe-inline'`，严格 CSP 需 DASHBOARD_HTML 前端改造；
+  register 端 `email_exists` 为 UX 保留。
+- **下一步**：与 EXPIRY 同批部署后线上回归（CSV 打开不弹公式、后台响应头、reset 未知邮箱不发信）。
+
+### T-20261029-EXPIRY · 安全时效收口（过期比较 / 管理会话吊销 / 验证码一次性 / 匿名端点鉴权）· 👀 待审（本地门禁全绿，未上线）
+
+- **起因**：全量复核列出 6 处可验证缺陷，核心是「到期时间被延长最多 24 小时」。
+- **改动**：
+  - `worker/account.ts` / `index.ts` / `verification.ts` / `qrTransactions.ts`：所有 `expires_at` 比较改
+    `julianday(...)`，ISO 与 SQL 两种写法统一按时间点比较（会话 30/7 天、OAuth exchange 5 分钟、分享短链、验证码、扫码事务）。
+  - `handleAdminChangePassword`：改密后清空 `admin_sessions`（含当前），后台提示重新登录。
+  - 新增 `resetPasswordWithCode`：改密 + 删验证码 + 吊销会话同一个 D1 batch 事务；后两条以新哈希为守卫，
+    错码不误删、不误踢下线；修复「验证码 10 分钟内可重复改密」。
+  - `POST /api/cache/clear`：要求登录（先限流后鉴权）；`SettingsMenu` 补 Bearer，未登录直接提示。
+  - `POST /api/insights` 内置通道：要求登录（HTTP 401 `authentication_required`），自定义 config 仍可匿名；前端补文案。
+  - `/api/netease/*`、`/api/douban/*`：限流前移到会话查询之前。
+- **验证**：check / lint / format:check / test（见下）/ build 全绿；新增 `passwordReset.test.ts`、`sessionExpiry.test.ts`
+  与 verification ISO 用例，全部跑真实 `node:sqlite`。
+- **文档**：`docs/API.md`（cache/clear、insights、admin change-password）、`FEATURES.md`、`USAGE.md`、`CHANGELOG.md`。
+- **提交**：`d315702`（fix(security)）；报告见 [`REVIEW-2026-10-29.md`](../REVIEW-2026-10-29.md) §二。
+- **下一步**：部署后线上回归——① OAuth 登录 5 分钟后 exchange 失效；② 改密后旧管理 token 401；
+  ③ 重置密码同码第二次 400；④ 未登录清缓存/内置 AI 返回 401。完成后再改为 ✅。
+
 ### T-20261028-THRESHOLD · 代判置信阈值做成设置项（Jev 结论三的裁决落地）· ✅ 完成（线上已验证）
 
 - **起因**：`T-20261028-JEV` 结论三待用户裁决（阈值 0.8 是否下调）。用户裁决：**不单向下调，做成设置项**。

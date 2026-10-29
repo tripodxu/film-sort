@@ -575,7 +575,7 @@ ART/RANK 后端 API 完整参考。所有接口由 Cloudflare Worker 处理，�
 
 ## AI 解读
 
-三个场景（榜单点评 / 画像点评 / 比较解读）共用 `POST /api/insights`；提示词由服务端模块拼装（指令与数据分离，见 `docs/PLAN-ai-insights.md` §6），前端只发送结构化数据。双通道：**内置**（CF 环境变量 `AI_API_URL`/`AI_API_KEY`/`AI_MODEL`/`AI_PROTOCOL`）或**用户自带**（请求体带 `config` 三参数，经 Worker 转发，key 不落日志）。
+三个场景（榜单点评 / 画像点评 / 比较解读）共用 `POST /api/insights`；提示词由服务端模块拼装（指令与数据分离，见 `docs/PLAN-ai-insights.md` §6），前端只发送结构化数据。双通道：**内置**（CF 环境变量 `AI_API_URL`/`AI_API_KEY`/`AI_MODEL`/`AI_PROTOCOL`，**仅登录用户可用**）或**用户自带**（请求体带 `config` 三参数，经 Worker 转发，key 不落日志，匿名可用）。
 
 ### POST /api/insights
 
@@ -1113,7 +1113,7 @@ OAuth 回调。校验 `state` 与 `oauth_state` Cookie 一致（CSRF），自动
 
 ### POST /api/cache/clear
 
-同源用户清除服务端缓存（分代失效：本机即刻生效，其余节点 60s 内跟进）。体 `{ scope: "posters"|"intro"|"music"|"misc" }`。限流桶 `cache`（5 次/10 分钟）。响应 `{ ok, scope, purged, generation }`。用户侧入口：设置菜单「清除服务端缓存」。管理员另有 `POST /api/admin/cache/clear`（scope 可为 `all`）与 `GET /api/admin/cache/status`。
+同源**登录用户**清除服务端缓存（分代失效：本机即刻生效，其余节点 60s 内跟进）。需 `Authorization: Bearer <account token>`，未登录返回 `401 authentication_required`——缓存代次是全局的，不能给匿名者留下反复回源的开关。体 `{ scope: "posters"|"intro"|"music"|"misc" }`。限流桶 `cache`（5 次/10 分钟，先限流后校验登录）。响应 `{ ok, scope, purged, generation }`。用户侧入口：设置菜单「清除服务端缓存」。管理员另有 `POST /api/admin/cache/clear`（scope 可为 `all`）与 `GET /api/admin/cache/status`。
 
 ### POST /api/other/cover-choice
 
@@ -1371,7 +1371,7 @@ OAuth 回调。校验 `state` 与 `oauth_state` Cookie 一致（CSRF），自动
 | DELETE | `/api/admin/plaza/comments/:id` | 管理员删评论（连删直接回复，按实际数修正计数；响应带 `removed`） |
 | POST | `/api/admin/reset` | 分级重置（`scope` ∈ `analytics`/`plaza`/`shares`/`accounts` 四档，需 `confirm=RESET` + `password` 重验） |
 | GET | `/api/admin/audit` | 审计日志列表（`limit` 默认 100、最大 500） |
-| POST | `/api/admin/change-password` | 修改管理密码（体 `{ old_password, new_password }`，新密码 ≥10 位；使用 `ADMIN_PASSWORD` 环境变量时返回 `400 env_password_immutable`） |
+| POST | `/api/admin/change-password` | 修改管理密码（体 `{ old_password, new_password }`，新密码 ≥10 位；使用 `ADMIN_PASSWORD` 环境变量时返回 `400 env_password_immutable`）。**成功后吊销全部管理会话（含当前），需重新登录** |
 | POST | `/api/admin/sessions/revoke-all` | 强制**所有用户**会话下线（清空 `user_sessions`） |
 | POST | `/api/admin/links/clean-expired` | 立即清理过期短链 |
 | GET | `/api/admin/ai/prompts` | 三场景 AI 提示词覆盖现状（`{ prompts: { ranking/profile/compare: { override, value } } }`） |
@@ -1388,7 +1388,7 @@ OAuth 回调。校验 `state` 与 `oauth_state` Cookie 一致（CSRF），自动
 
 | 方法 | 路径 | 说明 |
 |---|---|---|
-| POST | `/api/account/send-code` | 下发验证码（注册/修改密码共用）。体 `{ email, purpose: "register"\|"reset" }`。同邮箱同用途 **60s 冷却**（429 `code_cooldown`）；register 撞已注册 → 409，reset 未注册 → 404；邮件发送失败 → 502 `mail_failed`（`detail` 带双通道病因）。发信双通道：**Resend 主**（`RESEND_API_KEY`，可选 `MAIL_FROM`）+ luckycola 兜底（`MAIL_COLA_KEY` / `MAIL_SMTP_EMAIL` / `MAIL_SMTP_CODE` / `MAIL_SMTP_TYPE`，契约同 `scripts/mail_sender.py`）；全未配置时**生产 fail-closed**（502 `mail_failed`，reason `mailer_unconfigured`）；仅 `ENVIRONMENT=development|test` 时启用开发兜底，此时响应带 `dev_code` 字段、验证码不写日志 |
-| POST | `/api/account/change-password` | 修改密码（**免旧密码**，码证身份）。体 `{ email, code, password }`，password ≥8 位；成功后吊销该用户全部旧会话 |
+| POST | `/api/account/send-code` | 下发验证码（注册/修改密码共用）。体 `{ email, purpose: "register"\|"reset" }`。同邮箱同用途 **60s 冷却**（429 `code_cooldown`）；register 撞已注册 → 409；**reset 未注册 → 200 但不发信**（不回显邮箱是否存在）；邮件发送失败 → 502 `mail_failed`（`detail` 带双通道病因）。发信双通道：**Resend 主**（`RESEND_API_KEY`，可选 `MAIL_FROM`）+ luckycola 兜底（`MAIL_COLA_KEY` / `MAIL_SMTP_EMAIL` / `MAIL_SMTP_CODE` / `MAIL_SMTP_TYPE`，契约同 `scripts/mail_sender.py`）；全未配置时**生产 fail-closed**（502 `mail_failed`，reason `mailer_unconfigured`）；仅 `ENVIRONMENT=development|test` 时启用开发兜底，此时响应带 `dev_code` 字段、验证码不写日志 |
+| POST | `/api/account/change-password` | 修改密码（**免旧密码**，码证身份）。体 `{ email, code, password }`，password ≥8 位；成功后吊销该用户全部旧会话。**未知邮箱与验证码错误同响应**（400 `invalid_code`，并烧同轮 PBKDF2 抹平时序差）；禁用账号在验证码通过后返回 403 `account_disabled` |
 
 `POST /api/account/register` 新增必填字段 `code`（purpose=register 的验证码）。验证码规格：6 位数字、**10 分钟有效**、**5 次容错**（超限作废）、一次性消耗（SHA-256 散列入库，`verification_codes` 表，迁移 `0023`）。

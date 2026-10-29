@@ -150,7 +150,7 @@
 | PNG 导出跟随当前主题 | 导出 | `exportPng.samplePalette` |
 | **插拔式主题包导入**（2026-09-25 新增） | 主题菜单底部「导入主题包…」 | `lib/themeRegistry.ts`——重建式安全注入（变量白名单/字符白名单/必需集校验），包只存本浏览器 |
 | **开场特效选择**：等离子球(默认)/极光环场/呼吸黑洞/极光绸带(aurora 推荐) | 主题菜单「开场特效」组 | `lib/orbEffects/`（OrbEffect 接口 + 注册表 + `RECOMMENDED_BY_THEME`，特效随主题调色） |
-| **分类清缓存**：海报/简介/歌曲/其他 | 设置菜单「清除服务端缓存」 | `lib/cachePurge.ts` 分代清除 + `POST /api/cache/clear` |
+| **分类清缓存**：海报/简介/歌曲/其他（需登录） | 设置菜单「清除服务端缓存」 | `lib/cachePurge.ts` 分代清除 + `POST /api/cache/clear` |
 
 ## 9. 管理看板（/admin，ADMIN_PASSWORD 或 DB hash 登录）
 
@@ -179,7 +179,7 @@
 | 功能 | 入口 | 实现 |
 |---|---|---|
 | 三场景点评：榜单 / 画像 / 比较 | ProfileView×2 + CompareView「AI 观察」 | `AiInsightCard` → `POST /api/insights(scene,length,locale,data)` |
-| 双通道：内置（CF env）/ 用户自带 API | 「设置 → AI 解读服务」 | `AiConfigDialog`；config 存 `art-rank:ai-config`（仅本浏览器），经 Worker 转发 |
+| 双通道：内置（CF env，**需登录**）/ 用户自带 API（匿名可用） | 「设置 → AI 解读服务」 | `AiConfigDialog`；config 存 `art-rank:ai-config`（仅本浏览器），经 Worker 转发 |
 | 四协议：Chat Completions / Responses / Anthropic Messages / Gemini Native（默认自动探测） | 配置弹窗协议下拉 | `worker/ai.ts callAi/callModelAuto`（探测结论按 baseUrl 缓存） |
 | 一键获取模型列表（datalist 点选）+ 测试连接 | 配置弹窗 | `POST /api/ai/models`、`POST /api/ai/test` |
 | 输出长度三档（简短/标准/深入）持久化 | 结果卡分段选择器 | `art-rank:ai-length` → OUTPUT_BLOCK 字数映射 |

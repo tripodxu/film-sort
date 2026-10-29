@@ -1,5 +1,92 @@
 # Changelog
 
+> 2026-10-29 三批收口的完整复核记录（发现项、根因、验证、线上回归清单）见
+> [`docs/REVIEW-2026-10-29.md`](docs/REVIEW-2026-10-29.md)。
+
+## 2026-10-29 · 前端存量缺陷收口：广场竞态、草稿闸门、请求超时、海报缓存、导出画布（T-20261029-FRONTEND）
+
+**背景**：项目文档已登记的 5 项前端缺陷，逐条修复，不改交互流程。
+
+**改动**：
+
+- **广场列表竞态**（`src/views/PlazaView.tsx`）：`loadPosts` 增加请求序号 + `AbortController`。
+  快速切筛选/搜索/翻页时，旧请求被中止且迟到响应按序号丢弃；`loading/initialLoading` 只在最新请求
+  的 `finally` 里复位，不再出现「新列表被旧响应覆盖 / 假空态 / 转圈卡住」。
+- **草稿写侧闸门**（`src/lib/useSorting.ts`）：抽出 `DRAFT_MAX_WORKS = 1000`，读写共用。
+  超过 1000 件时不再写盘（写进去也读不回），保留上一份可读草稿，并只提示一次
+  「本次进度不会保存为草稿」——不再静默丢进度。
+- **账号请求超时**（`src/lib/useAuth.ts`）：新增 `authFetch`，所有账号请求统一 20s 超时
+  （已有 `AbortController` 时用 `AbortSignal.any` 合并，登出/切代际仍可提前中止）。
+  弱网下不再永久 pending。
+- **海报缓存主线程开销**（`src/components/Poster.tsx`）：sessionStorage 海报缓存改为模块级内存副本，
+  首次读取解析一次、写回同步更新；脏数据（非数组）按未命中处理。避免长列表每个 `<Poster>`
+  首帧都 `JSON.parse` 整份缓存。
+- **导出画布超限**（`src/lib/exportPng.ts`）：新增 `pickExportScale`，按 16M 像素面积上限
+  在 2x → 0.5x 间逐档降采样；年鉴卡条目上限 240。长榜单不再因固定 2x 画布静默出空白。
+
+**验证**：check / lint / format:check / test **951 passed / 9 skipped** / build 全绿；
+新增 `src/lib/exportScale.test.ts`（面积上限与降采样档位）。
+
+**说明**：广场竞态与请求超时属并发/弱网类修复，本地单测难以覆盖真实时序，已按代码路径复核；
+上线后建议弱网 + 快速切筛选做一次手测。
+
+## 2026-10-29 · P2 收口：CSV 注入、图片代理内存、入站 URL 校验、错误回显、后台 CSP、邮箱枚举（T-20261029-P2）
+
+**背景**：紧随 T-20261029-EXPIRY 的第二批，处理复核清单里的 P2 项——都真实存在，但利用门槛高于 P1。
+
+**改动**：
+
+- **CSV 公式注入**（`worker/index.ts` 新增 `csvCell`）：`/api/admin/poster-errors/export` 的 title/error 等字段
+  以 `= + - @` 或制表/回车开头时前缀单引号，Excel/Sheets 不再当公式执行；双引号仍按 CSV 规则转义。
+- **图片代理内存无界**（`worker/media.ts` `proxyImage`）：改用 `readBoundedBytes(response, UPSTREAM_MAX_BYTES)`
+  流式读取，超限立即取消 reader；此前先 `arrayBuffer()` 整段读入再判 12MB。
+- **豆瓣 suggest 整段读入**：改用 `readBoundedText(response, 2MB)`。
+- **入站 URL 未校验**（`fetchValidated`）：发起首跳前拒绝非 https、带凭据、非 443 端口——
+  此前只校验重定向目标，入参本身是防护缺口。
+- **内部错误回显**（`worker/index.ts` 500）：响应体只保留 `{ error: "internal_error" }`，
+  异常消息仍进 `console.error` 与 api_logs，不再向客户端暴露驱动/实现细节。
+- **管理后台响应头**：新增 `ADMIN_SECURITY_HEADERS`（CSP 的 object/base/frame/form 限制 + nosniff 等）
+  与 `cache-control: no-store`。注意：页面是内联脚本 + 内联 onclick，script-src 仍需 `'unsafe-inline'`，
+  严格 CSP 要等前端改造。
+- **邮箱枚举**：`send-code` 的 reset 未注册不再返回 404（200 但不发信）；`change-password`
+  未知邮箱与验证码错误同响应，并烧同轮 PBKDF2 抹平时序差；禁用状态改到验证码通过后再返回。
+  注册端 `email_exists` 保留（否则用户会卡在收不到验证码的死路）。
+
+**验证**：check / lint / format:check / test / build 全绿；新增 `worker/csvExport.test.ts`（公式前缀 + 引号转义），
+`worker/security.test.ts` 补流式读取、CSV 防护、后台 CSP、入站 URL 校验断言。
+
+**说明**：后台 CSP 不是严格意义上的 XSS 防线（inline handler 必须放行），真正收口需要把 `DASHBOARD_HTML`
+的内联脚本/事件改成外部模块 + 事件委托；本批次先补齐 frame/form/object 与缓存策略。
+
+## 2026-10-29 · 安全时效收口：过期比较、管理会话吊销、验证码一次性消费、匿名端点鉴权（T-20261029-EXPIRY）
+
+**背景**：全量复核发现 6 处可验证缺陷，其中「到期时间被延长最多 24 小时」影响全部会话与一次性凭证。本批次按 1→6 顺序修复，不动业务逻辑。
+
+**改动**：
+
+- **过期比较统一走 `julianday()`**（`worker/account.ts`、`worker/index.ts`、`worker/verification.ts`、`worker/qrTransactions.ts`）：
+  ISO 写法（`2026-11-27T20:00:00.000Z`）与 SQL 写法（`2026-11-27 20:00:00`）混存时，
+  旧的字符串比较因 `'T'(0x54) > ' '(0x20)` 把到期日当天恒判「未过期」。实际影响：
+  用户会话 30→31 天、管理员会话 7→8 天、**OAuth exchange 名义 5 分钟实际近 24 小时**、分享短链同样顺延。
+  日期函数两种格式都认，改为 `julianday(expires_at) > julianday('now')` 后语义与写入格式解耦。
+- **管理员改密即吊销全部管理会话**（`handleAdminChangePassword`）：此前只改 hash，泄露的旧 token 仍可用满 7 天；
+  现在与用户改密对齐，清空 `admin_sessions` 并写审计（含吊销数量），后台提示重新登录。
+- **重置密码验证码真正一次性**（`resetPasswordWithCode`，新增可测试函数）：改密 UPDATE、删验证码、吊销会话
+  放进同一个 D1 batch 事务；后两条以 `password_hash = 新哈希` 为守卫（PBKDF2 随机盐保证新哈希必然不同），
+  验证码错误时不会误删验证码、更不会误把用户踢下线。此前改密成功后验证码行仍在，10 分钟内可重复改密。
+- **`POST /api/cache/clear` 要求登录**：缓存代次是全局的，匿名可调用等于开放「反复把压力打回上游」的开关。
+  前端设置菜单补 `Authorization` 头；未登录时直接提示登录。
+- **`POST /api/insights` 内置通道要求登录**：内置通道烧服务端 AI 额度；用户自带 `config` 不受影响（匿名可用）。
+  新增错误码 `authentication_required` 与对应文案。
+- **限流前移**（`/api/netease/*`、`/api/douban/*`）：先限流再查会话，未登录请求无法靠缺失 token 刷 D1。
+
+**验证**：
+
+- 五道门禁全绿：check / lint / format:check / **test 945 passed / 9 skipped（+5：改密事务 3、ISO 会话过期 1、ISO exchange 过期 1）** / build。
+- 新增回归测试：`worker/passwordReset.test.ts`（对码/错码/过期/重放）、`worker/sessionExpiry.test.ts`（ISO 与 SQL 两种过期格式 + 禁用账号）、
+  `worker/verification.test.ts` 增加 ISO exchange 过期用例。均跑真实 `node:sqlite`。
+- **未上线验证**（本批次仅本地；上线后需按台账补线上回归）。
+
 ## 2026-10-28 · 代判置信阈值从硬编码变设置项：50–90% 五档可调，顺带修掉 StrictMode 下代判整体失效（T-20261028-THRESHOLD）
 
 **裁决来源**：`T-20261028-JEV` 结论三——7 次真实采样置信度全在 0.44–0.68，固定 0.8 等于把代判关死。

@@ -73,6 +73,7 @@
 | 3.8 | 广场发布拦截了 >20 首的榜单 | 复用错了上限（ranking 上限应是 300） | 上限常量按语义区分，别复用 |
 | 3.9 | 验证码全部失败（`attempts=0`） | **SQLite `=` 大小写敏感** + 复制粘贴的空白 | 邮箱统一 lowercase；验证码 strip 空白；错误要区分 `code_not_requested` / `code_expired` / `code_locked` / `invalid_code`（带剩余次数） |
 | 3.10 | 批注丢失 | `cleanString` 对 object 返回 `null` | 序列化前先判类型 |
+| 3.11 | 到期时间「看起来」没生效：会话多一天、OAuth code 名义 5 分钟却能用到第二天 | SQLite 按**字符串**比日期：ISO 的 `2026-11-27T20:00:00.000Z` 与 `datetime('now')` 的 `2026-11-27 20:00:00` 相比，`'T'`(0x54) > 空格(0x20)，**到期当天恒判未过期** | 比较一律 `julianday(expires_at) > julianday('now')`；写侧可继续用 ISO。回归测试要同时覆盖 ISO 与 `datetime()` 两种落库格式（3.11 = `sessionExpiry.test.ts`） |
 
 ---
 
