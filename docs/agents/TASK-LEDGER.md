@@ -10,6 +10,30 @@
 
 ## 进行中 / 最近
 
+### T-20261029-RATELIMIT · 敏感桶跨 isolate 原子限流 · ✅ 已上线并线上验证（`3a3589d`）
+
+- **起因**：`docs/REVIEW-2026-10-29.md` 保留项——Edge Cache 的 `match→put` 是读改写，
+  并发下丢计数；isolate Map 只覆盖单 isolate，管理登录/账号鉴权/AI 等敏感桶实际可被放大。
+- **改动**：
+  - `migrations/0028_rate_limits.sql`：`rate_limits(key, started_at, count)` + 索引（幂等）。
+  - `worker/rateLimitStore.ts`：单条 `INSERT … ON CONFLICT DO UPDATE … RETURNING count`
+    原子完成「过期重置 + 自增 + 返回新值」；无行/异常时按无法判定放行。
+  - `worker/index.ts`：`allowUpstreamRequest` 增加可选 `db`，18 处敏感调用接入 `env.DB`
+    （admin 登录/reset/改密/下线、account_auth、AI 全组、posters、share、import、
+    plaza_write、challenge）；`image/events/other/douban/netease/music*` 仍走 Map + Cache。
+  - 每周 cron 增加过期 `rate_limits` 清理。
+  - `worker/rateLimitStore.test.ts`：预算边界、原子 SQL、参数绑定、空行放行、接入范围绊线。
+- **验证（本地）**：`wrangler dev` + 真实本地 D1 `.tmp/verify-rate-limit.mjs` **6/6**——
+  预置满额 IP 直接 429；29→第 1 次放行、第 2 次 429；空 IP 连续 10 次全放行；
+  计数落库 A/B/C = 31/31/10；把 `started_at` 拨回 11 分钟前，下一请求重置为 1 并放行。
+  五道门禁全绿；`test` 73 文件（72 通过 / 1 跳过），**960 passed / 9 skipped**。
+- **线上验证（2026-10-29 13:58 CST）**：`main 5bce2bc..3a3589d` 自动部署后
+  `.tmp/verify-rate-limit-online.mjs` **5/5**——部署探针（`rate_limits` 出现真实 `auth:<ip>` 行）、
+  把该行置 30 后下一次请求 429、重置为 1 后放行（401）、原子自增落库 count=2、
+  窗口拨回 11 分钟前后重置为 1 并放行；测试行已清理。`/api/health` 正常，E2E 6/6。
+  线上真实流量已自然写入 `posters:<ip>` 行，说明接入生效。
+- **待办**：无。
+
 ### T-20261029-CSP · 后台严格 CSP（脚本外置 + 事件委托）· ✅ 已上线并线上验证（`bdb8701`）
 
 - **起因**：`docs/REVIEW-2026-10-29.md` 保留项——`ADMIN_SECURITY_HEADERS` 因 `DASHBOARD_HTML`

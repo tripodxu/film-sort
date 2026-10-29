@@ -3,6 +3,30 @@
 > 2026-10-29 三批收口的完整复核记录（发现项、根因、验证、线上回归清单）见
 > [`docs/REVIEW-2026-10-29.md`](docs/REVIEW-2026-10-29.md)。
 
+## 2026-10-29 · 敏感桶跨 isolate 原子限流（T-20261029-RATELIMIT）
+
+**背景**：Edge Cache 的 `match→put` 是读改写、并发下非原子；isolate Map 只覆盖单个 isolate。
+管理登录、账号鉴权、AI 等低流量高代价的桶可能被并发放大到 N 倍预算。
+
+**改动**：
+
+- **新增表**（`migrations/0028_rate_limits.sql`）：`rate_limits(key, started_at, count)` + 过期索引。
+- **原子计数**（`worker/rateLimitStore.ts`）：单条 `INSERT … ON CONFLICT DO UPDATE … RETURNING count`
+  一次完成「窗口过期重置 + 自增 + 返回新值」，跨 isolate 拿到真实上限。
+- **接入 18 处敏感调用**：admin 登录/reset/改密/强制下线、`account_auth`、AI 全组、
+  `posters`、`share`、`import`、`plaza_write`、`challenge`；`image` / `events` / 搜索代理等
+  高频读桶继续用 isolate Map + Edge Cache，避免 D1 写放大。
+- **故障兜底**：表未迁移、D1 异常或 `RETURNING` 无行时静默退回旧语义，绝不误伤正常请求。
+- **清理**：每周 cron 删除过期窗口。
+
+**验证**：本地 `wrangler dev` + 真实 D1 `.tmp/verify-rate-limit.mjs` **6/6**（满额直拒、
+29→30→429、空 IP 10 连放行、落库计数、过期重置）；五道门禁全绿，
+`960 passed / 9 skipped`。
+
+**线上验证（2026-10-29 13:58 CST）**：`3a3589d` 自动部署后
+`verify-rate-limit-online.mjs` **5/5**：真实出口 IP 行出现（部署探针）、置满额后下一次 429、
+重置后放行、原子自增 count=2、过期窗口重置为 1；测试行已清理，E2E 6/6。
+
 ## 2026-10-29 · 后台严格 CSP：脚本外置 + 事件委托（T-20261029-CSP）
 
 **背景**：安全审计保留项——管理后台 `DASHBOARD_HTML` 内联脚本与 54 处 `onclick`

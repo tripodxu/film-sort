@@ -374,6 +374,7 @@ Worker 模块划分：
 | `posterStore.ts` | `poster_urls` 侧表读写：解析结果落库、读取时挂载 `posterUrls`、导入即种子化 |
 | `gdstudio.ts` | 音乐上游（GD Studio API）搜索/播放链/歌词/封面，含 isolate 缓存与预算、失败熔断 |
 | `rateWindow.ts` | isolate 级限流窗口（`bucket:ip`、`RATE_WINDOW_MS`、上界与惰性清扫） |
+| `rateLimitStore.ts` | 敏感桶的跨 isolate 原子限流（D1 `rate_limits` 单条 UPSERT + `RETURNING`；高频读桶不接入） |
 | `other.ts` | "其他"类别维基搜索/详情（opensearch + pageimages 图片） |
 | `plaza.ts` | 广场帖子 CRUD/点赞/留言/编辑历史/可见性 + 管理端 |
 | `account.ts` | 注册/登录/OAuth/画像云同步/云端清单 + 管理端账户 |
