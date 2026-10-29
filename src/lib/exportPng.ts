@@ -637,7 +637,13 @@ export async function renderProfilePng({
   ctx.fillText("ART/RANK", W - M, H - 34);
   ctx.textAlign = "left";
 
-  await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+  // 等一帧让画布落地后再 toBlob；但 rAF 在后台/被遮挡标签里永不触发，
+  // 会让导出永远停在「导出中…」（2026-10-30 验收实测）——加超时竞争兜底，
+  // 画布内容此时已同步绘制完成，缺的那一帧只影响合成时机不影响内容。
+  await Promise.race([
+    new Promise<void>((resolve) => requestAnimationFrame(() => resolve())),
+    new Promise<void>((resolve) => setTimeout(resolve, 300)),
+  ]);
   return await new Promise<Blob>((resolve, reject) => {
     canvas.toBlob((blob) => {
       if (blob) resolve(blob);
@@ -910,7 +916,10 @@ export async function renderWrappedPng({
   ctx.fillText(`ART/RANK · ${t("年度报告", "WRAPPED")}`, W - M, H - 26);
   ctx.textAlign = "left";
 
-  await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+  await Promise.race([
+    new Promise<void>((resolve) => requestAnimationFrame(() => resolve())),
+    new Promise<void>((resolve) => setTimeout(resolve, 300)),
+  ]);
   return await new Promise<Blob>((resolve, reject) => {
     canvas.toBlob((blob) => {
       if (blob) resolve(blob);

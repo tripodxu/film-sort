@@ -141,17 +141,27 @@ describe("出站收敛（C2 / T-20261014-06）", () => {
   });
 
   it("index.ts 的 fetch 全是管理后台 HTML 里的同源相对请求（浏览器侧，非 Worker 出站）", () => {
+    // 2026-10-30：看板 HTML/脚本迁到 worker/dashboardHtml.ts（workerd 拒绝入口模块
+    // 的非函数具名导出），出站扫描跟着迁——两份都扫，防止任何一边新增绝对 URL 出站。
     const index = load("./index.ts");
-    const strippedLines = index.split("\n");
-    const lines = bareFetchLines(index);
-    expect(lines.length).toBeGreaterThan(0);
-    for (const n of lines) {
-      // 注意：行号以注释剥离后的文本为准（bareFetchLines 的计数基准），此处
-      // 必须用同一份 strippedLines 取行，用 raw 取行会因注释删除而错位。
-      const line = strippedLines[n - 1];
-      expect(line, `index.ts:${n} 必须是同源 /api/admin 相对请求`).toContain("/api/admin");
+    const dashboard = load("./dashboardHtml.ts");
+    for (const [name, source] of [
+      ["index.ts", index],
+      ["dashboardHtml.ts", dashboard],
+    ] as const) {
+      const lines = bareFetchLines(source);
+      if (lines.length === 0) continue;
+      const strippedLines = source.split("\n");
+      for (const n of lines) {
+        // 注意：行号以注释剥离后的文本为准（bareFetchLines 的计数基准），此处
+        // 必须用同一份 strippedLines 取行，用 raw 取行会因注释删除而错位。
+        const line = strippedLines[n - 1];
+        expect(line, `${name}:${n} 必须是同源 /api/admin 相对请求`).toContain("/api/admin");
+      }
     }
+    expect(bareFetchLines(dashboard).length).toBeGreaterThan(0);
     // 兜底：管理后台 HTML 里不许出现绝对 URL 出站。
     expect(index).not.toMatch(/fetch\(["'`]https?:/);
+    expect(dashboard).not.toMatch(/fetch\(["'`]https?:/);
   });
 });

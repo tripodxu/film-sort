@@ -20,3 +20,5 @@ jobs:
       - run: npm run format:check
       - run: npm test -- --run
       - run: npm run build
+      # 2026-10-30 验收 F1：五道门禁不含「本地 dev 能否启动」，单独冒烟
+      - run: npm run dev:smoke

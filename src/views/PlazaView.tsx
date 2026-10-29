@@ -13,6 +13,7 @@ import {
 import { Poster } from "../components/Poster";
 import { EmptyState } from "../components/ui/EmptyState";
 import { Skeleton } from "../components/ui/Skeleton";
+import { parseDbTime } from "../lib/dbTime";
 import { rankingSimilarity } from "../lib/similarity";
 import type { PlazaViewProps, PlazaPost } from "./types";
 import type { MediaKind } from "../data/media";
@@ -159,7 +160,7 @@ export function PlazaView({
   }, [hasMore, loading, initialLoading, page, kindFilter, sort, search]);
 
   function formatPlazaTime(value: string): string {
-    const diff = Date.now() - new Date(value).getTime();
+    const diff = Date.now() - parseDbTime(value).getTime();
     const minutes = Math.floor(diff / 60000);
     if (minutes < 1) return t("刚刚", "just now");
     if (minutes < 60) return `${minutes} ${t("分钟前", "min ago")}`;
@@ -167,7 +168,7 @@ export function PlazaView({
     if (hours < 24) return `${hours} ${t("小时前", "h ago")}`;
     const days = Math.floor(hours / 24);
     if (days < 30) return `${days} ${t("天前", "d ago")}`;
-    return new Date(value).toLocaleDateString();
+    return parseDbTime(value).toLocaleDateString();
   }
 
   return (
@@ -368,7 +369,7 @@ export function PlazaView({
                   <time
                     className="plaza-sticker-time"
                     dateTime={post.created_at}
-                    title={new Date(post.created_at).toLocaleString()}
+                    title={parseDbTime(post.created_at).toLocaleString()}
                   >
                     {formatPlazaTime(post.created_at)}
                   </time>

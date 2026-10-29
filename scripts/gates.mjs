@@ -70,4 +70,15 @@ for (const [name, command, retryCacheRace] of gates) {
   }
   console.log(`✓ ${name} 通过`);
 }
-console.log("\n五道门禁全绿 ✅");
+
+// 第六道护栏（2026-10-30 验收 F1）：五道门禁不覆盖「本地 dev 能否启动」，
+// workerd 对入口模块具名导出的严格校验曾让 wrangler dev 挂了一个月。
+// 失败同样阻断，避免假绿；CI 在 build 后跑同一条命令。
+console.log("\n=== 附加 dev 启动冒烟 ===");
+const smoke = run("npm run dev:smoke");
+if (smoke.status !== 0) {
+  console.error(`\n✘ dev 冒烟失败（exit ${smoke.status ?? "signal"}）。`);
+  process.exit(smoke.status ?? 1);
+}
+
+console.log("\n五道门禁 + dev 冒烟全绿 ✅");

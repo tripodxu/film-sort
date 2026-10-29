@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
-import { DASHBOARD_HTML, DASHBOARD_JS } from "./index";
+import { DASHBOARD_HTML, DASHBOARD_JS } from "./dashboardHtml";
 
 /**
  * 后台看板脚本已外置到 `/admin/app.js`（2026-10-29 严格 CSP 批）：

@@ -3,6 +3,32 @@
 > 2026-10-29 三批收口的完整复核记录（发现项、根因、验证、线上回归清单）见
 > [`docs/REVIEW-2026-10-29.md`](docs/REVIEW-2026-10-29.md)。
 
+## 2026-10-30 · 全功能验收修复三件套 + dev 启动冒烟护栏（T-20261030-ACCEPT-FIX）
+
+**背景**：2026-10-29/30 全功能验收（本地 wrangler dev + 浏览器走查 + API 复核）发现三项问题，
+其中 F1 让本地 `wrangler dev` 潜伏一个月无法启动。
+
+**改动**：
+
+- `worker/dashboardHtml.ts`（新增）：`DASHBOARD_HTML`/`DASHBOARD_JS` 移出 worker 入口模块。
+  workerd 拒绝入口模块「非函数/ExportedHandler 的具名导出」，`d1c942d`（2026-09-25）为可测试性
+  把这两个字符串常量 `export` 后，`wrangler dev` 启动即崩（`Incorrect type for map entry
+  'DASHBOARD_HTML'`），而五道门禁不含 workerd 启动、E2E 默认打线上，一直未被发现。
+  `index.ts` 改为导入使用；`dashboardHtml.test.ts` 改从新模块导入，内容零变更。
+- `src/lib/dbTime.ts`（新增）：D1 混合时间格式统一解析——`plaza_posts` 等表的
+  CURRENT_TIMESTAMP 串（`"YYYY-MM-DD HH:MM:SS"`，UTC 无时区标记）此前被 `new Date()`
+  按本地时区解析，UTC+8 下广场相对时间恰好漂移 8 小时（刚发的帖显示「8 小时前」）；
+  `plaza_post_edits` 等表是 ISO 带 Z 格式，不受影响。`PlazaView` 相对时间与悬浮
+  `title` 接入该工具。`dbTime.test.ts` 4 条锚定两种格式与 8 小时行为。
+- `src/lib/exportPng.ts`：两处 `requestAnimationFrame` 等待加 300ms 超时竞争——rAF 在
+  后台/被遮挡标签永不触发会让 PNG 导出永远停在「导出中…」（验收实测），画布内容此时已
+  同步绘制完成，超时只影响合成时机不影响内容。
+- `scripts/dev-smoke.mjs`（新增）+ `npm run dev:smoke`：起一个真实 `wrangler dev`，
+  断言 `/` 伺服 SPA、`/admin` 伺服看板外壳后整树收割。`gates.mjs` 末尾接入（失败阻断），
+  CI 在 build 后执行同一步——这类「本地起不来」的回归今后过不了门禁。
+
+**验证**：门禁全绿（五道 + dev 冒烟）；线上验证见 TASK-LEDGER `T-20261030-ACCEPT-FIX`。
+
 ## 2026-10-29 · PWA 离线收口：预缓存产物（Phase 8，T-20261029-PWA-OFFLINE）
 
 **背景**：SW 的导航 network-first / 静态 cache-first 早已上线，但预缓存只有 `/` 与 `/index.html`。
