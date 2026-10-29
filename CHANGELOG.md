@@ -3,6 +3,24 @@
 > 2026-10-29 三批收口的完整复核记录（发现项、根因、验证、线上回归清单）见
 > [`docs/REVIEW-2026-10-29.md`](docs/REVIEW-2026-10-29.md)。
 
+## 2026-10-29 · 触控命中区收尾 + 门禁临时目录修复（T-20261029-TOUCH）
+
+**背景**：复核 ROADMAP §二 发现 A/B/C/D 四组已在 10-25~10-29 各批落地；真正残留的是
+`AiInsightCard` 11px 文本按钮命中区不足 32px，以及受限环境下 `npm run gates` 必红的临时目录问题。
+
+**改动**：
+
+- **轻量命中区**（`src/styles.css`）：新增 `.hit-expand-sm{position:relative}` +
+  `::after{inset:-8px}`，透明命中区把 11px「取消/复制」补到约 32px，视觉零变化。
+- **AI 点评按钮**（`src/components/AiInsightCard.tsx`）：取消、复制挂 `text-button hit-expand-sm`。
+- **门禁自愈**（`scripts/gates.mjs`）：统一把 `TEMP/TMP/TMPDIR` 指向工作区 `.tmp/gates-tmp`，
+  消除 Vitest 模块缓存写系统临时目录的 `EPERM` 假红，此后无需手动设环境变量。
+- **文档校准**：`docs/ROADMAP.md` §二 标注为历史；`docs/REVIEW-2026-10-29.md` §七 的
+  OAuth 过期 / 管理会话吊销 / 验证码一次性 / CSV 公式防护全部转 ✅（线上复跑）。
+
+**验证**：五道门禁全绿（`test` **952 passed / 9 skipped**）；线上 E2E 6/6、广场竞态 6/6、
+线上 API 断言 16/16；`/assets/index-B2HJHfZI.js` 与本地构建一致。
+
 ## 2026-10-29 · 前端存量缺陷收口：广场竞态、草稿闸门、请求超时、海报缓存、导出画布（T-20261029-FRONTEND）
 
 **背景**：项目文档已登记的 5 项前端缺陷，逐条修复，不改交互流程。
