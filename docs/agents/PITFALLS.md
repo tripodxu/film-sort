@@ -76,6 +76,8 @@
 | 3.9 | 验证码全部失败（`attempts=0`） | **SQLite `=` 大小写敏感** + 复制粘贴的空白 | 邮箱统一 lowercase；验证码 strip 空白；错误要区分 `code_not_requested` / `code_expired` / `code_locked` / `invalid_code`（带剩余次数） |
 | 3.10 | 批注丢失 | `cleanString` 对 object 返回 `null` | 序列化前先判类型 |
 | 3.11 | 到期时间「看起来」没生效：会话多一天、OAuth code 名义 5 分钟却能用到第二天 | SQLite 按**字符串**比日期：ISO 的 `2026-11-27T20:00:00.000Z` 与 `datetime('now')` 的 `2026-11-27 20:00:00` 相比，`'T'`(0x54) > 空格(0x20)，**到期当天恒判未过期** | 比较一律 `julianday(expires_at) > julianday('now')`；写侧可继续用 ISO。回归测试要同时覆盖 ISO 与 `datetime()` 两种落库格式（3.11 = `sessionExpiry.test.ts`） |
+| 3.12 | `/api/other/detail` 冷缓存挂 45–60s 不返回，同一名称 1.2s / 45s / 60s 交替 | 维基取图是**多条串行链**（zh/en × 三轮搜索 + 海报侧 5 档兜底），单跳 8–9s，上游抖动时没有总预算 | 整条链给**总预算**：接口层 25s/15s → `504 upstream_timeout` + `no-store`；海报层 25s → `throttled`（15s），**不许记 `absent`**（24h）。见 `worker/deadline.ts`、`T-20261029-DEADLINE` |
+| 3.13 | `npm run gates` 随机红，或「绿了但少跑 123 条用例」 | Vitest 并行时两个 worker 同时写同一个大模块的 SSR 缓存（实测恒为 `worker/other.test.ts`），Windows 第二次 `open` 报 `EPERM ... ssr/<hash>`，该文件整份被丢 | `scripts/gates.mjs` 命中该特征自动 `--no-file-parallelism` 串行重试一次；**发现测试条数突然变少先查这条**（并行 843 / 串行 966） |
 
 ---
 

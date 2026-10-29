@@ -71,6 +71,7 @@ import {
   doubanAccountInfo,
 } from "./douban";
 import { otherSearch, otherDetail, otherCandidateReport } from "./other";
+import { DeadlineError, withDeadline } from "./deadline";
 import {
   gdSearch,
   gdPlayUrl,
@@ -198,6 +199,18 @@ const MAX_POSTER_BATCH_ITEMS = 300;
 const MAX_POSTER_BATCH_BYTES = 128 * 1024;
 // AI 点评场景数据：结构化 JSON（榜单/画像/比较指标），独立于 48KB 通用上限。
 const MAX_AI_DATA_BYTES = 16 * 1024;
+// 维基「其他类」链的总预算（见 worker/deadline.ts）：前端详情请求 30s 放弃，
+// 这里留 5s 余量。诊断端点给弹窗用，慢过 15s 已经没有意义，反而拖住交互。
+const OTHER_DETAIL_DEADLINE_MS = 25_000;
+const OTHER_CANDIDATES_DEADLINE_MS = 15_000;
+
+/** 维基链超时的统一响应：**不缓存**——超时是瞬时故障，缓存 5 分钟等于把
+ *  一次上游抖动固化成「这几天都没有资料」。 */
+function upstreamTimeout(): Response {
+  return json({ status: false, msg: "upstream_timeout", data: null }, 504, {
+    "cache-control": "no-store",
+  });
+}
 const upstreamWindows = new Map<string, RateWindow>();
 
 async function allowUpstreamRequest(
@@ -2655,7 +2668,11 @@ async function route(request: Request, env: Env): Promise<Response> {
     );
     if (kind === "other") {
       try {
-        const work = await otherDetail(title, detailYear);
+        const work = await withDeadline(
+          otherDetail(title, detailYear),
+          OTHER_DETAIL_DEADLINE_MS,
+          "artwork-detail-other",
+        );
         if (!work)
           return json({ status: false, msg: "not_found", data: null }, 404, {
             "cache-control": "public, max-age=300",
@@ -2663,7 +2680,8 @@ async function route(request: Request, env: Env): Promise<Response> {
         return json({ status: true, msg: "ok", data: work }, 200, {
           "cache-control": "public, max-age=3600",
         });
-      } catch {
+      } catch (error) {
+        if (error instanceof DeadlineError) return upstreamTimeout();
         return json({ status: false, msg: "wiki_unavailable", data: null }, 502, {
           "cache-control": "public, max-age=300",
         });
@@ -2751,7 +2769,11 @@ async function route(request: Request, env: Env): Promise<Response> {
     if (!(await allowUpstreamRequest(request, "other", 20)))
       return json({ error: "rate_limited" }, 429, { "retry-after": "60" });
     try {
-      const work = await otherDetail(name, year);
+      const work = await withDeadline(
+        otherDetail(name, year),
+        OTHER_DETAIL_DEADLINE_MS,
+        "other-detail",
+      );
       if (!work)
         return json({ status: false, msg: "not_found", data: null }, 404, {
           "cache-control": "public, max-age=300",
@@ -2759,7 +2781,8 @@ async function route(request: Request, env: Env): Promise<Response> {
       return json({ status: true, msg: "ok", data: work }, 200, {
         "cache-control": "public, max-age=3600",
       });
-    } catch {
+    } catch (error) {
+      if (error instanceof DeadlineError) return upstreamTimeout();
       return json({ status: false, msg: "wiki_unavailable", data: null }, 502, {
         "cache-control": "public, max-age=300",
       });
@@ -2800,11 +2823,16 @@ async function route(request: Request, env: Env): Promise<Response> {
     if (!(await allowUpstreamRequest(request, "other", 20)))
       return json({ error: "rate_limited" }, 429, { "retry-after": "60" });
     try {
-      const report = await otherCandidateReport(name, english, year);
+      const report = await withDeadline(
+        otherCandidateReport(name, english, year),
+        OTHER_CANDIDATES_DEADLINE_MS,
+        "other-candidates",
+      );
       return json({ status: true, msg: "ok", data: report }, 200, {
         "cache-control": "public, max-age=300",
       });
-    } catch {
+    } catch (error) {
+      if (error instanceof DeadlineError) return upstreamTimeout();
       return json({ status: false, msg: "wiki_unavailable", data: null }, 502, {
         "cache-control": "public, max-age=60",
       });

@@ -9,6 +9,7 @@ import {
   type OutboundPolicy,
 } from "./outbound";
 import { generationOf, registerPurger } from "./cachePurge";
+import { DeadlineError, withDeadline } from "./deadline";
 import { posterKeySegment, posterMediaKey } from "../shared/posterKey";
 import {
   classifyArtworkFile,
@@ -60,6 +61,8 @@ const POSTER_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
 // 又每 10 分钟被重新问一遍上游——两头都错。
 const POSTER_THROTTLED_TTL_MS = 15 * 1000;
 const POSTER_MISS_TTL_MS = 24 * 60 * 60 * 1000;
+// 「其他类」单条取图的总预算（5 档维基串行链，见 worker/deadline.ts）。
+const OTHER_POSTER_DEADLINE_MS = 25_000;
 const POSTER_CACHE_MAX_ENTRIES = 2000;
 const POSTER_EDGE_ORIGIN = "https://poster-cache.art-rank.internal";
 
@@ -1726,7 +1729,21 @@ async function resolvePosterEntry(
     if (!isolateHit) writeIsolatePosterCache(cacheKey, cached);
     return cached;
   }
-  const entry = await computePosters(title, english, year, type, env);
+  // 「其他类」的取图是 5 档串行维基链（见 worker/deadline.ts）：上游抖动时
+  // 单条能串到 60s+，批量里 8 并发会把整批拖死。给单条一个总预算，超时按
+  // `throttled` 记账（15s 负缓存，刷新即重试）——绝不能记成 `absent`，
+  // 那是 24h 负缓存，一次抖动就固化成一整天没有封面。
+  const entry =
+    type === "other"
+      ? await withDeadline(
+          computePosters(title, english, year, type, env),
+          OTHER_POSTER_DEADLINE_MS,
+          "other-poster",
+        ).catch((error) => {
+          if (error instanceof DeadlineError) return { urls: [], outcome: "throttled" as const };
+          throw error;
+        })
+      : await computePosters(title, english, year, type, env);
   writeIsolatePosterCache(cacheKey, entry);
   await writeEdgePosterCache(cacheKey, entry);
   return entry;

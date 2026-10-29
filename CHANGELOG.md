@@ -3,6 +3,27 @@
 > 2026-10-29 三批收口的完整复核记录（发现项、根因、验证、线上回归清单）见
 > [`docs/REVIEW-2026-10-29.md`](docs/REVIEW-2026-10-29.md)。
 
+## 2026-10-29 · 「其他类」维基链总预算（T-20261029-DEADLINE）
+
+**背景**：`/api/other/detail` 冷缓存实测会挂到 45–60s（同一名称 1.2s / 45s / 60s 交替），
+前端 30s 就放弃，用户看到「暂时没有更多资料」，Worker 还在烧 subrequest。根因是维基取图
+是一条多条串行的链（zh/en × 精确标题轮/标题轮/类型词轮 + 海报侧 5 档兜底），单跳超时 8–9s。
+
+**改动**：
+
+- **新增** `worker/deadline.ts`：`withDeadline(promise, ms, label)` + `DeadlineError`。
+- **接口层**：`/api/other/detail`、`/api/artwork/detail?kind=other` 25s；`/api/other/candidates` 15s。
+  超时返回 `504 {msg:"upstream_timeout"}` + `cache-control: no-store`（瞬时故障不缓存）。
+- **海报层**：`type === "other"` 的整条兜底链 25s 预算；超时记 `throttled`（15s 负缓存，刷新即重试），
+  绝不记 `absent`（24h 负缓存会把一次抖动固化成一整天没有封面）。
+
+**验证**：新增 `worker/deadline.test.ts` 6 条（含三条接入绊线）；五道门禁全绿，
+`966 passed / 9 skipped`。
+
+**顺带修门禁**：`scripts/gates.mjs` 的 test 门禁在命中 Vitest SSR 缓存并发写入竞态
+（`EPERM ... ssr/<hash>`，会整份丢掉 `worker/other.test.ts` 的 123 条用例）时，
+自动改用 `--no-file-parallelism` 串行重试一次——不再随机红，也不会静默少跑。
+
 ## 2026-10-29 · 敏感桶跨 isolate 原子限流（T-20261029-RATELIMIT）
 
 **背景**：Edge Cache 的 `match→put` 是读改写、并发下非原子；isolate Map 只覆盖单个 isolate。

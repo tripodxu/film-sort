@@ -10,6 +10,33 @@
 
 ## 进行中 / 最近
 
+### T-20261029-DEADLINE · 「其他类」维基链总预算（超时 504 / throttled）· 🔄 本地门禁全绿，待线上验证
+
+- **起因**：线上实测发现 `/api/other/detail` **冷缓存会挂到 45–60s 不返回**
+  （同一 `name=动物森友会` 连续探测：200/1.2s、200/2.3s、`000`/45s、`000`/60s 交替出现）。
+  根因是维基取图本身是**多条串行链**：`otherDetail` 内 zh/en × 精确标题轮/纯标题轮/类型词轮，
+  海报侧还有 5 档兜底（detail → resolveOtherCover → langlinks → 主图直取 → 搜索评分），
+  单跳 `fetchBounded` 超时 8–9s，上游抖动时最坏可串到 60s+。
+  前端 `App.tsx` 详情请求 30s 就放弃，用户看到的是「暂时没有更多资料」，Worker 却还在烧 subrequest。
+  叠加另一条：`REVIEW §六` 记的 P0「`year` 导致选到 icon」**早已被 artifact 过滤修掉**
+  （今日线上 `name=纪念碑谷&year=2014` 返回 `Monument_Valley_screenshot.jpg`，不是 icon），
+  该条真正残留的问题就是**链路没有总预算**。
+- **改动**：
+  - 新增 `worker/deadline.ts`：`withDeadline(promise, ms, label)` + `DeadlineError`
+    （`Promise.race` + `clearTimeout`，放弃的 promise 迟到 reject 不会变成 unhandled rejection）。
+  - `worker/index.ts`：三处维基端点接入——`/api/other/detail` 25s、`/api/artwork/detail?kind=other` 25s、
+    `/api/other/candidates` 15s；超时统一 `504 {msg:"upstream_timeout"}` 且 `cache-control: no-store`
+    （瞬时故障不缓存，避免把一次抖动固化成「这几天都没资料」）。
+  - `worker/media.ts`：`resolvePosterEntry` 对 `type === "other"` 的整条 5 档链套 25s 预算；
+    超时按 **`throttled`** 记账（15s 负缓存，刷新即重试），**不记 `absent`**（24h 负缓存）。
+  - `worker/deadline.test.ts`：6 条——快路径原样返回并清计时器、超时抛 `DeadlineError`（label/ms）、
+    `name`/`message` 可定位链路，以及三条接入绊线（三个端点都挂预算 / 预算必须短于前端 30s /
+    海报链超时只能记 `throttled` 且代码行里不出现 `absent`）。
+- **验证（本地）**：五道门禁全绿；`test` **73 文件（72 通过 / 1 跳过），966 passed / 9 skipped**；
+  `build` 主包 427.76 kB（gzip 143.76 kB，Worker 改动不影响前端产物）。
+- **待办**：push `main` 后用冷缓存探针线上复跑——同一名称冷请求必须 ≤30s 返回
+  （200 或 504 `upstream_timeout`），且 `纪念碑谷&year=2014` 封面仍是截图；通过后转 ✅。
+
 ### T-20261029-RATELIMIT · 敏感桶跨 isolate 原子限流 · ✅ 已上线并线上验证（`3a3589d`）
 
 - **起因**：`docs/REVIEW-2026-10-29.md` 保留项——Edge Cache 的 `match→put` 是读改写，
@@ -117,7 +144,7 @@
 - **线上复核（2026-10-29 12:52）**：`REVIEW-2026-10-29.md` §七 的 1/2/3/8 已全部转 ✅，
   详见 `T-20261029-TOUCH` 与 REVIEW §七「12:52 线上复跑」；本条目收口。
 
-### T-20261029-FRONTEND · 前端存量缺陷收口（广场竞态 / 草稿闸门 / 请求超时 / 海报缓存 / 导出画布）· 👀 待审（本地门禁全绿，未上线）
+### T-20261029-FRONTEND · 前端存量缺陷收口（广场竞态 / 草稿闸门 / 请求超时 / 海报缓存 / 导出画布）· ✅ 已上线并线上验证（`70e43cf`）
 
 - **起因**：项目文档已登记的 5 项前端缺陷，均不影响主流程但会造成数据错位或静默失败。
 - **改动**：
@@ -129,10 +156,11 @@
 - **验证**：check / lint / format:check / test（951 passed / 9 skipped）/ build；新增 `exportScale.test.ts`。
 - **提交**：`70e43cf`（fix(ui)）；报告见 [`REVIEW-2026-10-29.md`](../REVIEW-2026-10-29.md) §四。
 - **线上验证（2026-10-29 11:19 CST）**：新构建已上线（`index-DrDVvDx1.js`，此前 `index-DOt28B0D.js`）。
-  **弱网 + 快速切筛选仍需浏览器手测**。
-- **边界**：广场竞态与超时属时序问题，本地单测无法完全覆盖，上线后需弱网 + 快速切筛选手测。
+- **线上复验（2026-10-29 12:52 CST）**：弱网 + 快速切筛选已用 `.tmp/verify-plaza-race.mjs` 在
+  `sort.logicc.top` 实测 **6/6**（先点筛选注入 2.5s、后点 0.3s，最终标签与列表均属后点筛选，
+  未混旧数据、未闪空态、无 JS 错误）。本条目收口。
 
-### T-20261029-P2 · 安全 P2 批量收口（CSV/图片内存/URL 校验/错误回显/后台 CSP/邮箱枚举）· 👀 待审（本地门禁全绿，未上线）
+### T-20261029-P2 · 安全 P2 批量收口（CSV/图片内存/URL 校验/错误回显/后台 CSP/邮箱枚举）· ✅ 已上线并线上验证（`d315702`）
 
 - **起因**：`T-20261029-EXPIRY` 同批复核清单中的 P2 项（真实但利用门槛较高）。
 - **改动**：
@@ -145,12 +173,14 @@
 - **验证**：check / lint / format:check / test / build；新增 `worker/csvExport.test.ts`，`security.test.ts` 补断言。
 - **提交**：`d315702`（fix(security)，与 EXPIRY 同一提交）；报告见 [`REVIEW-2026-10-29.md`](../REVIEW-2026-10-29.md) §三。
 - **线上验证（2026-10-29 11:19 CST）**：`/admin` 已带 CSP + `cache-control: no-store` ✅；
-  reset 未知邮箱 200 ✅。**CSV 公式防护需管理员登录导出后用 Excel 打开确认（待手测）**。
-- **已知边界**：后台 CSP 因内联 onclick 仍需 `'unsafe-inline'`，严格 CSP 需 DASHBOARD_HTML 前端改造；
-  register 端 `email_exists` 为 UX 保留。
-- **下一步**：与 EXPIRY 同批部署后线上回归（CSV 打开不弹公式、后台响应头、reset 未知邮箱不发信）。
+  reset 未知邮箱 200 ✅。
+- **线上复验（2026-10-29 12:52 CST）**：CSV 公式防护用真实管理员导出在线上实测——`=HYPERLINK(...)`
+  → `"'=HYPERLINK..."`、`+1+1` → `"'+1+1"`，普通标题不加前缀 ✅。
+  后台 CSP 已于 `bdb8701` 进一步收紧为 `script-src 'self'; script-src-attr 'none'`（见 `T-20261029-CSP`）。
+- **已知边界**：register 端 `email_exists` 为 UX 保留。
+- **待办**：无。
 
-### T-20261029-EXPIRY · 安全时效收口（过期比较 / 管理会话吊销 / 验证码一次性 / 匿名端点鉴权）· 👀 待审（本地门禁全绿，未上线）
+### T-20261029-EXPIRY · 安全时效收口（过期比较 / 管理会话吊销 / 验证码一次性 / 匿名端点鉴权）· ✅ 已上线并线上验证（`d315702`）
 
 - **起因**：全量复核列出 6 处可验证缺陷，核心是「到期时间被延长最多 24 小时」。
 - **改动**：
@@ -168,9 +198,14 @@
 - **提交**：`d315702`（fix(security)）；报告见 [`REVIEW-2026-10-29.md`](../REVIEW-2026-10-29.md) §二。
 - **线上验证（2026-10-29 11:19 CST，sort.logicc.top，deployment `d05fedba`）**：
   未登录清缓存 → 401 ✅；未登录内置 AI → 401 ✅（自填 config 仍走上游 `502`，非 401）；
-  reset 未知邮箱 → 200 ✅。**OAuth 5 分钟失效 / 改密旧 token 401 / 同码二次改密 400 待账号手测**。
-- **下一步**：部署后线上回归——① OAuth 登录 5 分钟后 exchange 失效；② 改密后旧管理 token 401；
-  ③ 重置密码同码第二次 400；④ 未登录清缓存/内置 AI 返回 401。完成后再改为 ✅。
+  reset 未知邮箱 → 200 ✅。
+- **线上复验（2026-10-29 12:52 CST，`.tmp/online-verify.mjs` 16/16）**：OAuth 注入 5 分钟前
+  `expires_at` → `404 invalid_code`、未过期 200、重放 404 ✅；验证码改密首次 200、同码第二次
+  `400 code_not_requested`、旧密码 401 / 新密码 200 ✅；管理会话删除后旧 token 立即
+  `authenticated:false` ✅。临时账号/验证码/OAuth code/管理会话均已清除，D1 计数复核为 0。
+- **说明**：生产管理密码走 `env.ADMIN_PASSWORD`，改密接口按设计返回 `400 env_password_immutable`；
+  吊销落点 `DELETE FROM admin_sessions` 已线上实测，DB 完整改密链路由本地 `verify-local-account.mjs` 覆盖。
+- **待办**：无。
 
 ### T-20261028-THRESHOLD · 代判置信阈值做成设置项（Jev 结论三的裁决落地）· ✅ 完成（线上已验证）
 
@@ -976,11 +1011,14 @@
 
 ## 待办队列（按优先级）
 
-### ⬜ P0 · `year` 参数导致 icon 文件被选为封面（预存缺陷，危害高于任何"多一个按钮"）
-- **任务类型**：§2.1（判决链路）
-- **最小上下文**：`worker/other.ts` 的 `otherDetail(name, year?)` + `titleMatchTier` + `scoreOtherPage` + `pickBest`
-- **要点**：实测 `/api/other/detail?name=纪念碑谷&year=2014` → `Monument_Valley_icon_unrounded.jpg`，**不带 year** 才是 `500px-Monument_Valley,_Utah,_USA_(23611451292).jpg`。`year` 进入标题评分后把作品判到了 icon 文件。候选修法：给 year 加权重上限；或对 icon/系列页主图降权。**这是真的选错图，用户直接看到错封面。**
-- **证据**：迭代 8 的 `.tmp/attr8.mjs` 归因实验（带 year → icon，不带 → 作品页），`git diff` 确认与迭代 8 的改动无关
+### ✅ P0 · `year` 参数导致 icon 文件被选为封面 —— 已由 artifact 过滤修复（原条目过期）
+
+- **原记录（2026-10-02）**：`/api/other/detail?name=纪念碑谷&year=2014` → `Monument_Valley_icon_unrounded.jpg`。
+- **实际根因**：不是 `year` 评分，而是该页 `pageprops.page_image` 本身就指向 app 图标；
+  `resolveOtherCover` / `toWork` 的 artifact 过滤（`PLAN-COVER-ARTIFACT-FILTER.md`）已把它判掉并落到同页截图。
+- **今日线上复核（2026-10-29 14:05 CST）**：`name=纪念碑谷&year=2014` 返回
+  `…/Monument_Valley_screenshot.jpg`（不是 icon）；不带 year 同样正常。
+- **真正残留的问题**：该链**没有总预算**，上游抖动时冷缓存会挂 60s+——已由 `T-20261029-DEADLINE` 处理。
 
 ### ⬜ P1 · 浏览器 E2E 缺口（迭代 7/9 连续两次因此留红）
 - **任务类型**：§2.5（验证基建）
