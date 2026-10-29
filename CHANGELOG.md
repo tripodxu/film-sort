@@ -3,6 +3,26 @@
 > 2026-10-29 三批收口的完整复核记录（发现项、根因、验证、线上回归清单）见
 > [`docs/REVIEW-2026-10-29.md`](docs/REVIEW-2026-10-29.md)。
 
+## 2026-10-29 · 后台严格 CSP：脚本外置 + 事件委托（T-20261029-CSP）
+
+**背景**：安全审计保留项——管理后台 `DASHBOARD_HTML` 内联脚本与 54 处 `onclick`
+导致 CSP 只能保留 `script-src 'unsafe-inline'`。
+
+**改动**：
+
+- **脚本外置**：内联 `<script>` 拆为 `DASHBOARD_JS`，经 `GET /admin/app.js` 输出
+  （`application/javascript; charset=utf-8`、`cache-control: no-store`、同一套安全头）。
+- **事件委托**：全部内联 `onclick`/`onchange`/`onkeydown`/`onerror` 改为
+  `data-act` / `data-change` / `data-enter`，脚本内统一委托处理；动态生成的表格、
+  弹窗、广场操作同样走属性而非内联函数调用。
+- **CSP 收紧**：`ADMIN_SECURITY_HEADERS` 改为 `script-src 'self'; script-src-attr 'none'`；
+  因页面仍有大量内联 `style` 属性，`style-src` 保留 `'unsafe-inline'`。
+- **回归绊线**：`worker/dashboardHtml.test.ts` 校验脚本可解析、HTML 无内联 script/事件、
+  登录委托在位、后台 CSP 严格。
+
+**验证**：本地 `wrangler dev` + Playwright `18/18`（登录、页签、用户详情弹窗与遮罩关闭、
+缓存清除、数据页、CSP 头、无控制台错误）；五道门禁全绿，`955 passed / 9 skipped`。
+
 ## 2026-10-29 · adaptive 排序性能：300 件 15.5s → 3.8s（T-20261029-PERF）
 
 **背景**：`docs/CONSOLIDATION-2026-10-28.md` 记录的独立课题——adaptive 排序 300 件约 16.8 秒。

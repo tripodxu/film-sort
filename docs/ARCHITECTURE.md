@@ -369,7 +369,7 @@ Worker 模块划分：
 
 | 文件 | 职责 |
 |------|------|
-| `index.ts` | 路由分发、安全头/CSP、限流、cron 清理、API 日志、管理看板内嵌 HTML、详情四步流程 |
+| `index.ts` | 路由分发、安全头/CSP、限流、cron 清理、API 日志、管理看板 HTML（`/admin`）与外置脚本（`/admin/app.js`）、详情四步流程 |
 | `media.ts` | 豆瓣搜索/详情/Top250/suggest、海报多级解析与两级缓存、图片代理、简介消歧（维基+百科） |
 | `posterStore.ts` | `poster_urls` 侧表读写：解析结果落库、读取时挂载 `posterUrls`、导入即种子化 |
 | `gdstudio.ts` | 音乐上游（GD Studio API）搜索/播放链/歌词/封面，含 isolate 缓存与预算、失败熔断 |
@@ -520,6 +520,10 @@ const SECURITY_HEADERS = {
 ```
 
 （`script-src` 里的内联脚本用固定 hash 放行，不启用 `unsafe-inline`；`img-src` 的白名单比 `/api/image` 代理更宽，额外放行 `*.githubusercontent.com`。）
+
+管理后台单独使用 `ADMIN_SECURITY_HEADERS`：脚本外置到 `/admin/app.js`，内联事件改为事件委托，
+CSP 为 `script-src 'self'; script-src-attr 'none'`（`style-src` 因内联 `style` 属性仍保留 `'unsafe-inline'`），
+并附 `cache-control: no-store`。
 
 ### 6.2 输入验证
 

@@ -281,13 +281,14 @@ const SECURITY_HEADERS: Record<string, string> = {
   "permissions-policy": "camera=(), microphone=(), geolocation=(), payment=()",
 };
 
-/** 管理后台是单文件内联脚本 + 内联 onclick 的页面，无法套用站点级 sha256 CSP。
- * 这里仍给出 CSP（限制 base/frame/form/对象源），并保留 inline 脚本所需的最小放行；
+/** 管理后台脚本已外置到 `/admin/app.js`，内联事件改为事件委托，
+ * 因此脚本侧可完全禁止内联（`script-src 'self'` + `script-src-attr 'none'`）；
+ * 样式仍使用大量内联 style 属性，保留 style-src 的 unsafe-inline。
  * 同时用 no-store 避免后台页面被中间层缓存（安全审计 2026-10-29 P2）。 */
 const ADMIN_SECURITY_HEADERS: Record<string, string> = {
   ...SECURITY_HEADERS,
   "content-security-policy":
-    "default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; connect-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'",
+    "default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self'; script-src-attr 'none'; connect-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'",
 };
 
 class HttpError extends Error {
@@ -306,7 +307,8 @@ export const DASHBOARD_HTML = `<!DOCTYPE html>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>ART/RANK 后台看板</title>
-<script src="/vendor/chart.umd.js" onerror="window.__chartFailed=true"><\/script>
+<link rel="icon" href="data:,">
+<script src="/vendor/chart.umd.js"><\/script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 :root{--bg:#0a0c0a;--card:#141914;--border:#2a3a2a;--accent:#d8f86a;--muted:#8a9a8a;--text:#e0e8e0;--green:#4ade80;--red:#f87171;--blue:#60a5fa;--yellow:#facc15}
@@ -378,24 +380,24 @@ tr:last-child td{border-bottom:none}
 <div id="login" style="display:none">
   <h2>ART/RANK 后台</h2>
   <div class="err" id="loginErr"></div>
-  <input type="password" id="pwd" placeholder="管理密码" onkeydown="if(event.key==='Enter')doLogin()">
-  <button onclick="doLogin()">登录</button>
+  <input type="password" id="pwd" placeholder="管理密码" data-enter="login">
+  <button data-act="login">登录</button>
 </div>
 <div id="dashboard" style="display:none">
 <div class="header">
   <h1>ART<span>/</span>RANK <span>后台看板</span></h1>
   <div style="display:flex;align-items:center;gap:12px">
     <span class="meta" id="timestamp"></span>
-    <button class="refresh-btn" onclick="refreshCurrent()">刷新</button>
-    <button class="logout-btn" onclick="doLogout()">退出</button>
+    <button class="refresh-btn" data-act="refresh">刷新</button>
+    <button class="logout-btn" data-act="logout">退出</button>
   </div>
 </div>
 <div class="dash-tabs">
-  <button class="dash-tab active" data-tab="overview" onclick="switchTab('overview')">概览</button>
-  <button class="dash-tab" data-tab="users" onclick="switchTab('users')">用户</button>
-  <button class="dash-tab" data-tab="plaza" onclick="switchTab('plaza')">广场</button>
-  <button class="dash-tab" data-tab="data" onclick="switchTab('data')">数据</button>
-  <button class="dash-tab" data-tab="cache" onclick="switchTab('cache')">缓存</button>
+  <button class="dash-tab active" data-tab="overview" data-act="tab" data-arg="overview">概览</button>
+  <button class="dash-tab" data-tab="users" data-act="tab" data-arg="users">用户</button>
+  <button class="dash-tab" data-tab="plaza" data-act="tab" data-arg="plaza">广场</button>
+  <button class="dash-tab" data-tab="data" data-act="tab" data-arg="data">数据</button>
+  <button class="dash-tab" data-tab="cache" data-act="tab" data-arg="cache">缓存</button>
 </div>
 <div id="tab-overview" class="tab-pane active"><div id="app" class="loading">加载中...</div></div>
 <div id="tab-users" class="tab-pane"><div id="users-app" class="loading">点击「用户」页签加载</div></div>
@@ -409,23 +411,84 @@ tr:last-child td{border-bottom:none}
       浏览器侧的 HTTP 缓存由响应 max-age 控制（文字/详情类最长 1 小时）。
     </p>
     <div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px">
-      <button class="table-action" onclick="purgeCache('posters')">海报</button>
-      <button class="table-action" onclick="purgeCache('intro')">文字简介</button>
-      <button class="table-action" onclick="purgeCache('music')">歌曲</button>
-      <button class="table-action" onclick="purgeCache('misc')">其他</button>
-      <button class="table-action warn" onclick="purgeCache('all')">全部清除</button>
+      <button class="table-action" data-act="purge" data-arg="posters">海报</button>
+      <button class="table-action" data-act="purge" data-arg="intro">文字简介</button>
+      <button class="table-action" data-act="purge" data-arg="music">歌曲</button>
+      <button class="table-action" data-act="purge" data-arg="misc">其他</button>
+      <button class="table-action warn" data-act="purge" data-arg="all">全部清除</button>
     </div>
     <div id="cache-purge-result" style="font-size:12px;color:var(--muted)"></div>
   </div>
 </div>
 <div id="dash-modal-root"></div>
 </div>
-<script>
-var TOKEN_KEY = 'art-rank-admin-token';
+<script src="/admin/app.js"><\/script>
+
+</body>
+</html>`;
+
+/** 后台看板脚本外置，配合 CSP `script-src 'self'`（禁止内联脚本与内联事件）。 */
+export const DASHBOARD_JS = `var TOKEN_KEY = 'art-rank-admin-token';
 function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];});}
 function getToken(){return localStorage.getItem(TOKEN_KEY)||''}
 function setToken(t){localStorage.setItem(TOKEN_KEY,t)}
 function clearToken(){localStorage.removeItem(TOKEN_KEY)}
+
+var ACTIONS = {
+  login: function(){ doLogin(); },
+  logout: function(){ doLogout(); },
+  refresh: function(){ refreshCurrent(); },
+  tab: function(el){ switchTab(el.getAttribute('data-arg')); },
+  purge: function(el){ purgeCache(el.getAttribute('data-arg')); },
+  'export-poster-errors': function(){ exportPosterErrors(); },
+  'modal-close': function(){ closeDashModal(); },
+  'modal-backdrop': function(){ closeDashModal(); },
+  'user-detail': function(el){ openUserDetail(Number(el.getAttribute('data-arg'))); },
+  'user-toggle': function(el){ toggleAccount(Number(el.getAttribute('data-arg')), el.getAttribute('data-arg2') === 'true'); },
+  'user-clear': function(el){ clearAccountData(Number(el.getAttribute('data-arg')), el.getAttribute('data-arg2')); },
+  'user-delete': function(el){ deleteAccount(Number(el.getAttribute('data-arg'))); },
+  'user-reset-password': function(el){ resetPassword(Number(el.getAttribute('data-arg'))); },
+  'revoke-sessions': function(){ revokeAllSessions(); },
+  'clean-links': function(){ cleanExpiredLinks(); },
+  'change-admin-password': function(){ changeAdminPassword(); },
+  'clean-logs': function(el){ cleanLogs(el.getAttribute('data-arg'), el.getAttribute('data-arg2')); },
+  'reset-open': function(el){ openResetConfirm(el.getAttribute('data-arg')); },
+  'reset-execute': function(el){ executeReset(el.getAttribute('data-arg')); },
+  'ai-prompt-save': function(el){ saveAiPrompt(el.getAttribute('data-arg')); },
+  'ai-prompt-clear': function(el){ clearAiPrompt(el.getAttribute('data-arg')); },
+  'plaza-filter': function(){ plazaApplyFilter(); },
+  'plaza-load': function(){ loadPlaza(); },
+  'plaza-page': function(el){ plazaPage(Number(el.getAttribute('data-arg'))); },
+  'plaza-detail': function(el){ openPlazaDetail(Number(el.getAttribute('data-arg'))); },
+  'plaza-toggle': function(el){ togglePlazaPost(Number(el.getAttribute('data-arg')), Number(el.getAttribute('data-arg2')) === 1); },
+  'plaza-delete': function(el){ deletePlazaPost(Number(el.getAttribute('data-arg'))); },
+  'plaza-comment-delete': function(el){ deletePlazaComment(Number(el.getAttribute('data-arg')), Number(el.getAttribute('data-arg2'))); }
+};
+
+function findAction(node, attr){
+  return node && node.closest ? node.closest('[' + attr + ']') : null;
+}
+document.addEventListener('click', function(e){
+  var el = findAction(e.target, 'data-act');
+  if (!el) return;
+  if (el.getAttribute('data-act') === 'modal-backdrop' && e.target !== el) return;
+  var fn = ACTIONS[el.getAttribute('data-act')];
+  if (fn) fn(el);
+});
+document.addEventListener('change', function(e){
+  var el = findAction(e.target, 'data-change');
+  if (!el) return;
+  var fn = ACTIONS[el.getAttribute('data-change')];
+  if (fn) fn(el);
+});
+document.addEventListener('keydown', function(e){
+  if (e.key !== 'Enter') return;
+  var el = findAction(e.target, 'data-enter');
+  if (!el) return;
+  var fn = ACTIONS[el.getAttribute('data-enter')];
+  if (fn) fn(el);
+});
+
 
 async function checkAuth(){
   var r=await fetch('/api/admin/check',{headers:{'Authorization':'Bearer '+getToken()}});
@@ -596,7 +659,7 @@ function renderOverview(d, o) {
           var time = new Date(e.created_at).toLocaleString('zh-CN', {hour:'2-digit',minute:'2-digit',month:'2-digit',day:'2-digit'});
           return '<tr><td>'+esc(e.title)+'</td><td><span class="badge badge-'+esc(e.media_type)+'">'+esc(e.media_type)+'</span></td><td style="color:var(--muted)">'+esc(e.source||'resolver')+'</td><td style="color:var(--muted)">'+esc(time)+'</td></tr>';
         }).join('') + '</tbody></table>' : '<p style="color:var(--muted);font-size:13px">暂无错误记录</p>',
-        '<div style="margin-top:10px"><button onclick="exportPosterErrors()" style="background:var(--card);border:1px solid var(--border);color:var(--text);padding:4px 10px;border-radius:6px;font-size:11px;cursor:pointer">导出CSV（近30天）</button></div>',
+        '<div style="margin-top:10px"><button data-act="export-poster-errors" style="background:var(--card);border:1px solid var(--border);color:var(--text);padding:4px 10px;border-radius:6px;font-size:11px;cursor:pointer">导出CSV（近30天）</button></div>',
       '</div>',
       '<div class="card"><h3 style="margin-bottom:12px">海报错误聚合 / 近30天</h3>',
         '<div style="margin-bottom:10px;font-size:12px;color:var(--muted)">批量解析近7天：共 '+(batchStats.total||0)+' 项 · found '+(batchStats.found||0)+' · absent '+(batchStats.absent||0)+' · throttled '+(batchStats.throttled||0)+(batchStats.total?'（占比 '+Math.round((batchStats.throttled||0)/batchStats.total*100)+'%）':'')+' <span title="throttled 占比持续偏高 = 上游限流；absent 突增 = 封面链判断变化。判断依据：poster_batch_stats 表。">ⓘ</span></div>',
@@ -663,7 +726,7 @@ function renderUsers(d) {
   var rowsHtml = accounts.map(function(a) {
     var time = new Date(a.created_at).toLocaleString('zh-CN', {year:'2-digit',month:'2-digit',day:'2-digit'});
     var disabled = !!a.disabled_at;
-    return '<tr><td>'+esc(a.email)+'</td><td>'+esc(a.nickname||'-')+'</td><td><span class="badge '+(disabled?'badge-err':'badge-ok')+'">'+(disabled?'已禁用':'正常')+'</span></td><td style="color:var(--muted)">'+time+'</td><td><button onclick="openUserDetail('+a.id+')" class="table-action">查看</button> <button onclick="toggleAccount('+a.id+','+disabled+')" class="table-action '+(disabled?'restore':'warn')+'">'+(disabled?'恢复':'禁用')+'</button> <button onclick="clearAccountData('+a.id+',&apos;profile&apos;)" class="table-action">画像</button> <button onclick="clearAccountData('+a.id+',&apos;collections&apos;)" class="table-action">清单</button> <button onclick="deleteAccount('+a.id+')" class="table-action danger">删除</button> <button onclick="resetPassword('+a.id+')" class="table-action warn">重置密码</button></td></tr>';
+    return '<tr><td>'+esc(a.email)+'</td><td>'+esc(a.nickname||'-')+'</td><td><span class="badge '+(disabled?'badge-err':'badge-ok')+'">'+(disabled?'已禁用':'正常')+'</span></td><td style="color:var(--muted)">'+time+'</td><td><button data-act="user-detail" data-arg="'+a.id+'" class="table-action">查看</button> <button data-act="user-toggle" data-arg="'+a.id+'" data-arg2="'+disabled+'" class="table-action '+(disabled?'restore':'warn')+'">'+(disabled?'恢复':'禁用')+'</button> <button data-act="user-clear" data-arg="'+a.id+'" data-arg2="profile" class="table-action">画像</button> <button data-act="user-clear" data-arg="'+a.id+'" data-arg2="collections" class="table-action">清单</button> <button data-act="user-delete" data-arg="'+a.id+'" class="table-action danger">删除</button> <button data-act="user-reset-password" data-arg="'+a.id+'" class="table-action warn">重置密码</button></td></tr>';
   }).join('');
   document.getElementById('users-app').innerHTML = '<div class="card"><h3 style="margin-bottom:12px">用户账户（'+accounts.length+'）</h3>'+(accounts.length ? '<table><thead><tr><th>邮箱</th><th>昵称</th><th>状态</th><th>注册</th><th>操作</th></tr></thead><tbody>'+rowsHtml+'</tbody></table>' : '<p style="color:var(--muted);font-size:13px">暂无注册用户</p>')+'</div>';
 }
@@ -672,14 +735,14 @@ function renderUsers(d) {
 var KIND_LABELS = { film: '电影', book: '书籍', music: '音乐', other: '其他' };
 async function openUserDetail(id){
   var root = document.getElementById('dash-modal-root');
-  root.innerHTML = '<div class="dash-modal-backdrop" onclick="if(event.target===this)closeDashModal()"><div class="dash-modal"><div class="loading">加载中...</div></div></div>';
+  root.innerHTML = '<div class="dash-modal-backdrop" data-act="modal-backdrop"><div class="dash-modal"><div class="loading">加载中...</div></div></div>';
   try {
     var r = await fetch('/api/admin/accounts/'+id+'/detail',{headers:{'Authorization':'Bearer '+getToken()}});
     var d = await r.json();
     if (!r.ok) throw new Error(d.error||'加载失败');
     var a = d.account||{};
     var disabled = !!a.disabled_at;
-    var head = '<div style="display:flex;justify-content:space-between;gap:10px;align-items:flex-start"><div><h3>'+esc(a.nickname||'-')+' <span class="mini-note">#'+a.id+'</span></h3><div class="mini-note">'+esc(a.email||'')+'</div></div><button class="close-x" onclick="closeDashModal()">✕</button></div>';
+    var head = '<div style="display:flex;justify-content:space-between;gap:10px;align-items:flex-start"><div><h3>'+esc(a.nickname||'-')+' <span class="mini-note">#'+a.id+'</span></h3><div class="mini-note">'+esc(a.email||'')+'</div></div><button class="close-x" data-act="modal-close">✕</button></div>';
     var meta = '<div class="mini-note" style="margin:8px 0 12px">注册 '+(a.created_at?new Date(a.created_at).toLocaleDateString('zh-CN'):'-')+' · <span class="badge '+(disabled?'badge-err':'badge-ok')+'">'+(disabled?'已禁用':'正常')+'</span> · 活跃会话 '+(d.active_sessions||0)+' · OAuth '+(d.oauth_providers&&d.oauth_providers.length?esc(d.oauth_providers.join(' / ')):'无')+' · 广场发帖 '+(d.plaza_post_count||0)+' 篇</div>';
     var profileHtml = '';
     var p = d.profile;
@@ -705,8 +768,8 @@ async function openUserDetail(id){
     var collectionsHtml = '<h3 style="font-size:13px;margin:14px 0 4px">云端清单（'+collections.length+'）</h3>'+(collections.length ? '<table><thead><tr><th>标题</th><th>媒介</th><th>作品数</th><th>更新</th></tr></thead><tbody>'+collections.map(function(c){
       return '<tr><td>'+esc(c.title)+'</td><td><span class="badge badge-'+esc(c.kind)+'">'+esc(KIND_LABELS[c.kind]||c.kind)+'</span></td><td>'+(c.item_count||0)+'</td><td style="color:var(--muted)">'+(c.updated_at?new Date(c.updated_at).toLocaleDateString('zh-CN'):'-')+'</td></tr>';
     }).join('')+'</tbody></table>' : '<p class="mini-note">无云端清单</p>');
-    root.innerHTML = '<div class="dash-modal-backdrop" onclick="if(event.target===this)closeDashModal()"><div class="dash-modal">'+head+meta+profileHtml+notesHtml+collectionsHtml+'<div class="mini-note" style="margin-top:14px">删除/禁用/重置密码等操作请在「用户」页签表格中进行</div></div></div>';
-  } catch(e){ root.innerHTML = '<div class="dash-modal-backdrop" onclick="if(event.target===this)closeDashModal()"><div class="dash-modal"><div class="error">加载失败: '+esc(e&&e.message?e.message:e)+'</div></div></div>'; }
+    root.innerHTML = '<div class="dash-modal-backdrop" data-act="modal-backdrop"><div class="dash-modal">'+head+meta+profileHtml+notesHtml+collectionsHtml+'<div class="mini-note" style="margin-top:14px">删除/禁用/重置密码等操作请在「用户」页签表格中进行</div></div></div>';
+  } catch(e){ root.innerHTML = '<div class="dash-modal-backdrop" data-act="modal-backdrop"><div class="dash-modal"><div class="error">加载失败: '+esc(e&&e.message?e.message:e)+'</div></div></div>'; }
 }
 
 function renderData(d) {
@@ -727,31 +790,31 @@ function renderData(d) {
       '</tbody></table></div></div>'+
     '<div>'+
     '<div class="card" style="margin-bottom:16px"><h3 style="margin-bottom:12px">会话与链接管理</h3>'+
-      '<div class="reset-card"><div>用户活跃会话<div class="sub">'+sessionCount+' 个在线会话</div></div><button class="table-action warn" onclick="revokeAllSessions()">强制下线全部用户</button></div>'+
-      '<div class="reset-card"><div>分享短链<div class="sub">'+linkCount+' 条（含未过期）</div></div><button class="table-action" onclick="cleanExpiredLinks()">清理过期链接</button></div>'+
-      '<div class="reset-card"><div>管理后台密码<div class="sub">DB 密码模式可在此修改；环境变量密码需到 Cloudflare 设置</div></div><button class="table-action" onclick="changeAdminPassword()">修改密码</button></div>'+
+      '<div class="reset-card"><div>用户活跃会话<div class="sub">'+sessionCount+' 个在线会话</div></div><button class="table-action warn" data-act="revoke-sessions">强制下线全部用户</button></div>'+
+      '<div class="reset-card"><div>分享短链<div class="sub">'+linkCount+' 条（含未过期）</div></div><button class="table-action" data-act="clean-links">清理过期链接</button></div>'+
+      '<div class="reset-card"><div>管理后台密码<div class="sub">DB 密码模式可在此修改；环境变量密码需到 Cloudflare 设置</div></div><button class="table-action" data-act="change-admin-password">修改密码</button></div>'+
     '</div>'+
     '<div class="card"><h3 style="margin-bottom:12px">日志清理</h3>'+
       '<div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px">'+
-        '<button onclick="cleanLogs(&apos;all&apos;,&apos;delete_all&apos;)" class="table-action danger">清空全部日志</button>'+
-        '<button onclick="cleanLogs(&apos;all&apos;,&apos;delete_7d&apos;)" class="table-action warn">删除7天前</button>'+
-        '<button onclick="cleanLogs(&apos;all&apos;,&apos;keep_24h&apos;)" class="table-action">仅保留24小时</button>'+
-        '<button onclick="cleanLogs(&apos;all&apos;,&apos;delete_24h&apos;)" class="table-action warn">删除最近24小时</button>'+
-        '<button onclick="cleanLogs(&apos;all&apos;,&apos;keep_1h&apos;)" class="table-action">仅保留1小时</button>'+
-        '<button onclick="cleanLogs(&apos;all&apos;,&apos;delete_1h&apos;)" class="table-action warn">删除最近1小时</button>'+
+        '<button data-act="clean-logs" data-arg="all" data-arg2="delete_all" class="table-action danger">清空全部日志</button>'+
+        '<button data-act="clean-logs" data-arg="all" data-arg2="delete_7d" class="table-action warn">删除7天前</button>'+
+        '<button data-act="clean-logs" data-arg="all" data-arg2="keep_24h" class="table-action">仅保留24小时</button>'+
+        '<button data-act="clean-logs" data-arg="all" data-arg2="delete_24h" class="table-action warn">删除最近24小时</button>'+
+        '<button data-act="clean-logs" data-arg="all" data-arg2="keep_1h" class="table-action">仅保留1小时</button>'+
+        '<button data-act="clean-logs" data-arg="all" data-arg2="delete_1h" class="table-action warn">删除最近1小时</button>'+
       '</div>'+
       '<div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:6px">'+
         '<span style="color:var(--muted);font-size:11px;line-height:26px">单表：</span>'+
-        '<button onclick="cleanLogs(&apos;api_logs&apos;,&apos;delete_all&apos;)" class="table-action">清空API日志</button>'+
-        '<button onclick="cleanLogs(&apos;analytics_events&apos;,&apos;delete_all&apos;)" class="table-action">清空分析事件</button>'+
-        '<button onclick="cleanLogs(&apos;poster_errors&apos;,&apos;delete_all&apos;)" class="table-action">清空海报错误</button>'+
+        '<button data-act="clean-logs" data-arg="api_logs" data-arg2="delete_all" class="table-action">清空API日志</button>'+
+        '<button data-act="clean-logs" data-arg="analytics_events" data-arg2="delete_all" class="table-action">清空分析事件</button>'+
+        '<button data-act="clean-logs" data-arg="poster_errors" data-arg2="delete_all" class="table-action">清空海报错误</button>'+
       '</div>'+
       '<div id="cleanResult" style="font-size:12px;color:var(--muted);margin-top:6px"></div>'+
     '</div></div>'+
     '<div class="danger-zone"><h3>⚠ 危险区 · 分级数据重置（不可恢复）</h3>'+
       ['analytics','plaza','shares','accounts'].map(function(scope){
         var meta = RESET_META[scope];
-        return '<div class="reset-card"><div><strong>'+meta.label+'</strong><div class="sub">'+meta.desc+'</div></div><button class="table-action '+(scope==='accounts'?'danger':'warn')+'" onclick="openResetConfirm(&apos;'+scope+'&apos;)">一键重置</button></div>';
+        return '<div class="reset-card"><div><strong>'+meta.label+'</strong><div class="sub">'+meta.desc+'</div></div><button class="table-action '+(scope==='accounts'?'danger':'warn')+'" data-act="reset-open" data-arg="'+scope+'">一键重置</button></div>';
       }).join('')+
       '<p class="mini-note">执行需输入确认短语 RESET 并重新验证管理员密码；所有重置操作都会写入审计日志。建议重置前先用 wrangler d1 export 导出备份。</p>'+
     '</div>'+
@@ -779,15 +842,15 @@ function openResetConfirm(scope){
     return '<tr><td>'+esc(t)+'</td><td style="text-align:right">'+storageCount(lastDashData, t).toLocaleString()+' 行</td></tr>';
   }).join('');
   var root = document.getElementById('dash-modal-root');
-  root.innerHTML = '<div class="dash-modal-backdrop" onclick="if(event.target===this)closeDashModal()"><div class="dash-modal">'+
-    '<button class="close-x" onclick="closeDashModal()">✕</button>'+
+  root.innerHTML = '<div class="dash-modal-backdrop" data-act="modal-backdrop"><div class="dash-modal">'+
+    '<button class="close-x" data-act="modal-close">✕</button>'+
     '<h3>确认重置：'+esc(meta.label)+'</h3>'+
     '<p style="font-size:13px;color:var(--muted);line-height:1.7">'+esc(meta.desc)+'</p>'+
     '<table style="margin:10px 0"><tbody>'+countRows+'</tbody></table>'+
     '<div class="dash-confirm-row">'+
       '<label class="mini-note">输入 <strong style="color:var(--red)">RESET</strong> 确认（区分大小写）</label><input id="resetConfirmInput" autocomplete="off" placeholder="RESET">'+
       '<label class="mini-note">管理员密码</label><input id="resetPasswordInput" type="password" autocomplete="off" placeholder="管理员密码">'+
-      '<button class="table-action danger" style="padding:9px" onclick="executeReset(&apos;'+scope+'&apos;)">执行重置（不可恢复）</button>'+
+      '<button class="table-action danger" style="padding:9px" data-act="reset-execute" data-arg="'+scope+'">执行重置（不可恢复）</button>'+
     '</div></div></div>';
   document.getElementById('resetConfirmInput').focus();
 }
@@ -854,8 +917,8 @@ async function loadAiPrompts() {
         '<div class="mini-note" style="margin-bottom:4px">' + s[1] + (p.override ? ' · <span style="color:var(--yellow)">覆盖中</span>（响应 promptVersion=override）' : ' · 默认模块') + '</div>' +
         '<textarea id="ai-prompt-' + s[0] + '" style="width:100%;min-height:72px;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:12px;padding:8px" placeholder="留空使用默认提示词；仅覆盖指令部分，作品数据始终由服务端渲染">' + esc(p.value || '') + '</textarea>' +
         '<div style="display:flex;gap:6px;margin-top:4px">' +
-          '<button class="table-action" onclick="saveAiPrompt(\\'' + s[0] + '\\')">保存覆盖</button>' +
-          (p.override ? '<button class="table-action warn" onclick="clearAiPrompt(\\'' + s[0] + '\\')">恢复默认</button>' : '') +
+          '<button class="table-action" data-act="ai-prompt-save" data-arg="' + s[0] + '">保存覆盖</button>' +
+          (p.override ? '<button class="table-action warn" data-act="ai-prompt-clear" data-arg="' + s[0] + '">恢复默认</button>' : '') +
         '</div></div>';
     }).join('');
   } catch(e) { el.classList.remove('loading'); el.textContent = '加载失败'; }
@@ -894,7 +957,7 @@ function renderPlaza(d) {
     var time = new Date(p.created_at).toLocaleString('zh-CN',{month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'});
     var hidden = !p.is_public;
     var liveComments = p.live_comment_count != null ? p.live_comment_count : (p.comment_count||0);
-    return '<tr><td style="color:var(--muted)">#'+p.id+'</td><td>'+esc(p.collection_title)+'</td><td>'+esc(p.nickname||'-')+'<div class="mini-note">'+esc(p.email||'')+'</div></td><td><span class="badge badge-'+esc(p.kind||'other')+'">'+esc(p.kind||'-')+'</span></td><td>'+(p.item_count||0)+'</td><td>'+(p.like_count||0)+'</td><td>'+liveComments+'</td><td>'+(hidden?'<span class="badge badge-err">已隐藏</span>':'<span class="badge badge-ok">公开</span>')+'</td><td style="color:var(--muted)">'+time+'</td><td><button class="table-action" onclick="openPlazaDetail('+p.id+')">详情</button> <button class="table-action '+(hidden?'restore':'warn')+'" onclick="togglePlazaPost('+p.id+','+(hidden?1:0)+')">'+(hidden?'恢复':'隐藏')+'</button> <button class="table-action danger" onclick="deletePlazaPost('+p.id+')">删除</button></td></tr>';
+    return '<tr><td style="color:var(--muted)">#'+p.id+'</td><td>'+esc(p.collection_title)+'</td><td>'+esc(p.nickname||'-')+'<div class="mini-note">'+esc(p.email||'')+'</div></td><td><span class="badge badge-'+esc(p.kind||'other')+'">'+esc(p.kind||'-')+'</span></td><td>'+(p.item_count||0)+'</td><td>'+(p.like_count||0)+'</td><td>'+liveComments+'</td><td>'+(hidden?'<span class="badge badge-err">已隐藏</span>':'<span class="badge badge-ok">公开</span>')+'</td><td style="color:var(--muted)">'+time+'</td><td><button class="table-action" data-act="plaza-detail" data-arg="'+p.id+'">详情</button> <button class="table-action '+(hidden?'restore':'warn')+'" data-act="plaza-toggle" data-arg="'+p.id+'" data-arg2="'+(hidden?1:0)+'">'+(hidden?'恢复':'隐藏')+'</button> <button class="table-action danger" data-act="plaza-delete" data-arg="'+p.id+'">删除</button></td></tr>';
   }).join('');
   var kindOptions = kinds.map(function(k){ return '<option value="'+k[0]+'"'+(plazaState.kind===k[0]?' selected':'')+'>'+k[1]+'</option>'; }).join('');
   document.getElementById('plaza-app').innerHTML = [
@@ -902,9 +965,9 @@ function renderPlaza(d) {
       '<div class="card"><h3>帖子总数</h3><div class="value">'+plazaState.total+'</div></div>',
     '</div>',
     '<div class="card">',
-      '<div class="plaza-toolbar"><select id="plazaKind" onchange="plazaApplyFilter()">'+kindOptions+'</select><input id="plazaQ" placeholder="标题 / 昵称 / 邮箱搜索" value="'+esc(plazaState.q)+'" style="width:220px" onkeydown="if(event.key===&apos;Enter&apos;)plazaApplyFilter()"><button class="refresh-btn" onclick="plazaApplyFilter()">搜索</button><button class="refresh-btn" onclick="loadPlaza()">刷新</button><span class="mini-note">隐藏不会删除数据，可随时恢复显示</span></div>',
+      '<div class="plaza-toolbar"><select id="plazaKind" data-change="plaza-filter">'+kindOptions+'</select><input id="plazaQ" placeholder="标题 / 昵称 / 邮箱搜索" value="'+esc(plazaState.q)+'" style="width:220px" data-enter="plaza-filter"><button class="refresh-btn" data-act="plaza-filter">搜索</button><button class="refresh-btn" data-act="plaza-load">刷新</button><span class="mini-note">隐藏不会删除数据，可随时恢复显示</span></div>',
       '<table><thead><tr><th>ID</th><th>榜单</th><th>作者</th><th>媒介</th><th>作品</th><th>赞</th><th>评论</th><th>状态</th><th>时间</th><th>操作</th></tr></thead><tbody>'+(rows || '<tr><td colspan="10" style="color:var(--muted)">暂无帖子</td></tr>')+'</tbody></table>',
-      '<div style="display:flex;gap:10px;justify-content:center;margin-top:14px"><button class="refresh-btn" onclick="plazaPage('+(plazaState.page-1)+')"'+(plazaState.page<=1?' disabled':'')+'>上一页</button><span class="mini-note" style="line-height:30px">第 '+plazaState.page+' / '+pages+' 页</span><button class="refresh-btn" onclick="plazaPage('+(plazaState.page+1)+')"'+(plazaState.page>=pages?' disabled':'')+'>下一页</button></div>',
+      '<div style="display:flex;gap:10px;justify-content:center;margin-top:14px"><button class="refresh-btn" data-act="plaza-page" data-arg="'+(plazaState.page-1)+'"'+(plazaState.page<=1?' disabled':'')+'>上一页</button><span class="mini-note" style="line-height:30px">第 '+plazaState.page+' / '+pages+' 页</span><button class="refresh-btn" data-act="plaza-page" data-arg="'+(plazaState.page+1)+'"'+(plazaState.page>=pages?' disabled':'')+'>下一页</button></div>',
     '</div>'
   ].join('');
 }
@@ -922,7 +985,7 @@ async function deletePlazaPost(id){
 }
 async function openPlazaDetail(id){
   var root = document.getElementById('dash-modal-root');
-  root.innerHTML = '<div class="dash-modal-backdrop" onclick="if(event.target===this)closeDashModal()"><div class="dash-modal"><div class="loading">加载中...</div></div></div>';
+  root.innerHTML = '<div class="dash-modal-backdrop" data-act="modal-backdrop"><div class="dash-modal"><div class="loading">加载中...</div></div></div>';
   try {
     var r = await fetch('/api/admin/plaza/posts/'+id,{headers:{'Authorization':'Bearer '+getToken()}});
     var d = await r.json();
@@ -934,10 +997,10 @@ async function openPlazaDetail(id){
     }).join('');
     var comments = (d.comments||[]).map(function(c){
       var time = new Date(c.created_at).toLocaleString('zh-CN',{month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'});
-      return '<div class="comment-row"><div style="display:flex;justify-content:space-between;gap:10px;align-items:center"><span><strong>'+esc(c.nickname||'匿名')+'</strong> <span class="mini-note">'+esc(c.email||'')+' · '+time+'</span></span><button class="table-action danger" onclick="deletePlazaComment('+c.id+','+p.id+')">删除</button></div><div style="margin-top:4px;white-space:pre-wrap;overflow-wrap:anywhere">'+esc(c.content)+'</div></div>';
+      return '<div class="comment-row"><div style="display:flex;justify-content:space-between;gap:10px;align-items:center"><span><strong>'+esc(c.nickname||'匿名')+'</strong> <span class="mini-note">'+esc(c.email||'')+' · '+time+'</span></span><button class="table-action danger" data-act="plaza-comment-delete" data-arg="'+c.id+'" data-arg2="'+p.id+'">删除</button></div><div style="margin-top:4px;white-space:pre-wrap;overflow-wrap:anywhere">'+esc(c.content)+'</div></div>';
     }).join('');
-    root.innerHTML = '<div class="dash-modal-backdrop" onclick="if(event.target===this)closeDashModal()"><div class="dash-modal"><button class="close-x" onclick="closeDashModal()">✕</button><h3>'+esc(p.collection_title)+' <span class="mini-note">#'+p.id+'</span></h3><div class="mini-note" style="margin-bottom:10px">作者 '+esc(p.nickname||'匿名')+'（'+esc(p.email||'-')+'） · '+(p.is_public?'公开':'已隐藏')+' · 赞 '+(p.like_count||0)+'</div>'+(p.description?'<p style="font-size:13px;color:var(--muted);margin-bottom:10px">'+esc(p.description)+'</p>':'')+'<h3 style="font-size:13px;margin:12px 0 4px">榜单内容（'+(p.items||[]).length+' 件）</h3>'+(items||'<p class="mini-note">无</p>')+'<h3 style="font-size:13px;margin:14px 0 4px">评论（'+(d.comments||[]).length+' 条）</h3>'+(comments||'<p class="mini-note">暂无评论</p>')+'</div></div>';
-  } catch(e){ root.innerHTML = '<div class="dash-modal-backdrop" onclick="if(event.target===this)closeDashModal()"><div class="dash-modal"><div class="error">加载失败: '+esc(e&&e.message?e.message:e)+'</div></div></div>'; }
+    root.innerHTML = '<div class="dash-modal-backdrop" data-act="modal-backdrop"><div class="dash-modal"><button class="close-x" data-act="modal-close">✕</button><h3>'+esc(p.collection_title)+' <span class="mini-note">#'+p.id+'</span></h3><div class="mini-note" style="margin-bottom:10px">作者 '+esc(p.nickname||'匿名')+'（'+esc(p.email||'-')+'） · '+(p.is_public?'公开':'已隐藏')+' · 赞 '+(p.like_count||0)+'</div>'+(p.description?'<p style="font-size:13px;color:var(--muted);margin-bottom:10px">'+esc(p.description)+'</p>':'')+'<h3 style="font-size:13px;margin:12px 0 4px">榜单内容（'+(p.items||[]).length+' 件）</h3>'+(items||'<p class="mini-note">无</p>')+'<h3 style="font-size:13px;margin:14px 0 4px">评论（'+(d.comments||[]).length+' 条）</h3>'+(comments||'<p class="mini-note">暂无评论</p>')+'</div></div>';
+  } catch(e){ root.innerHTML = '<div class="dash-modal-backdrop" data-act="modal-backdrop"><div class="dash-modal"><div class="error">加载失败: '+esc(e&&e.message?e.message:e)+'</div></div></div>'; }
 }
 async function deletePlazaComment(commentId, postId){
   if (!confirm('删除该评论？其回复将一并删除。')) return;
@@ -950,9 +1013,7 @@ function closeDashModal(){ document.getElementById('dash-modal-root').innerHTML=
   var authed = await checkAuth();
   if(authed) showDashboard(); else showLogin();
 })();
-<\/script>
-</body>
-</html>`;
+`;
 
 function json(data: unknown, status = 200, extraHeaders?: HeadersInit): Response {
   const headers = new Headers(JSON_HEADERS);
@@ -3435,6 +3496,15 @@ async function route(request: Request, env: Env): Promise<Response> {
       headers: {
         ...ADMIN_SECURITY_HEADERS,
         "content-type": "text/html; charset=utf-8",
+        "cache-control": "no-store",
+      },
+    });
+  }
+  if (url.pathname === "/admin/app.js" && request.method === "GET") {
+    return new Response(DASHBOARD_JS, {
+      headers: {
+        ...ADMIN_SECURITY_HEADERS,
+        "content-type": "application/javascript; charset=utf-8",
         "cache-control": "no-store",
       },
     });

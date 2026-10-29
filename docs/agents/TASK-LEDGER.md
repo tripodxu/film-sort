@@ -10,6 +10,28 @@
 
 ## 进行中 / 最近
 
+### T-20261029-CSP · 后台严格 CSP（脚本外置 + 事件委托）· 👀 待审（本地 18/18，待上线）
+
+- **起因**：`docs/REVIEW-2026-10-29.md` 保留项——`ADMIN_SECURITY_HEADERS` 因 `DASHBOARD_HTML`
+  的内联脚本与 54 处 `onclick` 被迫保留 `script-src 'unsafe-inline'`。
+- **改动**：
+  - `worker/index.ts`：`DASHBOARD_HTML` 拆出 `DASHBOARD_JS`，新增 `GET /admin/app.js`
+    （`application/javascript` + `no-store` + 同一套安全头）；HTML 只保留
+    `<script src="/admin/app.js">`，并补 `data:` favicon 消除 404 噪音。
+  - 54 处内联事件改为 `data-act` / `data-change` / `data-enter`，脚本内统一
+    click / change / keydown 事件委托（`modal-backdrop` 仅在点击遮罩自身时关闭）。
+  - `ADMIN_SECURITY_HEADERS` 收紧为 `script-src 'self'; script-src-attr 'none'`
+    （`style-src` 因大量内联 `style` 仍保留 `'unsafe-inline'`）。
+  - `worker/dashboardHtml.test.ts`：改为断言 `DASHBOARD_JS` 语法、HTML 无内联
+    script/事件、委托在位、后台 CSP 严格。
+- **验证（本地）**：
+  - `wrangler dev` + Playwright `.tmp/verify-admin-csp.mjs` **18/18**：CSP 头、
+    `app.js` 类型、无内联事件、登录、概览、页签、用户详情弹窗（含遮罩关闭）、
+    缓存清除、数据页、无控制台/CSP 错误。
+  - 五道门禁全绿；`test` **72 文件（71 通过 / 1 跳过），955 passed / 9 skipped**。
+  - 本地测试账号、`admin_sessions`、`admin_config.password_hash`、`.dev.vars` 已清理。
+- **待办**：上线后在 `sort.logicc.top/admin` 复跑同一脚本（真实管理密码）后转 ✅。
+
 ### T-20261029-PERF · adaptive 排序性能（300 件 15.5s → 3.8s）· ✅ 已上线（`08a3f64`）
 
 - **起因**：`docs/CONSOLIDATION-2026-10-28.md` 的独立课题——adaptive 300 件排序约 16.8s。
