@@ -29,6 +29,28 @@ function stripped(name: string): string[] {
 }
 
 describe("migrations 幂等（D2 / T-20261014-07）", () => {
+  it("迁移编号前缀唯一（0008 是历史双支，唯一例外，禁止再增）", () => {
+    // 为什么不一刀切重命名 0008：D1 的 `d1_migrations` 以**文件名**记账，
+    // 已应用到线上的迁移改名后会被当成新迁移重放；0008_disabled_at 是
+    // `ALTER TABLE ADD COLUMN`，重放必然 duplicate column，`npm run deploy`
+    // 从此永久卡住。因此历史双支只能保留并在此登记，新迁移必须取下一个空号。
+    const KNOWN_DUPLICATES = new Map<string, string[]>([
+      ["0008", ["0008_disabled_at.sql", "0008_user_collections.sql"]],
+    ]);
+    const byPrefix = new Map<string, string[]>();
+    for (const file of migrationFiles()) {
+      const prefix = file.slice(0, 4);
+      byPrefix.set(prefix, [...(byPrefix.get(prefix) ?? []), file].sort());
+    }
+    const duplicates = [...byPrefix.entries()]
+      .filter(([, files]) => files.length > 1)
+      .sort(([a], [b]) => a.localeCompare(b));
+    expect(
+      duplicates,
+      `重复迁移编号（新迁移必须取下一个空号）：${JSON.stringify(duplicates)}`,
+    ).toEqual([...KNOWN_DUPLICATES.entries()]);
+  });
+
   it("CREATE TABLE / CREATE INDEX 全部带 IF NOT EXISTS", () => {
     const bad: string[] = [];
     for (const file of migrationFiles()) {
