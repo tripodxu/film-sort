@@ -21,6 +21,8 @@
   - `src/lib/exportPng.ts`：`pickExportScale` 按 16M 像素面积降采样；年鉴卡条目上限 240。
 - **验证**：check / lint / format:check / test（951 passed / 9 skipped）/ build；新增 `exportScale.test.ts`。
 - **提交**：`70e43cf`（fix(ui)）；报告见 [`REVIEW-2026-10-29.md`](../REVIEW-2026-10-29.md) §四。
+- **线上验证（2026-10-29 11:19 CST）**：新构建已上线（`index-DrDVvDx1.js`，此前 `index-DOt28B0D.js`）。
+  **弱网 + 快速切筛选仍需浏览器手测**。
 - **边界**：广场竞态与超时属时序问题，本地单测无法完全覆盖，上线后需弱网 + 快速切筛选手测。
 
 ### T-20261029-P2 · 安全 P2 批量收口（CSV/图片内存/URL 校验/错误回显/后台 CSP/邮箱枚举）· 👀 待审（本地门禁全绿，未上线）
@@ -35,6 +37,8 @@
     禁用状态后移到验证码通过之后。
 - **验证**：check / lint / format:check / test / build；新增 `worker/csvExport.test.ts`，`security.test.ts` 补断言。
 - **提交**：`d315702`（fix(security)，与 EXPIRY 同一提交）；报告见 [`REVIEW-2026-10-29.md`](../REVIEW-2026-10-29.md) §三。
+- **线上验证（2026-10-29 11:19 CST）**：`/admin` 已带 CSP + `cache-control: no-store` ✅；
+  reset 未知邮箱 200 ✅。**CSV 公式防护需管理员登录导出后用 Excel 打开确认（待手测）**。
 - **已知边界**：后台 CSP 因内联 onclick 仍需 `'unsafe-inline'`，严格 CSP 需 DASHBOARD_HTML 前端改造；
   register 端 `email_exists` 为 UX 保留。
 - **下一步**：与 EXPIRY 同批部署后线上回归（CSV 打开不弹公式、后台响应头、reset 未知邮箱不发信）。
@@ -55,6 +59,9 @@
   与 verification ISO 用例，全部跑真实 `node:sqlite`。
 - **文档**：`docs/API.md`（cache/clear、insights、admin change-password）、`FEATURES.md`、`USAGE.md`、`CHANGELOG.md`。
 - **提交**：`d315702`（fix(security)）；报告见 [`REVIEW-2026-10-29.md`](../REVIEW-2026-10-29.md) §二。
+- **线上验证（2026-10-29 11:19 CST，sort.logicc.top，deployment `d05fedba`）**：
+  未登录清缓存 → 401 ✅；未登录内置 AI → 401 ✅（自填 config 仍走上游 `502`，非 401）；
+  reset 未知邮箱 → 200 ✅。**OAuth 5 分钟失效 / 改密旧 token 401 / 同码二次改密 400 待账号手测**。
 - **下一步**：部署后线上回归——① OAuth 登录 5 分钟后 exchange 失效；② 改密后旧管理 token 401；
   ③ 重置密码同码第二次 400；④ 未登录清缓存/内置 AI 返回 401。完成后再改为 ✅。
 
