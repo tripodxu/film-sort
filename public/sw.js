@@ -1,12 +1,24 @@
-const CACHE_NAME = "art-rank-v3";
+const BUILD_ID = /*__BUILD_ID__*/ "dev";
+const CACHE_NAME = "art-rank-v4";
+// 每次构建的缓存桶带 BUILD_ID：产物换代后激活阶段整桶丢弃，
+// 不会再出现「旧 chunk 与新 index.html 混用」的半新半旧状态。
+const RUNTIME_CACHE = `${CACHE_NAME}-${BUILD_ID}`;
 const STATIC_ASSETS = ["/", "/index.html"];
+// 构建时由 scripts/pwa-precache.mjs 注入带 hash 的产物清单（含懒加载路由 chunk）。
+// 不预缓存这些，离线打开未访问过的路由会因动态 import 失败而落到 ErrorBoundary。
+const PRECACHE_ASSETS = /*__PRECACHE_ASSETS__*/ [];
 
 self.addEventListener("install", (event) => {
   event.waitUntil(
-    caches
-      .open(CACHE_NAME)
-      .then((cache) => cache.addAll(STATIC_ASSETS))
-      .then(() => self.skipWaiting()),
+    caches.open(RUNTIME_CACHE).then(async (cache) => {
+      // 单条失败不拖垮整个安装：预缓存是增强，缺一张图不该让 SW 装不上。
+      await Promise.allSettled(
+        [...STATIC_ASSETS, ...PRECACHE_ASSETS].map((url) =>
+          cache.add(new Request(url, { cache: "reload" })),
+        ),
+      );
+      await self.skipWaiting();
+    }),
   );
 });
 
@@ -15,7 +27,11 @@ self.addEventListener("activate", (event) => {
     caches
       .keys()
       .then((keys) =>
-        Promise.all(keys.filter((k) => k !== CACHE_NAME).map((k) => caches.delete(k))),
+        Promise.all(
+          keys
+            .filter((key) => key.startsWith("art-rank-") && key !== RUNTIME_CACHE)
+            .map((key) => caches.delete(key)),
+        ),
       )
       .then(() => self.clients.claim()),
   );
@@ -42,11 +58,11 @@ self.addEventListener("fetch", (event) => {
             response.type === "basic"
           ) {
             const clone = response.clone();
-            caches.open(CACHE_NAME).then((cache) => cache.put("/index.html", clone));
+            caches.open(RUNTIME_CACHE).then((cache) => cache.put("/index.html", clone));
           }
           return response;
         })
-        .catch(() => caches.match("/index.html")),
+        .catch(async () => (await caches.match("/index.html")) ?? Response.error()),
     );
     return;
   }
@@ -58,7 +74,7 @@ self.addEventListener("fetch", (event) => {
         .then((response) => {
           if (!response || response.status !== 200 || response.type !== "basic") return response;
           const clone = response.clone();
-          caches.open(CACHE_NAME).then((cache) => cache.put(request, clone));
+          caches.open(RUNTIME_CACHE).then((cache) => cache.put(request, clone));
           return response;
         })
         .catch(() => new Response("", { status: 503 }));

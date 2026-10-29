@@ -51,6 +51,20 @@ describe("PWA 可安装三件套", () => {
     expect(sw).toContain("clients.claim");
   });
 
+  it("sw.js 预缓存构建产物（否则离线打开没访问过的路由会落到 ErrorBoundary）", () => {
+    const sw = read("public/sw.js");
+    // 占位符必须原样存在，构建脚本才能注入清单与构建号。
+    expect(sw).toContain("/*__PRECACHE_ASSETS__*/ []");
+    expect(sw).toContain('/*__BUILD_ID__*/ "dev"');
+    // 缓存桶必须带构建号，否则新旧产物会混在同一个桶里。
+    expect(sw).toMatch(/RUNTIME_CACHE = `\$\{CACHE_NAME\}-\$\{BUILD_ID\}`/);
+    // 单条预缓存失败不能让整个 install 失败。
+    expect(sw).toMatch(/Promise\.allSettled\(/);
+    expect(sw).toContain("...PRECACHE_ASSETS");
+    // 构建脚本必须接在 vite build 之后。
+    expect(JSON.parse(read("package.json")).scripts.build).toContain("scripts/pwa-precache.mjs");
+  });
+
   it("Service Worker 只在生产域名注册（localhost 保持 HMR 新鲜）", () => {
     const main = read("src/main.tsx");
     expect(main).toContain('register("/sw.js")');

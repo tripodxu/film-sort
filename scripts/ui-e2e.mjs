@@ -190,6 +190,74 @@ try {
   record("T4 详情弹窗焦点不回跳", "skip", `结构对不上：${String(error).split("\n")[0]}`);
 }
 
+// ── T5：离线 app shell（PWA Phase 8：预缓存产物后，没访问过的路由也要能开）──
+try {
+  const context = await browser.newContext();
+  const page = await context.newPage();
+  await page.goto(`${base}/`, { waitUntil: "load", timeout: 30000 });
+  // 种一份最小画像：离线时 /myself 要能渲染出来，而不是兜底报错页。
+  await page.evaluate(() => {
+    const now = new Date().toISOString();
+    const items = ["花样年华", "蓝色", "一一"].map((title, index) => ({
+      id: `e2e-off-${index + 1}`,
+      title,
+      rank: index + 1,
+    }));
+    localStorage.setItem(
+      "art-rank:library:v2",
+      JSON.stringify({
+        version: 2,
+        profileId: "e2e-offline",
+        profileName: "离线用例",
+        updatedAt: now,
+        rankings: [
+          {
+            version: 1,
+            profileId: "e2e-offline",
+            profileName: "离线用例",
+            collectionTitle: "离线用例清单",
+            kind: "film",
+            createdAt: now,
+            items,
+          },
+        ],
+      }),
+    );
+  });
+  const swActive = await page.evaluate(async () => {
+    if (!("serviceWorker" in navigator)) return "unsupported";
+    const reg = await navigator.serviceWorker.ready.catch(() => null);
+    return reg?.active ? "active" : "none";
+  });
+  await page.reload({ waitUntil: "load" });
+  await page.waitForTimeout(2500); // 给预缓存 install 收尾
+  const controlled = await page.evaluate(() => Boolean(navigator.serviceWorker.controller));
+
+  await context.setOffline(true);
+  const status = await page
+    .goto(`${base}/myself`, { waitUntil: "domcontentloaded", timeout: 20000 })
+    .then((response) => response?.status() ?? 0)
+    .catch(() => 0);
+  await page.waitForTimeout(2500);
+  const text = await page.evaluate(() => document.body.innerText);
+  const ok =
+    swActive === "active" &&
+    controlled &&
+    status > 0 &&
+    !/Something went wrong/.test(text) &&
+    /离线用例/.test(text);
+  if (!ok) await shot(page, "T5_offline_failed");
+  record(
+    "T5 离线打开未访问过的路由（/myself）",
+    ok ? "pass" : "fail",
+    `sw=${swActive} controlled=${controlled} status=${status} 画像可见=${/离线用例/.test(text)}`,
+  );
+  await context.setOffline(false);
+  await context.close();
+} catch (error) {
+  record("T5 离线 app shell", "fail", String(error).split("\n")[0]);
+}
+
 await browser.close();
 
 const failed = results.filter((r) => r.status === "fail");

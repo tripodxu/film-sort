@@ -1037,17 +1037,6 @@
 - **最小上下文**：`worker/media.ts` 的 other 五档 fallback + `WikiProbe`
 - **要点**：「前 4 档成功、第 5 档超时 ⇒ `absent`」目前**只有源码形状断言**，没有真正的运行时用例。判据：probe 记到了成功答复 ⇒ 不判 `throttled`。
 
-### ⬜ 优化冲刺 Phase 6 · 相遇页「预测分歧」洞察（Jev）
-- **任务类型**：§2.1（排序/比较）+ §2.7（AI）
-- **最小上下文**：`src/views/CompareView.tsx` + `worker/typesafe.ts` + `docs/PLAN-OPTIMIZATION-SPRINT.md` Phase 6
-- **要点**：复用 `/api/ai/jev-rank` 加 predict 模式；比较页新增「对方最出乎你意料的作品」—— 用我的榜单预测对方排名，与真实排名求偏差 Top3
-- **依赖**：需用户配置 Jev key 才能端到端验证
-
-### ⬜ 优化冲刺 Phase 7 · 文化年度报告（Wrapped）
-- **任务类型**：§2.2 + §2.3
-- **最小上下文**：`src/lib/exportPng.ts` + `src/lib/ranking.ts` + `src/views/ProfileView.tsx`
-- **要点**：可导出 PNG 的年度年鉴卡：总取舍次数（decisionLog）、榜单/作品数、最纠结一对（回环数据）、媒介占比；印刷年鉴风格
-
 ### ⬜ 优化冲刺 Phase 8 · PWA 离线
 - **任务类型**：§2.2 + §2.9
 - **最小上下文**：`public/sw.js` + `public/manifest.json` + `docs/memory/PITFALLS` §1.7
@@ -1074,6 +1063,8 @@
 
 | 编号 | 任务 | 完成日 | commit |
 |------|------|--------|--------|
+| Phase 7 | 文化年度报告（Wrapped 年鉴卡） | 2026-10-29 | `48cc0f4`（线上验证 `7b3f165`；14:41 复核下载 236KB PNG） |
+| Phase 6 | 相遇页「预测分歧」洞察（Jev） | 2026-10-29 | `5d03baf` |
 | P5 | Jev 辅助模式（AI 代判，置信 ≥0.8） | 2026-09-28 | `50e46df` |
 | P4 | 路由拆包（index 1072→964 KB） | 2026-09-28 | `82b5b2d` |
 | P3 | 广场品味相似度徽章 | 2026-09-28 | `bcdaabb` |
