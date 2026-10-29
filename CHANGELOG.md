@@ -18,7 +18,8 @@
   绝不记 `absent`（24h 负缓存会把一次抖动固化成一整天没有封面）。
 
 **验证**：新增 `worker/deadline.test.ts` 6 条（含三条接入绊线）；五道门禁全绿，
-`966 passed / 9 skipped`。
+`966 passed / 9 skipped`。**线上（14:32 CST）**：14 个不同名称冷缓存探针全部 **1.26–7.83s**
+返回（200/404），45–60s 挂起不再出现；探针超配额后按预期 `429 + no-store + retry-after:60`。
 
 **顺带修门禁**：`scripts/gates.mjs` 的 test 门禁在命中 Vitest SSR 缓存并发写入竞态
 （`EPERM ... ssr/<hash>`，会整份丢掉 `worker/other.test.ts` 的 123 条用例）时，
