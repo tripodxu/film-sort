@@ -548,8 +548,8 @@ async function deleteAccount(id) {
   if (r.ok) { load(); } else { alert('删除失败'); }
 }
 async function resetPassword(id) {
-  var pwd = prompt('输入新密码（至少6位）');
-  if (!pwd || pwd.length < 6) { if (pwd !== null) alert('密码至少6位'); return; }
+  var pwd = prompt('输入新密码（至少8位）');
+  if (!pwd || pwd.length < 8) { if (pwd !== null) alert('密码至少8位'); return; }
   var r = await fetch('/api/admin/accounts/' + id + '/reset-password', { method: 'POST', headers: { 'Authorization': 'Bearer ' + getToken(), 'Content-Type': 'application/json' }, body: JSON.stringify({ password: pwd }) });
   if (r.ok) { alert('密码已重置，该用户所有会话已失效'); } else { alert('重置失败'); }
 }
@@ -905,8 +905,8 @@ async function cleanExpiredLinks(){
 async function changeAdminPassword(){
   var oldPwd = prompt('输入旧的管理密码');
   if (!oldPwd) return;
-  var newPwd = prompt('输入新密码（至少6位）');
-  if (!newPwd || newPwd.length < 6) { if (newPwd !== null) alert('密码至少6位'); return; }
+  var newPwd = prompt('输入新密码（至少10位）');
+  if (!newPwd || newPwd.length < 10) { if (newPwd !== null) alert('密码至少10位'); return; }
   var r = await fetch('/api/admin/change-password',{method:'POST',headers:{'Authorization':'Bearer '+getToken(),'Content-Type':'application/json'},body:JSON.stringify({old_password:oldPwd,new_password:newPwd})});
   var d = await r.json().catch(function(){ return {}; });
   if (r.ok) { alert('管理密码已更新，所有管理会话已失效，请重新登录'); localStorage.removeItem(TOKEN_KEY); location.reload(); } else alert('修改失败：'+(d.msg||d.error||('HTTP '+r.status)));
