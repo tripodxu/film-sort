@@ -16,6 +16,7 @@ export type AiProtocol = "auto" | "chat" | "responses" | "anthropic" | "gemini";
 
 export type AiErrorCode =
   | "ai_not_configured"
+  | "authentication_required"
   | "invalid_config"
   | "invalid_data"
   | "data_too_large"

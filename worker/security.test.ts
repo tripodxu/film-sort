@@ -67,7 +67,22 @@ describe("安全审计修复绊线（2026-10-25）", () => {
     const m = read("worker/media.ts");
     expect(m).toContain("UPSTREAM_MAX_BYTES");
     expect(m).toMatch(/declaredLength > UPSTREAM_MAX_BYTES/);
-    expect(m).toMatch(/buffer\.byteLength > UPSTREAM_MAX_BYTES/);
+    // 2026-10-29 P2：改为流式限量读取，超限立即取消 reader，不再先整段读入内存
+    expect(m).toMatch(/readBoundedBytes\(response, UPSTREAM_MAX_BYTES\)/);
+    expect(m).not.toContain("await response.arrayBuffer()");
+  });
+
+  it("P2：CSV 公式注入防护与后台 CSP/入站 URL 校验在位", () => {
+    const idx = read("worker/index.ts");
+    expect(idx).toContain("function csvCell(");
+    expect(idx).toContain("[=+\\-@\\t\\r]");
+    expect(idx).toContain(".map(csvCell)");
+    expect(idx).toContain("ADMIN_SECURITY_HEADERS");
+    expect(idx).toMatch(/"cache-control": "no-store"/);
+    const m = read("worker/media.ts");
+    expect(m).toContain("upstream_protocol_forbidden");
+    expect(m).toContain("upstream_credentials_forbidden");
+    expect(m).toContain("upstream_port_forbidden");
   });
 
   it("L4：PBKDF2 注释不再误导（常量 100k，实现注释不再宣称 600k）", () => {

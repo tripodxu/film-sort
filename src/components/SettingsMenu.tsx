@@ -52,11 +52,18 @@ export function SettingsMenu({
   const t = (zhText: string, en: string) => (zh ? zhText : en);
 
   async function purge(scope: string) {
+    // 服务端清缓存要求登录（全局缓存代次不能被匿名者反复刷新）。
+    const token = localStorage.getItem("art-rank:account-token");
+    if (!token) {
+      onNotice?.(t("登录后才能清除服务端缓存。", "Sign in to clear server cache."));
+      setOpen(false);
+      return;
+    }
     setPurging(scope);
     try {
       const response = await fetch("/api/cache/clear", {
         method: "POST",
-        headers: { "content-type": "application/json" },
+        headers: { "content-type": "application/json", authorization: `Bearer ${token}` },
         body: JSON.stringify({ scope }),
       });
       if (!response.ok) throw new Error(String(response.status));

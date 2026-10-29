@@ -113,6 +113,11 @@ export function AiInsightCard({
         "服务端未配置 AI。点右侧设置填入自己的 API 即可使用。",
         "No built-in AI configured. Add your own API in settings.",
       );
+    if (result.error === "authentication_required")
+      return t(
+        "内置 AI 仅对登录用户开放：请登录，或在设置里填入自己的 API。",
+        "Built-in AI is for signed-in users. Sign in, or add your own API in settings.",
+      );
     if (result.error === "upstream_auth_failed")
       return t(
         "API Key 无效或无权限，请检查设置。",

@@ -31,7 +31,9 @@ export async function adminAuthLocal(request: Request, db: D1Database): Promise<
   const token = auth?.startsWith("Bearer ") ? auth.slice(7) : null;
   if (!token || token.length < 32) return false;
   const session = await db
-    .prepare("SELECT token FROM admin_sessions WHERE token = ? AND expires_at > datetime('now')")
+    .prepare(
+      "SELECT token FROM admin_sessions WHERE token = ? AND julianday(expires_at) > julianday('now')",
+    )
     .bind(token)
     .first();
   return !!session;
@@ -163,11 +165,42 @@ export async function getUserFromToken(
   return (
     (await db
       .prepare(
-        "SELECT u.id, u.email FROM user_sessions s JOIN user_accounts u ON s.user_id = u.id WHERE s.token = ? AND s.expires_at > datetime('now') AND u.disabled_at IS NULL",
+        "SELECT u.id, u.email FROM user_sessions s JOIN user_accounts u ON s.user_id = u.id WHERE s.token = ? AND julianday(s.expires_at) > julianday('now') AND u.disabled_at IS NULL",
       )
       .bind(token)
       .first<{ id: number; email: string }>()) ?? null
   );
+}
+
+/**
+ * 改密 + 一次性消费验证码 + 吊销全部旧会话：三条语句放进同一个 D1 batch（事务）。
+ * 后两条以 `password_hash = 新哈希` 为守卫（PBKDF2 随机盐，新哈希必然不同于旧值），
+ * 因此验证码错误时既不会误删验证码，也不会把用户误踢下线。
+ * 返回 true 仅当守卫 UPDATE 命中（对码、未过期、未超尝试次数）。
+ */
+export async function resetPasswordWithCode(
+  db: D1Database,
+  userId: number,
+  email: string,
+  codeHash: string,
+  newHash: string,
+): Promise<boolean> {
+  const [updated] = await db.batch([
+    db
+      .prepare(`UPDATE user_accounts SET password_hash = ? WHERE id = ? AND ${buildCodeGuardSql()}`)
+      .bind(newHash, userId, email, "reset", codeHash, CODE_MAX_ATTEMPTS),
+    db
+      .prepare(
+        "DELETE FROM verification_codes WHERE email = ? AND purpose = 'reset' AND code_hash = ? AND EXISTS (SELECT 1 FROM user_accounts WHERE id = ? AND password_hash = ?)",
+      )
+      .bind(email, codeHash, userId, newHash),
+    db
+      .prepare(
+        "DELETE FROM user_sessions WHERE user_id = ? AND EXISTS (SELECT 1 FROM user_accounts WHERE id = ? AND password_hash = ?)",
+      )
+      .bind(userId, userId, newHash),
+  ]);
+  return updated.meta.changes === 1;
 }
 
 async function createSession(
@@ -175,12 +208,16 @@ async function createSession(
   userId: number,
 ): Promise<{ token: string; expires: string }> {
   const token = generateToken();
+  // 过期时间用 ISO（含 T/Z）落库，比较一律走 julianday()：SQLite 的日期函数
+  // 两种格式都认，而字符串比较会因 'T'(0x54) > ' '(0x20) 把到期日当天算成未过期。
   const expires = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
   await db
     .prepare("INSERT INTO user_sessions (token, user_id, expires_at) VALUES (?, ?, ?)")
     .bind(token, userId, expires)
     .run();
-  await db.prepare("DELETE FROM user_sessions WHERE expires_at < datetime('now')").run();
+  await db
+    .prepare("DELETE FROM user_sessions WHERE julianday(expires_at) < julianday('now')")
+    .run();
   return { token, expires };
 }
 
@@ -465,8 +502,10 @@ export async function accountRoute(request: Request, env: Env): Promise<Response
       .first();
     if (purpose === "register" && existing)
       return json({ error: "email_exists", msg: "该邮箱已注册" }, 409);
-    if (purpose === "reset" && !existing)
-      return json({ error: "email_notfound", msg: "该邮箱未注册" }, 404);
+    // 重置流程不回显「邮箱未注册」：返回与正常发送一致的响应，但不实际下发验证码。
+    // 注册流程仍需明确告知已注册，否则用户会卡在「收不到验证码」的死路；
+    // 该端点的枚举面由分派层 8 次/10 分/IP 的频控限制（安全审计 2026-10-29 P2）。
+    if (purpose === "reset" && !existing) return json({ ok: true });
     const issued = await issueVerificationCode(env.DB, env, email, purpose);
     if ("error" in issued) {
       const status = issued.error === "code_cooldown" ? 429 : 502;
@@ -490,28 +529,20 @@ export async function accountRoute(request: Request, env: Env): Promise<Response
     )
       .bind(email)
       .first<{ id: number; password_hash: string; disabled_at: string | null }>();
-    if (!user) return json({ error: "email_notfound" }, 404);
-    if (user.disabled_at) return json({ error: "account_disabled" }, 403);
-    // 原子门：单条 UPDATE 同时校验验证码（有效才改密，语句级原子）——
-    // 「密码已改、验证码未消费」的接管窗口不复存在（findings 复审 #1）。
+    // 不泄露邮箱是否注册：未知邮箱与「验证码错误」同响应，并烧同轮 PBKDF2 抹平时序差；
+    // 禁用状态也留到验证码通过后再返回（安全审计 2026-10-29 P2）。
+    if (!user) {
+      await pbkdf2(password, TIMING_DUMMY_SALT, PBKDF2_ITERATIONS).catch(() => undefined);
+      return json({ error: "invalid_code", msg: "验证码无效或已过期" }, 400);
+    }
+    // 原子门 + 一次性消费：改密、删验证码、吊销会话在同一个 batch 事务里完成。
     const codeHash = await sha256Hex(code.replace(/\s+/g, ""));
-    const updated = await env.DB.prepare(
-      `UPDATE user_accounts SET password_hash = ? WHERE id = ? AND ${buildCodeGuardSql()}`,
-    )
-      .bind(
-        await hashPasswordStrong(password),
-        user.id,
-        email,
-        "reset",
-        codeHash,
-        CODE_MAX_ATTEMPTS,
-      )
-      .run();
-    if (updated.meta.changes !== 1) {
+    const newHash = await hashPasswordStrong(password);
+    if (!(await resetPasswordWithCode(env.DB, user.id, email, codeHash, newHash))) {
       const classification = await classifyCodeFailure(env.DB, email, "reset", codeHash);
       return json({ error: classification.error, msg: classification.msg }, 400);
     }
-    await env.DB.prepare("DELETE FROM user_sessions WHERE user_id = ?").bind(user.id).run();
+    if (user.disabled_at) return json({ error: "account_disabled" }, 403);
     return json({ ok: true });
   }
 
@@ -855,7 +886,7 @@ export async function accountRoute(request: Request, env: Env): Promise<Response
     if (!account) return json({ error: "account_not_found" }, 404);
     const [sessions, oauth, profileRow, collections, plazaCount] = await Promise.all([
       env.DB.prepare(
-        "SELECT COUNT(*) AS c FROM user_sessions WHERE user_id = ? AND expires_at > datetime('now')",
+        "SELECT COUNT(*) AS c FROM user_sessions WHERE user_id = ? AND julianday(expires_at) > julianday('now')",
       )
         .bind(userId)
         .first<{ c: number }>(),

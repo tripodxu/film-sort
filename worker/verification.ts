@@ -23,7 +23,7 @@ export type CodeConsumptionFailure = {
  * 绑定顺序：email, purpose, codeHash, CODE_MAX_ATTEMPTS。
  */
 export function buildCodeGuardSql(): string {
-  return "EXISTS (SELECT 1 FROM verification_codes WHERE email = ? AND purpose = ? AND code_hash = ? AND attempts < ? AND expires_at > datetime('now'))";
+  return "EXISTS (SELECT 1 FROM verification_codes WHERE email = ? AND purpose = ? AND code_hash = ? AND attempts < ? AND julianday(expires_at) > julianday('now'))";
 }
 
 /** 消费/守卫失败时的错误归类（错码递增计数）。email 须已规范化。 */
@@ -36,7 +36,7 @@ export async function classifyCodeFailure(
   const normalizedEmail = email.trim().toLowerCase();
   const row = await db
     .prepare(
-      "SELECT id, code_hash, attempts, expires_at > datetime('now') AS alive FROM verification_codes WHERE email = ? AND purpose = ? ORDER BY id DESC LIMIT 1",
+      "SELECT id, code_hash, attempts, julianday(expires_at) > julianday('now') AS alive FROM verification_codes WHERE email = ? AND purpose = ? ORDER BY id DESC LIMIT 1",
     )
     .bind(normalizedEmail, purpose)
     .first<{ id: number; code_hash: string; attempts: number; alive: number }>();
@@ -79,7 +79,7 @@ export async function consumeVerificationCode(
   const codeHash = await sha256Hex(code.replace(/\s+/g, ""));
   const row = await db
     .prepare(
-      "SELECT id, code_hash, attempts, expires_at > datetime('now') AS alive FROM verification_codes WHERE email = ? AND purpose = ? ORDER BY id DESC LIMIT 1",
+      "SELECT id, code_hash, attempts, julianday(expires_at) > julianday('now') AS alive FROM verification_codes WHERE email = ? AND purpose = ? ORDER BY id DESC LIMIT 1",
     )
     .bind(normalizedEmail, purpose)
     .first<{ id: number; code_hash: string; attempts: number; alive: number }>();
@@ -89,7 +89,7 @@ export async function consumeVerificationCode(
     return { ok: false, error: "code_locked", msg: "尝试次数过多，请重新获取验证码" };
   const del = await db
     .prepare(
-      "DELETE FROM verification_codes WHERE id = ? AND code_hash = ? AND attempts < ? AND expires_at > datetime('now')",
+      "DELETE FROM verification_codes WHERE id = ? AND code_hash = ? AND attempts < ? AND julianday(expires_at) > julianday('now')",
     )
     .bind(row.id, codeHash, CODE_MAX_ATTEMPTS)
     .run();
@@ -106,7 +106,7 @@ export async function consumeVerificationCode(
   // 对码但条件删除失败 = 另一并发请求刚刚消费/锁定/过期了这一行：有界回读归类。
   const after = await db
     .prepare(
-      "SELECT attempts, expires_at > datetime('now') AS alive FROM verification_codes WHERE id = ?",
+      "SELECT attempts, julianday(expires_at) > julianday('now') AS alive FROM verification_codes WHERE id = ?",
     )
     .bind(row.id)
     .first<{ attempts: number; alive: number }>();
@@ -125,13 +125,15 @@ export async function consumeOAuthExchange(
 ): Promise<ExchangeConsumption> {
   const row = await db
     .prepare(
-      "SELECT token, email, nickname FROM oauth_exchanges WHERE code = ? AND expires_at > datetime('now')",
+      "SELECT token, email, nickname FROM oauth_exchanges WHERE code = ? AND julianday(expires_at) > julianday('now')",
     )
     .bind(code)
     .first<{ token: string; email: string; nickname: string | null }>();
   if (!row) return { ok: false };
   const del = await db
-    .prepare("DELETE FROM oauth_exchanges WHERE code = ? AND expires_at > datetime('now')")
+    .prepare(
+      "DELETE FROM oauth_exchanges WHERE code = ? AND julianday(expires_at) > julianday('now')",
+    )
     .bind(code)
     .run();
   if (del.meta.changes !== 1) return { ok: false };

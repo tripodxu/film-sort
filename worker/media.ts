@@ -3,6 +3,7 @@ import { gdPicUrl, gdSearch, pickTracks, toSc, type GdProxyEnv } from "./gdstudi
 import {
   fetchBounded,
   parseAllowedUrl,
+  readBoundedBytes,
   readBoundedJson,
   readBoundedText,
   type OutboundPolicy,
@@ -290,7 +291,18 @@ function redirectHostAllowed(hostname: string): boolean {
  * redirect:"manual" + 每跳 UPSTREAM_REDIRECT_SUFFIXES 白名单——白名单 CDN 被塞
  * 任意 Location 也不会被跟随到内网/任意主机。 */
 async function fetchValidated(url: string, headers: Record<string, string>): Promise<Response> {
-  let current = url;
+  // 入参也要校验，不能只信任调用方：拒绝非 https / 带凭据 / 非默认端口，
+  // 避免 file:/data:/内网端口的 URL 在这一层被直接发起（安全审计 P2）。
+  let initial: URL;
+  try {
+    initial = new URL(url);
+  } catch {
+    throw new Error("upstream_url_invalid");
+  }
+  if (initial.protocol !== "https:") throw new Error("upstream_protocol_forbidden");
+  if (initial.username || initial.password) throw new Error("upstream_credentials_forbidden");
+  if (initial.port && initial.port !== "443") throw new Error("upstream_port_forbidden");
+  let current = initial.href;
   let response = await fetch(current, {
     headers,
     signal: AbortSignal.timeout(15000),
@@ -1229,7 +1241,9 @@ export async function doubanSuggest(query: string): Promise<DoubanWork[]> {
     const response = await upstream(
       `https://movie.douban.com/j/subject_suggest?q=${encodeURIComponent(query)}`,
     );
-    const text = await response.text();
+    // 限量读取：suggest 响应是图书/影视条目列表，正常远小于 2MB；
+    // 无 content-length 的超大 body 不再整段读入内存（安全审计 2026-10-29 P2）。
+    const text = await readBoundedText(response, 2 * 1024 * 1024);
     let data: unknown;
     try {
       data = JSON.parse(text);
@@ -2570,9 +2584,14 @@ export async function proxyImage(raw: string): Promise<Response> {
     if (!/^image\/(jpe?g|png|webp|avif)(;|$)/i.test(type))
       return new Response(null, { status: 415 });
     // 实读上限（安全审计 2026-10-25 M3）：缺 content-length 的超大响应不再无界占内存；
-    // 海报量级远小于 12MB，超限按 413 拒绝。
-    const buffer = await response.arrayBuffer();
-    if (buffer.byteLength > UPSTREAM_MAX_BYTES) return new Response(null, { status: 413 });
+    // 海报量级远小于 12MB，超限按 413 拒绝。改用流式限量读取，超限即刻取消 reader，
+    // 不再先把整个 body 读进内存再判断（安全审计 2026-10-29 P2）。
+    let buffer: Uint8Array;
+    try {
+      buffer = await readBoundedBytes(response, UPSTREAM_MAX_BYTES);
+    } catch {
+      return new Response(null, { status: 413 });
+    }
     return new Response(buffer, {
       headers: {
         "content-type": type,

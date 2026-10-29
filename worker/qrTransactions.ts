@@ -49,7 +49,7 @@ export async function getQrTransaction(
 ): Promise<QrTransaction | null> {
   const row = await db
     .prepare(
-      "SELECT user_id, expires_at FROM qr_transactions WHERE provider = ? AND transaction_key = ? AND user_id = ? AND expires_at > datetime('now') LIMIT 1",
+      "SELECT user_id, expires_at FROM qr_transactions WHERE provider = ? AND transaction_key = ? AND user_id = ? AND julianday(expires_at) > julianday('now') LIMIT 1",
     )
     .bind(provider, key, userId)
     .first<D1Row>();
@@ -70,7 +70,7 @@ export async function consumeQrTransaction(
 ): Promise<boolean> {
   const result = await db
     .prepare(
-      "DELETE FROM qr_transactions WHERE provider = ? AND transaction_key = ? AND user_id = ? AND expires_at > datetime('now')",
+      "DELETE FROM qr_transactions WHERE provider = ? AND transaction_key = ? AND user_id = ? AND julianday(expires_at) > julianday('now')",
     )
     .bind(provider, key, userId)
     .run();
@@ -79,5 +79,7 @@ export async function consumeQrTransaction(
 
 /** 清理过期行；幂等，适合挂在 scheduled handler。 */
 export async function cleanupExpiredQrTransactions(db: D1Database): Promise<void> {
-  await db.prepare("DELETE FROM qr_transactions WHERE expires_at <= datetime('now')").run();
+  await db
+    .prepare("DELETE FROM qr_transactions WHERE julianday(expires_at) <= julianday('now')")
+    .run();
 }

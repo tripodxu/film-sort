@@ -177,6 +177,29 @@ describe("consumeOAuthExchange（一次性并发语义，DATA-05）", () => {
       .run("code-2", "token-2", "a@example.com");
     await expect(consumeOAuthExchange(d1, "code-2")).resolves.toMatchObject({ ok: false });
   });
+
+  // 回归：过期时间由 JS 写成 ISO（带 T/Z），旧实现用字符串比较，'T' > ' ' 会把
+  // 到期当天恒判「未过期」，5 分钟的 exchange code 实际可活近 24 小时。
+  it("compares ISO expiry by time, not by string order", async () => {
+    const { d1, raw } = d1FromSqlite();
+    const insert = raw.prepare(
+      "INSERT INTO oauth_exchanges (code, token, email, nickname, expires_at) VALUES (?, ?, ?, NULL, ?)",
+    );
+    insert.run(
+      "code-iso-old",
+      "token-old",
+      "a@example.com",
+      new Date(Date.now() - 1000).toISOString(),
+    );
+    insert.run(
+      "code-iso-alive",
+      "token-alive",
+      "a@example.com",
+      new Date(Date.now() + 5 * 60 * 1000).toISOString(),
+    );
+    await expect(consumeOAuthExchange(d1, "code-iso-old")).resolves.toMatchObject({ ok: false });
+    await expect(consumeOAuthExchange(d1, "code-iso-alive")).resolves.toMatchObject({ ok: true });
+  });
 });
 
 describe("buildCodeGuardSql（原子门，复审 #1/#2）", () => {

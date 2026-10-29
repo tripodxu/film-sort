@@ -281,6 +281,15 @@ const SECURITY_HEADERS: Record<string, string> = {
   "permissions-policy": "camera=(), microphone=(), geolocation=(), payment=()",
 };
 
+/** 管理后台是单文件内联脚本 + 内联 onclick 的页面，无法套用站点级 sha256 CSP。
+ * 这里仍给出 CSP（限制 base/frame/form/对象源），并保留 inline 脚本所需的最小放行；
+ * 同时用 no-store 避免后台页面被中间层缓存（安全审计 2026-10-29 P2）。 */
+const ADMIN_SECURITY_HEADERS: Record<string, string> = {
+  ...SECURITY_HEADERS,
+  "content-security-policy":
+    "default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; connect-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'",
+};
+
 class HttpError extends Error {
   constructor(
     public status: number,
@@ -678,9 +687,9 @@ async function openUserDetail(id){
       profileHtml = '<h3 style="font-size:13px;margin:14px 0 4px">画像「'+esc(p.profileName||'-')+'」（'+p.rankings.length+' 个榜单 / '+p.rankings.reduce(function(s,e){return s+(e.items?e.items.length:0);},0)+' 件作品'+(d.profile_updated_at?' · 更新于 '+new Date(d.profile_updated_at).toLocaleDateString('zh-CN'):'')+'）</h3>';
       profileHtml += p.rankings.map(function(entry){
         var items = (entry.items||[]).map(function(w,i){
-          var rank = w.rank || (i+1);
+          var rank = Number(w.rank) || (i+1);
           var poster = (w.posterUrls&&w.posterUrls[0]) ? '<img src="/api/image?url='+encodeURIComponent(w.posterUrls[0])+'" alt="" style="width:24px;height:34px;object-fit:cover;border-radius:2px;flex-shrink:0" referrerpolicy="no-referrer">' : '';
-          return '<div class="rank-row">'+poster+'<span class="rank-medal">'+(rank<=3?(rank===1?'🥇':rank===2?'🥈':'🥉'):String(rank).padStart(2,'0'))+'</span><div style="min-width:0"><strong>'+esc(w.title)+'</strong><div class="mini-note">'+esc(w.creator||'')+' '+(w.year||'')+'</div></div></div>';
+          return '<div class="rank-row">'+poster+'<span class="rank-medal">'+(rank<=3?(rank===1?'🥇':rank===2?'🥈':'🥉'):String(rank).padStart(2,'0'))+'</span><div style="min-width:0"><strong>'+esc(w.title)+'</strong><div class="mini-note">'+esc(w.creator||'')+' '+esc(w.year||'')+'</div></div></div>';
         }).join('');
         return '<div style="margin-bottom:14px"><div style="display:flex;gap:8px;align-items:center;margin-bottom:4px"><span class="badge badge-'+esc(entry.kind)+'">'+esc(KIND_LABELS[entry.kind]||entry.kind)+'</span><strong style="font-size:13px">'+esc(entry.collectionTitle)+'</strong><span class="mini-note">TOP '+((entry.items||[]).length)+'</span></div>'+(items||'<p class="mini-note">空榜单</p>')+'</div>';
       }).join('');
@@ -811,7 +820,7 @@ async function changeAdminPassword(){
   if (!newPwd || newPwd.length < 6) { if (newPwd !== null) alert('密码至少6位'); return; }
   var r = await fetch('/api/admin/change-password',{method:'POST',headers:{'Authorization':'Bearer '+getToken(),'Content-Type':'application/json'},body:JSON.stringify({old_password:oldPwd,new_password:newPwd})});
   var d = await r.json().catch(function(){ return {}; });
-  if (r.ok) alert('管理密码已更新'); else alert('修改失败：'+(d.msg||d.error||('HTTP '+r.status)));
+  if (r.ok) { alert('管理密码已更新，所有管理会话已失效，请重新登录'); localStorage.removeItem(TOKEN_KEY); location.reload(); } else alert('修改失败：'+(d.msg||d.error||('HTTP '+r.status)));
 }
 async function loadAudit(){
   var el = document.getElementById('audit-app');
@@ -920,8 +929,8 @@ async function openPlazaDetail(id){
     if (!r.ok) throw new Error(d.error||'加载失败');
     var p = d.post;
     var items = (p.items||[]).map(function(w,i){
-      var rank = w.rank || (i+1);
-      return '<div class="rank-row"><span class="rank-medal">'+(rank<=3?(rank===1?'🥇':rank===2?'🥈':'🥉'):String(rank).padStart(2,'0'))+'</span><div style="min-width:0"><strong>'+esc(w.title)+'</strong><div class="mini-note">'+esc(w.creator||'')+' '+(w.year||'')+'</div></div></div>';
+      var rank = Number(w.rank) || (i+1);
+      return '<div class="rank-row"><span class="rank-medal">'+(rank<=3?(rank===1?'🥇':rank===2?'🥈':'🥉'):String(rank).padStart(2,'0'))+'</span><div style="min-width:0"><strong>'+esc(w.title)+'</strong><div class="mini-note">'+esc(w.creator||'')+' '+esc(w.year||'')+'</div></div></div>';
     }).join('');
     var comments = (d.comments||[]).map(function(c){
       var time = new Date(c.created_at).toLocaleString('zh-CN',{month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'});
@@ -951,6 +960,15 @@ function json(data: unknown, status = 200, extraHeaders?: HeadersInit): Response
     new Headers(extraHeaders).forEach((value, key) => headers.set(key, value));
   }
   return withSecurityHeaders(new Response(JSON.stringify(data), { status, headers }));
+}
+
+/** CSV 单元格：转义引号，并对公式注入做防护。
+ * Excel/Sheets 会把以 = + - @ 或制表/回车开头的单元格当公式执行，
+ * 前缀单引号强制按文本处理（安全审计 2026-10-29 P2）。 */
+export function csvCell(value: unknown): string {
+  const text = String(value ?? "");
+  const guarded = /^[=+\-@\t\r]/.test(text) ? "'" + text : text;
+  return `"${guarded.replace(/"/g, '""')}"`;
 }
 
 function withSecurityHeaders(response: Response): Response {
@@ -1024,7 +1042,7 @@ async function adminAuth(request: Request, env: Env): Promise<boolean> {
   if (!token || token.length < 32) return false;
   try {
     const session = await env.DB.prepare(
-      "SELECT token FROM admin_sessions WHERE token = ? AND expires_at > datetime('now')",
+      "SELECT token FROM admin_sessions WHERE token = ? AND julianday(expires_at) > julianday('now')",
     )
       .bind(token)
       .first();
@@ -1474,7 +1492,9 @@ async function handleAdminLogin(request: Request, env: Env): Promise<Response> {
   await env.DB.prepare("INSERT INTO admin_sessions (token, expires_at) VALUES (?, ?)")
     .bind(token, expires)
     .run();
-  await env.DB.prepare("DELETE FROM admin_sessions WHERE expires_at < datetime('now')").run();
+  await env.DB.prepare(
+    "DELETE FROM admin_sessions WHERE julianday(expires_at) < julianday('now')",
+  ).run();
   return json({ token, expires });
 }
 
@@ -1594,7 +1614,14 @@ async function handleAdminChangePassword(request: Request, env: Env): Promise<Re
   await env.DB.prepare("UPDATE admin_config SET value = ? WHERE key = 'password_hash'")
     .bind(await hashPasswordStrong(newPassword))
     .run();
-  await recordAudit(env, "admin:change_password", "修改管理后台密码", request);
+  // 改密即全量吊销管理端会话：旧 token 若已泄露，不能继续用到 7 天自然过期。
+  const revoked = await env.DB.prepare("DELETE FROM admin_sessions").run();
+  await recordAudit(
+    env,
+    "admin:change_password",
+    `修改管理后台密码（吊销 ${revoked.meta?.changes ?? 0} 个管理会话）`,
+    request,
+  );
   return json({ ok: true });
 }
 
@@ -1625,7 +1652,7 @@ async function handleAdminRevokeSessions(request: Request, env: Env): Promise<Re
 async function handleAdminCleanExpiredLinks(request: Request, env: Env): Promise<Response> {
   if (!env.DB) return json({ error: "database_unavailable" }, 503);
   const result = await env.DB.prepare(
-    "DELETE FROM shared_links WHERE expires_at < datetime('now')",
+    "DELETE FROM shared_links WHERE julianday(expires_at) < julianday('now')",
   ).run();
   await recordAudit(
     env,
@@ -1803,7 +1830,7 @@ async function serveOgHtml(request: Request, env: Env): Promise<Response | null>
   try {
     if (shareMatch) {
       const row = await env.DB.prepare(
-        "SELECT profile FROM shared_links WHERE code = ? AND expires_at > datetime('now')",
+        "SELECT profile FROM shared_links WHERE code = ? AND julianday(expires_at) > julianday('now')",
       )
         .bind(shareMatch[1])
         .first<{ profile: string }>();
@@ -2079,10 +2106,7 @@ async function route(request: Request, env: Env): Promise<Response> {
       "\uFEFF" +
       "title,media_type,error,created_at\n" +
       rows
-        .map(
-          (r) =>
-            `"${r.title.replace(/"/g, '""')}","${r.media_type}","${r.error}","${r.created_at}"`,
-        )
+        .map((r) => [r.title, r.media_type, r.error, r.created_at].map(csvCell).join(","))
         .join("\n");
     return new Response(csv, {
       status: 200,
@@ -2912,10 +2936,20 @@ async function route(request: Request, env: Env): Promise<Response> {
           { error: "ai_not_configured", msg: "服务端未配置 AI，可在设置里填入自己的 API" },
           503,
         );
+      // 内置通道烧的是服务端额度：先限流，再要求登录（自填 config 不受此限）。
       if (!(await allowUpstreamRequest(request, "ai", 8)))
         return json({ error: "rate_limited", msg: "操作太频繁，请 10 分钟后再试" }, 429, {
           "retry-after": "600",
         });
+      const aiUser = env.DB ? await getUserFromToken(request, env.DB) : null;
+      if (!aiUser)
+        return json(
+          {
+            error: "authentication_required",
+            msg: "内置 AI 仅对登录用户开放，也可在设置里填入自己的 API",
+          },
+          401,
+        );
       const model = env.AI_MODEL?.trim() || "claude-3-5-haiku-latest";
       // 内置通道协议：缺省 anthropic（保持历史行为，AI_API_URL 原样直发）；
       // 配成 chat/responses/gemini 时按端点归一规则补路径。
@@ -3065,7 +3099,8 @@ async function route(request: Request, env: Env): Promise<Response> {
     }
   }
 
-  // POST /api/cache/clear —— 同源用户清除服务端缓存（海报/文字/歌曲/其他）
+  // POST /api/cache/clear —— 登录用户清除服务端缓存（海报/文字/歌曲/其他）
+  // 缓存代次是全局的：不登录即可清空等于给了匿名者反复把压力打回上游的开关。
   if (url.pathname === "/api/cache/clear" && request.method === "POST") {
     if (!env.DB) return json({ error: "database_unavailable" }, 503);
     assertSameOrigin(request);
@@ -3073,6 +3108,9 @@ async function route(request: Request, env: Env): Promise<Response> {
       return json({ error: "rate_limited", msg: "操作太频繁，请稍后再试" }, 429, {
         "retry-after": "600",
       });
+    const cacheUser = await getUserFromToken(request, env.DB);
+    if (!cacheUser)
+      return json({ error: "authentication_required", msg: "登录后才能清除服务端缓存" }, 401);
     const body = await readJson(request);
     if (!isCacheScope(body.scope)) return json({ error: "invalid_scope" }, 400);
     await refreshGenerations(env.DB);
@@ -3083,10 +3121,11 @@ async function route(request: Request, env: Env): Promise<Response> {
   // 网易云扫码登录（weapi 协议）与连接状态管理
   if (url.pathname.startsWith("/api/netease/")) {
     if (!env.DB) return json({ error: "database_unavailable" }, 503);
-    const user = await getUserFromToken(request, env.DB);
-    if (!user) return json({ error: "authentication_required" }, 401);
+    // 先限流再查会话：未登录请求不能靠伪造/缺失 token 绕过频控去刷 D1。
     if (!(await allowUpstreamRequest(request, "netease", 120)))
       return json({ error: "rate_limited" }, 429, { "retry-after": "60" });
+    const user = await getUserFromToken(request, env.DB);
+    if (!user) return json({ error: "authentication_required" }, 401);
     try {
       if (url.pathname === "/api/netease/qr/issue" && request.method === "GET") {
         const { unikey, qrValue, ttl } = await neteaseQrIssue();
@@ -3182,10 +3221,11 @@ async function route(request: Request, env: Env): Promise<Response> {
   }
   if (url.pathname.startsWith("/api/douban/")) {
     if (!env.DB) return json({ error: "database_unavailable" }, 503);
-    const user = await getUserFromToken(request, env.DB);
-    if (!user) return json({ error: "authentication_required" }, 401);
+    // 先限流再查会话（同上）。
     if (!(await allowUpstreamRequest(request, "douban", 120)))
       return json({ error: "rate_limited" }, 429, { "retry-after": "60" });
+    const user = await getUserFromToken(request, env.DB);
+    if (!user) return json({ error: "authentication_required" }, 401);
     try {
       if (url.pathname === "/api/douban/qr/issue" && request.method === "GET") {
         const { code, qrImage, ttl } = await doubanQrIssue();
@@ -3363,7 +3403,7 @@ async function route(request: Request, env: Env): Promise<Response> {
     const code = url.pathname.slice("/api/share/".length);
     if (!code || code.length > 20) return json({ error: "invalid_code" }, 400);
     const row = await env.DB.prepare(
-      "SELECT profile, notes, expires_at FROM shared_links WHERE code = ? AND expires_at > datetime('now')",
+      "SELECT profile, notes, expires_at FROM shared_links WHERE code = ? AND julianday(expires_at) > julianday('now')",
     )
       .bind(code)
       .first<{ profile: string; notes: string | null; expires_at: string }>();
@@ -3393,8 +3433,9 @@ async function route(request: Request, env: Env): Promise<Response> {
   if (url.pathname === "/admin" && request.method === "GET") {
     return new Response(DASHBOARD_HTML, {
       headers: {
+        ...ADMIN_SECURITY_HEADERS,
         "content-type": "text/html; charset=utf-8",
-        "cache-control": "public, max-age=300",
+        "cache-control": "no-store",
       },
     });
   }
@@ -3455,10 +3496,9 @@ export default {
         error = err.message;
       } else {
         console.error("unhandled worker error", err instanceof Error ? err.stack : err);
-        response = json(
-          { error: "internal_error", detail: err instanceof Error ? err.message : String(err) },
-          500,
-        );
+        // 不把内部错误信息回传给客户端：堆栈/驱动细节只进服务端日志与 api_logs
+        // （安全审计 2026-10-29 P2）。
+        response = json({ error: "internal_error" }, 500);
         error = err instanceof Error ? err.message : "unknown";
       }
     }
@@ -3495,11 +3535,15 @@ export default {
         ),
         env.DB.prepare("DELETE FROM api_logs WHERE created_at < datetime('now', '-90 days')"),
         env.DB.prepare("DELETE FROM poster_errors WHERE created_at < datetime('now', '-180 days')"),
-        env.DB.prepare("DELETE FROM admin_sessions WHERE expires_at < datetime('now')"),
-        env.DB.prepare("DELETE FROM user_sessions WHERE expires_at < datetime('now')"),
-        env.DB.prepare("DELETE FROM oauth_exchanges WHERE expires_at < datetime('now')"),
-        env.DB.prepare("DELETE FROM qr_transactions WHERE expires_at <= datetime('now')"),
-        env.DB.prepare("DELETE FROM shared_links WHERE expires_at < datetime('now')"),
+        env.DB.prepare("DELETE FROM admin_sessions WHERE julianday(expires_at) < julianday('now')"),
+        env.DB.prepare("DELETE FROM user_sessions WHERE julianday(expires_at) < julianday('now')"),
+        env.DB.prepare(
+          "DELETE FROM oauth_exchanges WHERE julianday(expires_at) < julianday('now')",
+        ),
+        env.DB.prepare(
+          "DELETE FROM qr_transactions WHERE julianday(expires_at) <= julianday('now')",
+        ),
+        env.DB.prepare("DELETE FROM shared_links WHERE julianday(expires_at) < julianday('now')"),
       ]);
     } catch (error) {
       console.error("scheduled cleanup failed", error instanceof Error ? error.message : error);
