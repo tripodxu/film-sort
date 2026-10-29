@@ -39,9 +39,9 @@ describe("安全审计修复绊线（2026-10-25）", () => {
     const idx = read("worker/index.ts");
     const loginRoute = idx.indexOf('"/api/admin/login"');
     expect(loginRoute).toBeGreaterThan(-1);
-    expect(idx.indexOf('allowUpstreamRequest(request, "auth", 30)', loginRoute)).toBeGreaterThan(
-      loginRoute,
-    );
+    expect(
+      idx.indexOf('allowUpstreamRequest(request, "auth", 30, env.DB)', loginRoute),
+    ).toBeGreaterThan(loginRoute);
     expect(idx).toContain("newPassword.length < 10");
   });
 

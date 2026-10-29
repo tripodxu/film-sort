@@ -26,6 +26,7 @@ import {
 } from "./posterStore";
 import { buildOgMeta, buildPlazaTags, buildShareTags, injectOg, type OgTags } from "./og";
 import { RATE_WINDOW_MS, consumeIsolateWindow, type RateWindow } from "./rateWindow";
+import { consumeSharedWindow } from "./rateLimitStore";
 import {
   MAX_PAYLOAD_BYTES,
   encodeStoredNotes,
@@ -228,6 +229,8 @@ async function allowUpstreamRequest(
     | "image"
     | "cache",
   limit: number,
+  /** 传入 env.DB 时追加 D1 原子计数（敏感桶用，见 rateLimitStore.ts）。 */
+  db?: D1Database,
 ): Promise<boolean> {
   const client = request.headers.get("cf-connecting-ip") ?? "anonymous";
   const key = `${bucket}:${client}`;
@@ -263,6 +266,16 @@ async function allowUpstreamRequest(
     );
   } catch {
     /* Cache is best-effort; the in-memory window still protects the isolate. */
+  }
+
+  // 敏感桶：D1 单条 UPSERT 原子计数，跨 isolate 拿到真实上限。
+  // 表未迁移 / D1 暂不可用时静默退回 Map + Cache 语义（宁可放宽，不可误伤）。
+  if (db) {
+    try {
+      if (!(await consumeSharedWindow(db, key, limit, now))) return false;
+    } catch {
+      /* best-effort */
+    }
   }
   return true;
 }
@@ -2033,7 +2046,7 @@ async function route(request: Request, env: Env): Promise<Response> {
   if (url.pathname === "/api/admin/login" && request.method === "POST") {
     // 管理登录与 reset/change-password 共用 auth 桶（30 次/10 分/IP）：管理面可
     // 一键清库，撞库必须被频控拦住（安全审计 2026-10-25 M2）。
-    if (!(await allowUpstreamRequest(request, "auth", 30)))
+    if (!(await allowUpstreamRequest(request, "auth", 30, env.DB)))
       return json({ error: "rate_limited" }, 429, { "retry-after": "300" });
     return handleAdminLogin(request, env);
   }
@@ -2047,7 +2060,7 @@ async function route(request: Request, env: Env): Promise<Response> {
     return withSecurityHeaders(await adminPlazaRoute(request, env));
   }
   if (url.pathname === "/api/admin/reset" && request.method === "POST") {
-    if (!(await allowUpstreamRequest(request, "auth", 30)))
+    if (!(await allowUpstreamRequest(request, "auth", 30, env.DB)))
       return json({ error: "rate_limited" }, 429, { "retry-after": "300" });
     return handleAdminReset(request, env);
   }
@@ -2056,13 +2069,13 @@ async function route(request: Request, env: Env): Promise<Response> {
     return handleAdminAuditList(request, env);
   }
   if (url.pathname === "/api/admin/change-password" && request.method === "POST") {
-    if (!(await allowUpstreamRequest(request, "auth", 30)))
+    if (!(await allowUpstreamRequest(request, "auth", 30, env.DB)))
       return json({ error: "rate_limited" }, 429, { "retry-after": "300" });
     return handleAdminChangePassword(request, env);
   }
   if (url.pathname === "/api/admin/sessions/revoke-all" && request.method === "POST") {
     if (!env.DB || !(await adminAuth(request, env))) return json({ error: "auth_required" }, 401);
-    if (!(await allowUpstreamRequest(request, "auth", 30)))
+    if (!(await allowUpstreamRequest(request, "auth", 30, env.DB)))
       return json({ error: "rate_limited" }, 429, { "retry-after": "300" });
     return handleAdminRevokeSessions(request, env);
   }
@@ -2273,7 +2286,7 @@ async function route(request: Request, env: Env): Promise<Response> {
   }
   if (url.pathname === "/api/posters/batch" && request.method === "POST") {
     // 独立限流桶：批量解析的上游开销远大于单条查询，不该和试听共享 music 配额。
-    if (!(await allowUpstreamRequest(request, "posters", 60)))
+    if (!(await allowUpstreamRequest(request, "posters", 60, env.DB)))
       return json({ error: "rate_limited" }, 429, { "retry-after": "600" });
     const raw = await request.text();
     if (new TextEncoder().encode(raw).byteLength > MAX_POSTER_BATCH_BYTES)
@@ -2754,7 +2767,7 @@ async function route(request: Request, env: Env): Promise<Response> {
   }
   if (url.pathname === "/api/ai/test" && request.method === "POST") {
     assertSameOrigin(request);
-    if (!(await allowUpstreamRequest(request, "ai_test", 5)))
+    if (!(await allowUpstreamRequest(request, "ai_test", 5, env.DB)))
       return json({ ok: false, error: "rate_limited", msg: "操作太频繁，请稍后再试" }, 429, {
         "retry-after": "600",
       });
@@ -2847,7 +2860,7 @@ async function route(request: Request, env: Env): Promise<Response> {
   }
   if (url.pathname === "/api/ai/jev/test" && request.method === "POST") {
     assertSameOrigin(request);
-    if (!(await allowUpstreamRequest(request, "ai_jev_test", 5)))
+    if (!(await allowUpstreamRequest(request, "ai_jev_test", 5, env.DB)))
       return json({ ok: false, error: "rate_limited", msg: "操作太频繁，请稍后再试" }, 429, {
         "retry-after": "600",
       });
@@ -2866,7 +2879,7 @@ async function route(request: Request, env: Env): Promise<Response> {
   }
   if (url.pathname === "/api/ai/jev-rank" && request.method === "POST") {
     assertSameOrigin(request);
-    if (!(await allowUpstreamRequest(request, "ai_jev", 10)))
+    if (!(await allowUpstreamRequest(request, "ai_jev", 10, env.DB)))
       return json({ ok: false, error: "rate_limited", msg: "操作太频繁，请稍后再试" }, 429, {
         "retry-after": "600",
       });
@@ -2888,7 +2901,7 @@ async function route(request: Request, env: Env): Promise<Response> {
   }
   if (url.pathname === "/api/ai/jev-disambiguate" && request.method === "POST") {
     assertSameOrigin(request);
-    if (!(await allowUpstreamRequest(request, "ai_jev_disambiguate", 20)))
+    if (!(await allowUpstreamRequest(request, "ai_jev_disambiguate", 20, env.DB)))
       return json({ ok: false, error: "rate_limited", msg: "操作太频繁，请稍后再试" }, 429, {
         "retry-after": "600",
       });
@@ -2917,7 +2930,7 @@ async function route(request: Request, env: Env): Promise<Response> {
   if (url.pathname === "/api/ai/jev-pick" && request.method === "POST") {
     assertSameOrigin(request);
     // 辅助模式每对作品一次预测,高频但单次极廉价(输入 token 为主);桶放宽到 60
-    if (!(await allowUpstreamRequest(request, "ai_jev_pick", 60)))
+    if (!(await allowUpstreamRequest(request, "ai_jev_pick", 60, env.DB)))
       return json({ ok: false, error: "rate_limited", msg: "操作太频繁，请稍后再试" }, 429, {
         "retry-after": "600",
       });
@@ -2939,7 +2952,7 @@ async function route(request: Request, env: Env): Promise<Response> {
   }
   if (url.pathname === "/api/ai/models" && request.method === "POST") {
     assertSameOrigin(request);
-    if (!(await allowUpstreamRequest(request, "ai_models", 10)))
+    if (!(await allowUpstreamRequest(request, "ai_models", 10, env.DB)))
       return json({ ok: false, error: "rate_limited", msg: "操作太频繁，请稍后再试" }, 429, {
         "retry-after": "600",
       });
@@ -2986,7 +2999,7 @@ async function route(request: Request, env: Env): Promise<Response> {
     let source: "builtin" | "custom";
     let resolved: ResolvedAi | null = null;
     if (custom) {
-      if (!(await allowUpstreamRequest(request, "ai_custom", 15)))
+      if (!(await allowUpstreamRequest(request, "ai_custom", 15, env.DB)))
         return json({ error: "rate_limited", msg: "操作太频繁，请 10 分钟后再试" }, 429, {
           "retry-after": "600",
         });
@@ -2998,7 +3011,7 @@ async function route(request: Request, env: Env): Promise<Response> {
           503,
         );
       // 内置通道烧的是服务端额度：先限流，再要求登录（自填 config 不受此限）。
-      if (!(await allowUpstreamRequest(request, "ai", 8)))
+      if (!(await allowUpstreamRequest(request, "ai", 8, env.DB)))
         return json({ error: "rate_limited", msg: "操作太频繁，请 10 分钟后再试" }, 429, {
           "retry-after": "600",
         });
@@ -3353,7 +3366,7 @@ async function route(request: Request, env: Env): Promise<Response> {
     return json({ error: "not_found" }, 404);
   }
   if (url.pathname.startsWith("/api/import/")) {
-    if (!(await allowUpstreamRequest(request, "import", 8)))
+    if (!(await allowUpstreamRequest(request, "import", 8, env.DB)))
       return json({ error: "rate_limited", msg: "导入过于频繁，请稍后再试" }, 429, {
         "retry-after": "600",
       });
@@ -3368,7 +3381,7 @@ async function route(request: Request, env: Env): Promise<Response> {
         (url.pathname === "/api/plaza/posts" && request.method === "POST") ||
         (url.pathname.startsWith("/api/plaza/posts/") && request.method === "PUT");
       parseContentLength(request, bulkWrite ? MAX_PAYLOAD_BYTES : MAX_REQUEST_BYTES);
-      if (!(await allowUpstreamRequest(request, "plaza_write", 30)))
+      if (!(await allowUpstreamRequest(request, "plaza_write", 30, env.DB)))
         return withSecurityHeaders(json({ error: "rate_limited" }, 429, { "retry-after": "600" }));
     }
     return withSecurityHeaders(await plazaRoute(request, env));
@@ -3391,7 +3404,7 @@ async function route(request: Request, env: Env): Promise<Response> {
         url.pathname === "/api/account/change-password";
       const bucket = authWrite ? "account_auth" : "account";
       const limit = authWrite ? 8 : 30;
-      if (!(await allowUpstreamRequest(request, bucket, limit)))
+      if (!(await allowUpstreamRequest(request, bucket, limit, env.DB)))
         return withSecurityHeaders(json({ error: "rate_limited" }, 429, { "retry-after": "600" }));
     }
     return withSecurityHeaders(await accountRoute(request, env));
@@ -3400,7 +3413,7 @@ async function route(request: Request, env: Env): Promise<Response> {
   if (url.pathname === "/api/share" && request.method === "POST") {
     if (!env.DB) return json({ error: "database_unavailable" }, 503);
     assertSameOrigin(request);
-    if (!(await allowUpstreamRequest(request, "share", 30)))
+    if (!(await allowUpstreamRequest(request, "share", 30, env.DB)))
       return json({ error: "rate_limited" }, 429, { "retry-after": "60" });
     const raw = await request.text();
     if (new TextEncoder().encode(raw).byteLength > MAX_PAYLOAD_BYTES)
@@ -3484,7 +3497,7 @@ async function route(request: Request, env: Env): Promise<Response> {
     return json(result, 200, { "cache-control": "public, max-age=3600" });
   }
   if (url.pathname === "/api/challenges" && request.method === "POST") {
-    if (!(await allowUpstreamRequest(request, "challenge", 30)))
+    if (!(await allowUpstreamRequest(request, "challenge", 30, env.DB)))
       return json({ error: "rate_limited" }, 429, { "retry-after": "60" });
     return createChallenge(request, env);
   }
@@ -3614,6 +3627,10 @@ export default {
           "DELETE FROM qr_transactions WHERE julianday(expires_at) <= julianday('now')",
         ),
         env.DB.prepare("DELETE FROM shared_links WHERE julianday(expires_at) < julianday('now')"),
+        // 跨 isolate 限流窗口：过期条目不再约束任何人，直接清掉避免长期累积。
+        env.DB.prepare("DELETE FROM rate_limits WHERE started_at < ?").bind(
+          Date.now() - RATE_WINDOW_MS,
+        ),
       ]);
     } catch (error) {
       console.error("scheduled cleanup failed", error instanceof Error ? error.message : error);
