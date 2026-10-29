@@ -276,6 +276,9 @@ export function fitPreferenceModel(
   const wins: Record<string, number> = {};
   const losses: Record<string, number> = {};
   const usable: PreferenceObservation[] = [];
+  // T-20261029-PERF：按 id 预聚合边表，避免每个坐标都全量扫一遍观测。
+  // 每条边上仍按原观测顺序追加，逐 id 的累加顺序与旧实现逐字相同（浮点结果不变）。
+  const edges: Record<string, { opponentId: string; win: boolean }[]> = {};
   for (const observation of observations) {
     const { winnerId, loserId } = observation;
     if (winnerId === loserId) continue;
@@ -283,6 +286,8 @@ export function fitPreferenceModel(
     usable.push({ winnerId, loserId });
     wins[winnerId] = (wins[winnerId] ?? 0) + 1;
     losses[loserId] = (losses[loserId] ?? 0) + 1;
+    (edges[winnerId] ??= []).push({ opponentId: loserId, win: true });
+    (edges[loserId] ??= []).push({ opponentId: winnerId, win: false });
   }
 
   const theta: Record<string, number> = {};
@@ -294,16 +299,12 @@ export function fitPreferenceModel(
       // 一维牛顿：固定其他坐标，求 theta_i 的一维 MAP 解。
       let gradient = -prior * (theta[id] - resolved.initialRating);
       let curvature = prior;
-      for (const { winnerId, loserId } of usable) {
-        if (winnerId === id) {
-          const p = expectedWinProbability(theta[id], theta[loserId]);
-          gradient += 1 - p;
-          curvature += p * (1 - p);
-        } else if (loserId === id) {
-          const p = expectedWinProbability(theta[winnerId], theta[id]);
-          gradient -= 1 - p;
-          curvature += p * (1 - p);
-        }
+      for (const { opponentId, win } of edges[id] ?? []) {
+        const p = win
+          ? expectedWinProbability(theta[id], theta[opponentId])
+          : expectedWinProbability(theta[opponentId], theta[id]);
+        gradient += win ? 1 - p : -(1 - p);
+        curvature += p * (1 - p);
       }
       const delta = (resolved.learningRate * gradient) / Math.max(curvature, Number.EPSILON);
       theta[id] += delta;
@@ -317,14 +318,11 @@ export function fitPreferenceModel(
   const ratings: Record<string, PreferenceRating> = {};
   for (const id of base.order) {
     let curvature = prior;
-    for (const { winnerId, loserId } of usable) {
-      if (winnerId === id) {
-        const p = expectedWinProbability(theta[id], theta[loserId]);
-        curvature += p * (1 - p);
-      } else if (loserId === id) {
-        const p = expectedWinProbability(theta[winnerId], theta[id]);
-        curvature += p * (1 - p);
-      }
+    for (const { opponentId, win } of edges[id] ?? []) {
+      const p = win
+        ? expectedWinProbability(theta[id], theta[opponentId])
+        : expectedWinProbability(theta[opponentId], theta[id]);
+      curvature += p * (1 - p);
     }
     const variance = clampVariance(1 / Math.max(curvature, Number.EPSILON), resolved);
     ratings[id] = {

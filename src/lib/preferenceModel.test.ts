@@ -3,6 +3,7 @@ import {
   DEFAULT_PREFERENCE_OPTIONS,
   createPreferenceModel,
   expectedWinProbability,
+  fitPreferenceModel,
   getPreferenceOrder,
   getPreferenceRating,
   getRankInterval,
@@ -184,5 +185,54 @@ describe("preferenceModel 在线 BT 能力模型", () => {
     const empty = createPreferenceModel();
     expect(getRankIntervals(empty)).toEqual([]);
     expect(getPreferenceOrder(empty)).toEqual([]);
+  });
+});
+
+describe("fitPreferenceModel 边表优化（T-20261029-PERF）", () => {
+  it("与朴素全量扫描参考实现逐字等价（theta 误差 < 1e-12）", () => {
+    const ids = Array.from({ length: 24 }, (_, i) => `w${i}`);
+    let seed = 7;
+    const rnd = () => {
+      seed = (seed * 1103515245 + 12345) & 0x7fffffff;
+      return seed / 0x7fffffff;
+    };
+    const observations = Array.from({ length: 180 }, () => {
+      const a = ids[Math.floor(rnd() * ids.length)];
+      let b = ids[Math.floor(rnd() * ids.length)];
+      if (a === b) b = ids[(ids.indexOf(a) + 1) % ids.length];
+      return { winnerId: a, loserId: b };
+    });
+
+    const model = fitPreferenceModel(ids, observations);
+    const options = DEFAULT_PREFERENCE_OPTIONS;
+    const prior = options.shrinkage;
+    const theta: Record<string, number> = {};
+    for (const id of ids) theta[id] = options.initialRating;
+    for (let pass = 0; pass < 6; pass += 1) {
+      let maxDelta = 0;
+      for (const id of ids) {
+        let gradient = -prior * (theta[id] - options.initialRating);
+        let curvature = prior;
+        for (const { winnerId, loserId } of observations) {
+          if (winnerId === id) {
+            const p = expectedWinProbability(theta[id], theta[loserId]);
+            gradient += 1 - p;
+            curvature += p * (1 - p);
+          } else if (loserId === id) {
+            const p = expectedWinProbability(theta[winnerId], theta[id]);
+            gradient -= 1 - p;
+            curvature += p * (1 - p);
+          }
+        }
+        const delta = (options.learningRate * gradient) / Math.max(curvature, Number.EPSILON);
+        theta[id] += delta;
+        maxDelta = Math.max(maxDelta, Math.abs(delta));
+      }
+      if (maxDelta < 1e-4) break;
+    }
+
+    for (const id of ids) {
+      expect(model.ratings[id].theta).toBeCloseTo(theta[id], 12);
+    }
   });
 });

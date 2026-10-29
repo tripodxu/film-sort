@@ -138,6 +138,30 @@ export function selectAdaptivePair(input: AdaptiveQueueInput): AdaptivePair | nu
 
   const recentPairs = new Set((input.recentPairKeys ?? []).slice(-options.pairCooldown));
   const recentWorks = new Set((input.recentWorkIds ?? []).slice(-options.workCooldown));
+  // T-20261029-PERF：冷却序对通常只有个位数，但旧实现会为每一对拼一次 key 字符串
+  // （300 件 = 4.5 万次/步）。把冷却键解析成 id → id 的索引，命中判断零分配。
+  // 键格式 `min\u0000max`（pairKey / adaptivePairKey 同构）；若遇异常键则退回旧路径，行为不变。
+  let recentPairIndex: Map<string, Set<string>> | null = new Map();
+  for (const key of recentPairs) {
+    const parts = key.split("\u0000");
+    if (parts.length !== 2 || !recentPairIndex) {
+      recentPairIndex = null;
+      break;
+    }
+    const [a, b] = parts;
+    let setA = recentPairIndex.get(a);
+    if (!setA) {
+      setA = new Set<string>();
+      recentPairIndex.set(a, setA);
+    }
+    setA.add(b);
+    let setB = recentPairIndex.get(b);
+    if (!setB) {
+      setB = new Set<string>();
+      recentPairIndex.set(b, setB);
+    }
+    setB.add(a);
+  }
   const counts = input.opponentCounts ?? {};
   const model = input.model;
   const size = ids.length;
@@ -169,7 +193,9 @@ export function selectAdaptivePair(input: AdaptiveQueueInput): AdaptivePair | nu
       const score = information + options.coverageWeight * coverage;
       const leftId = thetaA !== theta[j] ? (thetaA > theta[j] ? aId : bId) : aId < bId ? aId : bId;
       const rightId = leftId === aId ? bId : aId;
-      const blockedByPair = recentPairs.has(pairKeyOf(aId, bId));
+      const blockedByPair = recentPairIndex
+        ? (recentPairIndex.get(aId)?.has(bId) ?? false)
+        : recentPairs.has(pairKeyOf(aId, bId));
       const blockedByWork = recentWorks.has(aId) || recentWorks.has(bId);
       if (
         !blockedByPair &&
