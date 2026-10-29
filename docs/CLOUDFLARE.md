@@ -25,9 +25,15 @@ npm run deploy   # = npm run build && wrangler d1 migrations apply film-sort --r
 
 `npm run deploy` 已把远端迁移包含在内（迁移脚本必须幂等，`IF NOT EXISTS`；历史教训见 `migrations/0017` 注释），不要把 `wrangler d1 migrations apply` 再当成部署后的独立步骤。
 
-> 若在 Cloudflare Dashboard 启用了 Workers Builds / Git integration，`git push` 到 `main` 即可触发部署，日常发布不必手动跑 `wrangler deploy`。该集成的 Build/Deploy command 在 Dashboard 上配置，仓库内没有对应配置文件。
+仓库已接入 Cloudflare Workers Builds / Git integration：**`git push` 到 `main` 即自动部署 Worker 代码 + 静态资产**（仅 `main` 的 push 触发部署；PR 与 `docs/**` 分支只跑 CI）。日常发布不必手动跑 `wrangler deploy`。Build/Deploy command 在 Dashboard 上配置，仓库内没有对应配置文件。
+
+> **部署实证**：
+> - **2026-10-29（T-20261029-EXPIRY）**：推送 `a137829..e9e0c59` 后 3 分钟自动部署完成（deployment `d05fedba-90a8-…`，`created_on 2026-10-29T03:19:01Z`），worker 行为同步生效——未登录 `POST /api/cache/clear` 返回 401、`/admin` 带 CSP + `no-store`，均为本次改动独有。
+> - 更正 2026-10-25 的旧结论「push 只发静态资产、不发 worker」：push 一直会部署 worker，当次只是**部署尚未完成（或行为探针打到缓存）**，误判成了「不部署」。该条已从部署守则中撤销。
 >
-> **实证（2026-10-25，T-20261025-04）**：push 后静态资产会更新（asset SHA 变化可在线核对），但 **worker 代码当次未随 push 部署**（8 分钟后行为探针仍为旧逻辑，`npm run deploy` 手动部署后立即生效）。**改了 `worker/` 的变更，收尾必须 `npm run deploy` 并用行为探针（非资产 SHA）验证**。另：本地旧 wrangler 4.129 的 assets-upload-session 会报 `10013`，用 `npx -y wrangler@latest deploy` 成功。
+> **验证守则**：一律用**行为探针**（请求一个只有新代码才有的行为）而不是 asset SHA 判断是否上线；asset SHA 变化只说明静态资产更新。若 push 后 5 分钟仍无 deployment 记录，先查 Dashboard 的 Git 集成构建日志，再退回 `npx -y wrangler@latest deploy`。
+>
+> **迁移例外**：Git 集成的 Deploy command 若是裸 `wrangler deploy`，**不会**执行 `migrations/*.sql`。涉及新迁移的发布需在部署后单独跑 `wrangler d1 migrations apply film-sort --remote`（或走本地 `npm run deploy`，它已包含迁移）。
 
 本地调试：
 

@@ -57,6 +57,8 @@
 - **2.22 别把 `!important` 整宽当 bug 改** —— `src/styles.css` 顶部 base 区（约 L69-72）把 `.collection-row .poster` / `.poster-small` 强制成 `width:100%!important;height:auto!important`，单卡实际宽 369–557px（容器 1120px ÷ 列数 2/3/4，`colCount` 存在 localStorage `art-rank:cols`）。base 区的注释「Collection Sticker Cards (source view only)」说明这是**设计**（贴纸卡要整宽无裁剪）。若只按「小缩略图却拉全尺寸原图」的表象去拆，会砸掉 source view 的既有版式——**动之前先找设计注释**。
 - **2.23 终端 curl 的 451 ≠ 浏览器也 451**：同一端点 `/api/ai/jev/test`，终端 curl（代理、直连两种走法都试过）稳定返回 `451 Typesafe is not available in your region`，而**同一时刻真实浏览器里「测试」是成功的**（模型 `jev-1.14.0`，`jev-pick` 返回 200）。地区限制取决于**请求出口路径**，不是产品属性。教训有两条：① 外部服务的可用性结论**只认真实浏览器/真机**，curl 只能证明「HTTP 层能连通」，不能代表用户；② 服务端把 451 折叠成「AI 服务暂不可用」会让用户以为 key 错了、反复换 key —— 必须单独成码（`upstream_blocked`）。本轮就因为这条白跑了一轮「Jev 在国内不可用」的错误推论。
 
+- **2.24 把「部署还没跑完」误判成「push 不部署 worker」** —— 2026-10-25 改完 worker 后 push，8 分钟时行为探针仍是旧逻辑，遂写下「git push 只发静态资产、worker 必须手动 `npm run deploy`」，并当成守则写进 CLOUDFLARE.md / 台账 / CHANGELOG，后续几轮都在无必要地手动补部署。2026-10-29 同样流程 push 后 3 分钟自动部署完成（deployment `d05fedba`），行为探针立即命中新代码，才确认旧结论是误判。**教训**：① 判定「新代码是否上线」只用**行为探针**（只有新代码才会产生的响应），asset SHA 只反映静态资产；② 探针为旧行为时先看 Cloudflare 的 deployment 列表与构建日志，别急着下「平台不部署」的结论；③ 平台行为的结论要能被下一次实证推翻，写进文档时留**实证日期 + 可核对的 deployment id**。
+
 ---
 
 ## §3 数据类（D1 / 状态 / 并发）

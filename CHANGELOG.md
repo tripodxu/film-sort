@@ -304,7 +304,7 @@
 **验证与重要发现**
 
 - 五道门禁全绿（911 tests）；主清单截图 tol=0 零差异；**线上行为验证 ✅**：7 位密码注册探针返回 `invalid_password 密码至少8位`（新代码生效直接证据）、health 200、SPA 路由 200。429 类限流受 isolate 分散限制无法从单客户端复现（机制已部署，源码绊线 + rateWindow 单测锁定）。
-- **流程发现：git push 只部署静态资产、不部署 worker 代码**——本次 8 分钟后探针仍是旧行为，`npm run deploy` 手动部署才生效（旧 wrangler 4.129 assets API 报 10013，`npx -y wrangler@latest deploy` 成功）。CLOUDFLARE.md 已补部署实证与守则：改 `worker/` 的变更收尾必须 `npm run deploy` 并用行为探针（非资产 SHA）验证。
+- **流程发现：git push 只部署静态资产、不部署 worker 代码**——本次 8 分钟后探针仍是旧行为，`npm run deploy` 手动部署才生效（旧 wrangler 4.129 assets API 报 10013，`npx -y wrangler@latest deploy` 成功）。CLOUDFLARE.md 已补部署实证与守则：改 `worker/` 的变更收尾必须 `npm run deploy` 并用行为探针（非资产 SHA）验证。**（2026-10-29 更正：push 一直会自动部署 worker，当次只是部署未完成或探针命中缓存，结论误判；守则现为「用行为探针验证上线」，见 CLOUDFLARE.md。）**
 
 ## 2026-10-25 · 触控目标收尾：全站 <36px 可交互元素清零（T-20261025-02）
 
