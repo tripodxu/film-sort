@@ -485,7 +485,7 @@
 
 - **批一 `1916c75`（缺陷修复 ×1 + 纯性能 ×2，golden 全部原样通过）**：① quick 基线复测对象修正——此前复测头部相邻对，与「仅复测守门员边界」的注释语义不符（quick 的误差集中在守门员边界），改为从榜单末尾取对，classic/precise 不变，+2 回归测试分别锁住 quick=尾部 / classic=头部 不变量；② adaptive 每决策双拟合去重（三个中间量只依赖 decisionLog/sourceIds/skippedIds，两次计算逐字等价），300 件 × 400 决策实测 **14.8–16.1ms → 11.9–12.2ms/决策（约 -20%）**；③ 回环 BFS 去 `queue.shift()` 改头指针，FIFO 语义逐字不变。
 - **批二 `1817dc1`（质量升级）**：adaptive 复测结论回流 BT 模型——`adaptiveObservations` 去掉阶段过滤（排序期日志不存在 verification 条目，调度期行为逐字不变），全部复测结束后按完整模型重建最终榜单，复测不再「问了白问」；+2 机制测试。
-- **批三（实验后回退，不发布）**：置信度提前停止两种判据（边际区间分离 / 成对胜率）在当前标定下均不会在预算内触发，且实验暴露**更根本的问题：adaptive 在 n≥30 时跑满 4n 预算 + 全一致回答也会排错 Top N**（n≤20 全对；批二之前即如此，非回归；根因假设：信息量公式中未比较对的先验 σ²≈40 主导调度，覆盖挤占边界信息）。代码回退，完整实验数据与建议登记 `docs/PLAN-ADDITIVE-UPGRADE.md` §9 未决 5（与未决 1 合并为「大清单标定」课题，用线上真实数据回放定标）。
+- **批三（实验后回退，不发布）**：置信度提前停止两种判据（边际区间分离 / 成对胜率）在当前标定下均不会在预算内触发，且实验暴露**更根本的问题：adaptive 在 n≥30 时跑满 4n 预算 + 全一致回答也会排错 Top N**（n≤20 全对；批二之前即如此，非回归；根因假设：信息量公式中未比较对的先验 σ²≈40 主导调度，覆盖挤占边界信息）。代码回退，完整实验数据与建议登记 `docs/archive/PLAN-ADDITIVE-UPGRADE.md` §9 未决 5（与未决 1 合并为「大清单标定」课题，用线上真实数据回放定标）。
 - **批四 `371b990`（新方法，/depth 第五指标）**：新增 `src/lib/tasteDistance.ts`——**Plackett-Luce 双向似然品味一致度**：用完整排序拟合 PL 品味模型（与 preferenceModel 同构的坐标上升 MAP），算对方排序在该模型下的平均选择概率，**似然比归一**（÷ 己方自身排序同概率 ×100，完全一致恒 100 且与共同件数无关——未归一版本 n=120 完全一致仅 13 分的偏差已实测修正）。与 τ 的本质差异：计入「错得有多远」。/depth 指标网格第五卡 + 第四个解释器，零 CSS 改动；8 例单测 + 1 条绊线。
 - **批五（UI 护栏）**：SetupView 在「自适应 + 已选 > 20 件」时提示改用经典/简易（`ADAPTIVE_RELIABLE_ITEM_LIMIT = 20` 按批三实测边界 n≤20 全对 / n≥30 会错取下限），+1 绊线；纯条件文本，不改变模式可用性。
 
@@ -565,7 +565,7 @@
 
 ## 2026-10-17 ~ 10-18 · 增量升级 S1–S4 + S5 第一项（10 commits，逐项线上验证）
 
-**背景**：按 `docs/PLAN-ADDITIVE-UPGRADE.md` 推进「只增不改」的四个阶段——新增算法模块、新增第四排序模式、新增深度比较页、新增第 12 套主题，另开 S5（无障碍纯追加修补）第一项。全部为纯增量：旧三模式、旧比较页、旧 11 套主题**一行未改**，每阶段都留下门禁 + 零差异/哈希证据。
+**背景**：按 `docs/archive/PLAN-ADDITIVE-UPGRADE.md` 推进「只增不改」的四个阶段——新增算法模块、新增第四排序模式、新增深度比较页、新增第 12 套主题，另开 S5（无障碍纯追加修补）第一项。全部为纯增量：旧三模式、旧比较页、旧 11 套主题**一行未改**，每阶段都留下门禁 + 零差异/哈希证据。
 
 **改了什么**
 
@@ -575,7 +575,7 @@
 - **S4 `2d4570c`** 第 12 套内置主题「图册 / Atlas」（`src/styles/atlas.css` + `THEMES` 末位 + `main.tsx` 一行 import + 截图清单两格 + `src/theme-atlas.test.ts` 13 项绊线）；旧 11 套 22 张截图 tol=0 全零差异。
 - **S5 第 1 项 `79a84ff`** 无障碍纯追加修补：比较页两个分组补 `role="tablist"` + 组名、手动模式两个清单 checkbox 补 `aria-label`；广场页维度/排序两组补 `tablist`（排序组用 `display:contents` 包装层，不参与布局）；新增 `src/a11y.test.ts` 6 项绊线。
 - **性能优化 `d47bd98`** 自适应选对去掉逐对分配与整体排序（一遍扫描 + 三级各保留当前最优，判据不变）：300 件时一次取舍 **20.26 ms → 9.74 ms**，`selectAdaptivePair` 17.21 → 5.22 ms；4 组 golden 指纹优化前后逐字相同。
-- 文档：`docs/PLAN-ADDITIVE-UPGRADE.md` §10 逐阶段记录（含执行偏差与工具事故教训）；`docs/agents/MAP.md` / `THEME-PACKS.md` / `README.md` / `FEATURES.md` / `USAGE.md` 本次统一补齐四模式、`/depth` 与十二主题。
+- 文档：`docs/archive/PLAN-ADDITIVE-UPGRADE.md` §10 逐阶段记录（含执行偏差与工具事故教训）；`docs/agents/MAP.md` / `THEME-PACKS.md` / `README.md` / `FEATURES.md` / `USAGE.md` 本次统一补齐四模式、`/depth` 与十二主题。
 
 **验证**
 
@@ -915,7 +915,7 @@
 
 ## 2026-09-28 · UI 现代化 P4 · 收尾（本地部分完成，线上验证待推送）
 
-`docs/PLAN-ui-modernization.md` P4 的本地可完成项：
+`docs/archive/PLAN-ui-modernization.md` P4 的本地可完成项：
 
 - **主题菜单分组**：调色板菜单分「经典（7）/ 新系列（4）」两组（`ThemeSwitcher.tsx` + `NEW_SERIES` 集合），11 个主题平铺不再拖长菜单；自定义主题与开场特效/布局模式组不变
 - **`--ev-1/2/3` 全局补齐（PITFALLS 4.20 清偿）**：`:root` 定义三级景深公式（`--shadow-tint:#000` + 1px 内高光 / 45px 卡片影 / 80px 弹层影），aurora 块内旧定义移除（只覆写 tint 色相），gallery 本就不定义——**旧主题自此长出阴影，属计划内重立基线**：`docs/ui-baseline.json`（ui-audit）已重生成；全主题 22 张截图重拍为新基线；P1-P3 各批 zero-diff 证据以各自 commit 为界；绊线改写为「:root 三级公式 + 全文唯一」语义
@@ -925,7 +925,7 @@
 
 ## 2026-09-28 · UI 现代化 P3 · gallery 画廊主题（本地验证完成，线上留 P4）
 
-新增内置主题「画廊」（`docs/PLAN-ui-modernization.md` §2.3，8 个差异组件，L1 变量 + L2 结构覆写 + L3 条件渲染）：
+新增内置主题「画廊」（`docs/archive/PLAN-ui-modernization.md` §2.3，8 个差异组件，L1 变量 + L2 结构覆写 + L3 条件渲染）：
 
 - **画像页 Bento 网格（L3）**：`src/components/GalleryBento.tsx`——Top1 大卡（2×2，含 2-5 名跟进行）+ 手写 SVG 维度雷达（四媒介固定轴，值=各媒介作品数占比）+ 年代堆叠条（按维度分行、段色随年代由浅入深、右端跨度刻度）+ 口味坐标（作品/创作者/榜单/年代跨度）+ 榜单索引（承接维度页签切换职能）；`grid-template-areas` 编排，≤800px 单列堆叠；数据全部由 `src/lib/galleryStats.ts` 纯函数现场聚合（×10 单测），零数据层改动
 - **榜单卡片墙（L3）**：`src/components/GalleryWall.tsx`——海报正面（名次徽章 + 渐变字幕）/ 批注背面（摘录 + 批注/详情入口），hover（桌面，`media(hover:hover)` 包裹防触屏粘滞）或点按（触屏）3D 翻转；CDP 探针实证 hover 时 transform=rotateY(180°)、`preserve-3d`/`perspective:1100px` 在位；reduced-motion 降级为正反面文档流平铺（探针实证 hover 后 transform 仍 none）
@@ -942,7 +942,7 @@
 
 ## 2026-09-28 · UI 现代化 P2 · aurora 极光主题（本地验证完成，线上留 P4）
 
-新增内置主题「极光」（`docs/PLAN-ui-modernization.md` §2.2，7 个差异组件，L1 变量 + L2 结构覆写）：
+新增内置主题「极光」（`docs/archive/PLAN-ui-modernization.md` §2.2，7 个差异组件，L1 变量 + L2 结构覆写）：
 
 - **首页 orb 新特效「极光绸带」**（`src/lib/orbEffects/ribbon.ts`）：柔光基座（双层 additive 球）+ 4 条 CatmullRomCurve3 绸带（各挂一个维度色）+ 600 上升粒子；遵守 ORB-EFFECTS §4 契约（四成员齐全 / 粒子 ≤1200 / additive depthWrite:false / 不监听 window / reduced-motion 冻结）；注册表新增 `RECOMMENDED_BY_THEME`（aurora→ribbon，无持久化选择时生效，既有持久化逻辑不变）
 - **表面体系 玻璃 2.0**：identity/home-actions/segmented 改「ev 投影 + accent-2 内高光 + accent 外柔光」三层；`.medium-item` 保持透明扁平（设计意图）
@@ -959,7 +959,7 @@
 
 ## 2026-09-28 · UI 现代化 P1 · editorial / editorial-dark 双主题（本地验证完成，线上留 P4）
 
-新增两组内置主题「刊物 / 刊物暗色」（`docs/PLAN-ui-modernization.md` §2.1，9 个差异组件，L1 变量 + L2 结构覆写 + L3 条件渲染三层机制）：
+新增两组内置主题「刊物 / 刊物暗色」（`docs/archive/PLAN-ui-modernization.md` §2.1，9 个差异组件，L1 变量 + L2 结构覆写 + L3 条件渲染三层机制）：
 
 - **首页 hero（L3 DOM 重构）**：左文右图杂志封面式；3–4 张收藏海报错落堆叠（桌面绝对定位 ±6° 旋转 + hover 展开；移动端改 scroll-snap 单张轮播，零 JS）；eyebrow 改「第一期 · 你的私人文化索引」期号；orb 隐藏；空维度由 CSS 占位色块补齐（槽位↔维度一一对应）
 - **标题体系**：h1 衬线（Georgia→Songti SC→SimSun 链）+ 字重 600；区块巨型序号装饰
