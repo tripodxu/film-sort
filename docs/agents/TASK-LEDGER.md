@@ -10,7 +10,7 @@
 
 ## 进行中 / 最近
 
-### T-20261029-CSP · 后台严格 CSP（脚本外置 + 事件委托）· 👀 待审（本地 18/18，待上线）
+### T-20261029-CSP · 后台严格 CSP（脚本外置 + 事件委托）· ✅ 已上线并线上验证（`bdb8701`）
 
 - **起因**：`docs/REVIEW-2026-10-29.md` 保留项——`ADMIN_SECURITY_HEADERS` 因 `DASHBOARD_HTML`
   的内联脚本与 54 处 `onclick` 被迫保留 `script-src 'unsafe-inline'`。
@@ -30,7 +30,14 @@
     缓存清除、数据页、无控制台/CSP 错误。
   - 五道门禁全绿；`test` **72 文件（71 通过 / 1 跳过），955 passed / 9 skipped**。
   - 本地测试账号、`admin_sessions`、`admin_config.password_hash`、`.dev.vars` 已清理。
-- **待办**：上线后在 `sort.logicc.top/admin` 复跑同一脚本（真实管理密码）后转 ✅。
+- **线上验证（2026-10-29 13:41 CST）**：`main a25b238..bdb8701` 自动部署，线上 `/admin` CSP 为
+  `script-src 'self'; script-src-attr 'none'`；`.tmp/verify-admin-csp-online.mjs` **13/13**——
+  头、`/admin/app.js` 200 + `application/javascript`、HTML 无内联事件/脚本、登录按钮空密码提示
+  （证明外置脚本与委托生效）、动态注入内联脚本被执行策略阻止（`injected=0 after=0`，2 条预期 CSP 日志）、
+  无其他控制台错误。`npm run e2e` 6/6，`/api/health` 正常，前端入口仍为 `index-CKU--Rqk.js`。
+- **说明**：生产管理密码为 `env.ADMIN_PASSWORD`，未持有凭据，因此线上只验到登录门（空密码提示）；
+  登录后的页签/弹窗/缓存/数据页全链路已在本地 `wrangler dev` 以真实登录验证 18/18，同一份脚本。
+- **待办**：无。
 
 ### T-20261029-PERF · adaptive 排序性能（300 件 15.5s → 3.8s）· ✅ 已上线（`08a3f64`）
 

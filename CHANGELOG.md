@@ -23,6 +23,10 @@
 **验证**：本地 `wrangler dev` + Playwright `18/18`（登录、页签、用户详情弹窗与遮罩关闭、
 缓存清除、数据页、CSP 头、无控制台错误）；五道门禁全绿，`955 passed / 9 skipped`。
 
+**线上验证（2026-10-29 13:41 CST）**：`bdb8701` 自动部署后 `/admin` 返回
+`script-src 'self'; script-src-attr 'none'`，`/admin/app.js` 200 + `application/javascript`；
+`verify-admin-csp-online.mjs` 13/13（含动态注入内联脚本被阻止），E2E 6/6，前端入口未变。
+
 ## 2026-10-29 · adaptive 排序性能：300 件 15.5s → 3.8s（T-20261029-PERF）
 
 **背景**：`docs/CONSOLIDATION-2026-10-28.md` 记录的独立课题——adaptive 排序 300 件约 16.8 秒。
