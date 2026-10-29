@@ -83,6 +83,9 @@ Jev 是 TypeSafe AI 的「System One」决策模型(2026-09-15 发布):输入 st
 
 来源:全量代码审查报告。P0/P1 大部已在前四批提交修复,以下为尚未处理的项,按主题分组,建议按批次消化。
 
+> **2026-10-29 复核：本节 A/B/C/D 四组已全部落地**（`1deff71`、`16b6305`、`d221315`、`70e43cf`、`T-20261029-TOUCH`）。
+> 下表保留作历史记录与验收依据，**不再作为待办来源**；不要按旧描述重复施工。
+
 ### A. 可访问性与键盘
 
 > 2026-10-24 两轮修剪：S5 第 1 项（`79a84ff`）与 S5-2（`388d10a`）完成后，本表原有的 rename aria-label / WorkEditor htmlFor / rank 菜单 Escape / 点赞 aria-pressed / FocusTrap 焦点归还 / ArtworkDetail / audio / 全局 IconButton 各行均已落地并移除。仍开放的条目如下。

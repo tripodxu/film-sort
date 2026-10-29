@@ -1848,6 +1848,9 @@ body[data-theme=classic]{
 /* B 组·触控目标：视觉 28px 不动，::after 透明命中区扩到 36px（-4px 四向）。
    相邻 gap:2 的行内按钮命中区边界互有 6px 重叠，按 DOM 序后者覆盖，可接受。 */
 .hit-expand::after{content:"";position:absolute;inset:-4px}
+/* T-20261029-TOUCH：11px 文本按钮（取消/复制）视觉不动，透明命中区补到 ≥32px。 */
+.hit-expand-sm{position:relative}
+.hit-expand-sm::after{content:"";position:absolute;inset:-8px}
 
 /* C 组·着色横幅工具类：替代 PlazaPostView/ProfileView 手搓同款横幅（warn/accent 两态）。
    墨色用 color-mix 把 warn 拉向正文色——浅色主题下纯 --warn 对比不足。 */

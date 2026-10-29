@@ -171,7 +171,7 @@ export function AiInsightCard({
                 />
               ))}
               <button
-                className="text-button"
+                className="text-button hit-expand-sm"
                 style={{ fontSize: 11, color: "var(--muted)" }}
                 onClick={() => {
                   abortRef.current?.abort();
@@ -210,7 +210,7 @@ export function AiInsightCard({
                 </span>
               )}
               <button
-                className="text-button"
+                className="text-button hit-expand-sm"
                 style={{ fontSize: 11 }}
                 onClick={() => {
                   navigator.clipboard

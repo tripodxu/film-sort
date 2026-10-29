@@ -1098,6 +1098,13 @@ describe("打磨第二轮 T-20261025-01（ROADMAP §二 A/B/C/D）", () => {
     }
   });
 
+  it("11px 文本按钮（AI 点评取消/复制）挂 .hit-expand-sm，命中区补到 ≥32px", () => {
+    expect(css).toMatch(/\.hit-expand-sm\{position:relative\}/);
+    expect(css).toMatch(/\.hit-expand-sm::after\{content:"";position:absolute;inset:-8px\}/);
+    const card = readFileSync("src/components/AiInsightCard.tsx", "utf8");
+    expect((card.match(/className="text-button hit-expand-sm"/g) ?? []).length).toBe(2);
+  });
+
   it("广场回复输入 ≥36px（原 minHeight:auto 实高仅 ~33px）", () => {
     const post = readFileSync("src/views/PlazaPostView.tsx", "utf8");
     expect(post).toMatch(/padding: "6px 10px", minHeight: 36/);

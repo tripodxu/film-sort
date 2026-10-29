@@ -7,6 +7,14 @@
  * 用法：`npm run gates`；任一道失败立即非零退出，后续门禁不再执行。
  */
 import { spawnSync } from "node:child_process";
+import { mkdirSync } from "node:fs";
+import { join } from "node:path";
+
+// 部分沙箱/CI 拒绝写入系统临时目录，Vitest 会把 Vite 模块缓存（ssr/<hash>）写 TEMP
+// 并在 EPERM 时记为 unhandled error → 非零退出。统一把临时目录重定向到工作区内。
+const tmpDir = join(process.cwd(), ".tmp", "gates-tmp");
+mkdirSync(tmpDir, { recursive: true });
+const env = { ...process.env, TEMP: tmpDir, TMP: tmpDir, TMPDIR: tmpDir };
 
 const gates = [
   ["check", "npm run check"],
@@ -18,7 +26,7 @@ const gates = [
 
 for (const [name, command] of gates) {
   console.log(`\n=== 门禁 ${name} ===`);
-  const result = spawnSync(command, { shell: true, stdio: "inherit" });
+  const result = spawnSync(command, { shell: true, stdio: "inherit", env });
   if (result.status !== 0) {
     console.error(`\n✘ 门禁 ${name} 失败（exit ${result.status ?? "signal"}）——后续门禁未执行。`);
     process.exit(result.status ?? 1);

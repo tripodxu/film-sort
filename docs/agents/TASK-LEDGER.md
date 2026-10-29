@@ -10,6 +10,39 @@
 
 ## 进行中 / 最近
 
+### T-20261029-TOUCH · 触控命中区收尾 + 门禁临时目录修复 · 👀 待审（本地门禁全绿，未上线）
+
+- **起因**：复核 ROADMAP §二 时发现 A/B/C/D 四组绝大多数已在前几批落地；真正残留的是
+  `AiInsightCard` 的 11px「取消/复制」文本按钮命中区不足 32px，以及 `npm run gates` 在受限环境必红的环境坑。
+- **改动**：
+  - `src/styles.css`：新增 `.hit-expand-sm`（`position:relative` + `::after{inset:-8px}`），透明命中区把 11px 文本按钮补到 ~32px，视觉零变化。
+  - `src/components/AiInsightCard.tsx`：取消、复制两个按钮挂 `text-button hit-expand-sm`。
+  - `scripts/gates.mjs`：统一把 `TEMP/TMP/TMPDIR` 重定向到工作区 `.tmp/gates-tmp`，消除
+    `EPERM ... ssr/<hash>` 导致的 test 假红。
+  - `src/ui-fixes.test.ts`：新增 1 条断言（CSS 规则 + 2 处挂载）。
+- **验证**：`npm run gates` 五道全绿（无需再手动设 `TEMP`）；`test` **71 文件通过 / 1 跳过，952 passed / 9 skipped**；
+  `build` 主包 427.49 kB（gzip 143.67 kB）。改动仅透明伪元素，像素级无变化，未跑 ui-diff。
+- **待办**：上线后按铁律在 `sort.logicc.top` 复核后再转 ✅。
+- **备注**：ROADMAP §二 的 A/B/C/D 四组已于 2026-10-25~10-29 全部落地（见 `1deff71`、`16b6305`、`d221315`、`70e43cf`），
+  该节现已标注为历史，不再作为待办来源。
+
+### T-20261029-VERIFY · 全量门禁 + 10-29 三批手测复核 · 🔄 本地验证完成，线上 4 项待真实凭据
+
+- **范围**：`check` / `lint` / `format:check` / `test` / `build` + 线上 E2E + `REVIEW-2026-10-29.md` §七 的 5 项手测。
+- **门禁**：全绿；`test` **71 文件通过 / 1 跳过，951 passed / 9 skipped**；`build` 主包 427.49 kB（gzip 143.68 kB）；
+  线上 E2E **6 passed / 0 failed**（`sort.logicc.top`）。
+- **手测结果**：
+  - **#9 广场竞态（线上）✅**：`.tmp/verify-plaza-race.mjs`，给先点筛选注入 2.5s、后点 0.3s 延迟，最终标签与列表均属后点筛选，
+    未混旧数据、未闪空态、无 JS 错误（6/6）。
+  - **#1 OAuth 过期 / #2 管理会话吊销 / #3 验证码一次性 / #4 CSV 公式防护（本地）🟡**：
+    用 `wrangler dev` + 本地 D1（`ENVIRONMENT=development`、临时造数）自助验证，22 条断言全过：
+    `.tmp/verify-local-account.mjs`（14/14）、`.tmp/verify-local-security.mjs`（8/8）。
+    **不算线上验证**，转 ✅ 需真实 OAuth 账号 / 管理密码 / 邮箱在 `sort.logicc.top` 复跑。
+- **环境坑（已修，见 T-20261029-TOUCH）**：直接 `npm run gates` 时 Vitest 模块缓存写系统临时目录，沙箱报
+  `EPERM ... E:\temp\...\ssr\<hash>` 导致 exit 1；现由 `scripts/gates.mjs` 统一重定向到 `.tmp/gates-tmp`。
+- **清理**：本地测试账号/验证码/OAuth/海报错误数据与 `.dev.vars` 已删除，工作区干净。
+- **下一步**：① 线上复跑 #1/#2/#3/#8 后把三批转 ✅；② 再进优化（视觉/触控批 → 性能批 → 后端小修批）。
+
 ### T-20261029-FRONTEND · 前端存量缺陷收口（广场竞态 / 草稿闸门 / 请求超时 / 海报缓存 / 导出画布）· 👀 待审（本地门禁全绿，未上线）
 
 - **起因**：项目文档已登记的 5 项前端缺陷，均不影响主流程但会造成数据错位或静默失败。
