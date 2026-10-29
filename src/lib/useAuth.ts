@@ -7,6 +7,15 @@ import { stored } from "./utils";
 const PEER_KEY = "art-rank:peer:v2";
 const DRAFT_KEY = "art-rank:draft:v2";
 
+/** 账号请求超时：弱网/上游挂起时不能永久 pending（前端存量缺陷收口 2026-10-29）。 */
+const AUTH_TIMEOUT_MS = 20_000;
+function authFetch(input: RequestInfo | URL, init: RequestInit = {}): Promise<Response> {
+  const signal = init.signal
+    ? AbortSignal.any([AbortSignal.timeout(AUTH_TIMEOUT_MS), init.signal])
+    : AbortSignal.timeout(AUTH_TIMEOUT_MS);
+  return fetch(input, { ...init, signal });
+}
+
 /** Dependencies that useAuth needs from the outside — passed as callbacks to avoid stale closures. */
 export interface AuthDeps {
   /** Current profile (may be null for guests). */
@@ -101,7 +110,7 @@ export function useAuth(deps: Omit<AuthDeps, "setDraft"> & { setDraft?: (d: unkn
         // 批注随每次同步显式携带（含空对象）：清空批注后自动同步才能把清空落到云端
         //（旧代码按 hasAnyNotes 省略字段，云端永远保留旧批注，findings DATA-03）。
         const ok = (
-          await fetch("/api/account/profile", {
+          await authFetch("/api/account/profile", {
             method: "PUT",
             headers: { "content-type": "application/json", authorization: `Bearer ${token}` },
             body: JSON.stringify(buildProfileSyncBody(next, d.getNotes(), true)),
@@ -131,7 +140,7 @@ export function useAuth(deps: Omit<AuthDeps, "setDraft"> & { setDraft?: (d: unkn
     activeHydration.current = controller;
     setBusy(true);
     try {
-      const response = await fetch("/api/account/profile", {
+      const response = await authFetch("/api/account/profile", {
         headers: { authorization: `Bearer ${token}` },
         signal: controller.signal,
       });
@@ -181,7 +190,7 @@ export function useAuth(deps: Omit<AuthDeps, "setDraft"> & { setDraft?: (d: unkn
     setBusy(true);
     try {
       // 显式保存表达完整的本地状态：批注始终携带（含空对象=清空云端批注）。
-      const response = await fetch("/api/account/profile", {
+      const response = await authFetch("/api/account/profile", {
         method: "PUT",
         headers: { "content-type": "application/json", authorization: `Bearer ${token}` },
         body: JSON.stringify(buildProfileSyncBody(next, d.getNotes(), true)),
@@ -217,7 +226,7 @@ export function useAuth(deps: Omit<AuthDeps, "setDraft"> & { setDraft?: (d: unkn
     setBusy(true);
     try {
       const purpose = authMode === "register" ? "register" : "reset";
-      const response = await fetch("/api/account/send-code", {
+      const response = await authFetch("/api/account/send-code", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ email: authEmail, purpose }),
@@ -253,7 +262,7 @@ export function useAuth(deps: Omit<AuthDeps, "setDraft"> & { setDraft?: (d: unkn
           return;
         }
         if (mode === "reset") {
-          const response = await fetch("/api/account/change-password", {
+          const response = await authFetch("/api/account/change-password", {
             method: "POST",
             headers: { "content-type": "application/json" },
             body: JSON.stringify({ email: authEmail, code: authCode, password: authPassword }),
@@ -269,7 +278,7 @@ export function useAuth(deps: Omit<AuthDeps, "setDraft"> & { setDraft?: (d: unkn
           setAuthPassword("");
           return;
         }
-        const response = await fetch(`/api/account/${mode}`, {
+        const response = await authFetch(`/api/account/${mode}`, {
           method: "POST",
           headers: { "content-type": "application/json" },
           body: JSON.stringify({
@@ -319,7 +328,7 @@ export function useAuth(deps: Omit<AuthDeps, "setDraft"> & { setDraft?: (d: unkn
     if (!name || !token) return;
     setBusy(true);
     try {
-      const response = await fetch("/api/account/nickname", {
+      const response = await authFetch("/api/account/nickname", {
         method: "PUT",
         headers: { "content-type": "application/json", authorization: `Bearer ${token}` },
         body: JSON.stringify({ nickname: name }),
@@ -357,7 +366,7 @@ export function useAuth(deps: Omit<AuthDeps, "setDraft"> & { setDraft?: (d: unkn
         try {
           // Await the save so the server records the final profile while the session
           // is still valid; the logout request below would otherwise race it.
-          await fetch("/api/account/profile", {
+          await authFetch("/api/account/profile", {
             method: "PUT",
             headers: { "content-type": "application/json", authorization: `Bearer ${token}` },
             body: JSON.stringify(buildProfileSyncBody(next, d.getNotes(), true)),
@@ -367,7 +376,7 @@ export function useAuth(deps: Omit<AuthDeps, "setDraft"> & { setDraft?: (d: unkn
           /* best-effort */
         }
       }
-      void fetch("/api/account/logout", {
+      void authFetch("/api/account/logout", {
         method: "POST",
         headers: { authorization: `Bearer ${token}` },
       }).catch(() => {});
@@ -441,7 +450,7 @@ export function useAuth(deps: Omit<AuthDeps, "setDraft"> & { setDraft?: (d: unkn
     activeHydration.current?.abort();
     const controller = new AbortController();
     activeHydration.current = controller;
-    void fetch("/api/account/profile", {
+    void authFetch("/api/account/profile", {
       headers: { authorization: `Bearer ${accountToken}` },
       signal: controller.signal,
     })

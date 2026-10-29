@@ -180,24 +180,37 @@ const emptyStates = new Map<string, PosterOutcome>();
 
 const reportedFailures = new Set<string>();
 const POSTER_CACHE_KEY = "art-rank:poster-cache";
-function readPosterCache(key: string): string[] | null {
+/** 会话级海报缓存的进程内副本：避免每个 <Poster> 首帧都 JSON.parse 整个 sessionStorage
+ * （长列表下是 O(条目数 × 缓存体积) 的主线程开销，前端存量缺陷收口 2026-10-29）。 */
+let posterCache: Record<string, string[]> | null = null;
+function posterCacheStore(): Record<string, string[]> {
+  if (posterCache) return posterCache;
   try {
-    const cache = JSON.parse(sessionStorage.getItem(POSTER_CACHE_KEY) ?? "{}");
-    return cache[key] ?? null;
+    const raw = JSON.parse(sessionStorage.getItem(POSTER_CACHE_KEY) ?? "{}") as unknown;
+    posterCache =
+      raw && typeof raw === "object" && !Array.isArray(raw)
+        ? (raw as Record<string, string[]>)
+        : {};
   } catch {
-    return null;
+    posterCache = {};
   }
+  return posterCache;
+}
+function readPosterCache(key: string): string[] | null {
+  const hit = posterCacheStore()[key];
+  // 脏数据/旧结构一律视为未命中，别把非数组塞给调用方。
+  return Array.isArray(hit) ? hit : null;
 }
 const POSTER_CACHE_MAX = 500;
 function writePosterCache(key: string, urls: string[]) {
+  const cache = posterCacheStore();
+  const keys = Object.keys(cache);
+  if (keys.length >= POSTER_CACHE_MAX) {
+    // Evict oldest half
+    for (let i = 0; i < Math.floor(keys.length / 2); i++) delete cache[keys[i]];
+  }
+  cache[key] = urls;
   try {
-    const cache = JSON.parse(sessionStorage.getItem(POSTER_CACHE_KEY) ?? "{}");
-    const keys = Object.keys(cache);
-    if (keys.length >= POSTER_CACHE_MAX) {
-      // Evict oldest half
-      for (let i = 0; i < Math.floor(keys.length / 2); i++) delete cache[keys[i]];
-    }
-    cache[key] = urls;
     sessionStorage.setItem(POSTER_CACHE_KEY, JSON.stringify(cache));
   } catch {
     /* Quota exceeded — silently skip */

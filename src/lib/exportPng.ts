@@ -5,6 +5,15 @@ import { mapPool } from "./utils";
 
 // ===== 画像 PNG 导出：纯 Canvas 手绘，主题感知（采样当前 data-theme 的 CSS 变量），五套版式 =====
 
+/** 画布面积上限：Safari 单画布约 16.7M 像素，超出会静默出空白。
+ * 导出优先 2x，面积超限时逐档降采样，保证长榜单也能出图（2026-10-29 收口）。 */
+const MAX_CANVAS_AREA = 16_000_000;
+const EXPORT_SCALES = [2, 1.5, 1, 0.75, 0.5] as const;
+export function pickExportScale(w: number, h: number): number {
+  for (const scale of EXPORT_SCALES) if (w * scale * h * scale <= MAX_CANVAS_AREA) return scale;
+  return EXPORT_SCALES[EXPORT_SCALES.length - 1];
+}
+
 export type ExportLayout = "editorial" | "collage" | "minimal" | "filmstrip" | "podium";
 
 export interface PngExportContext {
@@ -259,11 +268,12 @@ export async function renderProfilePng({
   );
 
   const canvas = document.createElement("canvas");
-  canvas.width = W * 2;
-  canvas.height = H * 2; // 2x 导出保证清晰度
+  const scale = pickExportScale(W, H);
+  canvas.width = Math.round(W * scale);
+  canvas.height = Math.round(H * scale); // 优先 2x；画布面积超限时降采样
   const ctx = canvas.getContext("2d");
   if (!ctx) throw new Error("canvas unavailable");
-  ctx.scale(2, 2);
+  ctx.scale(scale, scale);
   const bg = resolveColor(p.bg),
     text = resolveColor(p.text),
     text2 = resolveColor(p.text2),
@@ -684,18 +694,21 @@ export async function renderWrappedPng({
   const M = 76;
   const date = new Date().toLocaleDateString(locale === "zh" ? "zh-CN" : "en-US");
   const stats = buildWrappedStats(profile);
-  const items = profile.rankings.flatMap((entry) =>
-    entry.items.slice(0, 3).map((item) => ({ entry, item })),
-  );
+  // 每个榜单取前 3；总条数设硬上限，保证 H 与画布面积可控（否则 1000+ 榜单会撑爆画布）。
+  const MAX_WRAPPED_ITEMS = 240;
+  const items = profile.rankings
+    .flatMap((entry) => entry.items.slice(0, 3).map((item) => ({ entry, item })))
+    .slice(0, MAX_WRAPPED_ITEMS);
   const hasDraft = draft !== null;
   const H = Math.max(900, 430 + (hasDraft ? 300 : 0) + 190 + items.length * 40 + 150);
 
   const canvas = document.createElement("canvas");
-  canvas.width = W * 2;
-  canvas.height = H * 2;
+  const scale = pickExportScale(W, H);
+  canvas.width = Math.round(W * scale);
+  canvas.height = Math.round(H * scale);
   const ctx = canvas.getContext("2d");
   if (!ctx) throw new Error("canvas unavailable");
-  ctx.scale(2, 2);
+  ctx.scale(scale, scale);
   const bg = resolveColor(p.bg),
     text = resolveColor(p.text),
     text2 = resolveColor(p.text2),

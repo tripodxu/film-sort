@@ -54,9 +54,14 @@ export function PlazaView({
       return 2;
     }
   });
+  // 请求令牌 + AbortController：快速切筛选/翻页时，旧的慢响应不得覆盖新列表
+  // （前端存量缺陷收口 2026-10-29）。
+  const loadSeq = useRef(0);
+  const loadAbort = useRef<AbortController | null>(null);
 
   useEffect(() => {
     void loadPosts(1, kindFilter, sort, search);
+    return () => loadAbort.current?.abort();
     // eslint-disable-next-line react-hooks/exhaustive-deps -- 只随 kindFilter 重拉；sort/search 由各自事件处理器显式带参调用
   }, [kindFilter]);
 
@@ -67,6 +72,10 @@ export function PlazaView({
     q = "",
     append = false,
   ) {
+    const seq = ++loadSeq.current;
+    loadAbort.current?.abort();
+    const controller = new AbortController();
+    loadAbort.current = controller;
     if (p === 1 && !append) setInitialLoading(true);
     setLoading(true);
     setError("");
@@ -74,21 +83,26 @@ export function PlazaView({
       const params = new URLSearchParams({ page: String(p), limit: "20", kind });
       if (sortKey === "hottest") params.set("sort", "hottest");
       if (q.trim()) params.set("q", q.trim());
-      const response = await fetch(
-        `/api/plaza/posts?${params}`,
-        accountToken ? { headers: { authorization: `Bearer ${accountToken}` } } : undefined,
-      );
+      const response = await fetch(`/api/plaza/posts?${params}`, {
+        ...(accountToken ? { headers: { authorization: `Bearer ${accountToken}` } } : {}),
+        signal: controller.signal,
+      });
       if (!response.ok) throw new Error();
       const data = (await response.json()) as { posts: PlazaPost[]; total: number };
+      // 过期响应丢弃：期间若已发起新请求，旧数据（含旧筛选/旧分页）一律不落地。
+      if (seq !== loadSeq.current) return;
       if (append) setPosts((prev) => [...prev, ...data.posts]);
       else setPosts(data.posts);
       setTotal(data.total);
       setPage(p);
     } catch {
+      if (seq !== loadSeq.current || controller.signal.aborted) return;
       setError(t("无法加载广场内容，请稍后重试。", "Failed to load plaza. Please try again."));
     } finally {
-      setLoading(false);
-      setInitialLoading(false);
+      if (seq === loadSeq.current) {
+        setLoading(false);
+        setInitialLoading(false);
+      }
     }
   }
 

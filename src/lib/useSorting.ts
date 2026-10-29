@@ -38,6 +38,8 @@ import {
 import { track, type Locale } from "./utils";
 
 const DRAFT_KEY = "art-rank:draft:v2";
+/** 草稿体积闸门：读侧超过此值直接丢弃，写侧必须同闸门，否则会「看似保存、实际读不回」。 */
+const DRAFT_MAX_WORKS = 1000;
 const kinds = Object.keys(mediaLabels) as MediaKind[];
 
 export type Draft = { collection: MediaCollection; ranking: string; profileName: string };
@@ -58,7 +60,7 @@ export function loadDraft(): Draft | null {
       state.completed ||
       !kinds.includes(data.collection.kind) ||
       !Array.isArray(data.collection.works) ||
-      data.collection.works.length > 1000 ||
+      data.collection.works.length > DRAFT_MAX_WORKS ||
       !state.sourceIds.every((id) =>
         data.collection.works.some((work) => work.id === id && typeof work.title === "string"),
       )
@@ -863,6 +865,7 @@ export function useSorting(deps: SortingDeps) {
   // N=1000 时 MB 级 JSON 每点一次全量落盘，主线程卡顿且逼近 5MB 配额。现改为 trailing
   // 500ms 防抖——连点时只落最后一次；切页/关页时 flush，保证草稿不丢。
   const draftSaveTimer = useRef<number | null>(null);
+  const draftLimitNotified = useRef(false);
   const pendingDraft = useRef<{
     collection: MediaCollection;
     ranking: RankingState;
@@ -877,6 +880,21 @@ export function useSorting(deps: SortingDeps) {
       window.clearTimeout(draftSaveTimer.current);
       draftSaveTimer.current = null;
     }
+    // 与读侧同一个闸门：超限草稿读不回来，继续写盘只会占配额并造成「已保存」的错觉。
+    // 保留此前可读的草稿不动，只提示一次，避免每次取舍都弹提示。
+    if (pending.collection.works.length > DRAFT_MAX_WORKS) {
+      if (!draftLimitNotified.current) {
+        draftLimitNotified.current = true;
+        d.setNotice(
+          d.t(
+            "收藏超过 1000 件，本次进度不会保存为草稿；建议先完成当前排序。",
+            "Collections over 1000 items are not saved as drafts; finish this ranking first.",
+          ),
+        );
+      }
+      return;
+    }
+    draftLimitNotified.current = false;
     const next = {
       collection: pending.collection,
       ranking: serializeRankingState(pending.ranking),
