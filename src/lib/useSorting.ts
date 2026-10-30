@@ -265,14 +265,27 @@ export function useSorting(deps: SortingDeps) {
   function saveCustomWorksFn() {
     const d = depsRef.current;
     const kept = customWorks.filter((w) => !customDeselected.includes(w.id));
-    if (!kept.length) {
-      d.setNotice(d.t("清单为空。", "The list is empty."));
+    // 下限 2 与服务端 validateCollectionBody / DB CHECK（0021）同口径：
+    // 过去这里放行 1 件，云端 POST 静默 400，用户只看到「已保存」的提示。
+    if (kept.length < 2) {
+      d.setNotice(
+        d.t("至少需要 2 件作品才能保存清单。", "At least 2 works are needed to save a list."),
+      );
       return;
     }
     // 唯一可落库形状：白名单投影 + 按 identity 去重 + 重排 rank。
     // 去重必须发生在写入侧，否则重复曲目会在下次读取时把整份画像带崩。
     const items = toRankedItems(kept.map((w, i) => ({ ...w, rank: i + 1 })));
     const merged = kept.length - items.length;
+    if (items.length < 2) {
+      d.setNotice(
+        d.t(
+          `去重后只剩 ${items.length} 件作品（同名同作者），清单至少需要 2 件。`,
+          `After merging duplicates only ${items.length} work remains; a list needs at least 2.`,
+        ),
+      );
+      return;
+    }
     const ranking: RankingExport = {
       version: 1,
       profileId: d.getProfile()?.profileId ?? crypto.randomUUID(),

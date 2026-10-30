@@ -137,6 +137,8 @@ function validateCollectionBody(body: Record<string, unknown> | null): {
     (kind !== "film" && kind !== "book" && kind !== "music" && kind !== "other") ||
     !title ||
     !Array.isArray(items) ||
+    // 下限 2 与前端闸门（useSorting 的保存路径）、DB CHECK（0021）三处同口径：
+    // 曾经前端放行 1 件、服务端静默 400，用户只看到「已保存」的提示。
     items.length < 2 ||
     items.length > 1000
   )
@@ -841,8 +843,17 @@ export async function accountRoute(request: Request, env: Env): Promise<Response
         ? json({ error: "payload_too_large" }, 413)
         : json({ error: "invalid_collection" }, 400);
     }
-    const result = await env.DB.prepare(
-      "INSERT INTO user_collections (user_id, kind, title, description, items, item_count) VALUES (?, ?, ?, ?, ?, ?)",
+    // 「同名即同一份」：同一用户在同一媒介下的清单标题唯一（0029 唯一索引），
+    // 因此这里是 UPSERT 而不是 INSERT——过去纯 INSERT 让前端每点一次「保存清单」
+    // 就多一条同名副本。
+    // `updated_at` 显式写入（不用列默认值）：ON CONFLICT 分支不会执行默认表达式，
+    // 且这样排除了「同一毫秒内新建 + 覆盖」时 created_at === updated_at 的混淆。
+    const now = new Date().toISOString();
+    const row = await env.DB.prepare(
+      "INSERT INTO user_collections (user_id, kind, title, description, items, item_count, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?) " +
+        "ON CONFLICT(user_id, kind, title) DO UPDATE SET description = excluded.description, items = excluded.items, " +
+        "item_count = excluded.item_count, updated_at = excluded.updated_at " +
+        "RETURNING id, created_at, updated_at",
     )
       .bind(
         user.id,
@@ -851,9 +862,15 @@ export async function accountRoute(request: Request, env: Env): Promise<Response
         collection.description,
         encoded.json,
         encoded.count,
+        now,
       )
-      .run();
-    return json({ id: result.meta.last_row_id, stored: true }, 201);
+      .first<{ id: number; created_at: string; updated_at: string }>();
+    // 用 created_at === updated_at 判定本次是新建还是覆盖：新建时两者都取自同一个 `now`。
+    const created = !!row && row.created_at === row.updated_at;
+    return json(
+      { id: row?.id ?? null, stored: true, created, updated_at: row?.updated_at ?? null },
+      created ? 201 : 200,
+    );
   }
 
   const collectionMatch = path.match(/^\/api\/account\/collections\/(\d+)$/);

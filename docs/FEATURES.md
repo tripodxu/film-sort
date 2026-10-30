@@ -135,7 +135,7 @@
 | Google/GitHub OAuth（一次性 code 交换，token 不进 URL） | 账号弹窗 | `/api/account/oauth/*` |
 | 画像+批注云同步（防抖自动 + 手动 + keepalive 退出前） | 同步状态点 | `GET/PUT /api/account/profile` |
 | 冲突处理（增量合并/用云端） | 登录时弹窗 | `mergeProfiles` |
-| 云端清单（保存/列表/删除，kind 含 other） | Source | `/api/account/collections` |
+| 云端清单（保存/列表/删除，kind 含 other；同媒介同标题再保存为覆盖） | Source | `/api/account/collections` |
 | 昵称设置/修改 | 账号弹窗 | `PUT /api/account/nickname` |
 | 退出登录（清会话+本地 token） | 账号弹窗 | `POST /api/account/logout` |
 | 禁用态（disabled_at 拒绝登录） | — | user_accounts |

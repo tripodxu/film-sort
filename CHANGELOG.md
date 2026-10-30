@@ -3,6 +3,35 @@
 > 2026-10-29 三批收口的完整复核记录（发现项、根因、验证、线上回归清单）见
 > [`docs/REVIEW-2026-10-29.md`](docs/REVIEW-2026-10-29.md)。
 
+## 2026-10-30 · 云端清单「同名即同一份」+ 最小件数口径对齐（T-20261030-COLLECTIONS）
+
+**背景**：代码审查发现两处云端清单缺陷，均为静默失败型（用户看到成功提示，数据却不对）：
+
+- **F1（P0）**：`POST /api/account/collections` 是纯 `INSERT`，而前端每次「保存清单」都发一次请求，
+  于是每点一次就多一条同名副本——云端列表被堆满，还反复计入 100 条上限。
+- **F2（P0）**：前端保存闸门是「非空」（`< 1`），服务端 `validateCollectionBody` 与 DB CHECK（0021）
+  都要求 ≥2 件；1 件清单被服务端 400，前端却提示「已保存 1 件作品」。
+
+**改动**：
+
+- `migrations/0029_user_collections_title_unique.sql`（新增）：先去重历史副本（按
+  `(user_id, kind, title)` 保留 `id` 最大的一条），再建唯一索引；顺序保证重放安全。
+- `worker/account.ts`：POST 改 `INSERT … ON CONFLICT(user_id, kind, title) DO UPDATE
+  … RETURNING`；新建返回 `201 {created:true}`，覆盖返回 `200 {created:false}`，`id` 不变。
+  `validateCollectionBody` 的 ≥2 下限补注释锚定三处同口径。
+- `src/lib/useSorting.ts`：`saveCustomWorks` 闸门对齐为 ≥2，并在「去重后不足 2 件」时单独提示
+  （同名同作者合并后不能落库）。`saveWithoutSorting`（画像榜单，下限 1）未改。
+- `worker/collections.test.ts`（新增，真实 `node:sqlite`）：同名覆盖返回同一 id 且条数更新 /
+  不同标题与媒介各自成行 / 1 件被拒 / 0029 迁移去重与重放安全。
+- `src/lib/collections.test.ts`：新增保存闸门绊线（≥2、去重后 ≥2、单件榜单仍允许）。
+
+**文档**：`docs/API.md`（同名覆盖语义与 200/201 响应）、`docs/ARCHITECTURE.md`（0029 唯一约束）、
+`docs/FEATURES.md`、`docs/USAGE.md`。
+
+**验证**：本地门禁全绿（981 passed）；本地 D1 首申 0029 通过；真实 `wrangler dev` + 本地 D1
+端到端探针验证「201 → 200 同 id、列表 1 条、item_count 更新」与「1 件清单 400」。线上验证见
+TASK-LEDGER `T-20261030-COLLECTIONS`。
+
 ## 2026-10-30 · 全功能验收修复三件套 + dev 启动冒烟护栏（T-20261030-ACCEPT-FIX）
 
 **背景**：2026-10-29/30 全功能验收（本地 wrangler dev + 浏览器走查 + API 复核）发现三项问题，

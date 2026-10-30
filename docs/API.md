@@ -1086,7 +1086,7 @@ OAuth 回调。校验 `state` 与 `oauth_state` Cookie 一致（CSRF），自动
 
 ### POST /api/account/collections
 
-保存新的云端清单。需 Bearer Token。
+保存云端清单。需 Bearer Token。**同一用户在同一 `kind` 下标题唯一**——同名再保存是**覆盖**（更新描述、作品与 `updated_at`），不会新增第二条；不同标题或不同媒介各自成行。
 
 **请求体：**
 ```json
@@ -1103,7 +1103,7 @@ OAuth 回调。校验 `state` 与 `oauth_state` Cookie 一致（CSRF），自动
 
 **限制：** `kind` ∈ `film` / `book` / `music` / `other`；`title` 必填且 ≤160 字符；`description` ≤500 字符；`items` 2–1000 件（每件须有非空 `title`，≤160 字符），编码后总大小 512 KB。不符合返回 `400 invalid_collection`，超限返回 `413 payload_too_large`。
 
-**响应：** `201 { "id": 42, "stored": true }`
+**响应：** 新建 `201 { "id": 42, "stored": true, "created": true, "updated_at": "…" }`；同名覆盖 `200 { "id": 42, "stored": true, "created": false, "updated_at": "…" }`（`id` 不变）。
 
 ### DELETE /api/account/collections/:id
 

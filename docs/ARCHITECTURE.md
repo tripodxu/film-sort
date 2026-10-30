@@ -409,7 +409,7 @@ Worker 模块划分：
 | `user_oauth` | OAuth 关联 | 0004 / 0005 |
 | `poster_errors` | 海报错误日志（`source` 见 0017） | 0007 |
 | `poster_batch_stats` | 批量解析 outcome 分布（每请求一行 total/found/absent/throttled；封面链观测的分母，throttled 占比从这里算） | 0026 |
-| `user_collections` | 云端清单（0021 重建为 `user_collections_v2` 后改名：`item_count` 2–1000、`items` ≤512KB） | 0008 / 0021 |
+| `user_collections` | 云端清单（0021 重建为 `user_collections_v2` 后改名：`item_count` 2–1000、`items` ≤512KB；0029 起 `(user_id, kind, title)` 唯一，同名保存为 UPSERT 覆盖） | 0008 / 0021 / 0029 |
 | `shared_links` | 分享短链（`code` 主键、`profile`、`notes` 见 0013、`expires_at`） | 0009 / 0013 |
 | `plaza_posts` | 广场帖子（`description` 见 0012） | 0011 |
 | `plaza_likes` | 广场点赞（`UNIQUE(post_id, user_id)`） | 0011 |
