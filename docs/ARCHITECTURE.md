@@ -143,6 +143,18 @@ src/
 - `compareRankDetail`: 比较排名详情弹窗
 - `peerRankPickOpen`: 选择对方榜单弹窗
 
+**弹窗焦点约定**（`src/components/Modal.tsx` + `FocusTrap.tsx`，全站 9 个弹窗共用）
+
+| 行为 | 实现 |
+|------|------|
+| 挂载时聚焦目标 | **优先 `[role="dialog"]` 容器**（`Modal` 的 `<section>` 带 `tabIndex={-1}`），仅当容器缺失才退回首个可聚焦元素 |
+| 滚动位置 | 聚焦后把容器 `scrollTop` 归零；长弹窗不会因为焦点落在页脚按钮而被 `focus()` 带到底部 |
+| Tab 循环 | 首尾互卷；**焦点停在容器本身时** `Shift+Tab` 视为「在首元素之前」，圈回最后一个可聚焦元素（否则会逃出 trap） |
+| Esc | 一律关闭 |
+| 焦点环 | 容器 `outline:none`（容器只是聚焦锚点，不是可交互控件） |
+
+> 为什么不能直接「聚焦首个可聚焦元素」：那条规则默认对话框很短。内容一超过可视高度、首个可聚焦元素又在页脚（如「技术说明」按钮），`focus()` 会把它滚进视口 ⇒ 整个 overflow 容器打开即停在底部。详见 `docs/agents/PITFALLS.md` 4.68。
+
 ### 2.4 数据持久化
 
 | 数据 | Key | 存储 |
@@ -558,8 +570,8 @@ CSP 为 `script-src 'self'; script-src-attr 'none'`（`style-src` 因内联 `sty
 
 ```bash
 npm run build
-# 等价于：tsc -b && vite build
-# 输出到 dist/
+# 等价于：tsc -b && vite build && node scripts/pwa-precache.mjs
+# 输出到 dist/；最后一步把产物清单注入 dist/sw.js（见 7.4）
 ```
 
 ### 7.2 部署配置
@@ -593,6 +605,30 @@ npm run build
 
 部署链路（CI、`npm run deploy`、Cloudflare 侧 Git 集成）见 `CLOUDFLARE.md`。
 
+> `npm run deploy` 自带 `wrangler d1 migrations apply --remote`；**Cloudflare Git 集成的 Deploy command 若写成裸 `wrangler deploy` 则不会跑迁移**，新增迁移必须手动补一次 apply，否则 Worker 用到的新索引/列不存在。
+
+### 7.4 PWA 与 Service Worker
+
+`public/sw.js` 是源码模板，构建后由 `scripts/pwa-precache.mjs` 注入两处占位符：
+
+| 占位符 | 构建期注入内容 |
+|--------|----------------|
+| `/*__PRECACHE_ASSETS__*/ []` | `dist/assets` 下全部 `.js/.css/.woff2`（含懒加载路由 chunk），只预缓存代码与字体，图片靠运行时积累 |
+| `/*__BUILD_ID__*/ "dev"` | 上述清单的 sha256 前 10 位 |
+
+缓存桶名为 `art-rank-v4-<BUILD_ID>`：`activate` 阶段删除所有同前缀但非本代的桶，因此换代是原子的，不会出现「旧 chunk + 新 index.html」。
+
+| 请求类型 | 策略 |
+|----------|------|
+| 页面导航（`request.mode === "navigate"`） | network-first；仅 `/` 与 `/index.html` 的 200 响应写入 `/index.html` 键（`/admin`、`/share/*` 写同一键会导致离线互开串页），失败回退该键 |
+| 同源静态资源 | cache-first（产物名带 hash）；非 200 或非 basic 响应不写缓存；兜底返回 503 空响应 |
+| `/api/*` | 不接管（直接走网络） |
+| 跨域 / 非 GET | 不接管 |
+
+注册条件：仅当 `navigator.serviceWorker` 存在 **且** hostname 不是 `localhost`/`127.0.0.1`（`src/main.tsx`）。开发环境注册会缓存未打包源码，热更新失效。
+
+**为什么预缓存清单必须注入**：SW 只预缓存 `/` 与 `/index.html`，懒加载路由的 chunk 不在缓存里，离线打开未访问过的路由会动态 import 失败并落到 ErrorBoundary（`/myself` 曾线上实测）。
+
 ---
 
 ## 8. 测试
@@ -605,4 +641,4 @@ npm run lint          # eslint（react-hooks/recommended + no-unused-vars=warn�
 npm run format:check  # prettier --check（printWidth 100）
 ```
 
-测试使用 Vitest（`vitest.config.ts` 只收集 `src/**`、`worker/**`、`shared/**` 下的 `*.test.ts`），数量随 CI 增长（2026-10-24 时点 63 个测试文件、855 passed / 9 skipped），覆盖排序算法、画像比较/解析、集合导入、海报管线、限流窗口、批注白名单、Worker 载荷校验与大量源码扫描式回归绊线。CI 步骤见 `.github/workflows/ci.yml`（本地聚合入口 `npm run gates`）。
+测试使用 Vitest（`vitest.config.ts` 只收集 `src/**`、`worker/**`、`shared/**` 下的 `*.test.ts`），覆盖排序算法、画像比较/解析、集合导入、海报管线、限流窗口、批注白名单、Worker 载荷校验与大量源码扫描式回归绊线。**文件数与用例数不写进文档**（历史上多次硬编码后滞后），以 `npm test` 输出为准。CI 步骤见 `.github/workflows/ci.yml`（本地聚合入口 `npm run gates`，比 CI 多一道 `dev:smoke` 启动冒烟）。

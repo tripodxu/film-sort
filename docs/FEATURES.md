@@ -169,8 +169,8 @@
 - 安全头：CSP（img 白名单含 doubanio/amazon/imdb/tmdb/126.net/github/wikimedia/bkimg）、COOP、nosniff、X-Frame DENY、写接口 CSRF（assertSameOrigin）。
 - 边缘缓存：`/api/douban/top250`、`/api/douban/suggest`、`/api/posters`、`/api/image`；GET 详情 86400s。
 - cron：每周一清 90 天前日志/180 天前海报错误/过期会话与短链。
-- 无障碍：焦点陷阱（引导）、aria-modal/tablist/menu 语义、reduced-motion、触屏 :active。
-- PWA：manifest（192/512/maskable 三图标 + apple-touch-icon）+ network-first SW（仅生产域名注册）。
+- 无障碍：焦点陷阱（首次焦点优先落 `[role="dialog"]` 容器并归零滚动，容器可聚焦时 Tab/Shift+Tab 仍圈回首尾）、aria-modal/tablist/menu 语义、reduced-motion、触屏 :active。
+- PWA：manifest（192/512/maskable 三图标 + apple-touch-icon）+ network-first SW（仅生产域名注册）；安装期由 `scripts/pwa-precache.mjs` 预缓存全部带 hash 的 JS/CSS/字体（含懒加载路由 chunk），缓存桶带构建哈希，激活即清旧桶 ⇒ 离线可开全部应用内路由，更新即时生效。`/api/` 不接管。
 - 性能：首页 3D 光球由 `src/components/DeferredOrb.tsx` 托管——空闲时（`requestIdleCallback`，2s 上限）才加载；`saveData` 或 2G 网络不加载，保留 CSS 兜底背景。
 - 质量门：CI（`.github/workflows/ci.yml`）依次跑 check / lint / format:check / test / build；本地对应 `npm run lint|format|format:check`。
 
@@ -211,3 +211,4 @@
 9. 主题：十二内置主题切换（主题菜单四组双列 chip 网格：经典/新系列/开场特效/布局，Esc 可关）、刷新持久化、PNG 跟随
 10. /admin 五页签各一操作
 11. AI 点评：三场景各生成一次（含长度三档切换）；设置→配置自己的 API→获取模型列表→测试连接→再生成（来源徽标变「我的」）；清除配置回落内置；错误注入（错 key / 错 base / 连打限流）文案正确
+12. 引导 / 技术说明弹窗：首次访问自动弹出，且**打开位置在顶部（从第 1 步开始，不是滚到底）**；9 步齐全、技术说明 6 个折叠块均可展开；「不再显示」后不再自动弹、右下角 `?` 仍可调出；Esc 关闭；Tab / Shift+Tab 在首尾循环且不逃出弹窗；深浅主题下正文对比度正常
