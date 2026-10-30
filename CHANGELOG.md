@@ -43,9 +43,22 @@
 **文档**：`docs/API.md`（同名覆盖语义与 200/201 响应）、`docs/ARCHITECTURE.md`（0029 唯一约束 +
 改名保留）、`docs/FEATURES.md`、`docs/USAGE.md`。
 
-**验证**：本地门禁全绿（五道 + dev 冒烟）；本地 D1 首申 0029 通过；真实 `wrangler dev` + 本地 D1
-端到端探针验证「201 → 200 同 id、列表 1 条、item_count 更新」与「1 件清单 400」；`created` 用例
-连跑 8 轮全绿（修复前约 1/2 失败）。线上验证见 TASK-LEDGER `T-20261030-COLLECTIONS`。
+**验证（本地）**：门禁全绿（五道 + dev 冒烟，987 passed / 9 skipped）；干净本地 D1 从 0001 到 0029
+全部 apply 成功；真实 `wrangler dev` + 本地 D1 端到端探针——12 条新清单 12×201、同名覆盖 200 + 同
+`id` + `item_count` 更新、1 件清单 400；`created` 用例连跑 8 轮全绿（修复前约 1/2 失败）。
+
+**上线记录（2026-10-30 21:00 +08，`a6d9127`）**：
+
+- 远程 `0029` 实际于 **2026-10-30 11:23 UTC 应用，早于本次发布**，跑的是最初 `DELETE` 版（D1 按
+  文件名记账，文件内容变更不会重放）。核查线上 `user_collections`：**5 行、按
+  `(user_id, kind, title)` 分组 5 组、无 ` #` 后缀 → 无同名重复，一行未删**，与「改名保留」版终态
+  一致，未造成数据损失。
+- 已线上验证：`idx_user_collections_user_kind_title` 存在且 `UNIQUE`；远程 D1 上对该 UPSERT 跑
+  `EXPLAIN` 成功 → `ON CONFLICT(user_id, kind, title)` 能匹配索引，不会报 `ON CONFLICT clause does
+  not match any PRIMARY KEY or UNIQUE constraint`；`/admin/app.js`（47,688B）含 `dbTime` 13 处、
+  零裸解析库内时间；未认证 `GET`/`POST /api/account/collections` → 401。
+- **未线上验证**：「登录后同名连存两次 → 先 201 再 200、同 `id`」需真实登录态，未为测试造账号写线
+  上库。该项仍待有账号者点两次保存确认，台账条目因此保持 👀，未标 ✅。
 
 ## 2026-10-30 · 全功能验收修复三件套 + dev 启动冒烟护栏（T-20261030-ACCEPT-FIX）
 

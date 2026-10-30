@@ -10,7 +10,7 @@
 
 ## 进行中 / 最近
 
-### T-20261030-COLLECTIONS · 云端清单「同名即同一份」+ 下限口径拆分 · 👀 待线上验证
+### T-20261030-COLLECTIONS · 云端清单「同名即同一份」+ 下限口径拆分 · 👀 已上线，核心交互待账号验证（`a6d9127`）
 
 - **起因（代码审查，两处静默失败）**：
   - **F1（P0）**：`POST /api/account/collections` 纯 `INSERT`，前端每次「保存清单」都发一次
@@ -49,13 +49,24 @@
   - **真实 workerd 端到端探针**（`wrangler dev` + 本地 D1，临时脚本，验后即删）：
     同一标题连存两次 → `201 created:true` 然后 `200 created:false`、**同一 id**、列表只有 1 条且
     `item_count` 由 2 更新为 5；1 件清单 → `400 invalid_collection`。
+- **上线实况（2026-10-30 21:00 +08 发布 `a6d9127`）**：
+  - **远程 `0029` 早在 2026-10-30 11:23 UTC 就被单独应用过**，跑的是最初 `DELETE` 版；D1 按文件名
+    记账，文件内容改成「改名保留」后**不会重放**。核查线上 `user_collections`：5 行、按
+    `(user_id, kind, title)` 分组 5 组、无 ` #` 后缀 → 线上本无同名重复，**一行未删**，与改名版
+    终态一致。教训：提交迁移文件的同时别手动跑远程迁移，否则「发布窗口」的控制权就丢了。
+  - 已线上验证：唯一索引 `idx_user_collections_user_kind_title` 存在且 `UNIQUE`；远程 D1 对该 UPSERT
+    跑 `EXPLAIN` 成功（`ON CONFLICT` 能匹配索引，不会 `ON CONFLICT clause does not match`）；
+    `/admin/app.js` 47,688B 含 `dbTime` 13 处、零裸解析；未认证 `GET`/`POST /api/account/collections`
+    → 401；首页 200（bundle 已切到新 hash）、`/admin` 200（9,589B）。
+  - 上线窗口：迁移已完成 → 旧代码撞唯一索引的同名保存会 500，存在约 2 分钟（推送→部署生效实测
+    2m10s）。个人站夜间低流量，风险已接受。
 - **上线注意**：Git 集成的 Deploy command 若为裸 `wrangler deploy` **不会**跑迁移
   （见 `docs/CLOUDFLARE.md`）。迁移与 Worker 必须在**同一发布窗口**：先部署后迁移 → 保存全 500
   （`ON CONFLICT clause does not match any PRIMARY KEY or UNIQUE constraint`）；先迁移后旧代码 →
-  同名保存撞 UNIQUE 也是 500。建议 apply 迁移后立刻部署并验一次保存。
-- **线上验证待办**：① 同一标题连存两次 → 云端只一条且 `item_count` 更新；② 1 件作品「仅保存」
-  → 本地榜单可打开 + 提示「云端至少 2 件、本次只存本地」，不再静默失败；③ 若该账号有历史同名
-  副本，迁移后应看到 `标题 #<id>` 的旧副本仍在（未被删除）。
+  同名保存撞 UNIQUE 也是 500。
+- **线上验证待办（需真实登录态，未为测试造账号写线上库）**：① 同一标题连存两次 → 云端只一条且
+  `item_count` 更新；② 1 件作品「仅保存」→ 本地榜单可打开 + 提示「云端至少 2 件、本次只存本地」；
+  ③ 该账号若有历史同名副本，迁移后应看到 `标题 #<id>`（本环境无此数据，跳过）。
 
 ### T-20261030-ACCEPT-FIX · 全功能验收修复三件套 + dev 启动冒烟护栏 · ✅ 已上线并线上验证（`6b2a639`）
 
