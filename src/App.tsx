@@ -2305,8 +2305,8 @@ export default function App() {
           <h2 id="guide-heading">{t("欢迎来到 ART/RANK", "Welcome to ART/RANK")}</h2>
           <p className="guide-subtitle">
             {t(
-              "在两件作品之间做出选择，找到你真正想留下的那一个。以下是快速上手指南：",
-              "Choose between two works and reveal what stays with you. Here's a quick guide:",
+              "这里只讲怎么用：怎么选作品、怎么排、怎么导出与比较。想看算法怎么算，点底部「技术说明」。",
+              "This is the how-to: picking works, sorting, exporting, comparing. For how the algorithms work, open Technical details at the bottom.",
             )}
           </p>
           <div className="guide-steps">
@@ -2328,8 +2328,8 @@ export default function App() {
                 <strong>{t("选择作品来源", "Pick your works")}</strong>
                 <p>
                   {t(
-                    "从精选榜单中挑选，粘贴自己的清单，或从豆瓣 Top250 导入。",
-                    "Pick from curated lists, paste your own collection, or import from Douban Top250.",
+                    "精选榜单、即搜即加（输入标题搜出候选再点选）、批量导入（TXT / JSON / 粘贴清单）、豆瓣 Top 250；音乐还能扫码或 Cookie 连接网易云，按用户浏览全部歌单（含收藏）点选；也可以打开别人的分享链接直接取内容。",
+                    "Curated lists, instant search (type a title, pick a candidate), batch import (TXT / JSON / paste), or Douban Top 250. For music you can also connect NetEase by QR code or cookie and browse all of a user's playlists. You can also open someone's share link and take the works from it.",
                   )}
                 </p>
               </div>
@@ -2337,11 +2337,11 @@ export default function App() {
             <div className="guide-step">
               <span className="guide-step-num">3</span>
               <div className="guide-step-body">
-                <strong>{t("1v1 取舍排序", "Sort by choosing")}</strong>
+                <strong>{t("选择排序模式", "Choose a sort mode")}</strong>
                 <p>
                   {t(
-                    "每次看到两件作品，点击你更想留下的那个。支持键盘快捷键 A/D 或 ←/→。",
-                    "Each time you see two works, tap the one you'd keep. Keyboard: A/D or ←/→.",
+                    "简易最快：每件只跟榜尾比一次，上百件里挖 Top N 的首选。经典是默认：二分定位加回环复测。精确会在经典之上加倍复测，完成后汇报校准一致率。自适应按信息量挑「最该问」的一对、实时给 90% 名次区间，超过 20 件建议换经典或简易。选择会被记住。",
+                    "Quick is fastest: each work meets only the last place — best for digging a Top N out of hundreds. Classic is the default: binary placement plus loop rechecks. Precise doubles the rechecks on top of classic and reports a calibration rate. Adaptive picks the most informative pair and shows live 90% rank ranges — switch to classic or quick above 20 works. Your choice is remembered.",
                   )}
                 </p>
               </div>
@@ -2349,11 +2349,11 @@ export default function App() {
             <div className="guide-step">
               <span className="guide-step-num">4</span>
               <div className="guide-step-body">
-                <strong>{t("查看文化索引", "View your index")}</strong>
+                <strong>{t("开始 1v1 取舍", "Sort, one pair at a time")}</strong>
                 <p>
                   {t(
-                    "排序完成后自动保存，可导出为 JSON/TXT/Markdown/CSV/PNG。",
-                    "Results save automatically. Export as JSON, TXT, Markdown, CSV, or PNG.",
+                    "点击你更想留下的那一件；键盘 A/D 或 ←/→；手机上左右滑动。可随时撤销、略过某件或暂放到队尾。进度自动存草稿，刷新后可继续。",
+                    "Tap the one you'd keep — keyboard A/D or ←/→, or swipe left/right on phones. Undo any time, skip a work, or park it at the back of the queue. Progress is draft-saved automatically and can be resumed after a refresh.",
                   )}
                 </p>
               </div>
@@ -2361,11 +2361,61 @@ export default function App() {
             <div className="guide-step">
               <span className="guide-step-num">5</span>
               <div className="guide-step-body">
-                <strong>{t("与朋友比较", "Compare with friends")}</strong>
+                <strong>{t("查看与导出文化索引", "View and export your index")}</strong>
                 <p>
                   {t(
-                    "生成比较链接或二维码发给对方，看看你们的品味在哪里重合。",
-                    "Generate a compare link or QR code and see where your tastes overlap.",
+                    "排序完成会自动保存到「我的文化索引」，每件作品都可加批注。导出支持 JSON / TXT / Markdown / CSV / PNG（五套版式，另有年度年鉴卡），PNG 配色跟随当前主题。",
+                    "Results save to My Index automatically, and every work can carry a note. Export as JSON / TXT / Markdown / CSV / PNG (five layouts plus a yearly report card); PNG colours follow the active theme.",
+                  )}
+                </p>
+              </div>
+            </div>
+            <div className="guide-step">
+              <span className="guide-step-num">6</span>
+              <div className="guide-step-body">
+                <strong>{t("与他人比较", "Share and compare")}</strong>
+                <p>
+                  {t(
+                    "「比较链接」让对方直接进比较界面，「分享链接」让对方先看内容再决定；都走 12 位短码，可扫码。相遇页看综合共识分，深度页是只读的第二读法，含似然一致度等新指标。",
+                    "A compare link drops them straight into the comparison; a share link lets them read your list first. Both use a 12-character code and can be scanned as a QR code. The encounter page shows the consensus score; the depth page is a read-only second reading with extra metrics such as likelihood agreement.",
+                  )}
+                </p>
+              </div>
+            </div>
+            <div className="guide-step">
+              <span className="guide-step-num">7</span>
+              <div className="guide-step-body">
+                <strong>
+                  {t("（可选）AI 点评与 AI 快排", "(Optional) AI notes and quick rank")}
+                </strong>
+                <p>
+                  {t(
+                    "设置 → AI 服务：AI 点评默认走服务端内置模型，也可填自己的 Base URL / API Key / Model。同一弹窗里填入 TypeSafe Key 后，准备页会出现「AI 快排」——一次预测直接成榜，跳过逐对比较（最多 255 件）。",
+                    "Settings → AI services. AI notes use a built-in model by default; you can plug in your own Base URL / API key / model instead. With a TypeSafe key in the same dialog, a Quick rank button appears on the setup page: one prediction produces the whole list, skipping pairwise sorting (up to 255 works).",
+                  )}
+                </p>
+              </div>
+            </div>
+            <div className="guide-step">
+              <span className="guide-step-num">8</span>
+              <div className="guide-step-body">
+                <strong>{t("（可选）Jev 代判", "(Optional) Jev decides")}</strong>
+                <p>
+                  {t(
+                    "同样在「AI 服务」里打开「Jev 代判」并选置信阈值（默认 80%，50–90% 五档）：达到阈值的那一对自动落位，标注「上一对由 Jev 代判 · 置信 N%」，随时可撤销；没达标的仍交给你自己。调低更省事，调高更保守。",
+                    "Still in AI services, switch on Jev decides and pick a confidence threshold (80% by default, five steps from 50% to 90%): a pair that clears it is settled automatically and labelled 'Last pair decided by Jev · N% confidence', undoable at any time. Anything below the bar stays yours. Lower means less work, higher means more caution.",
+                  )}
+                </p>
+              </div>
+            </div>
+            <div className="guide-step">
+              <span className="guide-step-num">9</span>
+              <div className="guide-step-body">
+                <strong>{t("（可选）登录同步", "(Optional) Sign in to sync")}</strong>
+                <p>
+                  {t(
+                    "邮箱注册，或用 Google / GitHub 登录后，画像、批注与云端清单自动同步；游客数据在登录时可选择增量合并到云端，或改用云端数据。",
+                    "Sign up with email, or sign in with Google / GitHub, and profiles, notes and cloud lists sync automatically. Guest data can be merged into the cloud or replaced by it at sign-in.",
                   )}
                 </p>
               </div>
@@ -2410,30 +2460,55 @@ export default function App() {
           <h2 id="tech-heading">{t("技术说明", "Technical Details")}</h2>
           <p className="guide-subtitle">
             {t(
-              "ART/RANK 背后的核心算法和数据流。",
-              "The core algorithms and data flow behind ART/RANK.",
+              "算法怎么算、数据存在哪。想知道按钮在哪、功能怎么用，回到「使用说明」。",
+              "How the algorithms work and where data lives. For where the buttons are and how features work, go back to the guide.",
             )}
           </p>
           <div className="tech-sections">
             <details open>
-              <summary>{t("排序算法", "Sorting Algorithm")}</summary>
+              <summary>{t("排序模式", "Sort Modes")}</summary>
               <div className="tech-body">
                 <p>
-                  {t("排序引擎使用", "The sorting engine uses ")}
-                  <strong>{t("主动式二分插入排序", "Active Binary Insertion Sort")}</strong>
                   {t(
-                    "，核心思路是：每次取出一个候选作品，与已排序列表的中位数比较，根据结果缩小搜索范围，直到确定精确插入位置。",
-                    ". The core idea: each candidate work is compared with the median of the sorted list, narrowing the search range until the exact insertion position is found.",
+                    "四种模式共用同一套取舍记录，区别在于「问哪些对」和「怎么定名次」。准备页四选一，选择会被记住。",
+                    "All four modes share one record of choices; they differ in which pairs get asked and how ranks are settled. Pick one on the setup page — the choice is remembered.",
                   )}
                 </p>
                 <p>
+                  <strong>{t("简易（quick）", "Quick")}</strong>：
                   {t(
-                    "时间复杂度 O(n log n)。对于 n 件作品取 Top N，每个候选最多需要 ⌈log₂(N+1)⌉ 次比较。",
-                    "Time complexity O(n log n). For n works with Top N, each candidate needs at most ⌈log₂(N+1)⌉ comparisons.",
+                    "每件新作品只与榜单末位比一次：赢了上榜、输了出局。线性步数，没有验证阶段；适合从上百件里快速挖 Top N，代价是名次精度较低。",
+                    "Each new work meets the last place once: win and it enters, lose and it is out. Linear steps with no verification phase — good for digging a Top N out of hundreds, at the cost of precision.",
                   )}
                 </p>
                 <p>
-                  <strong>{t("冷却机制", "Cooldown")}</strong>：
+                  <strong>{t("经典（classic，默认）", "Classic (default)")}</strong>：
+                  {t(
+                    "主动式二分插入：取出候选，与已排序区间的中位数比较并缩小范围，直到定位精确插入位置。n 件取 Top N 时每个候选最多 ⌈log₂(N+1)⌉ 次比较，整体 O(n log n)。",
+                    "Active binary insertion: compare the candidate against the median of the sorted range and halve the range until the exact slot is found. For a Top N out of n works each candidate costs at most ⌈log₂(N+1)⌉ comparisons — O(n log n) overall.",
+                  )}
+                </p>
+                <p>
+                  <strong>{t("精确（precise）", "Precise")}</strong>：
+                  {t(
+                    "在经典之上加倍复测，并主动补验从未直接比较过的相邻对；结束时汇报「校准一致率」，说明复测与首次判断的吻合程度。",
+                    "Classic plus doubled rechecks, and it probes adjacent pairs that were never compared head-to-head. It ends with a calibration rate showing how often rechecks agreed with first answers.",
+                  )}
+                </p>
+                <p>
+                  <strong>{t("自适应（adaptive）", "Adaptive")}</strong>：
+                  {t(
+                    "用 Bradley-Terry 能力模型估计每件作品的强度与不确定度，按信息量 p(1−p)(σᵢ²+σⱼ²) 加覆盖率补偿来挑「最该问」的一对，实时显示双方 90% 名次区间，预算约 4× 作品数。排序中的复测结论会回流模型，最终榜单按完整模型重建（2026-10-24）。",
+                    "A Bradley-Terry strength model tracks each work's score and uncertainty. Pairs are chosen by information p(1−p)(σᵢ²+σⱼ²) plus a coverage bonus, live 90% rank ranges are shown, and the budget is roughly 4× the number of works. Rechecks feed back into the model and the final ranking is rebuilt from the full model (2026-10-24).",
+                  )}
+                </p>
+              </div>
+            </details>
+            <details>
+              <summary>{t("共识机制", "Shared Mechanics")}</summary>
+              <div className="tech-body">
+                <p>
+                  <strong>{t("冷却", "Cooldown")}</strong>：
                   {t(
                     "同一对作品至少间隔 3 次比较，同一作品至少间隔 4 次比较，防止顺序偏差和比较疲劳。",
                     "Same pair at least 3 comparisons apart, same work at least 4 apart — prevents order bias and comparison fatigue.",
@@ -2442,22 +2517,22 @@ export default function App() {
                 <p>
                   <strong>{t("偏好回环检测", "Preference Loop Detection")}</strong>：
                   {t(
-                    "当检测到 A→B→C→A 的偏好循环时，系统安排复测。首次标记为「观察中」，多次方向一致后标记为「持久张力」——尊重用户的真实品味矛盾，而非强行纠正。",
-                    "When detecting A→B→C→A preference loops, the system schedules rechecks. First marked 'observed', then 'persistent tension' if consistently confirmed — respecting genuine taste contradictions.",
+                    "检测到 A→B→C→A 的偏好循环时会安排复测。首次标记「观察中」，多次方向一致后标记「持久张力」——尊重真实的品味矛盾，而非强行纠正。",
+                    "When an A→B→C→A preference loop shows up, rechecks are scheduled. It starts as 'observed' and becomes 'persistent tension' if it keeps confirming — genuine taste contradictions are respected rather than overridden.",
                   )}
                 </p>
                 <p>
                   <strong>{t("验证阶段", "Verification Phase")}</strong>：
                   {t(
-                    "主排序完成后，自动复测少量相邻作品对和循环边，确保结果稳定。复测数量约为 Top N 的 1/3。",
-                    "After main sorting, a few adjacent pairs and loop edges are rechecked. Verification count ≈ Top N / 3.",
+                    "经典与精确模式在主排序完成后复测少量相邻作品对和循环边，数量约为 Top N 的 1/3；简易模式没有这一阶段。",
+                    "In classic and precise, a few adjacent pairs and loop edges are rechecked after the main pass — about Top N / 3. Quick mode skips it.",
                   )}
                 </p>
                 <p>
                   <strong>{t("撤销", "Undo")}</strong>：
                   {t(
-                    "通过重放决策日志（去掉最后一条）重建完整状态，保证撤销后排序一致性。",
-                    "Rebuilds state by replaying the decision log minus the last entry, guaranteeing consistency after undo.",
+                    "重放决策日志（去掉最后一条）重建状态，保证撤销后的一致性。",
+                    "State is rebuilt by replaying the decision log minus the last entry, keeping undo consistent.",
                   )}
                 </p>
               </div>
@@ -2466,61 +2541,72 @@ export default function App() {
               <summary>{t("比较算法", "Comparison Algorithm")}</summary>
               <div className="tech-body">
                 <p>
+                  <strong>{t("合并", "Merging")}</strong>：
                   {t(
-                    "两人比较时，系统首先将同维度的多个榜单",
-                    "When comparing two profiles, the system first ",
-                  )}
-                  <strong>{t("合并", "merges")}</strong>
-                  {t(
-                    "：同一作品出现在多个榜单中时取最高名次。匹配依据是标题 + 年份 + 创作者的规范化比较。",
-                    " multiple lists per dimension: same work across lists takes the best rank. Matching is based on normalized title + year + creator.",
+                    "同维度的多个榜单先合并：同一作品出现在多个榜单中时取最高名次。匹配依据是标题 + 年份 + 创作者的规范化比较。",
+                    "Multiple lists of the same medium are merged first: a work appearing in several lists takes its best rank. Matching compares normalized title + year + creator.",
                   )}
                 </p>
                 <p>
                   <strong>{t("贪心匹配", "Greedy Matching")}</strong>：
                   {t(
-                    "生成所有候选对的匹配评分（70-90 分），按评分降序、排名差升序排列，贪心选择不冲突的最优匹配。",
-                    " — generates match scores (70-90) for all candidate pairs, sorted by score descending then rank-diff ascending, greedily selecting non-conflicting optimal matches.",
+                    "为所有候选对算匹配评分（70–90 分），按评分降序、名次差升序排列，再贪心挑选互不冲突的最优配对。",
+                    "Every candidate pair gets a match score (70–90); pairs are sorted by score descending then rank gap ascending, and non-conflicting matches are taken greedily.",
                   )}
                 </p>
                 <p>
-                  <strong>{t("比较指标", "Comparison Metrics")}</strong>：
+                  <strong>{t("相遇页 13 项指标", "13 metrics on the encounter page")}</strong>：
+                  {t(
+                    "重合类——作品重合度（交集 / 并集）、前五重合、Top 3 共识、Top-5 Jaccard、冠军一致；顺序类——顺序一致率、Kendall τ-b、Spearman 近似、名次距离、加权偏好一致（1/rank 加权）；画像类——年代偏好、覆盖率、收缩共识分。",
+                    "Overlap: work overlap (intersection / union), top-5 overlap, top-3 consensus, Top-5 Jaccard, same champion. Order: order agreement, Kendall τ-b, Spearman approximation, rank distance, weighted agreement (weighted by 1/rank). Profile: era affinity, coverage, shrunk consensus.",
+                  )}
                 </p>
-                <ul>
-                  <li>
-                    <strong>{t("作品重合度", "Work Overlap")}</strong>：
-                    {t("共同作品数 / 并集作品数", "shared works / union count")}
-                  </li>
-                  <li>
-                    <strong>{t("加权偏好一致", "Weighted Agreement")}</strong>：
-                    {t(
-                      "基于 1/rank 权重的一致性（高排名作品权重更大）",
-                      "consistency weighted by 1/rank (higher-ranked works matter more)",
-                    )}
-                  </li>
-                  <li>
-                    <strong>{t("顺序一致率", "Order Agreement")}</strong>：
-                    {t(
-                      "剔除并列名次后的序对一致数 / 非并列总序对数（多榜单合并取最优名次会产生并列，并列无法判定先后，不计入）",
-                      "concordant pairs / non-tied pairs (merged best ranks can tie; ties are excluded)",
-                    )}
-                  </li>
-                  <li>
-                    <strong>{t("Top 3 共识", "Top 3 Consensus")}</strong>：
-                    {t("双方前三名中的共同作品数", "shared works in both top 3")}
-                  </li>
-                  <li>
-                    <strong>{t("名次距离", "Rank Distance")}</strong>：
-                    {t("平均名次差 / 最大名次", "avg rank difference / max rank")}
-                  </li>
-                  <li>
-                    <strong>{t("斯皮尔曼相关", "Spearman-like")}</strong>：
-                    {t(
-                      "基于排名差平方的秩相关系数",
-                      "rank correlation based on squared rank differences",
-                    )}
-                  </li>
-                </ul>
+                <p>
+                  <strong>{t("深度页的五格第二读法", "Second reading on the depth page")}</strong>：
+                  {t(
+                    "只读、不写入任何数据：头部加权 τ（1/i 权重）、位置折扣一致度（每往后一位乘 0.85）、τ 的 bootstrap 区间（200 轮 · 90% 水平）、序对账本（可用序对 / 全部序对，含被剔除的并列），以及品味似然一致度（Plackett-Luce 双向似然，完全一致恒为 100，且计入「错得有多远」，2026-10-24 新增）。",
+                    "Read-only, writes nothing: head-weighted τ (1/i weights), position-discounted agreement (×0.85 per place), a bootstrap interval for τ (200 rounds at 90%), a pair ledger (usable / total pairs, ties excluded), and likelihood agreement (two-way Plackett-Luce likelihood — exactly 100 when identical, and it accounts for how far a work is misplaced; added 2026-10-24).",
+                  )}
+                </p>
+              </div>
+            </details>
+            <details>
+              <summary>{t("AI 能力", "AI Capabilities")}</summary>
+              <div className="tech-body">
+                <p>
+                  {t(
+                    "三条独立通道，互不影响：AI 点评（文字解读）、AI 快排（一次成榜）、Jev 代判（逐对替你选择）。点评走「AI 服务」里配置的通用模型，快排与代判共用同一把 TypeSafe Key。",
+                    "Three independent channels: AI notes (text), quick rank (one-shot ranking), and Jev decides (pair by pair). Notes use the general model configured in AI services; quick rank and Jev share one TypeSafe key.",
+                  )}
+                </p>
+                <p>
+                  <strong>{t("AI 点评", "AI notes")}</strong>：
+                  {t(
+                    "三个场景——榜单（截取前 150 件）、画像（跨维度汇总）、单件作品。默认走服务端内置模型，无需配置；填入自己的 Base URL、API Key 与 Model 后改走你的服务，Key 只存在本浏览器。",
+                    "Three scenarios — a list (first 150 works), a profile (across media), and a single work. A built-in server-side model works out of the box; entering your own Base URL, API key and model routes it to your provider, with the key kept only in this browser.",
+                  )}
+                </p>
+                <p>
+                  <strong>{t("AI 快排", "Quick rank")}</strong>：
+                  {t(
+                    "把整份清单一次交给模型预测名次，直接成榜，跳过所有 1v1 取舍（单次最多 255 件）。结果仍可在画像页手动微调。",
+                    "The whole list goes to the model in one prediction and becomes a ranked list directly, skipping every 1v1 (up to 255 works per call). You can still fine-tune it on the profile page.",
+                  )}
+                </p>
+                <p>
+                  <strong>{t("Jev 代判", "Jev decides")}</strong>：
+                  {t(
+                    "在每次取舍前预测你更可能选哪一件：置信度达到阈值才落位，并标注「上一对由 Jev 代判 · 置信 N%」、可撤销；低于阈值则不插手，仍由你判断。阈值默认 80%，可在 50–90% 五档调整——调低代判更频繁，调高更保守。",
+                    "Before each choice Jev predicts which work you'd keep. If confidence clears the threshold the pair is settled and labelled 'Last pair decided by Jev · N% confidence', undoable at any time; below it Jev stays out and the pair is yours. The default is 80%, adjustable in five steps from 50% to 90% — lower takes over more often, higher is more cautious.",
+                  )}
+                </p>
+                <p>
+                  <strong>{t("工程约束", "Engineering guardrails")}</strong>：
+                  {t(
+                    "Key 只存 localStorage，不经 Worker 落盘；代判请求带键控与代际守卫——换了一对、或你已手动选择时，迟到的响应一律丢弃，绝不复写你的决定。失败按限流、地区受限、key 无效分别提示，不静默吞掉。",
+                    "Keys live only in localStorage and are never persisted by the Worker. Assist requests are keyed and generation-guarded: if the pair changed or you already chose, late responses are dropped rather than overwriting your decision. Failures are surfaced by kind — rate limit, regional restriction, invalid key — instead of being swallowed.",
+                  )}
+                </p>
               </div>
             </details>
             <details>
@@ -2559,6 +2645,13 @@ export default function App() {
                   {t(
                     "以上都没命中时，所有类别统一按「维基百科 → 网易云 / gd-proxy」逐级兜底。",
                     "When none of the above hit, every medium falls back through Wikipedia → NetEase / gd-proxy.",
+                  )}
+                </p>
+                <p>
+                  <strong>{t("识别纠错", "Disambiguation")}</strong>：
+                  {t(
+                    "标题重名或结果不确定时，详情弹窗会列出候选让你选一次，并记住「这个名字指哪部作品」，之后不再重复问；实在找不到封面时给出占位与重试出路，而不是一直转圈。",
+                    "When a title is ambiguous or the match is uncertain, the detail dialog offers candidates and remembers which work that name refers to, so you are not asked again. If no poster can be found it shows a placeholder with a retry path instead of spinning forever.",
                   )}
                 </p>
                 <p>
@@ -2605,6 +2698,13 @@ export default function App() {
                   {t(
                     "统一走服务端 12 位短码（需要 D1）。旧版把画像压缩后内联在 URL 里的链接仍可打开，由前端 fflate 解压读取。",
                     "Served as a 12-character server-side code (requires D1). Older links that inline a compressed profile in the URL still open, decoded client-side with fflate.",
+                  )}
+                </p>
+                <p>
+                  <strong>{t("离线与缓存", "Offline & cache")}</strong>：
+                  {t(
+                    "构建产物由 Service Worker 预缓存，装到桌面或主屏幕后断网也能打开访问过的页面；海报与简介另有一层服务端缓存，可在顶栏齿轮里按类型手动清除。",
+                    "Build assets are precached by a Service Worker, so an installed copy can open visited pages while offline. Posters and intros sit behind a separate server-side cache that can be cleared by type from the gear menu.",
                   )}
                 </p>
               </div>

@@ -41,6 +41,13 @@ export function FocusTrap({ children, onEscape }: { children: ReactNode; onEscap
         (e.shiftKey ? last : first).focus();
         return;
       }
+      // 焦点停在对话框容器上（挂载时的初始位置）。容器既不是 first 也不是 last，
+      // 若不管，Shift+Tab 会从容器走到 trap 之外的文档前序节点——圈就漏了。
+      if (document.activeElement === el!.querySelector('[role="dialog"]')) {
+        e.preventDefault();
+        (e.shiftKey ? last : first).focus();
+        return;
+      }
       if (e.shiftKey) {
         if (document.activeElement === first) {
           e.preventDefault();
@@ -54,11 +61,20 @@ export function FocusTrap({ children, onEscape }: { children: ReactNode; onEscap
       }
     }
 
-    // Focus first focusable element —— 只在挂载时取一次焦点，之后不抢用户的焦点
-    const firstFocusable = el.querySelector<HTMLElement>(
-      'button:not([disabled]), [href], input:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
-    );
-    firstFocusable?.focus();
+    // 焦点优先给对话框容器本身（Modal 会带 tabIndex=-1），而不是第一个可聚焦元素。
+    // 原因：长内容弹窗（使用说明 / 技术说明）的首个可聚焦元素在页脚，focus() 会把
+    // 这个 overflow 容器直接滚到底部——用户一打开就从第 4 步开始看，前几步永远错过。
+    // 聚焦容器还让读屏立刻念出 aria-labelledby 指向的标题。
+    const dialog = el.querySelector<HTMLElement>('[role="dialog"]');
+    if (dialog && dialog.tabIndex === -1) {
+      dialog.focus();
+      dialog.scrollTop = 0;
+    } else {
+      const firstFocusable = el.querySelector<HTMLElement>(
+        'button:not([disabled]), [href], input:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+      );
+      firstFocusable?.focus();
+    }
 
     document.addEventListener("keydown", handleKeyDown);
     return () => {

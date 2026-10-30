@@ -53,6 +53,7 @@ export function Modal({
           role="dialog"
           aria-modal="true"
           aria-labelledby={headingId}
+          tabIndex={-1}
           onClick={(event) => event.stopPropagation()}
           onKeyDown={(event) => {
             if (event.key === "Escape") onClose();

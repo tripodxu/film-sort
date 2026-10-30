@@ -271,6 +271,9 @@ html{scroll-behavior:smooth}
 /* 换页时 useRouter 把焦点交给 <main> 只为读屏播报路线变化，:focus-visible 会顺带
    给整个视口套一圈 2px 亮框（首页因满宽被裁到视口外才看不见）。焦点环属于可操作控件。 */
 .main:focus,.main:focus-visible{outline:none}
+/* 同理：Modal 把焦点交给 [role=dialog] 容器，只为「打开时停在顶部 + 读屏念标题」。
+   容器不是可操作控件，不该套焦点环（否则整个弹窗边框亮一圈）。 */
+[role="dialog"]:focus,[role="dialog"]:focus-visible{outline:none}
 
 /* ===== Improved Contrast ===== */
 
