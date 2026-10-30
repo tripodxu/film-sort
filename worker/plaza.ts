@@ -203,7 +203,7 @@ export async function plazaRoute(request: Request, env: Env): Promise<Response> 
     // 历史教训：曾经把 poster_urls 侧表的结果挂进 post.items，前端编辑帖子时
     // `{...w}` 展开把 posterUrls 原样带回 body.items，PUT 又没有护栏，
     // 于是海报地址重新进库、随覆盖率增长重演 512KB 故障（见
-    // docs/PLAN-poster-pipeline.md §4.3）。改成旁路后，编辑流只碰干净的
+    // docs/archive/PLAN-poster-pipeline.md §4.3）。改成旁路后，编辑流只碰干净的
     // post.items，泄漏路径从结构上消失，而不是靠「记得剥离」。
     const rawItems: unknown[] = JSON.parse(String(post.items ?? "[]"));
     const isProfilePost = post.post_type === "profile";

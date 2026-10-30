@@ -27,7 +27,7 @@ import {
 import { fitPreferenceModel, getPreferenceOrder } from "./preferenceModel";
 
 // 固定剧本：12 件作品 + 一个「真实」偏好顺序，规则=总选真实名次更高者。
-// 旧三模式的 golden 数字是 S2 改动前实测值（见 docs/PLAN-ADDITIVE-UPGRADE.md §10），
+// 旧三模式的 golden 数字是 S2 改动前实测值（见 docs/archive/PLAN-ADDITIVE-UPGRADE.md §10），
 // 用来钉住「接入 adaptive 不改旧模式任何一个决定」。
 const IDS = ["a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l"];
 const TRUE_ORDER = ["d", "a", "k", "c", "h", "b", "e", "j", "f", "i", "l", "g"];

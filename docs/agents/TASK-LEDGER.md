@@ -10,37 +10,52 @@
 
 ## 进行中 / 最近
 
-### T-20261030-COLLECTIONS · 云端清单「同名即同一份」+ 最小件数口径对齐 · 👀 待线上验证
+### T-20261030-COLLECTIONS · 云端清单「同名即同一份」+ 下限口径拆分 · 👀 待线上验证
 
 - **起因（代码审查，两处静默失败）**：
   - **F1（P0）**：`POST /api/account/collections` 纯 `INSERT`，前端每次「保存清单」都发一次
     → 每点一次多一条同名副本，云端列表被堆满并反复计入 100 条上限。
   - **F2（P0）**：前端 `saveCustomWorks` 闸门是「非空」（`< 1`），服务端
     `validateCollectionBody` 与 DB CHECK（0021）要求 ≥2；1 件清单被 400，前端却提示已保存。
+- **复审追加（同批，推送前自查）**：
+  - **F3（P1，竞态）**：`created` 靠 `created_at === updated_at` 判定，而 `created_at` 是 SQLite
+    列默认值（执行时求值）、`updated_at` 是 JS 的 `now`。跨毫秒边界即把新建报成覆盖：
+    实测 300 次插入 **124 次误判（41%）**，`worker/collections.test.ts` 约一半概率随机红。
+  - **F4（P2）**：① 0029 初版 `DELETE` 收敛副本，静默删用户数据；② 前端下限抬到 2 连本地画像
+    一起拦了（与 `saveWithoutSorting` 下限 1 矛盾），而按钮 1 件时仍可点、点了必报错；
+    ③ `dbTime` 只接了广场列表，详情页 3 处 + 后台看板 6 处仍偏 8 小时。
 - **改动**：
-  - `migrations/0029_user_collections_title_unique.sql`（新增）：先去重历史副本（按
-    `(user_id, kind, title)` 保留 `id` 最大一条，= 用户最近保存的那份），再建唯一索引。
-    顺序不可颠倒：重复行存在时建唯一索引会失败（失败会整文件重放）。
-  - `worker/account.ts`：改 `INSERT … ON CONFLICT(user_id, kind, title) DO UPDATE … RETURNING`；
-    新建 `201 {created:true}` / 覆盖 `200 {created:false}`，`id` 不变。用
-    `created_at === updated_at` 判定分支（新建时两者同一时刻生成）。
-  - `src/lib/useSorting.ts`：闸门对齐 ≥2，并对「去重后不足 2 件」单独提示。
-    `saveWithoutSorting`（画像榜单，下限 1）**未改**——两者口径不同。
-  - `worker/collections.test.ts`（新增）：真实 `node:sqlite` 跑路由 UPSERT 与 0029 迁移。
-  - `src/lib/collections.test.ts`：保存闸门绊线。
+  - `migrations/0029_user_collections_title_unique.sql`（新增）：历史副本**改名保留**——每组
+    保留 `id` 最大那份原标题（后续 UPSERT 的落点），其余加 ` #<id>` 后缀仍在清单里，一条不删；
+    随后建 `(user_id, kind, title)` 唯一索引。顺序不可颠倒；重放为 no-op（改名后各组只剩一行）。
+  - `worker/account.ts`：`INSERT … ON CONFLICT(user_id, kind, title) DO UPDATE … RETURNING`；
+    `created_at`/`updated_at` 同源写同一个 `now` → `created` 判定确定；`RETURNING` 无行时
+    `500 collection_write_failed`（不再 200 + `id:null`）。
+  - `src/lib/useSorting.ts`：下限拆分——本地画像 ≥1（照存）、云端清单 ≥2（跳过上传并明说
+    「本次只保存在本地」）；空清单与「去重后为空」各自单独提示。
+  - `src/lib/dbTime.ts` 收口：`PlazaPostView` 3 处、`dashboardHtml` 6 处时间渲染统一走 UTC
+    解析；看板是外置脚本字符串，内联复刻一份并在测试里比对同口径。
+  - `scripts/dev-smoke.mjs`：默认向系统要空闲端口（不再固定 8798，避免与在跑的 dev 撞车假红）。
+  - 注释里的 `docs/PLAN-*.md` 死链统一改到 `docs/archive/`。
+  - 测试：`worker/collections.test.ts` 5 条（增「连续 40 条新清单必须 201」锁 F3；迁移用例断言
+    行数不减 / 满长标题截断合法 / 跨用户不串组 / 重放不变）；`src/lib/collections.test.ts`
+    断言「本地先落库、云端被 `items.length >= 2` 守卫」；`dashboardHtml.test.ts` 比对内联 `dbTime`；
+    `dbTime.test.ts` 断言两页不得裸解析库内时间。
   - 文档：`docs/API.md` / `ARCHITECTURE.md` / `FEATURES.md` / `USAGE.md` / `CHANGELOG.md`。
 - **验证（本地）**：
-  - 门禁全绿（五道 + dev 冒烟），`test` **76 passed / 1 skipped 文件、981 passed / 9 skipped 用例**；
-    `build` 主包 428.04 kB（gzip 143.86 kB）。`worker/collections.test.ts` 4/4。
-  - `wrangler d1 migrations apply film-sort --local`：0029 在本地 D1 首申通过（5 条语句）。
+  - 门禁全绿（五道 + dev 冒烟）：`76 passed / 1 skipped` 文件、**987 passed / 9 skipped** 用例。
+  - `created` 回归用例连跑 **8 轮全绿**（修复前约 1/2 失败率）；`wrangler d1 migrations apply
+    film-sort --local` 首申 0029 通过；实际执行迁移确认 3 条同名副本 → `#1` / `#2` / 原标题三条俱在。
   - **真实 workerd 端到端探针**（`wrangler dev` + 本地 D1，临时脚本，验后即删）：
     同一标题连存两次 → `201 created:true` 然后 `200 created:false`、**同一 id**、列表只有 1 条且
     `item_count` 由 2 更新为 5；1 件清单 → `400 invalid_collection`。
 - **上线注意**：Git 集成的 Deploy command 若为裸 `wrangler deploy` **不会**跑迁移
-  （见 `docs/CLOUDFLARE.md`）。推送后必须补 `npx wrangler d1 migrations apply film-sort --remote`，
-  否则服务端 UPSERT 会因缺唯一索引报错（`ON CONFLICT clause does not match any PRIMARY KEY
-  or UNIQUE constraint`）。迁移与 Worker 代码应在同一发布窗口内落地。
-- **线上验证待办**：同一标题连存两次 → 云端列表只一条且 `item_count` 更新；1 件清单前端即拦截。
+  （见 `docs/CLOUDFLARE.md`）。迁移与 Worker 必须在**同一发布窗口**：先部署后迁移 → 保存全 500
+  （`ON CONFLICT clause does not match any PRIMARY KEY or UNIQUE constraint`）；先迁移后旧代码 →
+  同名保存撞 UNIQUE 也是 500。建议 apply 迁移后立刻部署并验一次保存。
+- **线上验证待办**：① 同一标题连存两次 → 云端只一条且 `item_count` 更新；② 1 件作品「仅保存」
+  → 本地榜单可打开 + 提示「云端至少 2 件、本次只存本地」，不再静默失败；③ 若该账号有历史同名
+  副本，迁移后应看到 `标题 #<id>` 的旧副本仍在（未被删除）。
 
 ### T-20261030-ACCEPT-FIX · 全功能验收修复三件套 + dev 启动冒烟护栏 · ✅ 已上线并线上验证（`6b2a639`）
 

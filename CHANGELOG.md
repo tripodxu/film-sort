@@ -3,7 +3,7 @@
 > 2026-10-29 三批收口的完整复核记录（发现项、根因、验证、线上回归清单）见
 > [`docs/REVIEW-2026-10-29.md`](docs/REVIEW-2026-10-29.md)。
 
-## 2026-10-30 · 云端清单「同名即同一份」+ 最小件数口径对齐（T-20261030-COLLECTIONS）
+## 2026-10-30 · 云端清单「同名即同一份」+ 下限口径拆分（T-20261030-COLLECTIONS）
 
 **背景**：代码审查发现两处云端清单缺陷，均为静默失败型（用户看到成功提示，数据却不对）：
 
@@ -12,25 +12,40 @@
 - **F2（P0）**：前端保存闸门是「非空」（`< 1`），服务端 `validateCollectionBody` 与 DB CHECK（0021）
   都要求 ≥2 件；1 件清单被服务端 400，前端却提示「已保存 1 件作品」。
 
+**复审追加（同批，未上线前自查发现）**：
+
+- **F3（P1，竞态）**：`created` 分支靠 `created_at === updated_at` 判定，但 `created_at` 走列默认值
+  （SQLite 执行语句时才求值）、`updated_at` 走 JS 取的 `now`，两者跨毫秒边界时新建被误报成覆盖。
+  实测误判率 **41%**（300 次插入 124 次），对应测试约四成概率随机失败。
+- **F4（P2，数据 / 口径）**：① 0029 初版用 `DELETE` 收敛历史副本，会静默丢掉用户数据；
+  ② 前端把整条保存路径的下限抬到 2，连「本地画像榜单」一起拦了，与 `saveWithoutSorting`（下限 1）
+  自相矛盾，且按钮仍在 1 件时可用，点了必然报错；③ `dbTime` 只接了广场列表，详情页与后台看板仍偏 8 小时。
+
 **改动**：
 
-- `migrations/0029_user_collections_title_unique.sql`（新增）：先去重历史副本（按
-  `(user_id, kind, title)` 保留 `id` 最大的一条），再建唯一索引；顺序保证重放安全。
-- `worker/account.ts`：POST 改 `INSERT … ON CONFLICT(user_id, kind, title) DO UPDATE
-  … RETURNING`；新建返回 `201 {created:true}`，覆盖返回 `200 {created:false}`，`id` 不变。
-  `validateCollectionBody` 的 ≥2 下限补注释锚定三处同口径。
-- `src/lib/useSorting.ts`：`saveCustomWorks` 闸门对齐为 ≥2，并在「去重后不足 2 件」时单独提示
-  （同名同作者合并后不能落库）。`saveWithoutSorting`（画像榜单，下限 1）未改。
-- `worker/collections.test.ts`（新增，真实 `node:sqlite`）：同名覆盖返回同一 id 且条数更新 /
-  不同标题与媒介各自成行 / 1 件被拒 / 0029 迁移去重与重放安全。
-- `src/lib/collections.test.ts`：新增保存闸门绊线（≥2、去重后 ≥2、单件榜单仍允许）。
+- `migrations/0029_user_collections_title_unique.sql`（新增）：历史副本**改名保留**——每组保留
+  `id` 最大的一份原标题（= 后续 UPSERT 的落点），其余追加 ` #<id>` 后缀后仍留在用户清单里，
+  一条不删；随后建 `(user_id, kind, title)` 唯一索引。顺序不可颠倒，重放为 no-op。
+- `worker/account.ts`：POST 改 `INSERT … ON CONFLICT(user_id, kind, title) DO UPDATE … RETURNING`；
+  `created_at` 与 `updated_at` **同源**写入同一个 `now`，使 `created` 判定确定化（F3）；
+  `RETURNING` 拿不到行时返回 `500 collection_write_failed`，不再伪装成「覆盖成功 + id:null」。
+- `src/lib/useSorting.ts`：下限拆成两条——本地画像榜单 ≥1、云端清单 ≥2；1 件照存本地、
+  只跳过上传并在提示里说明「本次只保存在本地」，不再静默 400（F4②）。
+- `src/lib/dbTime.ts` 收口：`PlazaPostView`（帖子/评论/编辑历史）与后台看板 6 处时间渲染
+  统一走 UTC 解析，消除「列表对了、点进详情又差 8 小时」（F4③）。
+- `scripts/dev-smoke.mjs`：默认改为向系统要空闲端口，避免与本机在跑的 `wrangler dev` 撞 8798 假红。
+- 注释里的 `docs/PLAN-*.md` 引用统一改到 `docs/archive/`（归档后的死链）。
+- 测试：`worker/collections.test.ts` 增「连续 40 条新清单必须 201」锁定 F3、迁移用例改为断言
+  「行数不减 + 满长标题截断仍合法 + 跨用户不串组」；`src/lib/collections.test.ts` 改为断言
+  「本地先落库、云端被 `items.length >= 2` 守卫」；`dashboardHtml.test.ts` 增看板内联 `dbTime`
+  与前端同口径的比对；`dbTime.test.ts` 增两页均不得裸解析库内时间。
 
-**文档**：`docs/API.md`（同名覆盖语义与 200/201 响应）、`docs/ARCHITECTURE.md`（0029 唯一约束）、
-`docs/FEATURES.md`、`docs/USAGE.md`。
+**文档**：`docs/API.md`（同名覆盖语义与 200/201 响应）、`docs/ARCHITECTURE.md`（0029 唯一约束 +
+改名保留）、`docs/FEATURES.md`、`docs/USAGE.md`。
 
-**验证**：本地门禁全绿（981 passed）；本地 D1 首申 0029 通过；真实 `wrangler dev` + 本地 D1
-端到端探针验证「201 → 200 同 id、列表 1 条、item_count 更新」与「1 件清单 400」。线上验证见
-TASK-LEDGER `T-20261030-COLLECTIONS`。
+**验证**：本地门禁全绿（五道 + dev 冒烟）；本地 D1 首申 0029 通过；真实 `wrangler dev` + 本地 D1
+端到端探针验证「201 → 200 同 id、列表 1 条、item_count 更新」与「1 件清单 400」；`created` 用例
+连跑 8 轮全绿（修复前约 1/2 失败）。线上验证见 TASK-LEDGER `T-20261030-COLLECTIONS`。
 
 ## 2026-10-30 · 全功能验收修复三件套 + dev 启动冒烟护栏（T-20261030-ACCEPT-FIX）
 

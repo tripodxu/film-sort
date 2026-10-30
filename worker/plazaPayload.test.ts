@@ -3,7 +3,7 @@ import type { Env } from "./index";
 import { plazaRoute } from "./plaza";
 
 /**
- * 端到端钉住 512KB 故障的复发链（docs/PLAN-poster-pipeline.md §4.3）：
+ * 端到端钉住 512KB 故障的复发链（docs/archive/PLAN-poster-pipeline.md §4.3）：
  *
  *   attachStoredPosterUrls 注回 post.items
  *     → PlazaPostView 展开 post.items 进编辑态

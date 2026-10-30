@@ -162,7 +162,7 @@ export async function loadPosterUrls(
  *
  * 刻意不再把结果注入条目对象：`{...item, posterUrls}` 会让前端编辑帖子时
  * 把海报地址原样提交回写入路径，重演 512KB 故障
- * （见 docs/PLAN-poster-pipeline.md §4.3）。
+ * （见 docs/archive/PLAN-poster-pipeline.md §4.3）。
  */
 export async function resolveStoredPosterUrls(
   db: D1Database | undefined,

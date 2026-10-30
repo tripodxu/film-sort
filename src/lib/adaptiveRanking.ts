@@ -3,7 +3,7 @@
  * 这一层把 S1 的两个纯函数模块接进 src/lib/ranking.ts 的状态机：BT 能力模型
  * （preferenceModel）+ 信息增益配对（adaptiveQueue）→ 第四种排序模式 adaptive。
  *
- * 三条设计约束（与 docs/PLAN-ADDITIVE-UPGRADE.md §3 铁律 R1/R2/R3 一致）：
+ * 三条设计约束（与 docs/archive/PLAN-ADDITIVE-UPGRADE.md §3 铁律 R1/R2/R3 一致）：
  * 1. 旧三模式（quick/classic/precise）的任何一行执行路径都不经过本文件；
  *    ranking.ts 只在 mode === "adaptive" 时前置早退到本模块。
  * 2. 不往 RankingState 增加任何持久化字段：能力模型与名次区间都由 decisionLog

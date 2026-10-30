@@ -31,6 +31,27 @@ describe("后台看板脚本外置与严格 CSP 前提", () => {
     expect(DASHBOARD_JS).toContain("document.addEventListener('keydown'");
   });
 
+  it("看板内联的 dbTime 与前端同口径（space 格式按 UTC，ISO 原样）", () => {
+    // 看板是外置脚本字符串，import 不进 src/lib/dbTime.ts，只能复刻一份；
+    // 这里把复刻实现揪出来跑，防止两边判定分叉（2026-10-30 的 +8h 漂移就是这类分叉）。
+    const line = DASHBOARD_JS.split("\n").find((l) => l.startsWith("function dbTime("));
+    expect(line, "DASHBOARD_JS 缺少 dbTime 辅助函数").toBeTruthy();
+    const dbTime = new Function(`${line}; return dbTime;`)() as (v: unknown) => Date;
+    expect(dbTime("2026-09-19 16:58:23").getTime()).toBe(Date.UTC(2026, 8, 19, 16, 58, 23));
+    expect(dbTime("2026-10-29T16:37:59.646Z").getTime()).toBe(
+      Date.UTC(2026, 9, 29, 16, 37, 59, 646),
+    );
+  });
+
+  it("库里时间一律走 dbTime，不再裸 new Date(..._at)", () => {
+    const bare = [
+      ...DASHBOARD_JS.matchAll(
+        /new Date\([a-zA-Z]+\.(created_at|updated_at|last_edited_at|profile_updated_at)\)/g,
+      ),
+    ];
+    expect(bare.map((m) => m[0])).toEqual([]);
+  });
+
   it("后台 CSP 禁止内联脚本与内联事件属性", () => {
     const idx = readFileSync("worker/index.ts", "utf8");
     expect(idx).toContain("script-src 'self'; script-src-attr 'none'");

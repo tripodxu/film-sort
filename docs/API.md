@@ -1103,7 +1103,9 @@ OAuth 回调。校验 `state` 与 `oauth_state` Cookie 一致（CSRF），自动
 
 **限制：** `kind` ∈ `film` / `book` / `music` / `other`；`title` 必填且 ≤160 字符；`description` ≤500 字符；`items` 2–1000 件（每件须有非空 `title`，≤160 字符），编码后总大小 512 KB。不符合返回 `400 invalid_collection`，超限返回 `413 payload_too_large`。
 
-**响应：** 新建 `201 { "id": 42, "stored": true, "created": true, "updated_at": "…" }`；同名覆盖 `200 { "id": 42, "stored": true, "created": false, "updated_at": "…" }`（`id` 不变）。
+**响应：** 新建 `201 { "id": 42, "stored": true, "created": true, "updated_at": "…" }`；同名覆盖 `200 { "id": 42, "stored": true, "created": false, "updated_at": "…" }`（`id` 不变）。`created` 由「写入的 `created_at` 与 `updated_at` 同源」判定，不依赖时钟对齐；`RETURNING` 拿不到行时返回 `500 collection_write_failed`。
+
+> 客户端侧下限：云端清单 2 件起（服务端与 DB CHECK 同口径），但**本地画像榜单 1 件即可**——1 件时前端只存本地、不上传，避免「提示已保存但云端 400」的静默失败。
 
 ### DELETE /api/account/collections/:id
 

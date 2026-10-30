@@ -237,7 +237,7 @@ describe("serialize/deserialize", () => {
   });
 });
 
-// ===== 算法三模式（docs/PLAN-algo-modes.md）=====
+// ===== 算法三模式（docs/archive/PLAN-algo-modes.md）=====
 
 import { deferCurrent, skipCurrent } from "./ranking";
 

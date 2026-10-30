@@ -846,11 +846,14 @@ export async function accountRoute(request: Request, env: Env): Promise<Response
     // 「同名即同一份」：同一用户在同一媒介下的清单标题唯一（0029 唯一索引），
     // 因此这里是 UPSERT 而不是 INSERT——过去纯 INSERT 让前端每点一次「保存清单」
     // 就多一条同名副本。
-    // `updated_at` 显式写入（不用列默认值）：ON CONFLICT 分支不会执行默认表达式，
-    // 且这样排除了「同一毫秒内新建 + 覆盖」时 created_at === updated_at 的混淆。
+    // created_at / updated_at 都显式写入同一个 `now`，不用列默认值：
+    //   1. ON CONFLICT 分支不会执行默认表达式，写了 updated_at 才能保证覆盖时时间前进；
+    //   2. 「新建还是覆盖」靠 created_at === updated_at 判定，两者必须**同源**才成立。
+    //      只写 updated_at 会让 created_at 走 SQLite 的 strftime('now')（语句执行时才求值），
+    //      与 JS 取的 `now` 跨毫秒边界时不相等——实测约四成的新建被误判成覆盖（2026-10-30）。
     const now = new Date().toISOString();
     const row = await env.DB.prepare(
-      "INSERT INTO user_collections (user_id, kind, title, description, items, item_count, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?) " +
+      "INSERT INTO user_collections (user_id, kind, title, description, items, item_count, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?) " +
         "ON CONFLICT(user_id, kind, title) DO UPDATE SET description = excluded.description, items = excluded.items, " +
         "item_count = excluded.item_count, updated_at = excluded.updated_at " +
         "RETURNING id, created_at, updated_at",
@@ -863,12 +866,14 @@ export async function accountRoute(request: Request, env: Env): Promise<Response
         encoded.json,
         encoded.count,
         now,
+        now,
       )
       .first<{ id: number; created_at: string; updated_at: string }>();
-    // 用 created_at === updated_at 判定本次是新建还是覆盖：新建时两者都取自同一个 `now`。
-    const created = !!row && row.created_at === row.updated_at;
+    // RETURNING 必然回一行；回不到说明写侧异常，不能伪装成「覆盖成功」返回 200 + id:null。
+    if (!row) return json({ error: "collection_write_failed" }, 500);
+    const created = row.created_at === row.updated_at;
     return json(
-      { id: row?.id ?? null, stored: true, created, updated_at: row?.updated_at ?? null },
+      { id: row.id, stored: true, created, updated_at: row.updated_at },
       created ? 201 : 200,
     );
   }

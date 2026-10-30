@@ -8,12 +8,27 @@
  * 本脚本作为第六道护栏接在 `npm run gates` 末尾与 CI 的 build 之后；
  * 只验证「能启动 + 首页/后台页可伺服」，不依赖本地 D1 里有什么数据。
  *
- * 用法：`npm run dev:smoke`；SMOKE_PORT 可指定端口（默认 8798）。
+ * 用法：`npm run dev:smoke`；SMOKE_PORT 可指定端口，默认向系统要一个空闲端口
+ * （固定 8798 会与本机已开着的 wrangler dev 撞端口，冒出与代码无关的假红）。
  */
 import { spawn, spawnSync } from "node:child_process";
+import { createServer } from "node:net";
 import { join } from "node:path";
 
-const PORT = Number(process.env.SMOKE_PORT || 8798);
+/** 向内核要一个此刻空闲的端口；占用窗口只有毫秒级，够用且不会误伤并行任务。 */
+async function freePort() {
+  return await new Promise((resolve) => {
+    const probe = createServer();
+    probe.unref();
+    probe.on("error", () => resolve(0));
+    probe.listen(0, "127.0.0.1", () => {
+      const { port } = probe.address();
+      probe.close(() => resolve(port));
+    });
+  });
+}
+
+const PORT = Number(process.env.SMOKE_PORT) || (await freePort()) || 8798;
 const BASE = `http://127.0.0.1:${PORT}`;
 const BOOT_TIMEOUT_MS = 90_000;
 

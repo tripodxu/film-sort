@@ -119,7 +119,7 @@ export function writeAiLength(length: AiLength): void {
   }
 }
 
-// ===== 三场景数据组装（截断规则与 docs/PLAN-ai-insights.md §6.5 一致）=====
+// ===== 三场景数据组装（截断规则与 docs/archive/PLAN-ai-insights.md §6.5 一致）=====
 
 export interface AiRankingData {
   profileName: string;

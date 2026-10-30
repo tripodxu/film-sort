@@ -1,5 +1,5 @@
 /**
- * AI 上游 mock 服务器 —— 本地端到端验证用（docs/PLAN-ai-insights.md §7.2）。
+ * AI 上游 mock 服务器 —— 本地端到端验证用（docs/archive/PLAN-ai-insights.md §7.2）。
  *
  * 不进构建、不进 bundle；仅在手动验证时运行：`npm run ai:mock`（端口 9393）。
  * 同时挂载四协议端点与两个模型列表端点，返回固定点评文本。

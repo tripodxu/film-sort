@@ -10,7 +10,7 @@ import {
 } from "./coverChoice";
 
 describe("消歧出口的触发判定（PLAN-CHOICE-UI §3.1）", () => {
-  // 线上抽样（docs/PLAN-CHOICE-UI.md §1.1）：exact 六条全部判对、strong 两条判对，
+  // 线上抽样（docs/archive/PLAN-CHOICE-UI.md §1.1）：exact 六条全部判对、strong 两条判对，
   // weak 里 poolSize 有大有小。判定表照这批实测数据逐格写死。
   const cases: Array<[string, Parameters<typeof shouldOfferChoice>[0], boolean]> = [
     [

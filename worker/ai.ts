@@ -1,7 +1,7 @@
 /**
  * AI 点评通道：四协议适配 + 模块化提示词 + 配置校验 + 模型列表。
  *
- * 设计要点（详见 docs/PLAN-ai-insights.md）：
+ * 设计要点（详见 docs/archive/PLAN-ai-insights.md）：
  *  - 内置通道走 Cloudflare 环境变量（AI_API_URL/KEY/MODEL/PROTOCOL），不配 AI_PROTOCOL
  *    时保持 anthropic 直发原端点的历史行为，零迁移；
  *  - 自定义通道的三参数（baseUrl/apiKey/model）由用户在网页端配置，经 Worker 转发，

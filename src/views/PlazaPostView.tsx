@@ -16,6 +16,7 @@ import {
   Users,
 } from "lucide-react";
 import { Poster } from "../components/Poster";
+import { parseDbTime } from "../lib/dbTime";
 import { rankingSimilarity } from "../lib/similarity";
 import { RankingDetail } from "../components/RankingDetail";
 import { ExpandableNote } from "../components/ExpandableNote";
@@ -582,7 +583,7 @@ export function PlazaPostView({
           <span style={{ display: "inline-flex", alignItems: "center", gap: 5 }}>
             <PenLine size={12} />
             {t("最后编辑于", "Last edited")}{" "}
-            {post.last_edited_at ? new Date(post.last_edited_at).toLocaleString() : "-"}（
+            {post.last_edited_at ? parseDbTime(post.last_edited_at).toLocaleString() : "-"}（
             {post.edit_count ?? 0} {t("次", "times")}）
           </span>
           {isAuthor && (
@@ -625,7 +626,7 @@ export function PlazaPostView({
                 </span>
                 <span style={{ flex: 1, minWidth: 0, overflowWrap: "anywhere" }}>{e.detail}</span>
                 <span style={{ color: "var(--muted)", flexShrink: 0, whiteSpace: "nowrap" }}>
-                  {new Date(e.created_at).toLocaleString()}
+                  {parseDbTime(e.created_at).toLocaleString()}
                 </span>
               </div>
             ))
@@ -1074,7 +1075,7 @@ export function PlazaPostView({
                   {comment.nickname || t("匿名用户", "Anonymous")}
                 </span>
                 <span className="comment-time">
-                  {new Date(comment.created_at).toLocaleString()}
+                  {parseDbTime(comment.created_at).toLocaleString()}
                 </span>
               </div>
               <p className="comment-content">{comment.content}</p>

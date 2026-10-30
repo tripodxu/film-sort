@@ -135,6 +135,10 @@ tr:last-child td{border-bottom:none}
 /** 后台看板脚本外置，配合 CSP `script-src 'self'`（禁止内联脚本与内联事件）。 */
 export const DASHBOARD_JS = `var TOKEN_KEY = 'art-rank-admin-token';
 function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];});}
+// 库内时间格式是混合的：CURRENT_TIMESTAMP 写 "YYYY-MM-DD HH:MM:SS"（UTC 但无标记），
+// strftime 写带 Z 的 ISO。浏览器会把前一种按本地时区解析，UTC+8 下全体偏 8 小时。
+// 与前端 src/lib/dbTime.ts 同一判定；看板是独立外置脚本，无法 import，故此处复刻一份。
+function dbTime(v){var s=String(v==null?'':v);return /^\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}/.test(s)?new Date(s.replace(' ','T')+'Z'):new Date(s);}
 function getToken(){return localStorage.getItem(TOKEN_KEY)||''}
 function setToken(t){localStorage.setItem(TOKEN_KEY,t)}
 function clearToken(){localStorage.removeItem(TOKEN_KEY)}
@@ -329,14 +333,14 @@ function renderOverview(d, o) {
   var apiLogsHtml = '<table><thead><tr><th>路径</th><th>状态</th><th>耗时</th><th>来源</th><th>错误</th><th>时间</th></tr></thead><tbody>';
   (d.api_logs||[]).forEach(function(l){
     var statusCls = l.status >= 400 ? 'badge-err' : 'badge-ok';
-    var time = new Date(l.created_at).toLocaleString('zh-CN',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
+    var time = dbTime(l.created_at).toLocaleString('zh-CN',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
     apiLogsHtml += '<tr><td>'+esc(l.path)+'</td><td><span class="badge '+statusCls+'">'+esc(l.status)+'</span></td><td>'+esc(l.duration_ms)+'ms</td><td>'+esc(l.source)+'</td><td style="color:var(--red)">'+esc(l.error||'')+'</td><td style="color:var(--muted)">'+esc(time)+'</td></tr>';
   });
   apiLogsHtml += '</tbody></table>';
 
   var apiErrorsHtml = '<table><thead><tr><th>路径</th><th>状态</th><th>耗时</th><th>错误信息</th><th>时间</th></tr></thead><tbody>';
   (d.api_errors||[]).forEach(function(l){
-    var time = new Date(l.created_at).toLocaleString('zh-CN',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
+    var time = dbTime(l.created_at).toLocaleString('zh-CN',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
     apiErrorsHtml += '<tr><td>'+esc(l.path)+'</td><td><span class="badge badge-err">'+esc(l.status)+'</span></td><td>'+esc(l.duration_ms)+'ms</td><td style="color:var(--red)">'+esc(l.error||'')+'</td><td style="color:var(--muted)">'+esc(time)+'</td></tr>';
   });
   apiErrorsHtml += '</tbody></table>';
@@ -361,7 +365,7 @@ function renderOverview(d, o) {
     '<div class="grid grid-2" style="margin-bottom:16px">',
       '<div class="card"><h3 style="margin-bottom:12px"><span class="status-dot err"></span>海报获取失败（近7天 ',posterErrors.length,' 条）</h3>',
         posterErrors.length > 0 ? '<table><thead><tr><th>标题</th><th>类型</th><th>来源</th><th>时间</th></tr></thead><tbody>' + posterErrors.slice(0,20).map(function(e) {
-          var time = new Date(e.created_at).toLocaleString('zh-CN', {hour:'2-digit',minute:'2-digit',month:'2-digit',day:'2-digit'});
+          var time = dbTime(e.created_at).toLocaleString('zh-CN', {hour:'2-digit',minute:'2-digit',month:'2-digit',day:'2-digit'});
           return '<tr><td>'+esc(e.title)+'</td><td><span class="badge badge-'+esc(e.media_type)+'">'+esc(e.media_type)+'</span></td><td style="color:var(--muted)">'+esc(e.source||'resolver')+'</td><td style="color:var(--muted)">'+esc(time)+'</td></tr>';
         }).join('') + '</tbody></table>' : '<p style="color:var(--muted);font-size:13px">暂无错误记录</p>',
         '<div style="margin-top:10px"><button data-act="export-poster-errors" style="background:var(--card);border:1px solid var(--border);color:var(--text);padding:4px 10px;border-radius:6px;font-size:11px;cursor:pointer">导出CSV（近30天）</button></div>',
@@ -378,7 +382,7 @@ function renderOverview(d, o) {
           var badge = 'badge-' + esc(e.event_name);
           var mode = e.mode ? '<span class="badge badge-' + esc(e.mode) + '">' + esc(e.mode) + '</span>' : '';
           var detail = e.item_count ? e.item_count + '件 / ' + (e.comparison_count || '?') + '次' : '';
-          var time = new Date(e.created_at).toLocaleString('zh-CN', {hour:'2-digit',minute:'2-digit',month:'2-digit',day:'2-digit'});
+          var time = dbTime(e.created_at).toLocaleString('zh-CN', {hour:'2-digit',minute:'2-digit',month:'2-digit',day:'2-digit'});
           return '<tr><td><span class="badge ' + badge + '">' + esc(e.event_name) + '</span></td><td>' + mode + '</td><td>' + esc(detail) + '</td><td style="color:var(--muted)">' + esc(time) + '</td></tr>';
         }).join(''), '</tbody></table>',
       '</div>',
@@ -429,7 +433,7 @@ function renderOverview(d, o) {
 function renderUsers(d) {
   var accounts = d.accounts||[];
   var rowsHtml = accounts.map(function(a) {
-    var time = new Date(a.created_at).toLocaleString('zh-CN', {year:'2-digit',month:'2-digit',day:'2-digit'});
+    var time = dbTime(a.created_at).toLocaleString('zh-CN', {year:'2-digit',month:'2-digit',day:'2-digit'});
     var disabled = !!a.disabled_at;
     return '<tr><td>'+esc(a.email)+'</td><td>'+esc(a.nickname||'-')+'</td><td><span class="badge '+(disabled?'badge-err':'badge-ok')+'">'+(disabled?'已禁用':'正常')+'</span></td><td style="color:var(--muted)">'+time+'</td><td><button data-act="user-detail" data-arg="'+a.id+'" class="table-action">查看</button> <button data-act="user-toggle" data-arg="'+a.id+'" data-arg2="'+disabled+'" class="table-action '+(disabled?'restore':'warn')+'">'+(disabled?'恢复':'禁用')+'</button> <button data-act="user-clear" data-arg="'+a.id+'" data-arg2="profile" class="table-action">画像</button> <button data-act="user-clear" data-arg="'+a.id+'" data-arg2="collections" class="table-action">清单</button> <button data-act="user-delete" data-arg="'+a.id+'" class="table-action danger">删除</button> <button data-act="user-reset-password" data-arg="'+a.id+'" class="table-action warn">重置密码</button></td></tr>';
   }).join('');
@@ -448,11 +452,11 @@ async function openUserDetail(id){
     var a = d.account||{};
     var disabled = !!a.disabled_at;
     var head = '<div style="display:flex;justify-content:space-between;gap:10px;align-items:flex-start"><div><h3>'+esc(a.nickname||'-')+' <span class="mini-note">#'+a.id+'</span></h3><div class="mini-note">'+esc(a.email||'')+'</div></div><button class="close-x" data-act="modal-close">✕</button></div>';
-    var meta = '<div class="mini-note" style="margin:8px 0 12px">注册 '+(a.created_at?new Date(a.created_at).toLocaleDateString('zh-CN'):'-')+' · <span class="badge '+(disabled?'badge-err':'badge-ok')+'">'+(disabled?'已禁用':'正常')+'</span> · 活跃会话 '+(d.active_sessions||0)+' · OAuth '+(d.oauth_providers&&d.oauth_providers.length?esc(d.oauth_providers.join(' / ')):'无')+' · 广场发帖 '+(d.plaza_post_count||0)+' 篇</div>';
+    var meta = '<div class="mini-note" style="margin:8px 0 12px">注册 '+(a.created_at?dbTime(a.created_at).toLocaleDateString('zh-CN'):'-')+' · <span class="badge '+(disabled?'badge-err':'badge-ok')+'">'+(disabled?'已禁用':'正常')+'</span> · 活跃会话 '+(d.active_sessions||0)+' · OAuth '+(d.oauth_providers&&d.oauth_providers.length?esc(d.oauth_providers.join(' / ')):'无')+' · 广场发帖 '+(d.plaza_post_count||0)+' 篇</div>';
     var profileHtml = '';
     var p = d.profile;
     if (p && p.rankings && p.rankings.length) {
-      profileHtml = '<h3 style="font-size:13px;margin:14px 0 4px">画像「'+esc(p.profileName||'-')+'」（'+p.rankings.length+' 个榜单 / '+p.rankings.reduce(function(s,e){return s+(e.items?e.items.length:0);},0)+' 件作品'+(d.profile_updated_at?' · 更新于 '+new Date(d.profile_updated_at).toLocaleDateString('zh-CN'):'')+'）</h3>';
+      profileHtml = '<h3 style="font-size:13px;margin:14px 0 4px">画像「'+esc(p.profileName||'-')+'」（'+p.rankings.length+' 个榜单 / '+p.rankings.reduce(function(s,e){return s+(e.items?e.items.length:0);},0)+' 件作品'+(d.profile_updated_at?' · 更新于 '+dbTime(d.profile_updated_at).toLocaleDateString('zh-CN'):'')+'）</h3>';
       profileHtml += p.rankings.map(function(entry){
         var items = (entry.items||[]).map(function(w,i){
           var rank = Number(w.rank) || (i+1);
@@ -471,7 +475,7 @@ async function openUserDetail(id){
     }).join('') : '<p class="mini-note">无批注</p>');
     var collections = d.collections||[];
     var collectionsHtml = '<h3 style="font-size:13px;margin:14px 0 4px">云端清单（'+collections.length+'）</h3>'+(collections.length ? '<table><thead><tr><th>标题</th><th>媒介</th><th>作品数</th><th>更新</th></tr></thead><tbody>'+collections.map(function(c){
-      return '<tr><td>'+esc(c.title)+'</td><td><span class="badge badge-'+esc(c.kind)+'">'+esc(KIND_LABELS[c.kind]||c.kind)+'</span></td><td>'+(c.item_count||0)+'</td><td style="color:var(--muted)">'+(c.updated_at?new Date(c.updated_at).toLocaleDateString('zh-CN'):'-')+'</td></tr>';
+      return '<tr><td>'+esc(c.title)+'</td><td><span class="badge badge-'+esc(c.kind)+'">'+esc(KIND_LABELS[c.kind]||c.kind)+'</span></td><td>'+(c.item_count||0)+'</td><td style="color:var(--muted)">'+(c.updated_at?dbTime(c.updated_at).toLocaleDateString('zh-CN'):'-')+'</td></tr>';
     }).join('')+'</tbody></table>' : '<p class="mini-note">无云端清单</p>');
     root.innerHTML = '<div class="dash-modal-backdrop" data-act="modal-backdrop"><div class="dash-modal">'+head+meta+profileHtml+notesHtml+collectionsHtml+'<div class="mini-note" style="margin-top:14px">删除/禁用/重置密码等操作请在「用户」页签表格中进行</div></div></div>';
   } catch(e){ root.innerHTML = '<div class="dash-modal-backdrop" data-act="modal-backdrop"><div class="dash-modal"><div class="error">加载失败: '+esc(e&&e.message?e.message:e)+'</div></div></div>'; }
@@ -600,7 +604,7 @@ async function loadAudit(){
     var entries = d.entries||[];
     el.classList.remove('loading');
     el.innerHTML = entries.length ? '<table><thead><tr><th>时间</th><th>操作</th><th>详情</th><th>来源IP</th></tr></thead><tbody>'+entries.map(function(e){
-      var time = new Date(e.created_at).toLocaleString('zh-CN',{month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit'});
+      var time = dbTime(e.created_at).toLocaleString('zh-CN',{month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit'});
       return '<tr class="audit-row"><td style="color:var(--muted);white-space:nowrap">'+esc(time)+'</td><td><span class="badge badge-visit">'+esc(e.action)+'</span></td><td>'+esc(e.detail||'')+'</td><td style="color:var(--muted)">'+esc(e.ip||'-')+'</td></tr>';
     }).join('')+'</tbody></table>' : '<p style="color:var(--muted);font-size:13px">暂无审计记录</p>';
   } catch(e){ el.innerHTML = '<p style="color:var(--red);font-size:13px">审计日志加载失败</p>'; }
@@ -659,7 +663,7 @@ function renderPlaza(d) {
   var kinds = [['','全部媒介'],['film','电影'],['book','书籍'],['music','音乐'],['other','其他']];
   var pages = Math.max(1, Math.ceil(plazaState.total / 20));
   var rows = (d.posts||[]).map(function(p){
-    var time = new Date(p.created_at).toLocaleString('zh-CN',{month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'});
+    var time = dbTime(p.created_at).toLocaleString('zh-CN',{month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'});
     var hidden = !p.is_public;
     var liveComments = p.live_comment_count != null ? p.live_comment_count : (p.comment_count||0);
     return '<tr><td style="color:var(--muted)">#'+p.id+'</td><td>'+esc(p.collection_title)+'</td><td>'+esc(p.nickname||'-')+'<div class="mini-note">'+esc(p.email||'')+'</div></td><td><span class="badge badge-'+esc(p.kind||'other')+'">'+esc(p.kind||'-')+'</span></td><td>'+(p.item_count||0)+'</td><td>'+(p.like_count||0)+'</td><td>'+liveComments+'</td><td>'+(hidden?'<span class="badge badge-err">已隐藏</span>':'<span class="badge badge-ok">公开</span>')+'</td><td style="color:var(--muted)">'+time+'</td><td><button class="table-action" data-act="plaza-detail" data-arg="'+p.id+'">详情</button> <button class="table-action '+(hidden?'restore':'warn')+'" data-act="plaza-toggle" data-arg="'+p.id+'" data-arg2="'+(hidden?1:0)+'">'+(hidden?'恢复':'隐藏')+'</button> <button class="table-action danger" data-act="plaza-delete" data-arg="'+p.id+'">删除</button></td></tr>';
@@ -701,7 +705,7 @@ async function openPlazaDetail(id){
       return '<div class="rank-row"><span class="rank-medal">'+(rank<=3?(rank===1?'🥇':rank===2?'🥈':'🥉'):String(rank).padStart(2,'0'))+'</span><div style="min-width:0"><strong>'+esc(w.title)+'</strong><div class="mini-note">'+esc(w.creator||'')+' '+esc(w.year||'')+'</div></div></div>';
     }).join('');
     var comments = (d.comments||[]).map(function(c){
-      var time = new Date(c.created_at).toLocaleString('zh-CN',{month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'});
+      var time = dbTime(c.created_at).toLocaleString('zh-CN',{month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'});
       return '<div class="comment-row"><div style="display:flex;justify-content:space-between;gap:10px;align-items:center"><span><strong>'+esc(c.nickname||'匿名')+'</strong> <span class="mini-note">'+esc(c.email||'')+' · '+time+'</span></span><button class="table-action danger" data-act="plaza-comment-delete" data-arg="'+c.id+'" data-arg2="'+p.id+'">删除</button></div><div style="margin-top:4px;white-space:pre-wrap;overflow-wrap:anywhere">'+esc(c.content)+'</div></div>';
     }).join('');
     root.innerHTML = '<div class="dash-modal-backdrop" data-act="modal-backdrop"><div class="dash-modal"><button class="close-x" data-act="modal-close">✕</button><h3>'+esc(p.collection_title)+' <span class="mini-note">#'+p.id+'</span></h3><div class="mini-note" style="margin-bottom:10px">作者 '+esc(p.nickname||'匿名')+'（'+esc(p.email||'-')+'） · '+(p.is_public?'公开':'已隐藏')+' · 赞 '+(p.like_count||0)+'</div>'+(p.description?'<p style="font-size:13px;color:var(--muted);margin-bottom:10px">'+esc(p.description)+'</p>':'')+'<h3 style="font-size:13px;margin:12px 0 4px">榜单内容（'+(p.items||[]).length+' 件）</h3>'+(items||'<p class="mini-note">无</p>')+'<h3 style="font-size:13px;margin:14px 0 4px">评论（'+(d.comments||[]).length+' 条）</h3>'+(comments||'<p class="mini-note">暂无评论</p>')+'</div></div>';

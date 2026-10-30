@@ -388,7 +388,7 @@ export function pickThumbBucket(maxWidth: number): number {
  *
  * 弹窗大图（`.poster-large` 整宽）会偏糊，这是**已知且刻意接受**的代价：
  * 原图 URL 仍在候选里（`thumbnail → original` 回落顺序未变），要彻底解决得让
- * 前端把显示宽度上报服务端，见 `docs/PLAN-THUMBNAIL-SIZING.md` §5 的「不做」清单。
+ * 前端把显示宽度上报服务端，见 `docs/archive/PLAN-THUMBNAIL-SIZING.md` §5 的「不做」清单。
  */
 const OTHER_THUMB_MAX_WIDTH = 500;
 

@@ -162,6 +162,26 @@ describe("POST /api/account/collections —— 同名覆盖而非新增", () => 
     expect(count.c).toBe(3);
   });
 
+  it("连续 40 次全新标题都必须 201/created:true（时间戳判定不能靠巧合）", async () => {
+    // 2026-10-30：created 曾用 created_at === updated_at 判定，但 created_at 走列默认值
+    // （SQLite 执行语句时才求值）、updated_at 走 JS——两者跨毫秒边界时新建会被误报成覆盖，
+    // 实测误判率约四成。单跑一次测不出来，必须连开多条新清单才稳定抓住。
+    const { d1, raw } = d1FromSqlite();
+    seedUser(raw);
+    const env = { DB: d1 } as unknown as Env;
+
+    for (let i = 0; i < 40; i++) {
+      const response = await accountRoute(
+        saveRequest({ kind: "film", title: `全新清单 ${i}`, items: works(2) }),
+        env,
+      );
+      expect(response.status, `第 ${i + 1} 条新清单被误判成覆盖`).toBe(201);
+      expect(((await response.json()) as { created: boolean }).created).toBe(true);
+    }
+    const count = raw.prepare("SELECT COUNT(*) AS c FROM user_collections").get() as { c: number };
+    expect(count.c).toBe(40);
+  });
+
   it("1 件作品的清单被拒（与服务端下限、DB CHECK 同口径）", async () => {
     const { d1, raw } = d1FromSqlite();
     seedUser(raw);
@@ -178,37 +198,76 @@ describe("POST /api/account/collections —— 同名覆盖而非新增", () => 
   });
 });
 
-describe("migration 0029 —— 历史去重 + 唯一索引", () => {
-  it("保留 id 最大的一条，重放安全，唯一约束生效", () => {
+describe("migration 0029 —— 历史副本改名保留 + 唯一索引", () => {
+  it("每组保留最近一份原标题，其余加 #id 后缀；不删任何行；重放安全", () => {
     const raw = new DatabaseSync(":memory:");
     legacySchema(raw);
     const userId = seedUser(raw);
+    // 另一个用户同标题：分组必须按 user_id，不能被跨用户改名。
+    raw
+      .prepare("INSERT INTO user_accounts (email, password_hash) VALUES ('v@example.com', 'x')")
+      .run();
+    const otherId = Number(
+      (
+        raw.prepare("SELECT id FROM user_accounts WHERE email = 'v@example.com'").get() as {
+          id: number;
+        }
+      ).id,
+    );
+
     const insert = raw.prepare(
-      "INSERT INTO user_collections (user_id, kind, title, items, item_count) VALUES (?, 'film', '同名', ?, 2)",
+      "INSERT INTO user_collections (user_id, kind, title, items, item_count) VALUES (?, 'film', ?, ?, 2)",
     );
     const items = JSON.stringify(works(2));
-    insert.run(userId, items);
-    insert.run(userId, items);
-    insert.run(userId, items);
-    const before = raw.prepare("SELECT id FROM user_collections ORDER BY id").all() as Array<{
-      id: number;
-    }>;
-    expect(before).toHaveLength(3);
+    insert.run(userId, "同名", items);
+    insert.run(userId, "同名", items);
+    insert.run(userId, "同名", items);
+    insert.run(otherId, "同名", items);
+    // 160 字符满长标题：改名后拼上 " #<id>" 仍须满足 CHECK（1..160），锁住截断算法。
+    const longTitle = "长".repeat(160);
+    insert.run(userId, longTitle, items);
+    insert.run(userId, longTitle, items);
+
+    const before = raw
+      .prepare("SELECT id, user_id, title FROM user_collections ORDER BY id")
+      .all() as Array<{ id: number; user_id: number; title: string }>;
+    expect(before).toHaveLength(6);
 
     const sql = readFileSync(MIGRATION_0029, "utf8");
     raw.exec(sql);
     // 重放（失败重试会重放整个文件）：必须不抛错，且结果不变。
     raw.exec(sql);
 
-    const after = raw.prepare("SELECT id FROM user_collections").all() as Array<{ id: number }>;
-    expect(after).toEqual([{ id: before[before.length - 1].id }]);
+    const after = raw
+      .prepare("SELECT id, user_id, title FROM user_collections ORDER BY id")
+      .all() as Array<{ id: number; user_id: number; title: string }>;
 
-    expect(() =>
-      raw
-        .prepare(
-          "INSERT INTO user_collections (user_id, kind, title, items, item_count) VALUES (?, 'film', '同名', ?, 2)",
-        )
-        .run(userId, items),
-    ).toThrow(/UNIQUE/i);
+    // 一条都不许少：改名不是删除。
+    expect(after).toHaveLength(before.length);
+    expect(after.map((r) => r.id)).toEqual(before.map((r) => r.id));
+
+    // id 最大的那份保住原标题（= 后续 UPSERT 的落点），其余带 #id 后缀。
+    const mine = after.filter((r) => r.user_id === userId && r.title.startsWith("同名"));
+    expect(mine.filter((r) => r.title === "同名")).toEqual([
+      { id: 3, user_id: userId, title: "同名" },
+    ]);
+    expect(
+      mine
+        .filter((r) => r.title !== "同名")
+        .map((r) => r.title)
+        .sort(),
+    ).toEqual(["同名 #1", "同名 #2"]);
+
+    // 跨用户不串组：另一个用户的行原样保留。
+    expect(after.filter((r) => r.user_id === otherId).map((r) => r.title)).toEqual(["同名"]);
+
+    // 满长标题改名后仍 ≤160，且两张都还在（CHECK 未被打穿）。
+    const longRows = after.filter((r) => r.user_id === userId && r.title.startsWith("长"));
+    expect(longRows).toHaveLength(2);
+    for (const row of longRows) expect(row.title.length).toBeLessThanOrEqual(160);
+    expect(longRows.some((r) => r.title === longTitle)).toBe(true);
+
+    // 唯一约束真的建出来了。
+    expect(() => insert.run(userId, "同名", items)).toThrow(/UNIQUE/i);
   });
 });

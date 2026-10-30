@@ -654,7 +654,7 @@ describe("profileText", () => {
   });
 });
 
-// ===== merge strategy（docs/PLAN-algo-modes.md 比较·精确模式）=====
+// ===== merge strategy（docs/archive/PLAN-algo-modes.md 比较·精确模式）=====
 describe("mergeDimensionRankings strategy", () => {
   const mk = (title: string, items: Array<[string, number]>): RankingExport => ({
     version: 1,

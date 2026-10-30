@@ -104,26 +104,46 @@ describe("importCollection", () => {
 });
 
 /**
- * 「保存清单」的最小件数必须与服务端同口径（P0 修复）。
+ * 「保存清单」的两条下限不能混为一谈（2026-10-30 二次修复）。
  *
- * 服务端 validateCollectionBody 与 DB CHECK（0021）都要求 ≥2；前端曾只判「非空」，
- * 于是 1 件清单被静默 400，用户却看到「已保存」提示。这里锁死前端闸门与文案。
+ * 本地画像榜单 = 1 件起（与 saveWithoutSorting 一致）；
+ * 云端清单     = 2 件起（validateCollectionBody / DB CHECK 0021）。
+ *
+ * 历史事故有两层：① 前端只判「非空」就上传，1 件清单被服务端静默 400，用户却看到
+ * 「已保存」；② 第一版修复直接把这整条路径的下限抬到 2，连本地画像也一起拦了，
+ * 与 saveWithoutSorting 自相矛盾。这里锁死「本地照存、云端 <2 跳过并明说」的行为。
  */
-describe("保存清单的最小件数闸门", () => {
+describe("保存清单的下限：本地 1 件、云端 2 件", () => {
   const code = readFileSync(new URL("./useSorting.ts", import.meta.url), "utf8");
+  const saveCustomWorks = code.slice(
+    code.indexOf("function saveCustomWorksFn()"),
+    code.indexOf("function clearCustomWorksFn()"),
+  );
 
-  it("saveCustomWorks 在 >=2 件之前就返回，且提示不能是「清单为空」", () => {
-    expect(code).toMatch(/const kept = customWorks\.filter\(\(w\) => !customDeselected/);
-    expect(code).toMatch(/if \(kept\.length < 2\) \{/);
-    expect(code).toMatch(/至少需要 2 件作品才能保存清单/);
+  it("空清单仍然先拦下", () => {
+    expect(saveCustomWorks).toMatch(/if \(!kept\.length\) \{/);
+    expect(saveCustomWorks).toMatch(/清单为空/);
   });
 
-  it("去重后不足 2 件也拦下（同名同作者合并后不能落库）", () => {
-    expect(code).toMatch(/if \(items\.length < 2\) \{/);
+  it("不再因为 <2 件就在本地保存前 return（那会连本地榜单一起丢掉）", () => {
+    expect(saveCustomWorks).not.toMatch(/if \(kept\.length < 2\) \{/);
+    expect(saveCustomWorks).not.toMatch(/至少需要 2 件作品才能保存清单/);
   });
 
-  it("saveWithoutSorting 仍允许单件榜单（不进云端清单，只进画像）", () => {
-    // 画像榜单的下限是 1，与云端清单不同；两处闸门不能一起改。
+  it("云端上传被 items.length >= 2 守卫，1 件时提示「只保存在本地」", () => {
+    expect(saveCustomWorks).toMatch(/const canSyncCloud = items\.length >= 2;/);
+    expect(saveCustomWorks).toMatch(/if \(canSyncCloud\) \{\s*void saveCollectionCloudFn\(/);
+    expect(saveCustomWorks).toMatch(/云端清单至少需要 2 件作品，本次只保存在本地/);
+  });
+
+  it("本地落库发生在云端分支之前（1 件清单也要进画像）", () => {
+    const persistAt = saveCustomWorks.indexOf("d.persist(mergeRanking(");
+    const cloudAt = saveCustomWorks.indexOf("void saveCollectionCloudFn(");
+    expect(persistAt).toBeGreaterThan(-1);
+    expect(cloudAt).toBeGreaterThan(persistAt);
+  });
+
+  it("saveWithoutSorting 仍允许单件榜单（它本来就不上传云端）", () => {
     expect(code).toMatch(/请至少选择 1 件作品/);
   });
 });

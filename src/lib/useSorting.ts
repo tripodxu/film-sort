@@ -265,27 +265,29 @@ export function useSorting(deps: SortingDeps) {
   function saveCustomWorksFn() {
     const d = depsRef.current;
     const kept = customWorks.filter((w) => !customDeselected.includes(w.id));
-    // 下限 2 与服务端 validateCollectionBody / DB CHECK（0021）同口径：
-    // 过去这里放行 1 件，云端 POST 静默 400，用户只看到「已保存」的提示。
-    if (kept.length < 2) {
-      d.setNotice(
-        d.t("至少需要 2 件作品才能保存清单。", "At least 2 works are needed to save a list."),
-      );
+    if (!kept.length) {
+      d.setNotice(d.t("清单为空。", "The list is empty."));
       return;
     }
     // 唯一可落库形状：白名单投影 + 按 identity 去重 + 重排 rank。
     // 去重必须发生在写入侧，否则重复曲目会在下次读取时把整份画像带崩。
     const items = toRankedItems(kept.map((w, i) => ({ ...w, rank: i + 1 })));
     const merged = kept.length - items.length;
-    if (items.length < 2) {
+    if (!items.length) {
       d.setNotice(
         d.t(
-          `去重后只剩 ${items.length} 件作品（同名同作者），清单至少需要 2 件。`,
-          `After merging duplicates only ${items.length} work remains; a list needs at least 2.`,
+          "去重后没有可保存的作品（同名同作者全部被合并），请检查清单。",
+          "Nothing left to save: every work was merged as a duplicate.",
         ),
       );
       return;
     }
+    // 两条下限不同，别再混为一谈（2026-10-30）：
+    //   本地画像榜单 = 1 件起（与 saveWithoutSorting 一致）；
+    //   云端清单     = 2 件起（validateCollectionBody / DB CHECK 0021）。
+    // 过去这里不区分就上传，1 件清单被服务端静默 400，用户却看到「已保存」。
+    // 现在 1 件照存本地、只跳过云端，并在提示里说清楚没上传。
+    const canSyncCloud = items.length >= 2;
     const ranking: RankingExport = {
       version: 1,
       profileId: d.getProfile()?.profileId ?? crypto.randomUUID(),
@@ -297,20 +299,35 @@ export function useSorting(deps: SortingDeps) {
     };
     d.persist(mergeRanking(d.getProfile(), ranking));
     d.setActiveKind(kind);
-    void saveCollectionCloudFn({
-      id: `custom-${kind}-${crypto.randomUUID()}`,
-      kind,
-      source: "custom",
-      title: ranking.collectionTitle,
-      description: "",
-      topN: Math.min(10, kept.length),
-      works: kept,
-    });
-    d.setNotice(
+    if (canSyncCloud) {
+      void saveCollectionCloudFn({
+        id: `custom-${kind}-${crypto.randomUUID()}`,
+        kind,
+        source: "custom",
+        title: ranking.collectionTitle,
+        description: "",
+        topN: Math.min(10, kept.length),
+        works: kept,
+      });
+    }
+    const mergedNote =
       merged > 0
         ? d.t(
-            `已保存 ${items.length} 件作品为榜单（按导入顺序，未排序）；另有 ${merged} 件与前面的作品同名同作者，已自动合并。`,
-            `Saved ${items.length} works (import order, unsorted); ${merged} duplicate(s) were merged.`,
+            `；另有 ${merged} 件与前面的作品同名同作者，已自动合并`,
+            `; ${merged} duplicate(s) were merged`,
+          )
+        : "";
+    const cloudNote = canSyncCloud
+      ? d.t("。", ".")
+      : d.t(
+          "；云端清单至少需要 2 件作品，本次只保存在本地。",
+          "; cloud lists need at least 2 works, so this one was saved locally only.",
+        );
+    d.setNotice(
+      merged > 0 || !canSyncCloud
+        ? d.t(
+            `已保存 ${items.length} 件作品为榜单（按导入顺序，未排序）${mergedNote}${cloudNote}`,
+            `Saved ${items.length} work(s) as a list (import order, unsorted)${mergedNote}${cloudNote}`,
           )
         : d.t(
             `已保存 ${items.length} 件作品为榜单（按导入顺序，未排序）。`,

@@ -1398,7 +1398,7 @@ async function route(request: Request, env: Env): Promise<Response> {
       .all();
     return json({ errors: errors.results ?? [] }, 200, { "cache-control": "no-store" });
   }
-  // AI 提示词在线覆盖（docs/PLAN-ai-insights.md §6.3）：管理端读/写/清，全部写审计。
+  // AI 提示词在线覆盖（docs/archive/PLAN-ai-insights.md §6.3）：管理端读/写/清，全部写审计。
   if (url.pathname === "/api/admin/ai/prompts" && request.method === "GET") {
     if (!env.DB || !(await adminAuth(request, env))) return json({ error: "auth_required" }, 401);
     const scenes: AiScene[] = ["ranking", "profile", "compare"];

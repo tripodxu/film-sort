@@ -4,7 +4,7 @@
 // 其余主题回退第一个（plasma）——既有持久化逻辑不变，推荐只兜底。
 //
 // four 个特效模块连同 Three.js 全量（约 522KB 原始 / 128KB gzip）会被拖进主包，
-// **本文件必须保持零 three 依赖**（见 docs/PLAN-BUNDLE-SPLIT.md）。
+// **本文件必须保持零 three 依赖**（见 docs/archive/PLAN-BUNDLE-SPLIT.md）。
 // ThemeSwitcher 是首屏常驻组件，它静态 import 本文件；若本文件静态 import 特效模块，
 // 四个特效模块连同 Three.js 全量（约 522KB 原始 / 128KB gzip）会被拖进主包，
 // DeferredOrb 的 lazy() + requestIdleCallback 就成了空转 —— 那层保护只推迟了渲染，
