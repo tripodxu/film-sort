@@ -1417,6 +1417,8 @@ async function route(request: Request, env: Env): Promise<Response> {
   if (url.pathname === "/api/admin/poster-errors" && request.method === "GET") {
     if (!env.DB || !(await adminAuth(request, env))) return json({ error: "auth_required" }, 401);
     const days = Number(url.searchParams.get("days") ?? "7");
+    if (!Number.isInteger(days) || days < 1 || days > 365)
+      return json({ error: "invalid_days" }, 400);
     const limit = Math.min(Number(url.searchParams.get("limit") ?? "200"), 1000);
     const errors = await env.DB.prepare(
       "SELECT id, title, media_type, error, source, created_at FROM poster_errors WHERE created_at >= datetime('now', ?) ORDER BY created_at DESC LIMIT ?",
@@ -1493,6 +1495,8 @@ async function route(request: Request, env: Env): Promise<Response> {
   if (url.pathname === "/api/admin/poster-errors/export" && request.method === "GET") {
     if (!env.DB || !(await adminAuth(request, env))) return json({ error: "auth_required" }, 401);
     const days = Number(url.searchParams.get("days") ?? "30");
+    if (!Number.isInteger(days) || days < 1 || days > 365)
+      return json({ error: "invalid_days" }, 400);
     const errors = await env.DB.prepare(
       "SELECT title, media_type, error, source, created_at FROM poster_errors WHERE created_at >= datetime('now', ?) ORDER BY created_at DESC LIMIT 5000",
     )
@@ -2807,8 +2811,15 @@ async function route(request: Request, env: Env): Promise<Response> {
       .first<{ profile: string; notes: string | null; expires_at: string }>();
     if (!row) return json({ error: "link_expired_or_not_found" }, 404);
     // 读取端自愈：旧链接里的画像可能残留 posterUrls（见 shared/storedItem.ts）。
+    // 库内一行损坏时返回 profile:null 让前端显示失效链接，而不是把整条路由打成 500。
+    let profile: unknown = null;
+    try {
+      profile = healStoredProfile(JSON.parse(row.profile));
+    } catch {
+      profile = null;
+    }
     const result: Record<string, unknown> = {
-      profile: healStoredProfile(JSON.parse(row.profile)),
+      profile,
       expires_at: row.expires_at,
     };
     if (row.notes) {
@@ -2826,7 +2837,13 @@ async function route(request: Request, env: Env): Promise<Response> {
     return createChallenge(request, env);
   }
   if (url.pathname.startsWith("/api/challenges/") && request.method === "GET") {
-    return getChallenge(decodeURIComponent(url.pathname.slice("/api/challenges/".length)), env);
+    let id: string;
+    try {
+      id = decodeURIComponent(url.pathname.slice("/api/challenges/".length));
+    } catch {
+      return json({ error: "invalid_challenge_id" }, 400);
+    }
+    return getChallenge(id, env);
   }
   if (url.pathname === "/admin" && request.method === "GET") {
     return new Response(DASHBOARD_HTML, {

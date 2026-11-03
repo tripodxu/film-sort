@@ -848,10 +848,19 @@ export async function accountRoute(request: Request, env: Env): Promise<Response
       .bind(user.id)
       .all();
     return json({
-      collections: (rows.results ?? []).map((row) => ({
-        ...row,
-        items: JSON.parse(String((row as Record<string, unknown>).items ?? "[]")),
-      })),
+      collections: (rows.results ?? []).map((row) => {
+        // 单行 items 损坏只让这一份清单变空，不让整个列表 500。
+        let items: unknown = [];
+        try {
+          const parsed: unknown = JSON.parse(
+            String((row as Record<string, unknown>).items ?? "[]"),
+          );
+          if (Array.isArray(parsed)) items = parsed;
+        } catch {
+          items = [];
+        }
+        return { ...row, items };
+      }),
     });
   }
 
