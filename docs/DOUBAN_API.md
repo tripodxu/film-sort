@@ -187,7 +187,7 @@ GET /api/movie/detail?name={电影名}
 | url | string | 否 | `movie.douban.com/subject/...` 格式 |
 | creator | string | 否 | 导演/主演，用于在搜索多结果中择优（命中标题+演员 +4） |
 
-简介优先取豆瓣官方详情页 v:summary；失败时降级维基消歧打分，百度百科兜底。元数据从豆瓣搜索补充；维基消歧用的年份取自搜索结果的 `year`（路由**不读取** `year` 查询参数）。
+简介优先取豆瓣官方详情页 v:summary；失败时降级维基消歧打分，百度百科兜底。元数据从豆瓣搜索补充；movie/book 的维基消歧年份取自搜索结果的 `year`（这两条路由**不读取** `year` 查询参数）；music/other 的 detail 路由读取 `year`/`release_date`。
 
 **响应示例：**
 ```json

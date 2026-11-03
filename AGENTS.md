@@ -26,7 +26,7 @@ npm test -- --run      # vitest
 npm run build          # 构建
 ```
 
-改完代码**五道全绿才算完成**。改视觉的额外规则见 `docs/agents/CONVENTIONS.md`。
+改完代码**五道全绿才算完成**。附加一道文档事实校验 `npm run docs:facts`（`npm run gates` 已包含）。改视觉的额外规则见 `docs/agents/CONVENTIONS.md`。
 
 ---
 

@@ -6,6 +6,30 @@
 
 ---
 
+## D-20261103-01 · 现代主题动效的三条硬约束
+
+**背景**：PR #2 给默认「现代」主题加入 hero 指针视差、维度卡 3D tilt、滚动进度与 View Transition；复核发现 4 处实现会让新特性失效或污染其他主题。
+**决策**：① 指针监听必须挂在 `.orb-hero` 宿主，不能挂在 `pointer-events:none` 的 `.md-backdrop`；② 入场动画只允许动 `opacity/translate/scale`，不得用 `transform` 填充（会按住内联 tilt），延迟期用 `backwards`，结束后交还属性；③ View Transition 只在无 `data-theme` 的现代主题启用，且回调内 `flushSync`，确保浏览器拍到 React 提交后的新快照。
+**理由**：`pointer-events:none` 元素不是事件目标也不在冒泡路径；`fill-mode: both` 会长期持有 `transform`；React 的 setState 异步提交会让「新」快照仍是旧界面。
+**代价 / 边界**：`prefers-reduced-motion` 下 JS 只画静态帧；rAF 收敛即停，不常驻。
+**相关**：`src/components/HeroBackdrop.tsx`、`src/styles.css`、`src/lib/useRouter.ts`、`src/modern-ui.test.ts`；PR #2 squash `ed28cdf`；PITFALLS 4.16 / 4.20a 同族。
+
+## D-20261101-01 · Jev 站内免费通道：站主 Key 走 Worker Secret
+
+**背景**：Jev 此前要求每个用户自配 API Key，使用门槛高。
+**决策**：站主提供 `JEV_API_KEY`（`wrangler secret put`，不进仓库/DB），未配置用户 Key 时以 `useBuiltin: true` 走 `jev.logicc.top` 反代；用户 Key 永远优先、直连官方。四端点共用 `resolveJevConfig`，通道未开返回 `503 builtin_unavailable`。
+**理由**：降低门槛，同时不改变「用户 Key 只存 localStorage、Worker 不落盘」的承诺；站主 Key 按 `AI_API_KEY` 先例以 Secret 存放。
+**代价 / 边界**：免费通道与用户通道共用限流桶；上游不可用时必须显式降级，不静默回落到规则。
+**相关**：`worker/typesafe.ts`、`worker/index.ts`、`src/lib/typesafe.ts`；CHANGELOG 2026-11-01；AGENTS 规则 5 括注。
+
+## D-20261029-01 · 上游请求必须有总预算，且 throttled ≠ absent
+
+**背景**：「其他」维度详情链由多条串行维基请求组成，上游抖动时会挂 45–60s；海报链曾把超时记成 `absent`（24h 负缓存），让「确实不存在」与「这次没取到」无法区分。
+**决策**：整条链给总预算——详情接口 25s/15s → `504 upstream_timeout`（`no-store`）；海报层 25s → `throttled`（15s 负缓存），**不许记 `absent`**。统一走 `worker/deadline.ts` 的 `withDeadline`。
+**理由**：单跳 8–9s 的串行链在上游抖动时没有总预算，会把一次慢请求放大成分钟级；把「失败」与「不存在」混成一个值，等于把判断成本转嫁给每个消费者。
+**代价 / 边界**：总预算会让极端慢的上游提前失败；需要前端展示可区分的错误码。
+**相关**：`worker/deadline.ts`、`worker/other.ts`、`worker/media.ts`；PITFALLS 3.12；commit `40174e2`。
+
 ## D-20260930-01 · 维基取图：pageprops.page_image 为主源，文件列表兜底改为「关键词命中否则 null」
 
 **背景**：T-20260930-02。D-20260929-01 定下「主图直取优先」，但直取手段仍是 `pageimages` + `images` 文件列表，且文件列表以 `files[0]` 兜底——线上错配证明这条链对游戏品类系统性失守（pageimages 对非自由封面恒空；files[0] 按字母序取到无关配图）。

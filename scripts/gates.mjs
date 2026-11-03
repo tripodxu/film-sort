@@ -74,6 +74,15 @@ for (const [name, command, retryCacheRace] of gates) {
 // 第六道护栏（2026-10-30 验收 F1）：五道门禁不覆盖「本地 dev 能否启动」，
 // workerd 对入口模块具名导出的严格校验曾让 wrangler dev 挂了一个月。
 // 失败同样阻断，避免假绿；CI 在 build 后跑同一条命令。
+// 附加文档事实校验（2026-11-03）：五道门禁不覆盖文档与代码的事实一致性，
+// 而文档漂移曾多次把已删除功能/错误上限写成事实。失败同样阻断。
+console.log("\n=== 附加文档事实校验 ===");
+const facts = run("npm run docs:facts");
+if (facts.status !== 0) {
+  console.error(`\n✘ 文档事实校验失败（exit ${facts.status ?? "signal"}）。`);
+  process.exit(facts.status ?? 1);
+}
+
 console.log("\n=== 附加 dev 启动冒烟 ===");
 const smoke = run("npm run dev:smoke");
 if (smoke.status !== 0) {
@@ -81,4 +90,4 @@ if (smoke.status !== 0) {
   process.exit(smoke.status ?? 1);
 }
 
-console.log("\n五道门禁 + dev 冒烟全绿 ✅");
+console.log("\n五道门禁 + 文档事实 + dev 冒烟全绿 ✅");

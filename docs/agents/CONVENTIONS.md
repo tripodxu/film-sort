@@ -14,7 +14,7 @@
 | Lint | 只开两类规则：`react-hooks/recommended`（error）+ `@typescript-eslint/no-unused-vars`（warn，`_`/`caughtErrors` 豁免） |
 | 类型检查 | `tsc -b`（三份 tsconfig：app / worker / node） |
 | 测试 | Vitest，`environment: node`，匹配 `src/**`、`worker/**`、`shared/**` 下的 `*.test.ts` |
-| 门禁顺序 | `check` → `lint` → `format:check` → `test -- --run` → `build`（CI 与本地一致）；本地聚合入口 **`npm run gates`**（失败即停），浏览器 E2E 用 **`npm run e2e [url]`** |
+| 门禁顺序 | `check` → `lint` → `format:check` → `test -- --run` → `build`（CI 与本地一致；另跑附加 `docs:facts`）；本地聚合入口 **`npm run gates`**（失败即停），浏览器 E2E 用 **`npm run e2e [url]`** |
 
 **ESLint 只开两类的原因**（写在 `eslint.config.js` 注释里）：一次性全仓开火会产生成百上千条告警，把真正的信号淹掉。后续**按目录逐步收紧**，不要一次性放开。
 

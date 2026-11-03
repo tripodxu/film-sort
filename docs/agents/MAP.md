@@ -85,7 +85,7 @@
 
 | 文件 | 行数 | 职责 |
 |------|------|------|
-| `src/styles.css` | 1909 | 全令牌化样式（589 行含 `var(--` / 204 行含 `color-mix(`，统计口径=按行计数）；圆角 5 档、间距 8px 阶梯、阴影 2 级 |
+| `src/styles.css` | 2238 | 全令牌化样式（677 行含 `var(--` / 226 行含 `color-mix(`，统计口径=按行计数）；圆角 5 档、间距 8px 阶梯、阴影 2 级 |
 | `src/lib/theme.ts` | 59 | `data-theme` 切换与持久化（THEMES 12 套） |
 | `src/lib/themeRegistry.ts` | 383 | 插拔主题包注册表（规范见 `docs/THEME-PACKS.md`） |
 | `src/lib/layout.ts` | — | `data-layout` 布局模式（与 theme 正交） |
@@ -100,7 +100,7 @@
 
 ### §2.4 Worker 接口 / 新增 API
 
-**路由总表在 `worker/index.ts` 约 1880 行起**，是一条 `if (url.pathname === ...)` 链。新增端点时：
+**路由总表在 `worker/index.ts` 的 `route()` 链里**（用 `grep -n 'url.pathname ===' worker/index.ts` 定位），是一条 `if (url.pathname === ...)` 链。新增端点时：
 
 1. 在路由链里加分支；
 2. 业务逻辑放独立模块（`worker/<domain>.ts`），保持 `index.ts` 只做路由与编排；

@@ -489,7 +489,7 @@ D1 行无 TTL，所以「解析器写错过一次」会被永久短路：改代�
 3. **创作者组合搜索** — 如"三体 刘慈欣"；
 4. **百度百科** — 兜底；**中文歌名（音乐详情）优先于维基**，因百科词条名通常就是歌名本身，对华语流行单曲覆盖远好于维基。传输按实测可达性排序：**anysearch 搜索**（`api.anysearch.com/mcp`，JSON-RPC `tools/call search`，取词条页结果摘要；服务端抓取绕开百度反爬，带 key 约 4s，`ANYSEARCH_API_KEY` secret 可选）→ **两路百度直连并行兜底**（开放 API 共享 demo appid 自 2026-09 起持续 `errno:6`；词条页对数据中心 IP 常下安全验证页，只读响应头部 96KB。直连失败是 IP 级且持续性的，带 isolate 级熔断：连续 3 次失败停探 1 小时）。音乐中文路径的维基落空后只重试 anysearch（换类型提示词查询，不重复直连）。命中结果进 isolate 级简介缓存（FIFO 200 条，TTL 24h，仅缓存成功值）。`/api/music/detail` 的 gdstudio 元数据与简介两步并行请求。
 
-detail 路由接受 `year`/`creator` 参数辅助消歧（前端传作品已知元数据）。"其他"类别走 `worker/other.ts`（维基 opensearch + pageimages 取图，百科兜底）。
+movie/book 的 detail 路由只接受 `creator`（movie 的年份取自搜索结果）；music/other 的 detail 路由接受 `year`/`creator` 辅助消歧（前端传作品已知元数据）。"其他"类别走 `worker/other.ts`（维基 opensearch + pageimages 取图，百科兜底）。
 
 ### 5.5 防限流机制
 
