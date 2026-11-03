@@ -25,6 +25,8 @@ export interface EssencePick {
 export interface EssenceResult {
   /** 按选择顺序排列。 */
   picks: EssencePick[];
+  /** 与 picks 等长：每件切片「代表」的清单作品数（含自身），合计为清单总数。 */
+  represented: number[];
   /** 清单被切片覆盖的比例（0–100）：至少与一件切片相似度 ≥ 阈值的作品占比。 */
   coverage: number;
 }
@@ -104,10 +106,11 @@ export function essenceSimilarity(a: EssenceCandidate, b: EssenceCandidate): num
  */
 export function essenceSlice(items: readonly EssenceCandidate[], count: number): EssenceResult {
   const total = items.length;
-  if (total === 0 || count <= 0) return { picks: [], coverage: 0 };
+  if (total === 0 || count <= 0) return { picks: [], represented: [], coverage: 0 };
   if (count >= total) {
     return {
       picks: items.map((_, index) => ({ index, novelty: 0 })),
+      represented: items.map(() => 1),
       coverage: 100,
     };
   }
@@ -150,5 +153,21 @@ export function essenceSlice(items: readonly EssenceCandidate[], count: number):
     ),
   ).length;
 
-  return { picks, coverage: Math.round((covered / total) * 100) };
+  // 每件作品归入「最相似的那件切片」；并列时归入先选出的切片。
+  // 这样「代表 N 件」之和恒等于清单总数，可与作品数互相校验。
+  const represented = selected.map(() => 0);
+  for (let itemIndex = 0; itemIndex < total; itemIndex++) {
+    let bestOrder = 0;
+    let bestSimilarity = -1;
+    selected.forEach((pickIndex, order) => {
+      const similarity = preparedSimilarity(prepared[pickIndex], prepared[itemIndex]);
+      if (similarity > bestSimilarity) {
+        bestSimilarity = similarity;
+        bestOrder = order;
+      }
+    });
+    represented[bestOrder] += 1;
+  }
+
+  return { picks, represented, coverage: Math.round((covered / total) * 100) };
 }

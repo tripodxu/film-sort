@@ -6,14 +6,19 @@ const work = (title: string, creator: string, year: number) => ({ title, creator
 
 describe("essenceSlice", () => {
   it("空清单 / 非正数量返回空切片", () => {
-    expect(essenceSlice([], 5)).toEqual({ picks: [], coverage: 0 });
-    expect(essenceSlice([work("A", "甲", 2000)], 0)).toEqual({ picks: [], coverage: 0 });
+    expect(essenceSlice([], 5)).toEqual({ picks: [], represented: [], coverage: 0 });
+    expect(essenceSlice([work("A", "甲", 2000)], 0)).toEqual({
+      picks: [],
+      represented: [],
+      coverage: 0,
+    });
   });
 
   it("数量不小于长度时返回全部并保持原顺序", () => {
     const items = [work("A", "甲", 2000), work("B", "乙", 2010)];
     const result = essenceSlice(items, 5);
     expect(result.picks.map((pick) => pick.index)).toEqual([0, 1]);
+    expect(result.represented).toEqual([1, 1]);
     expect(result.coverage).toBe(100);
   });
 
@@ -46,6 +51,9 @@ describe("essenceSlice", () => {
     );
     const result = essenceSlice(items, 5);
     expect(result.picks).toHaveLength(5);
+    expect(result.represented).toHaveLength(5);
+    expect(result.represented.reduce((sum, value) => sum + value, 0)).toBe(items.length);
+    expect(result.represented.every((value) => value >= 1)).toBe(true);
     expect(result.coverage).toBeGreaterThanOrEqual(0);
     expect(result.coverage).toBeLessThanOrEqual(100);
     expect(Number.isInteger(result.coverage)).toBe(true);

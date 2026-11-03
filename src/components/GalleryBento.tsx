@@ -1,7 +1,7 @@
 // gallery 主题（PLAN-ui-modernization P3）的画像页 Bento 网格（L3 条件渲染）。
 // 铁律：仅 gallery 家族渲染（ProfileView/ShareView 按主题家族分支），
 // classic 路径 DOM 一字节不变；数据全部来自 galleryStats 现场聚合，零数据层改动。
-import { useMemo } from "react";
+import { useMemo, type KeyboardEvent } from "react";
 
 import { essenceSlice } from "../lib/essenceSlice";
 import {
@@ -150,6 +150,23 @@ export function GalleryBento({
         : null,
     [activeRanking.items],
   );
+  // 横向轨道：Tab 之外再用方向键移动焦点，Home/End 跳首尾。
+  const onEssenceKeyDown = (event: KeyboardEvent<HTMLOListElement>) => {
+    if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
+    const buttons = Array.from(event.currentTarget.querySelectorAll<HTMLButtonElement>("button"));
+    const current = buttons.indexOf(document.activeElement as HTMLButtonElement);
+    if (current === -1) return;
+    event.preventDefault();
+    const next =
+      event.key === "Home"
+        ? 0
+        : event.key === "End"
+          ? buttons.length - 1
+          : event.key === "ArrowRight"
+            ? Math.min(buttons.length - 1, current + 1)
+            : Math.max(0, current - 1);
+    buttons[next]?.focus();
+  };
   const spanText =
     stats.span.earliest !== null && stats.span.latest !== null
       ? `${stats.span.earliest}–${stats.span.latest}`
@@ -278,17 +295,36 @@ export function GalleryBento({
               )}
             </span>
           </div>
-          <ol className="gl-essence" aria-label={t("精华切片作品", "Essence slice works")}>
-            {essence.picks.map(({ index }) => {
+          <ol
+            className="gl-essence"
+            aria-label={t("精华切片作品", "Essence slice works")}
+            onKeyDown={onEssenceKeyDown}
+          >
+            {essence.picks.map(({ index }, order) => {
               const work = activeRanking.items[index];
               const meta = [work.creator, work.year].filter(Boolean).join(" · ");
+              const represented = essence.represented[order];
               return (
                 <li key={work.id} className="gl-essence-item">
-                  <button onClick={() => openArtworkDetail(work, activeRanking.kind)}>
+                  <button
+                    onClick={() => openArtworkDetail(work, activeRanking.kind)}
+                    aria-label={t(
+                      `${work.title}，代表 ${represented} 件作品`,
+                      `${work.title}, covers ${represented} works`,
+                    )}
+                  >
                     <span className="gl-essence-rank">{String(work.rank).padStart(2, "0")}</span>
                     <span className="gl-essence-body">
                       <strong>{work.title}</strong>
-                      {meta && <small>{meta}</small>}
+                      <small>
+                        {meta}
+                        {represented > 1 && (
+                          <span className="gl-essence-rep">
+                            {meta ? " · " : ""}
+                            {t(`代表 ${represented} 件`, `covers ${represented}`)}
+                          </span>
+                        )}
+                      </small>
                     </span>
                   </button>
                 </li>
