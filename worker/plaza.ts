@@ -205,7 +205,14 @@ export async function plazaRoute(request: Request, env: Env): Promise<Response> 
     // 于是海报地址重新进库、随覆盖率增长重演 512KB 故障（见
     // docs/archive/PLAN-poster-pipeline.md §4.3）。改成旁路后，编辑流只碰干净的
     // post.items，泄漏路径从结构上消失，而不是靠「记得剥离」。
-    const rawItems: unknown[] = JSON.parse(String(post.items ?? "[]"));
+    // 坏 JSON 只降级为空清单：读侧不能因为一行历史脏数据把整帖打成 500。
+    let rawItems: unknown[] = [];
+    try {
+      const parsed: unknown = JSON.parse(String(post.items ?? "[]"));
+      if (Array.isArray(parsed)) rawItems = parsed;
+    } catch {
+      rawItems = [];
+    }
     const isProfilePost = post.post_type === "profile";
     // 读取时也过一遍白名单：库里残留 posterUrls 的旧行读出来即干净，
     // 客户端下一次保存就自动瘦身——不需要数据迁移脚本。
@@ -445,7 +452,10 @@ export async function plazaRoute(request: Request, env: Env): Promise<Response> 
     if (existing.user_id !== user.id) return json({ error: "forbidden" }, 403);
 
     const body = await readJsonObject(request);
-    const isPublic = body?.is_public ? 1 : 0;
+    // 与创建/编辑路径同口径：字符串 "false"/"0" 不能被当成公开。
+    const visibility = parseVisibility(body?.is_public);
+    if (visibility === null) return json({ error: "invalid_is_public" }, 400);
+    const isPublic = visibility ?? 0;
     await env.DB.prepare(
       "UPDATE plaza_posts SET is_public = ?, updated_at = datetime('now') WHERE id = ?",
     )
@@ -661,8 +671,12 @@ export async function adminPlazaRoute(request: Request, env: Env): Promise<Respo
       params.push(kind);
     }
     if (q) {
-      where.push("(p.collection_title LIKE ? OR u.nickname LIKE ? OR u.email LIKE ?)");
-      params.push(`%${q}%`, `%${q}%`, `%${q}%`);
+      // 与公开列表同口径：转义用户输入里的 % / _，否则「_」会匹配任意字符。
+      const like = `%${q.replace(/[\\%_]/g, (m) => `\\${m}`)}%`;
+      where.push(
+        "(p.collection_title LIKE ? ESCAPE '\\' OR u.nickname LIKE ? ESCAPE '\\' OR u.email LIKE ? ESCAPE '\\')",
+      );
+      params.push(like, like, like);
     }
     const whereSql = where.length ? ` WHERE ${where.join(" AND ")}` : "";
 
@@ -710,8 +724,14 @@ export async function adminPlazaRoute(request: Request, env: Env): Promise<Respo
       .bind(postId)
       .all();
 
+    let items: unknown = [];
+    try {
+      items = JSON.parse(String(post.items ?? "[]"));
+    } catch {
+      items = [];
+    }
     return json({
-      post: { ...post, items: JSON.parse(String(post.items ?? "[]")) },
+      post: { ...post, items },
       comments: comments.results ?? [],
     });
   }
@@ -746,7 +766,9 @@ export async function adminPlazaRoute(request: Request, env: Env): Promise<Respo
   if (visibilityMatch && method === "POST") {
     const postId = Number(visibilityMatch[1]);
     const body = await readJsonObject(request);
-    const isPublic = body?.is_public ? 1 : 0;
+    const visibility = parseVisibility(body?.is_public);
+    if (visibility === null) return json({ error: "invalid_is_public" }, 400);
+    const isPublic = visibility ?? 0;
     const existing = await env.DB.prepare(
       "SELECT id, collection_title FROM plaza_posts WHERE id = ?",
     )
