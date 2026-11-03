@@ -1,6 +1,6 @@
 # MAP — 任务 → 文件路由表
 
-> **本文件是整个 agent 文档体系的核心。** 目的：让每个 agent 只读「与任务相关的那一两个文件」，而不是通读约 37,868 行代码或 683 条 commit。
+> **本文件是整个 agent 文档体系的核心。** 目的：让每个 agent 只读「与任务相关的那一两个文件」，而不是通读约 41,251 行代码（不含测试）或 697 条 commit。
 > 用法：先在 §1 找到你的任务类型 → 跳到对应小节 → 只打开列出的文件。
 > 行号会漂移，**以符号名 / 路由字符串为准**，行号仅作初次定位的提示。
 
@@ -10,14 +10,14 @@
 
 | 我想找… | 去这里 |
 |---------|--------|
-| 某个 API 端点怎么实现的 | `worker/index.ts` 路由表（约 1880 行起，`if (url.pathname === ...)` 链） |
+| 某个 API 端点怎么实现的 | `worker/index.ts` 的 `route()` 路由链（`grep -n 'url.pathname ===' worker/index.ts`） |
 | 某路由的业务逻辑 | 按前缀找对应模块：`/api/plaza/*`→`worker/plaza.ts`、`/api/netease/*`→`worker/netease.ts`、`/api/douban/*`→`worker/douban.ts`+`doubanlist.ts`、`/api/import/*`→`worker/import.ts`、`/api/account/*`→`worker/account.ts` |
 | 前端页面 | `src/views/*.tsx`（路由在 `src/lib/useRouter.ts` + `src/App.tsx`） |
 | 全局状态 / 事件编排 | `src/App.tsx`（2730 行，改动前先确认是否被 `useAuth` / `useSorting` / `useRouter` 接管） |
-| 样式与主题 | `src/styles.css`（1909 行，全令牌化）+ `src/styles/atlas.css`（第 12 套内置主题的变量块） |
-| 数据库表结构 | `migrations/0001..0028` + `docs/ARCHITECTURE.md` 的 Schema 节 |
+| 样式与主题 | `src/styles.css`（约 2238 行，全令牌化）+ `src/styles/atlas.css`（第 12 套内置主题的变量块） |
+| 数据库表结构 | `migrations/0001..0029` + `docs/ARCHITECTURE.md` 的 Schema 节 |
 | 「什么能落库」 | `shared/storedItem.ts` —— **唯一出口** |
-| 排序 / 比较算法 | `src/lib/ranking.ts`（1278 行，四模式）+ `src/lib/adaptiveRanking.ts` / `preferenceModel.ts` / `adaptiveQueue.ts` / `compareMetrics.ts` |
+| 排序 / 比较算法 | `src/lib/ranking.ts`（1309 行，四模式）+ `src/lib/adaptiveRanking.ts` / `preferenceModel.ts` / `adaptiveQueue.ts` / `compareMetrics.ts` |
 | 历史决策理由 | `docs/memory/DECISIONS.md` |
 | 这个功能什么时候加的 | `docs/memory/TIMELINE.md`（按日倒序） |
 
@@ -121,7 +121,7 @@
 
 ### §2.5 数据库 / migration
 
-- 迁移文件：`migrations/0001_initial.sql` → `0028_rate_limits.sql`。**新增迁移必须幂等可重复应用**（曾因非幂等导致远程迁移失败）。
+- 迁移文件：`migrations/0001_initial.sql` → `0029_user_collections_title_unique.sql`。**新增迁移必须幂等可重复应用**（曾因非幂等导致远程迁移失败）。
 - 共享契约：`shared/storedItem.ts`（落库字段白名单唯一出口，289 行，含批注编码 `encodeStoredNotes`：未提供=保留 / 显式空=清空；批注语义测试见 `shared/storedNotes.test.ts`）。
 - Schema 说明：`docs/ARCHITECTURE.md`。
 - 关键表：`user_profiles`、`user_accounts`、`user_collections`、`poster_urls`、`shared_links`、`plaza_posts`、`plaza_post_edits`、`plaza_comments`、`plaza_likes`、`api_logs`、`poster_errors`、`admin_audit`、`user_cookie_vault`、`oauth_bindings`、`oauth_exchanges`、`verification_codes`、`qr_transactions`、`user_sessions`。
@@ -156,7 +156,7 @@
 | `src/lib/aiInsight.ts` | 前端 AI 点评客户端 |
 | `src/lib/typesafe.ts` | 前端 Jev 配置与请求（key 只存 localStorage） |
 | 端点 | `/api/ai/test`、`/api/ai/models`、`/api/insights`、`/api/ai/jev/test`、`/api/ai/jev-rank`、`/api/ai/jev-pick`、`/api/ai/jev-disambiguate`（判决层未接前端，见 ROADMAP Phase 2） |
-| 限流桶 | `ai_jev_test` 5 / `ai_jev` 10 / `ai_jev_pick` 60（次/10 分钟） |
+| 限流桶 | `ai_jev_test` 5 / `ai_jev` 10 / `ai_jev_pick` 60 / `ai_jev_disambiguate` 20（次/10 分钟） |
 
 **四原则**（`docs/memory/DECISIONS.md` D-20260928-01）：key 不内置 / 只做决策不做生成 / 必须可降级 / 非关键路径先行。
 **后续计划**：`docs/ROADMAP.md`（Phase 2 维基消歧 Choice、Phase 3 广场 Noul 护栏）。
@@ -222,7 +222,7 @@
 | ❌ 反模式 | ✅ 正确做法 |
 |-----------|------------|
 | 开工前通读 `src/App.tsx` 2700+ 行 | 先 `grep` 符号名，只读相关函数 |
-| 通读 683 条 git log 了解背景 | 查 `docs/memory/TIMELINE.md` 或 `git log --grep=<关键词>` |
+| 通读 697 条 git log 了解背景 | 查 `docs/memory/TIMELINE.md` 或 `git log --grep=<关键词>` |
 | 想当然地按 Node.js 能力写代码 | 平台能力在 workerd 上实测（PBKDF2 100k 教训） |
 | 直接改 `styles.css` 的硬编码色值 | 先确认是否已提升为 token；新色必须走 token |
 | 在多个地方判定"这个图片域名安全吗" | 只改 `allowedImage()` |

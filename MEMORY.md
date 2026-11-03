@@ -4,7 +4,7 @@
 > 本文件是**跨会话、跨 agent 共享**的项目长期记忆（git 可追踪）。单会话的过程记录写 `.workbuddy/memory/YYYY-MM-DD.md`。
 > 完整演化脉络见 [`docs/memory/TIMELINE.md`](docs/memory/TIMELINE.md)；决策理由见 [`docs/memory/DECISIONS.md`](docs/memory/DECISIONS.md)。
 
-最后更新：2026-10-24
+最后更新：2026-11-03
 
 > 2026-10-24 起：逐任务的细记录以 [`docs/agents/TASK-LEDGER.md`](docs/agents/TASK-LEDGER.md) 顶部为准，本区按批次归并。
 
@@ -19,12 +19,18 @@
 | 仓库 | `git@github.com:tripodxu/film-sort.git`（私有） |
 | 线上 | `sort.logicc.top` |
 | 技术栈 | React 19 + TypeScript + Vite（前端 SPA） / Cloudflare Workers + D1 + KV-free（后端全在 Worker） / Vitest + ESLint + Prettier |
-| 规模 | 683 commits（2026-09-06 → 2026-10-29，54 天，单人开发）；`worker/` + `src/` + `shared/` 37,868 行 TS/TSX（不含 64 个测试文件，精确数以 `wc -l` / `git rev-list --count` 为准）；29 个 D1 migration 文件（0001 → 0028，其中 0008 有两支） |
+| 规模 | 697 commits（2026-09-06 → 2026-11-03，单人开发）；`worker/` + `src/` + `shared/` 41,251 行 TS/TSX（不含 79 个测试文件，精确数以 `wc -l` / `git rev-list --count` 为准）；30 个 D1 migration 文件（0001 → 0029，其中 0008 有两支） |
 | 关键约束 | **全站零自建服务器**，所有能力必须能在 Cloudflare Workers（workerd）运行时内跑起来 |
 
 ---
 
 ## 1. 活跃记录（最新在最上）
+
+### 2026-11-03 · Jev 免费通道、现代主题二次打磨、文档审计
+
+- **Jev 站内免费通道**（2026-11-01）：`JEV_API_KEY` 以 Worker Secret 存放，未配置 Key 的用户可走 `jev.logicc.top` 反代；用户 Key 永远优先。四端点共用 `resolveJevConfig`，新增 `503 builtin_unavailable`。详见 CHANGELOG 2026-11-01。
+- **现代主题二次打磨**（2026-11-03，PR #2 squash `ed28cdf`）：hero 指针视差/光斑、维度卡 3D tilt、滚动进度条、跨视图 View Transition。合并前修掉 4 处失效点（指针监听宿主、入场动画覆盖 tilt、主题作用域泄漏、View Transition 缺 flushSync）。
+- **文档审计**（2026-11-03）：全量通读后确认 P0（README PBKDF2 60 万）已修正为 10 万；规模/migration/奖牌/果冻等漂移已同步修正，剩余项见 `docs/DOC-AUDIT-2026-11-03.md`。
 
 ### 2026-10-24 · 十月冲刺收束：增量升级 S1–S4+S5-1、性能 2.08x、两项 UI 整理与文档全面审计
 
@@ -55,7 +61,7 @@ T-20260930-02：用户清单（动物森友会 2020 / Inside 2016 / Journey 2012
 - **移动端顶栏抢救**：`overflow-x` 隐式裁剪下拉（设置菜单改锚 topbar）、≤540px 收导航（修复匿名「广场」被 `:last-child` 误伤）、≤360px 紧凑档、触屏 tooltip 关闭。
 - **UI 现代化 P0–P4**（`docs/archive/PLAN-ui-modernization.md` v3）：editorial 双主题 → aurora 极光主题（含 ribbon 光球特效）→ gallery 数据画廊（Bento 画像页 + 卡片墙）→ P4 收尾（主题菜单分组 + `--ev-*` 全局景深 + 11 主题新基线）；旧主题截图零差异回归，均线上实机验证。
 - **T-20260928-07 报障两批**：「其他」维度接入 wiki 海报管线（上线以来无封面）、other 详情超时 20s→30s、AI 点评按档位放宽截断（2500/5000/9000 字符）。
-- **当前状态**：P1–P5 ✅（均线上验证）；P6（相遇页预测分歧）已实现待线上复核；P7（Wrapped 年度报告）/ P8（PWA 离线）⬜ 未开始；全部计划见 `docs/archive/PLAN-OPTIMIZATION-SPRINT.md`。
+- **当日状态**：P1–P5 ✅（均线上验证）；P6（相遇页预测分歧）已实现待线上复核；P7（Wrapped 年度报告）/ P8（PWA 离线）当时 ⬜——两项后续均已上线（2026-10-29 / 2026-09-10）；全部计划见 `docs/archive/PLAN-OPTIMIZATION-SPRINT.md`。
 
 ### 2026-09-27 · 全量审查缺陷清零 + 排序交互收尾
 
@@ -94,7 +100,7 @@ worker/        Cloudflare Worker：index.ts 为路由总入口
   plaza.ts  import.ts  account.ts  verification.ts  mailer.ts  og.ts  typesafe.ts
   audit.ts  cachePurge.ts  qrTransactions.ts  outbound.ts  posterStore.ts  rateWindow.ts
 shared/        前后端共享：storedItem.ts（落库白名单唯一出口）+ posterKey.ts
-migrations/    0001 → 0028，D1 schema
+migrations/    0001 → 0029，D1 schema
 scripts/       gates.mjs（五道门禁聚合）/ ui-e2e.mjs（浏览器 E2E）/
                ui-shot.mjs / ui-diff.mjs / ui-contrast.mjs / ui-audit.mjs / ui-normalize.mjs
 ```

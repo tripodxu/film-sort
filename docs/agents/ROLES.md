@@ -49,7 +49,7 @@
 
 **最小上下文**：
 - `docs/agents/MAP.md` §2.4（+ 若涉及外部平台则 §2.6）
-- `worker/index.ts` 的路由链（约 1880 行起）+ 目标模块
+- `worker/index.ts` 的路由链（`grep -n 'url.pathname ===' worker/index.ts`）+ 目标模块
 - `docs/agents/CONVENTIONS.md` §3
 - `docs/agents/PITFALLS.md` §1（平台类）+ §2（网络类）
 
@@ -66,7 +66,7 @@
 **最小上下文**：
 - `docs/agents/MAP.md` §2.5
 - `docs/ARCHITECTURE.md` 的 Schema 节
-- `docs/agents/PITFALLS.md` §3（数据类 10 条）
+- `docs/agents/PITFALLS.md` §3（数据类 13 条）
 - `shared/storedItem.ts`（落库白名单唯一出口）
 
 **必守**：迁移**幂等可重复应用**；字段白名单只改 `shared/storedItem.ts`；单行 512KB 约束；读侧永不删数据。

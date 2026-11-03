@@ -2,7 +2,7 @@
 
 > 本文档是**已实现功能的全量清单与回归基线**：每条功能标注入口路径与后端端点。任何重构/UI 改版后，逐条走查本文档即完成回归验证。
 > 端点的请求/响应细节见 `API.md`；算法与架构细节见 `ARCHITECTURE.md`；优化历史见 `docs/archive/OPTIMIZATION.md`（已归档）。
-> 最后更新：2026-10-24
+> 最后更新：2026-11-03
 
 ## 0. 路由总表（SPA，History API）
 
@@ -172,7 +172,7 @@
 - 无障碍：焦点陷阱（首次焦点优先落 `[role="dialog"]` 容器并归零滚动，容器可聚焦时 Tab/Shift+Tab 仍圈回首尾）、aria-modal/tablist/menu 语义、reduced-motion、触屏 :active。
 - PWA：manifest（192/512/maskable 三图标 + apple-touch-icon）+ network-first SW（仅生产域名注册）；安装期由 `scripts/pwa-precache.mjs` 预缓存全部带 hash 的 JS/CSS/字体（含懒加载路由 chunk），缓存桶带构建哈希，激活即清旧桶 ⇒ 离线可开全部应用内路由，更新即时生效。`/api/` 不接管。
 - 性能：首页 3D 光球由 `src/components/DeferredOrb.tsx` 托管——空闲时（`requestIdleCallback`，2s 上限）才加载；`saveData` 或 2G 网络不加载，保留 CSS 兜底背景。
-- 质量门：CI（`.github/workflows/ci.yml`）依次跑 check / lint / format:check / test / build；本地对应 `npm run lint|format|format:check`。
+- 质量门：CI（`.github/workflows/ci.yml`）依次跑 check / lint / format:check / test / build；本地聚合入口 `npm run gates`。
 
 ## 11. AI 点评（2026-09-19 新增）
 

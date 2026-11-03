@@ -10,10 +10,12 @@
 
 ## 进行中 / 最近
 
-### T-20261103-MODERN-POLISH · 现代主题二次打磨（PR #2） · 🔄 本地五门禁全绿，待线上走查
+### T-20261103-MODERN-POLISH · 现代主题二次打磨（PR #2） · 🔄 已合并（`ed28cdf`），待线上走查
 
 - **来源**：fork `jerryxu1949/film-sort` 的 PR #2（`feat/modern-ui-overhaul`）。维护者复核后
   在 PR 分支上修复缺陷，再 squash 合入 `main`。
+- **合并**：2026-11-03 squash 合入 `main`，merge commit `ed28cdf`；修复提交 `68f3902`
+  已推回 fork 的 `feat/modern-ui-overhaul`。
 - **收口修复**：
   - `HeroBackdrop`：指针监听改挂 `.orb-hero`（原挂 `pointer-events:none` 装饰层，事件收不到）；
     坐标 clamp；`prefers-reduced-motion` 只画静态帧；rAF 收敛即停。

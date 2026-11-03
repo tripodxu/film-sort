@@ -51,7 +51,7 @@ npx wrangler d1 migrations apply film-sort --local
 npx wrangler d1 migrations apply film-sort --remote
 ```
 
-`wrangler.jsonc` 的 `d1_databases` binding 保持 `DB`。`migrations/` 下现有 29 个迁移文件（编号 0001–0028，其中 0008 有两支，精确数字以 `ls migrations` 为准），覆盖：匿名事件 + 挑战片单、旧版画像表、API 日志 + 管理会话/配置、账户体系（user_accounts/sessions/oauth/exchanges）、画像 v2 + 批注、云端清单（0021 重建为 1000 件上限）、分享短链、广场（帖子/点赞/留言/楼中楼/编辑历史/性能索引）、海报错误日志、Cookie 保险库、管理审计、海报地址侧表（0022）、邮箱验证码（0023）、扫码事务（0024）、运行时索引（0025）、海报批次统计（0026）、评论回复索引（0027）、敏感桶限流计数（0028）。
+`wrangler.jsonc` 的 `d1_databases` binding 保持 `DB`。`migrations/` 下现有 30 个迁移文件（编号 0001–0029，其中 0008 有两支，精确数字以 `ls migrations` 为准），覆盖：匿名事件 + 挑战片单、旧版画像表、API 日志 + 管理会话/配置、账户体系（user_accounts/sessions/oauth/exchanges）、画像 v2 + 批注、云端清单（0021 重建为 1000 件上限）、分享短链、广场（帖子/点赞/留言/楼中楼/编辑历史/性能索引）、海报错误日志、Cookie 保险库、管理审计、海报地址侧表（0022）、邮箱验证码（0023）、扫码事务（0024）、运行时索引（0025）、海报批次统计（0026）、评论回复索引（0027）、敏感桶限流计数（0028）、云端清单同名唯一（0029）。
 
 清理策略：Worker cron（每周一 03:00 UTC）自动清理 90 天前 `analytics_events`/`api_logs`、180 天前 `poster_errors`、过期的 `admin_sessions`/`user_sessions`/`oauth_exchanges`/`shared_links`。也可在 `/admin` 数据页签手动清理。
 
@@ -62,7 +62,7 @@ npx wrangler d1 migrations apply film-sort --remote
 | `ADMIN_PASSWORD` | `/admin` 登录（优先于 DB hash） | 用首次登录写入的 DB hash |
 | `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | Google OAuth | 隐藏该登录入口 |
 | `GITHUB_CLIENT_ID` / `GITHUB_CLIENT_SECRET` | GitHub OAuth | 隐藏该登录入口 |
-| `AI_API_KEY` | 内置 AI 通道密钥（`worker/ai.ts`）；`AI_API_URL`/`AI_MODEL`/`AI_PROTOCOL` 是 **vars**（见 `wrangler.jsonc`），不是 secret | 未配 key 时用户仍可在网页端自带 API | AI 按钮提示「服务端未配置」，用户自带 API 通道不受影响 |
+| `AI_API_KEY` | 内置 AI 通道密钥（`worker/ai.ts`）；`AI_API_URL`/`AI_MODEL`/`AI_PROTOCOL` 是 **vars**（见 `wrangler.jsonc`），不是 secret | 未配 key 时用户仍可在网页端自带 API；AI 按钮提示「服务端未配置」，用户自带 API 通道不受影响 |
 | `COOKIE_ENC_KEY` | 覆盖 Cookie 保险库密钥（64 位十六进制 = AES-256）；**生产建议配置 secret**，避免密钥与密文同落 D1 | 首次使用时自动生成并存入 `admin_config('cookie_enc_key')`（仅适合开发/过渡） |
 | `MUSIC_PROXY_URL` / `MUSIC_PROXY_KEY` | 音乐上游代理（`worker/gdstudio.ts`） | 直连上游 API |
 | `ANYSEARCH_API_KEY` | anysearch 搜索服务 key（`api.anysearch.com`，简介的百度百科传输）；缺省走匿名额度（限速更低） | 仍可用，但匿名额度按 CF 出口 IP 共享计，高峰可能命中限速 |

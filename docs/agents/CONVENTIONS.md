@@ -33,7 +33,7 @@
 
 ## 3. Worker 约定
 
-- **`worker/index.ts` 只做路由与编排**，业务逻辑放独立模块。路由表是一条 `if (url.pathname === ...)` 链（约 1880 行起），新增分支时保持风格一致。
+- **`worker/index.ts` 只做路由与编排**，业务逻辑放独立模块。路由表是一条 `if (url.pathname === ...)` 链（用 `grep -n 'url.pathname ===' worker/index.ts` 定位），新增分支时保持风格一致。
 - **请求体校验就近在业务模块内实现**（如 `worker/plaza.ts` 的 `plazaRoute`），不要手写散落的 `if (body.xxx)`。不存在独立的 `payloadGuard.ts` 模块——`worker/payloadGuard.test.ts` 是「可落库字符串编码出口唯一性」的静态扫描护栏。
 - **限流走 `worker/rateWindow.ts`**（Map 有上界 + 惰性清扫，见 `9f36ae9`）。
 - **所有对外 fetch 走 `worker/outbound.ts` 的 `fetchBounded`**：精确 host 白名单 + `redirect: 'manual'` 逐跳复核 + 响应字节上限。
@@ -75,7 +75,7 @@
 
 ## 6. 视觉改动流程（改样式必读）
 
-1. **先确认是否已 token 化**：`src/styles.css` 已全面令牌化（按行计 589 行含 `var(--` / 204 行含 `color-mix(`，2026-10-24 口径）。新颜色必须提升为 token，**不要写裸 hex**。
+1. **先确认是否已 token 化**：`src/styles.css`（约 2238 行）已全面令牌化（按行计 677 行含 `var(--` / 226 行含 `color-mix(`，2026-11-03 口径）。新颜色必须提升为 token，**不要写裸 hex**。
 2. **遵循既有档位**：圆角 5 档 / 间距 8px 阶梯（±6px 容差）/ 字号 ±1px 归档 / 阴影 2 级 / 玻璃两级制。
 3. **大批量归一化用工具**：`scripts/ui-normalize.mjs`（**dry-run 优先**、幂等），不要手工改。
 4. **对比度用工具判**：`scripts/ui-contrast.mjs` + `docs/ui-contrast.json`，目标 WCAG AA（`--text-3` 定案 78%）。
