@@ -7,6 +7,7 @@ import {
   encodeStoredWorks,
   healStoredProfile,
 } from "../shared/storedItem";
+import { fetchBounded, readBoundedJson, type OutboundPolicy } from "./outbound";
 
 const encoder = new TextEncoder();
 import { pbkdf2Sync } from "node:crypto";
@@ -306,6 +307,20 @@ interface OAuthProvider {
   parseUser(data: unknown): { id: string; email: string | null; emailVerified: boolean } | null;
 }
 
+/**
+ * OAuth 端点的出站策略：host 来自服务端固定 provider 配置（非用户输入），
+ * 仍按 C2 走 fetchBounded——精确 host、禁止跳转、15s 超时、64KB 上限。
+ */
+function oauthOutboundPolicy(rawUrl: string): OutboundPolicy {
+  return {
+    allowedHosts: [new URL(rawUrl).hostname],
+    maxBytes: 64 * 1024,
+    timeoutMs: 15_000,
+    maxRedirects: 0,
+    allowedContentTypes: ["application/json"],
+  };
+}
+
 const oauthProviders: Record<string, OAuthProvider> = {
   google: {
     name: "Google",
@@ -602,33 +617,44 @@ export async function accountRoute(request: Request, env: Env): Promise<Response
 
     try {
       // Exchange code for access token
-      const tokenResponse = await fetch(provider.tokenUrl, {
-        method: "POST",
-        headers: {
-          "content-type": "application/x-www-form-urlencoded",
-          accept: "application/json",
-          ...(providerKey === "github" ? { "user-agent": "film-sort" } : {}),
+      const tokenResponse = await fetchBounded(
+        provider.tokenUrl,
+        {
+          method: "POST",
+          headers: {
+            "content-type": "application/x-www-form-urlencoded",
+            accept: "application/json",
+            ...(providerKey === "github" ? { "user-agent": "film-sort" } : {}),
+          },
+          body: new URLSearchParams({
+            grant_type: "authorization_code",
+            code,
+            client_id: clientId,
+            client_secret: clientSecret,
+            redirect_uri: `${url.origin}/api/account/oauth/callback`,
+          }),
         },
-        body: new URLSearchParams({
-          grant_type: "authorization_code",
-          code,
-          client_id: clientId,
-          client_secret: clientSecret,
-          redirect_uri: `${url.origin}/api/account/oauth/callback`,
-        }),
-      });
-      const tokenData = (await tokenResponse.json()) as { access_token?: string; error?: string };
+        oauthOutboundPolicy(provider.tokenUrl),
+      );
+      const tokenData = (await readBoundedJson(tokenResponse, 64 * 1024)) as {
+        access_token?: string;
+        error?: string;
+      };
       if (!tokenData.access_token) throw new Error(tokenData.error ?? "No access token");
 
       // Fetch user info
-      const userResponse = await fetch(provider.userUrl, {
-        headers: {
-          authorization: `Bearer ${tokenData.access_token}`,
-          accept: "application/json",
-          ...(providerKey === "github" ? { "user-agent": "film-sort" } : {}),
+      const userResponse = await fetchBounded(
+        provider.userUrl,
+        {
+          headers: {
+            authorization: `Bearer ${tokenData.access_token}`,
+            accept: "application/json",
+            ...(providerKey === "github" ? { "user-agent": "film-sort" } : {}),
+          },
         },
-      });
-      const userData = await userResponse.json();
+        oauthOutboundPolicy(provider.userUrl),
+      );
+      const userData = await readBoundedJson(userResponse, 64 * 1024);
       const parsed = provider.parseUser(userData);
       if (!parsed) throw new Error("Failed to parse user info");
 

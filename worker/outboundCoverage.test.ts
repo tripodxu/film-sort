@@ -128,9 +128,8 @@ describe("出站收敛（C2 / T-20261014-06）", () => {
       ["./gdstudio.ts", 2, "gd-proxy 代理取图 ×2"],
       ["./import.ts", 2, "网易云歌单/歌曲详情 ×2"],
       ["./netease.ts", 4, "网易云 QR/登录/请求封装 ×4"],
-      // OAuth token/user 端点：URL 来自服务端 provider 配置（非用户输入），
-      // 但仍是外部出站——收敛它需要按配置 host 动态组 policy，单独立项，不在此断言里放行新增。
-      ["./account.ts", 2, "OAuth tokenUrl/userUrl ×2（待动态 host 策略）"],
+      // OAuth token/user 端点已于 2026-11-04 按 provider 配置动态组 policy，收敛到 fetchBounded。
+      ["./account.ts", 0, "OAuth tokenUrl/userUrl 已收敛"],
     ];
     for (const [file, count, reason] of expectations) {
       const lines = bareFetchLines(load(file));

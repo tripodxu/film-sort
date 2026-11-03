@@ -26,6 +26,7 @@ import { FocusTrap } from "../components/FocusTrap";
 import { GalleryBento } from "../components/GalleryBento";
 import { GalleryWall } from "../components/GalleryWall";
 import { useThemeFamily } from "../lib/useTheme";
+import type { CssVars } from "../lib/cssVars";
 import { IconButton } from "./IconButton";
 import { heading } from "./helpers";
 import { undoLastAction } from "../lib/ranking";
@@ -440,7 +441,7 @@ export function ProfileView({
                                 "--angle": i * 30 + "deg",
                                 "--delay": i * 0.03 + "s",
                                 "--color": colors[i % 5],
-                              } as any
+                              } as CssVars
                             }
                           />
                         );
@@ -906,7 +907,7 @@ export function ProfileView({
                                 "--angle": i * 30 + "deg",
                                 "--delay": i * 0.03 + "s",
                                 "--color": colors[i % 5],
-                              } as any
+                              } as CssVars
                             }
                           />
                         );
