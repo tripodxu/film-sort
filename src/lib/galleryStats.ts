@@ -32,7 +32,10 @@ export interface DecadeSlice {
 export function decadeSlices(items: readonly RankedArtwork[]): DecadeSlice[] {
   const table = new Map<number | null, number>();
   for (const item of items) {
-    const decade = typeof item.year === "number" ? Math.floor(item.year / 10) * 10 : null;
+    const decade =
+      typeof item.year === "number" && Number.isFinite(item.year)
+        ? Math.floor(item.year / 10) * 10
+        : null;
     table.set(decade, (table.get(decade) ?? 0) + 1);
   }
   return [...table.entries()]

@@ -29,8 +29,7 @@ function classify(code: string, status: number): GdFailure {
   if (code === "rate_limited") return "rate_limited";
   if (code === "music_upstream_limited" || code === "lyric_upstream_limited")
     return "upstream_limited";
-  if (code === "music_not_found" || code === "lyric_not_found" || code === "lyric_not_found")
-    return "not_found";
+  if (code === "music_not_found" || code === "lyric_not_found") return "not_found";
   if (status === 404) return "not_found";
   return "unavailable";
 }

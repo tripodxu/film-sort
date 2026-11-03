@@ -337,11 +337,19 @@ export function removeCustomThemeStyle(id: string): void {
 
 /** 启动恢复：重建全部自定义主题的 <style>（在首帧渲染前调用）。 */
 export function restoreCustomThemes(): void {
-  for (const entry of readStore()) {
+  const entries = readStore();
+  const valid: StoredTheme[] = [];
+  for (const entry of entries) {
     const parsed = parseThemePackage(entry.source);
-    if (parsed.ok) injectCustomTheme(parsed.theme);
-    else removeCustomThemeStyle(entry.id); // 校验规则升级后不合规的旧包静默移除
+    if (parsed.ok) {
+      valid.push(entry);
+      injectCustomTheme(parsed.theme);
+    } else {
+      removeCustomThemeStyle(entry.id); // 校验规则升级后不合规的旧包静默移除
+    }
   }
+  // 无效包同时从存储里清掉，否则每次启动都要重新解析一遍。
+  if (valid.length !== entries.length) writeStore(valid);
 }
 
 export function listCustomThemes(): CustomThemeMeta[] {

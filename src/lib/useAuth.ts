@@ -174,7 +174,8 @@ export function useAuth(deps: Omit<AuthDeps, "setDraft"> & { setDraft?: (d: unkn
       if (!autoApply && !controller.signal.aborted)
         d.setNotice(d.t("读取失败，请重新登录。", "Failed to load. Please sign in again."));
     } finally {
-      setBusy(false);
+      // 旧代际的请求被新加载中止时，不能把新加载的 busy 态清掉。
+      if (isCurrentGeneration(sessionGeneration.current, generation)) setBusy(false);
     }
   }, []);
 

@@ -174,6 +174,7 @@ export function useSorting(deps: SortingDeps) {
         const response = await fetch(`/api/other/list?key=${encodeURIComponent(trimmed)}`, {
           signal: AbortSignal.timeout(15000),
         });
+        if (!response.ok) return [];
         const data = (await response.json()) as {
           data?: Array<{ title?: string; subtitle?: string; year?: number; poster_url?: string }>;
         };
@@ -193,6 +194,7 @@ export function useSorting(deps: SortingDeps) {
         `/api/${apiType}/list?key=${encodeURIComponent(trimmed)}&page=1`,
         { signal: AbortSignal.timeout(15000) },
       );
+      if (!response.ok) return [];
       const data = (await response.json()) as {
         data?: Array<{
           title?: string;
@@ -516,16 +518,16 @@ export function useSorting(deps: SortingDeps) {
             signal: AbortSignal.timeout(120000),
           },
         );
-        const data = (await response.json()) as {
+        const data = (await response.json().catch(() => null)) as {
           works?: Array<Artwork & { type?: string; poster_url?: string }>;
           listTotal?: number | null;
           hasMore?: boolean;
           nextOffset?: number;
           msg?: string;
           error?: string;
-        };
-        if (!response.ok || !data.works) {
-          const msg = data.msg ?? data.error ?? d.t("未知错误", "unknown error");
+        } | null;
+        if (!response.ok || !data?.works) {
+          const msg = data?.msg ?? data?.error ?? d.t("未知错误", "unknown error");
           d.setNotice(
             offset > 0
               ? d.t(`已抓取 ${offset} 件后中断：${msg}`, `Stopped after ${offset}: ${msg}`)
@@ -692,10 +694,10 @@ export function useSorting(deps: SortingDeps) {
           ? `/api/douban/music/top250?limit=${doubanLimit}`
           : `/api/douban/top250?limit=${doubanLimit}`;
       const response = await fetch(endpoint, { signal: AbortSignal.timeout(60000) });
-      const data = (await response.json()) as {
+      const data = (await response.json().catch(() => null)) as {
         works?: Array<{ id: string; title: string; year?: number; poster_url?: string }>;
-      };
-      if (!response.ok || !data.works || data.works.length < 2) throw new Error();
+      } | null;
+      if (!response.ok || !data?.works || data.works.length < 2) throw new Error();
       const title = isBook
         ? `豆瓣读书 Top ${doubanLimit}`
         : isMusic
