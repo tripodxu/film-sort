@@ -3,6 +3,7 @@
 // classic 路径 DOM 一字节不变；数据全部来自 galleryStats 现场聚合，零数据层改动。
 import { useMemo } from "react";
 
+import { essenceSlice } from "../lib/essenceSlice";
 import {
   GALLERY_KINDS,
   decadeSlices,
@@ -27,6 +28,9 @@ interface GalleryBentoProps {
 
 /** 媒介色 token 名与 MediaKind 同名（--film/--book/--music/--other），直接拼接。 */
 const kindColor = (kind: MediaKind) => `var(--${kind})`;
+
+/** 精华切片条数：一屏可扫完，又不至于退化成「前六名」。 */
+const ESSENCE_SIZE = 6;
 
 function decadeText(decade: number | null, t: GalleryBentoProps["t"]): string {
   return decade === null ? t("无年份", "Undated") : t(`${decade} 年代`, `${decade}s`);
@@ -138,6 +142,14 @@ export function GalleryBento({
     return { stats: profileStats(profile), decades: decadeRows };
   }, [profile]);
   const top = activeRanking.items[0];
+  // 精华切片只对「长榜」有意义：短榜全选等于照抄名次。
+  const essence = useMemo(
+    () =>
+      activeRanking.items.length > ESSENCE_SIZE
+        ? essenceSlice(activeRanking.items, ESSENCE_SIZE)
+        : null,
+    [activeRanking.items],
+  );
   const spanText =
     stats.span.earliest !== null && stats.span.latest !== null
       ? `${stats.span.earliest}–${stats.span.latest}`
@@ -254,6 +266,37 @@ export function GalleryBento({
           </div>
         </div>
       </div>
+
+      {essence && (
+        <div className="gl-cell gl-cell-essence">
+          <div className="gl-essence-head">
+            <span className="gl-cell-label">{t("精华切片", "ESSENCE SLICE")}</span>
+            <span className="gl-essence-coverage">
+              {t(
+                `${essence.picks.length} 件覆盖本榜 ${essence.coverage}% 的口味`,
+                `${essence.picks.length} picks cover ${essence.coverage}% of this list`,
+              )}
+            </span>
+          </div>
+          <ol className="gl-essence" aria-label={t("精华切片作品", "Essence slice works")}>
+            {essence.picks.map(({ index }) => {
+              const work = activeRanking.items[index];
+              const meta = [work.creator, work.year].filter(Boolean).join(" · ");
+              return (
+                <li key={work.id} className="gl-essence-item">
+                  <button onClick={() => openArtworkDetail(work, activeRanking.kind)}>
+                    <span className="gl-essence-rank">{String(work.rank).padStart(2, "0")}</span>
+                    <span className="gl-essence-body">
+                      <strong>{work.title}</strong>
+                      {meta && <small>{meta}</small>}
+                    </span>
+                  </button>
+                </li>
+              );
+            })}
+          </ol>
+        </div>
+      )}
 
       {entries && onOpenEntry && (
         <div className="gl-cell gl-cell-entries">

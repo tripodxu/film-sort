@@ -1680,12 +1680,14 @@ body[data-theme=classic]{
     "hero hero radar"
     "hero hero coords"
     "decades decades entries"
+    "essence essence essence"
 }
 .gl-bento--share{
   grid-template-areas:
     "hero hero radar"
     "hero hero coords"
     "decades decades decades"
+    "essence essence essence"
 }
 .gl-cell{min-width:0;display:flex;flex-direction:column;gap:10px;padding:16px;border:1px solid var(--line);border-radius:var(--r-md);background:var(--surface)}
 .gl-cell-label{font-family:var(--font-mono);font-size:var(--t-meta);letter-spacing:var(--ls-wide);text-transform:uppercase;color:var(--text-3)}
@@ -1694,6 +1696,21 @@ body[data-theme=classic]{
 .gl-cell-decades{grid-area:decades}
 .gl-cell-coords{grid-area:coords}
 .gl-cell-entries{grid-area:entries}
+.gl-cell-essence{grid-area:essence;gap:12px}
+/* 精华切片：一条编辑式「接触印相带」——细线分隔、等宽序号、可横向滑动，
+   与 gl-* 既有语言一致；不引入新色值，只用 accent/line/surface 令牌。 */
+.gl-essence-head{display:flex;align-items:baseline;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.gl-essence-coverage{font-family:var(--font-mono);font-size:var(--t-meta);color:var(--text-3);font-variant-numeric:tabular-nums}
+.gl-essence{list-style:none;margin:0;padding:0;display:flex;overflow-x:auto;overscroll-behavior-x:contain;scroll-snap-type:x proximity;border-top:1px solid var(--line);border-left:1px solid var(--line)}
+.gl-essence-item{flex:1 0 min(170px,46%);min-width:0;border-right:1px solid var(--line);border-bottom:1px solid var(--line);scroll-snap-align:start}
+.gl-essence-item button{display:flex;align-items:baseline;gap:10px;width:100%;min-height:52px;padding:10px 14px;border:0;background:none;text-align:left;color:inherit;cursor:pointer}
+.gl-essence-item button:hover{background:var(--surface-hover)}
+.gl-essence-item button:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
+.gl-essence-rank{flex-shrink:0;font-family:var(--font-mono);font-size:var(--t-meta);color:var(--text-3);font-variant-numeric:tabular-nums}
+.gl-essence-item:first-child .gl-essence-rank{color:var(--accent)}
+.gl-essence-body{display:flex;flex-direction:column;gap:2px;min-width:0}
+.gl-essence-body strong{font-size:13px;font-weight:600;line-height:1.35;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.gl-essence-body small{font-family:var(--font-mono);font-size:10px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .gl-empty{font-size:13px;color:var(--muted)}
 /* Top1 大卡：大幅海报 + 巨号名次 + 2-5 名跟进行。
    海报走文档流 + aspect-ratio（不能绝对定位撑满按钮——Bento 格高由雷达/坐标行
@@ -1766,8 +1783,8 @@ body[data-theme=classic]{
 }
 /* Bento 移动端：单列堆叠（grid-template-areas 逐格重排，保持显式声明纪律） */
 @media(max-width:800px){
-  .gl-bento{grid-template-columns:minmax(0,1fr);grid-template-areas:"hero" "radar" "decades" "coords" "entries"}
-  .gl-bento--share{grid-template-areas:"hero" "radar" "decades" "coords"}
+  .gl-bento{grid-template-columns:minmax(0,1fr);grid-template-areas:"hero" "radar" "decades" "coords" "essence" "entries"}
+  .gl-bento--share{grid-template-areas:"hero" "radar" "decades" "coords" "essence"}
 }
 @media(max-width:540px){
   .gl-cell{padding:12px}
