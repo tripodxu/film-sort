@@ -115,8 +115,11 @@ describe("P1b/P2/P3 收敛绊线", () => {
     ]) {
       expect(modal).toContain(token);
     }
-    // Esc 必须真的接上：只声明 role 不接 pack = 键盘用户关不掉（ArtworkDetail 曾踩过）
-    expect(modal).toMatch(/onKeyDown=\{\(event\) => \{[\s\S]{0,80}Escape[\s\S]{0,60}onClose\(\)/);
+    // Esc 必须真的接上：只声明 role 不接 pack = 键盘用户关不掉（ArtworkDetail 曾踩过）。
+    // 2026-11-04：面板 inline onKeyDown 与 FocusTrap 的 document 监听会各调一次
+    // onClose（关两次、副作用翻倍），Esc 收敛为 FocusTrap 单一归属。
+    expect(modal).toContain("<FocusTrap onEscape={onClose}>");
+    expect(modal).not.toMatch(/onKeyDown=\{\(event\) =>[\s\S]{0,80}Escape/);
   });
 });
 

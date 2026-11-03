@@ -47,6 +47,11 @@ export function GalleryWall({
       {items.map((work) => {
         const noteText = notes[noteKey("work", kind, work.id)] ?? "";
         const flipped = flippedId === work.id;
+        // 点按与键盘激活必须是同一语义：触屏（hover:none）翻面，桌面进详情。
+        const activate = () => {
+          if (hoverNone) setFlippedId(flipped ? null : work.id);
+          else openArtworkDetail(work, kind);
+        };
         return (
           <li key={work.id} className={`gl-card${flipped ? " flipped" : ""}`}>
             <div
@@ -54,14 +59,11 @@ export function GalleryWall({
               role="button"
               tabIndex={0}
               aria-label={`${work.rank}. ${work.title}`}
-              onClick={() => {
-                if (hoverNone) setFlippedId(flipped ? null : work.id);
-                else openArtworkDetail(work, kind);
-              }}
+              onClick={activate}
               onKeyDown={(e) => {
                 if (e.key === "Enter" || e.key === " ") {
                   e.preventDefault();
-                  openArtworkDetail(work, kind);
+                  activate();
                 }
               }}
             >

@@ -151,6 +151,9 @@ export function CoverChoice({
             `/api/other/detail?name=${encodeURIComponent(candidateTitle)}${qs}`,
             { signal: AbortSignal.timeout(30000) },
           );
+          // 非 2xx（限流 / 上游故障）的 JSON 里也可能带字段，先按失败处理，
+          // 免得把错误响应当成候选图。
+          if (!response.ok) throw new Error(`HTTP ${response.status}`);
           const payload = (await response.json()) as {
             data?: { poster_url?: string } | null;
           };

@@ -52,6 +52,14 @@ export function AiInsightCard({
   const abortRef = useRef<AbortController | null>(null);
   const cardRef = useRef<HTMLDivElement | null>(null);
   const [copied, setCopied] = useState(false);
+  /** 「已复制」回退定时器：卸载后仍会 setState，必须清掉。 */
+  const copyTimerRef = useRef<number | null>(null);
+  useEffect(
+    () => () => {
+      if (copyTimerRef.current !== null) window.clearTimeout(copyTimerRef.current);
+    },
+    [],
+  );
   // 配置徽标：localStorage 不是响应式的，配置弹窗保存/停用后通过自定义事件通知刷新。
   const [hasCustom, setHasCustom] = useState(() => !!readAiConfig());
   useEffect(() => {
@@ -217,7 +225,8 @@ export function AiInsightCard({
                     ?.writeText(result.insight)
                     .then(() => {
                       setCopied(true);
-                      setTimeout(() => setCopied(false), 1500);
+                      if (copyTimerRef.current !== null) window.clearTimeout(copyTimerRef.current);
+                      copyTimerRef.current = window.setTimeout(() => setCopied(false), 1500);
                     })
                     .catch(() => {});
                 }}

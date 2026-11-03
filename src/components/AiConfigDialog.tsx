@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Check, Plug, RefreshCw, Sparkles, X } from "lucide-react";
 import { IconButton } from "../views/IconButton";
 import { FocusTrap } from "./FocusTrap";
@@ -52,6 +52,14 @@ export function AiConfigDialog({
   const [model, setModel] = useState(existing?.model ?? "");
   const [protocol, setProtocol] = useState<AiProtocol>(existing?.protocol ?? "auto");
   const [showKey, setShowKey] = useState(false);
+  /** 失焦延迟关闭下拉的定时器：卸载后仍会 setState，必须清掉。 */
+  const modelMenuTimerRef = useRef<number | null>(null);
+  useEffect(
+    () => () => {
+      if (modelMenuTimerRef.current !== null) window.clearTimeout(modelMenuTimerRef.current);
+    },
+    [],
+  );
   const [models, setModels] = useState<string[]>([]);
   const [modelMenuOpen, setModelMenuOpen] = useState(false);
   const [testBusy, setTestBusy] = useState(false);
@@ -252,7 +260,13 @@ export function AiConfigDialog({
                   }}
                   onBlur={() => {
                     // 延迟关闭：给下拉项的 mousedown（先于 blur 触发）留出选择窗口
-                    window.setTimeout(() => setModelMenuOpen(false), 150);
+                    if (modelMenuTimerRef.current !== null) {
+                      window.clearTimeout(modelMenuTimerRef.current);
+                    }
+                    modelMenuTimerRef.current = window.setTimeout(
+                      () => setModelMenuOpen(false),
+                      150,
+                    );
                   }}
                   placeholder={
                     models.length > 0 ? t("点开下拉或手输", "pick below or type") : "gpt-4o-mini"

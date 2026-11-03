@@ -260,6 +260,9 @@ function resolve(work: Artwork, kind: MediaKind, opts?: { retry?: boolean }): Pr
       resolvedPosters.set(key, urls);
       emptyStates.delete(key);
       writePosterCache(key, urls);
+      // 成功结果已落到 resolvedPosters/sessionStorage，in-flight 去重表不必再留，
+      // 否则长会话里条目只增不减。
+      requests.delete(key);
     } else {
       requests.delete(key);
       // 分类同样不跨会话保留：15 秒后上游很可能已恢复，记住 throttled 只会
