@@ -1,6 +1,8 @@
 // gallery 主题（PLAN-ui-modernization P3）的画像页 Bento 网格（L3 条件渲染）。
 // 铁律：仅 gallery 家族渲染（ProfileView/ShareView 按主题家族分支），
 // classic 路径 DOM 一字节不变；数据全部来自 galleryStats 现场聚合，零数据层改动。
+import { useMemo } from "react";
+
 import {
   GALLERY_KINDS,
   decadeSlices,
@@ -126,12 +128,16 @@ export function GalleryBento({
   entries = true,
   onOpenEntry,
 }: GalleryBentoProps) {
-  const stats = profileStats(profile);
+  // 全画像聚合与年代分桶都是 O(作品数)；只在 profile 引用变化时重算，
+  // 避免父组件因批注/弹窗等无关状态重渲染时反复遍历整份清单。
+  const { stats, decades } = useMemo(() => {
+    const decadeRows = GALLERY_KINDS.map((kind) => {
+      const items = profile.rankings.filter((r) => r.kind === kind).flatMap((r) => r.items);
+      return { kind, items, slices: decadeSlices(items) };
+    }).filter((row) => row.items.length > 0);
+    return { stats: profileStats(profile), decades: decadeRows };
+  }, [profile]);
   const top = activeRanking.items[0];
-  const decades = GALLERY_KINDS.map((kind) => {
-    const items = profile.rankings.filter((r) => r.kind === kind).flatMap((r) => r.items);
-    return { kind, items, slices: decadeSlices(items) };
-  }).filter((row) => row.items.length > 0);
   const spanText =
     stats.span.earliest !== null && stats.span.latest !== null
       ? `${stats.span.earliest}–${stats.span.latest}`
