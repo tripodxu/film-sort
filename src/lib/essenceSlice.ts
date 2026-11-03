@@ -64,18 +64,37 @@ function creatorKey(creator: string | undefined): string {
   return creator?.trim().toLocaleLowerCase() ?? "";
 }
 
-/**
- * 两件作品的相似度（0–1）：标题语义 40% + 创作者 35% + 年代 25%。
- * 缺年份/创作者时该维度按 0 处理——「未知」不应被当成「相同」。
- */
-export function essenceSimilarity(a: EssenceCandidate, b: EssenceCandidate): number {
-  const title = jaccard(titleTokens(a.title), titleTokens(b.title));
-  const creator = creatorKey(a.creator) && creatorKey(a.creator) === creatorKey(b.creator) ? 1 : 0;
+/** 预计算后的特征：分词只做一次，避免最远点采样里每对比较都重新分词。 */
+interface PreparedCandidate {
+  tokens: Set<string>;
+  creator: string;
+  year?: number;
+}
+
+function prepareCandidate(candidate: EssenceCandidate): PreparedCandidate {
+  return {
+    tokens: titleTokens(candidate.title),
+    creator: creatorKey(candidate.creator),
+    year: typeof candidate.year === "number" ? candidate.year : undefined,
+  };
+}
+
+function preparedSimilarity(a: PreparedCandidate, b: PreparedCandidate): number {
+  const title = jaccard(a.tokens, b.tokens);
+  const creator = a.creator && a.creator === b.creator ? 1 : 0;
   const year =
     typeof a.year === "number" && typeof b.year === "number"
       ? Math.max(0, 1 - Math.abs(a.year - b.year) / YEAR_WINDOW)
       : 0;
   return title * 0.4 + creator * 0.35 + year * 0.25;
+}
+
+/**
+ * 两件作品的相似度（0–1）：标题语义 40% + 创作者 35% + 年代 25%。
+ * 缺年份/创作者时该维度按 0 处理——「未知」不应被当成「相同」。
+ */
+export function essenceSimilarity(a: EssenceCandidate, b: EssenceCandidate): number {
+  return preparedSimilarity(prepareCandidate(a), prepareCandidate(b));
 }
 
 /**
@@ -93,9 +112,10 @@ export function essenceSlice(items: readonly EssenceCandidate[], count: number):
     };
   }
 
+  const prepared = items.map(prepareCandidate);
   const selected: number[] = [0];
   const novelty = new Array<number>(total).fill(0);
-  for (let i = 0; i < total; i++) novelty[i] = 1 - essenceSimilarity(items[0], items[i]);
+  for (let i = 0; i < total; i++) novelty[i] = 1 - preparedSimilarity(prepared[0], prepared[i]);
   novelty[0] = -1;
 
   while (selected.length < count) {
@@ -109,7 +129,7 @@ export function essenceSlice(items: readonly EssenceCandidate[], count: number):
     novelty[best] = -1;
     for (let i = 0; i < total; i++) {
       if (novelty[i] < 0) continue;
-      const similarity = essenceSimilarity(items[best], items[i]);
+      const similarity = preparedSimilarity(prepared[best], prepared[i]);
       novelty[i] = Math.min(novelty[i], 1 - similarity);
     }
   }
@@ -119,13 +139,15 @@ export function essenceSlice(items: readonly EssenceCandidate[], count: number):
     let nearest = 1;
     for (const other of selected) {
       if (other === index) continue;
-      nearest = Math.min(nearest, 1 - essenceSimilarity(items[index], items[other]));
+      nearest = Math.min(nearest, 1 - preparedSimilarity(prepared[index], prepared[other]));
     }
     return { index, novelty: order === 0 ? nearest : nearest };
   });
 
-  const covered = items.filter((item) =>
-    selected.some((index) => essenceSimilarity(items[index], item) >= COVERAGE_THRESHOLD),
+  const covered = items.filter((_, itemIndex) =>
+    selected.some(
+      (index) => preparedSimilarity(prepared[index], prepared[itemIndex]) >= COVERAGE_THRESHOLD,
+    ),
   ).length;
 
   return { picks, coverage: Math.round((covered / total) * 100) };
