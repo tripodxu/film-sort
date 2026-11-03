@@ -1629,6 +1629,8 @@ export default function App() {
         </div>
       </header>
       <main className={`main view-${view}`}>
+        {/* 滚动进度条（CSS scroll-driven）：现代层专属，全页面生效 */}
+        <div className="md-progress" aria-hidden="true" />
         {view !== "home" && (
           <button
             className="back-link"

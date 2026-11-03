@@ -22,3 +22,6 @@ ch2.json
 
 # 本地 IDE / Agent 运行时数据，不入库
 .workbuddy/
+
+# 本地 npm 缓存（环境 ~/.npm 不可写时使用）
+.npmcache/

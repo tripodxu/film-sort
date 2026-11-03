@@ -2070,3 +2070,169 @@ body[data-theme=classic]{
     --border-2:color-mix(in srgb,var(--text) 48%,transparent);
   }
 }
+
+/* ===== Modern overhaul (default theme only) =====
+   重构层 v2：仅默认 modern 主题生效，其余 data-theme 基线不动。
+   动效能力：指针视差 / 鼠标光斑 / 3D tilt / 磁性按钮扫光 / 滚动进度条 /
+   滚动视差（CSS scroll-driven）/ View Transitions 跨视图过渡。
+   全部走既有 token，无裸 hex；hover 抬升用独立 `translate` 属性，
+   基线 `.medium-item:hover` 禁 translateY 的绊线不受影响。 */
+:root:not([data-theme]){
+  --grad-accent:linear-gradient(135deg,var(--accent),var(--accent-2));
+  --m-sheen:color-mix(in srgb,var(--accent) 24%,transparent);
+  --m-card-surface:linear-gradient(160deg,color-mix(in srgb,var(--text) 9%,var(--bg)),color-mix(in srgb,var(--text) 4%,var(--bg)) 58%,color-mix(in srgb,var(--accent) 6%,var(--bg)));
+  --m-glow:0 0 0 1px color-mix(in srgb,var(--accent) 18%,transparent),0 18px 50px color-mix(in srgb,var(--shadow-tint) 50%,transparent);
+  --m-glow-hover:0 0 0 1px color-mix(in srgb,var(--accent) 42%,transparent),0 26px 70px color-mix(in srgb,var(--shadow-tint) 60%,transparent),0 0 48px var(--m-sheen);
+  /* 鼠标光斑坐标，默认右肩；HeroBackdrop 用 rAF 写入 */
+  --md-mx:72%;
+  --md-my:32%;
+  /* 3D tilt 由 HomeView 的指针处理器写入 */
+  --md-tilt-x:0deg;
+  --md-tilt-y:0deg;
+  --md-sx:50%;
+  --md-sy:50%;
+}
+
+/* ---------- Hero：渐变网格背景 + 指针视差 + 鼠标光斑 ---------- */
+:root:not([data-theme]) .orb-hero{isolation:isolate;overflow:hidden;background:
+  radial-gradient(120% 100% at 50% 120%,color-mix(in srgb,var(--accent) 7%,transparent),transparent 60%),
+  var(--bg)}
+:root:not([data-theme]) .md-backdrop{position:absolute;inset:0;z-index:-1;pointer-events:none;overflow:hidden}
+:root:not([data-theme]) .md-layer{position:absolute;inset:-6%;will-change:transform}
+:root:not([data-theme]) .md-blob{position:absolute;border-radius:50%;filter:blur(70px);opacity:.78;mix-blend-mode:screen}
+:root:not([data-theme]) .md-blob-a{width:52vw;height:52vw;max-width:760px;max-height:760px;top:-14%;right:-6%;
+  background:radial-gradient(circle,color-mix(in srgb,var(--accent) 36%,transparent),transparent 70%);
+  animation:md-float-a 24s var(--ease-out) infinite alternate}
+:root:not([data-theme]) .md-blob-b{width:44vw;height:44vw;max-width:640px;max-height:640px;top:20%;right:14%;
+  background:radial-gradient(circle,color-mix(in srgb,var(--indigo) 30%,transparent),transparent 70%);
+  animation:md-float-b 30s var(--ease-out) infinite alternate}
+:root:not([data-theme]) .md-blob-c{width:38vw;height:38vw;max-width:540px;max-height:540px;bottom:-12%;left:-4%;
+  background:radial-gradient(circle,color-mix(in srgb,var(--accent-2) 24%,transparent),transparent 70%);
+  animation:md-float-c 27s var(--ease-out) infinite alternate}
+@keyframes md-float-a{0%{transform:translate3d(0,0,0) scale(1)}100%{transform:translate3d(-7%,8%,0) scale(1.12)}}
+@keyframes md-float-b{0%{transform:translate3d(0,0,0) scale(1.06)}100%{transform:translate3d(9%,-7%,0) scale(.94)}}
+@keyframes md-float-c{0%{transform:translate3d(0,0,0) scale(1)}100%{transform:translate3d(8%,6%,0) scale(1.1)}}
+/* 鼠标跟随光斑：坐标由 rAF 写入，mask 挖出柔光 */
+:root:not([data-theme]) .md-spot{position:absolute;inset:0;transform:translate3d(0,0,0);
+  background:radial-gradient(520px circle at var(--md-mx) var(--md-my),color-mix(in srgb,var(--accent) 18%,transparent),transparent 62%);
+  mask-image:radial-gradient(620px circle at var(--md-mx) var(--md-my),var(--mask-opaque),transparent);
+  -webkit-mask-image:radial-gradient(620px circle at var(--md-mx) var(--md-my),var(--mask-opaque),transparent)}
+:root:not([data-theme]) .md-grain{position:absolute;inset:0;opacity:.045;
+  background-image:repeating-linear-gradient(45deg,color-mix(in srgb,var(--text) 60%,transparent) 0 1px,transparent 1px 5px);mix-blend-mode:overlay}
+
+/* Hero 排版：左对齐文档流。基线 .home-heading 是 space-between 横排、
+   identity/home-actions/orb-index 是绝对定位浮块，这里统一归位。 */
+:root:not([data-theme]) .orb-hero-inner{display:block;padding-top:58px;animation:md-fade-up .6s var(--ease-out) both}
+:root:not([data-theme]) .home-heading{display:block;max-width:640px;padding:0;animation:md-fade-up .7s var(--ease-out) .08s both}
+:root:not([data-theme]) .home-heading>div{display:block;width:100%;min-width:0}
+:root:not([data-theme]) .identity{position:static;flex:0 0 auto;width:auto;max-width:none;align-self:flex-start;margin:0 0 24px;padding:6px 6px 6px 12px;font-size:12px}
+:root:not([data-theme]) .home-actions{position:static;flex:0 0 auto;width:auto;max-width:none;align-self:flex-start;margin-top:32px;gap:6px;padding:5px;border-radius:999px;animation:md-fade-up .7s var(--ease-out) .24s both}
+:root:not([data-theme]) .orb-index{position:absolute;right:0;bottom:40px;top:auto;transform:none;color:color-mix(in srgb,var(--text) 40%,transparent)}
+
+/* 标题：斜杠用渐变做视觉锚点，保留基线的竖排副标（editorial 设计语言）。 */
+:root:not([data-theme]) .home-heading h1{display:block;font-size:clamp(58px,8.4vw,86px);line-height:.86;letter-spacing:-.02em;font-weight:600;color:var(--text)}
+:root:not([data-theme]) .home-heading h1>span{display:inline;margin:0;font:inherit;color:var(--accent-2);background:none;-webkit-text-fill-color:currentColor;font-style:normal}
+:root:not([data-theme]) .home-heading h1>small{color:var(--text-2);font-size:clamp(17px,2vw,21px);letter-spacing:.02em;margin-top:20px}
+:root:not([data-theme]) .home-heading p{margin-top:26px;font-size:14.5px;line-height:1.75;color:var(--text-2);max-width:400px}
+:root:not([data-theme]) .home-heading .eyebrow{display:inline-flex;align-items:center;gap:10px;font-family:var(--font-mono);font-size:11px;letter-spacing:var(--ls-wide);color:var(--accent);text-transform:uppercase}
+:root:not([data-theme]) .home-heading .eyebrow:before{content:"";width:28px;height:1px;background:var(--accent);opacity:.7}
+:root:not([data-theme]) .home-heading h1,:root:not([data-theme]) .home-heading p,:root:not([data-theme]) .home-heading .eyebrow{animation-name:md-fade-up}
+@keyframes md-fade-up{from{opacity:0;translate:0 14px}to{opacity:1;translate:0 0}}
+
+/* 滚动视差退场：CSS scroll-driven，不支持时自动静态。 */
+@keyframes md-hero-retreat{from{opacity:1;translate:0 0}to{opacity:.2;translate:0 -34px}}
+@keyframes md-blob-drift{from{translate:0 0}to{translate:0 -70px}}
+:root:not([data-theme]) .orb-hero-inner{animation-name:md-hero-retreat;animation-timeline:view();animation-range:exit 0% exit 100%}
+:root:not([data-theme]) .md-backdrop{animation-name:md-blob-drift;animation-timeline:view();animation-range:exit 0% exit 100%}
+
+/* 滚动进度条：固定在顶栏上方，scroll() 驱动 */
+:root:not([data-theme]) .md-progress{position:fixed;top:0;left:0;right:0;height:2px;z-index:80;pointer-events:none;
+  background:linear-gradient(90deg,var(--accent),var(--accent-2));transform-origin:0 50%;transform:scaleX(0);
+  animation:md-progress-grow linear both;animation-timeline:scroll()}
+@keyframes md-progress-grow{from{transform:scaleX(0)}to{transform:scaleX(1)}}
+
+/* ---------- View Transitions：跨视图过渡（useRouter 包 startViewTransition） ---------- */
+:root:not([data-theme])::view-transition-old(*),:root:not([data-theme])::view-transition-new(*){animation-duration:var(--dur-3);animation-timing-function:var(--ease-out)}
+:root:not([data-theme])::view-transition-old(*){animation-name:md-view-out}
+:root:not([data-theme])::view-transition-new(*){animation-name:md-view-in}
+:root:not([data-theme])::view-transition-group(*){animation-duration:var(--dur-3)}
+@keyframes md-view-out{to{opacity:0;translate:0 -8px}}
+@keyframes md-view-in{from{opacity:0;translate:0 12px}to{opacity:1;translate:0 0}}
+
+/* ---------- 顶部栏：滚动响应（App.tsx 已挂 .scrolled 切换） ---------- */
+:root:not([data-theme]) .topbar{background:color-mix(in srgb,var(--bg) 52%,transparent);backdrop-filter:blur(22px) saturate(1.6);-webkit-backdrop-filter:blur(22px) saturate(1.6);border-color:color-mix(in srgb,var(--text) 10%,transparent);transition:height var(--dur-2) var(--ease-out),background var(--dur-2) var(--ease-out),border-color var(--dur-2) var(--ease-out)}
+:root:not([data-theme]) .topbar.scrolled{height:64px;background:color-mix(in srgb,var(--bg) 76%,transparent);border-color:color-mix(in srgb,var(--text) 15%,transparent)}
+:root:not([data-theme]) .topbar.scrolled .wordmark{font-size:17px}
+:root:not([data-theme]) .topbar nav button{font-size:13px;font-weight:500;transition:color var(--dur-1) var(--ease-out)}
+:root:not([data-theme]) .topbar nav button:not(.active):hover{color:var(--text)}
+:root:not([data-theme]) .topbar nav button.active:after{animation:md-underline-in var(--dur-2) var(--ease-out)}
+@keyframes md-underline-in{from{transform:scaleX(0)}to{transform:scaleX(1)}}
+:root:not([data-theme]) .wordmark{font-size:19px;letter-spacing:.01em;transition:font-size var(--dur-2) var(--ease-out)}
+
+/* ---------- 按钮：磁性光斑 + 扫光 + 统一按压 ---------- */
+:root:not([data-theme]) .button{position:relative;overflow:hidden;transition:transform var(--dur-1) var(--ease-out),box-shadow var(--dur-2) var(--ease-out),border-color var(--dur-1) var(--ease-out),background var(--dur-2) var(--ease-out),color var(--dur-1) var(--ease-out)}
+:root:not([data-theme]) .button:active:not(:disabled){transform:scale(.97)}
+:root:not([data-theme]) .button.primary{background:var(--grad-accent);color:var(--accent-ink);box-shadow:0 8px 24px var(--m-sheen)}
+:root:not([data-theme]) .button.primary:hover{box-shadow:0 12px 34px color-mix(in srgb,var(--accent) 36%,transparent)}
+:root:not([data-theme]) .button.primary:before{content:"";position:absolute;top:0;left:-80%;width:50%;height:100%;pointer-events:none;
+  background:linear-gradient(100deg,transparent,color-mix(in srgb,var(--text) 46%,transparent),transparent);transform:skewX(-18deg);transition:left .7s var(--ease-out)}
+:root:not([data-theme]) .button.primary:hover:before{left:130%}
+/* 磁性按钮：radial 高光跟随指针（坐标由 HomeView 的指针处理器写入） */
+:root:not([data-theme]) .button.primary:after{content:"";position:absolute;inset:0;pointer-events:none;
+  background:radial-gradient(120px circle at var(--md-sx) var(--md-sy),color-mix(in srgb,var(--text) 30%,transparent),transparent 70%);
+  opacity:0;transition:opacity var(--dur-2) var(--ease-out)}
+:root:not([data-theme]) .button.primary:hover:after{opacity:1}
+:root:not([data-theme]) .button.secondary{border-color:color-mix(in srgb,var(--text) 22%,transparent);background:color-mix(in srgb,var(--text) 6%,transparent);color:var(--text)}
+:root:not([data-theme]) .button.secondary:hover{border-color:color-mix(in srgb,var(--accent) 50%,transparent);color:var(--accent)}
+:root:not([data-theme]) .button.quiet{color:var(--text-2)}
+
+/* ---------- 维度卡：玻璃渐变面板 + 3D tilt + 抬升 + 流光 ---------- */
+:root:not([data-theme]) .medium-section{perspective:900px}
+:root:not([data-theme]) .medium-section .medium-item{position:relative;flex:1 1 250px;min-height:150px;padding:22px 22px 20px;border:1px solid var(--line);border-radius:var(--r-lg);overflow:hidden;
+  background:var(--m-card-surface);
+  transform:rotateX(var(--md-tilt-x)) rotateY(var(--md-tilt-y));transform-style:preserve-3d;
+  transition:translate var(--dur-2) var(--ease-out),box-shadow var(--dur-2) var(--ease-out),border-color var(--dur-2) var(--ease-out),transform var(--dur-2) var(--ease-out)}
+:root:not([data-theme]) .medium-section .medium-item:hover,:root:not([data-theme]) .medium-section .medium-item:focus-visible{translate:0 -5px;box-shadow:var(--m-glow-hover);border-color:color-mix(in srgb,var(--accent) 42%,transparent)}
+:root:not([data-theme]) .medium-section .medium-item:before{content:"";position:absolute;top:0;left:0;right:0;height:1px;background:linear-gradient(90deg,transparent,var(--m-sheen),transparent);opacity:.55;transition:opacity var(--dur-2)}
+:root:not([data-theme]) .medium-section .medium-item:after{content:"";position:absolute;top:0;left:-60%;width:40%;height:100%;pointer-events:none;
+  background:linear-gradient(100deg,transparent,color-mix(in srgb,var(--text) 10%,transparent),transparent);transform:skewX(-16deg);transition:left .65s var(--ease-out)}
+:root:not([data-theme]) .medium-section .medium-item:hover:after{left:130%}
+:root:not([data-theme]) .medium-section .medium-item strong{font-size:19px;letter-spacing:.01em}
+:root:not([data-theme]) .medium-section .medium-item small{color:var(--text-3)}
+:root:not([data-theme]) .medium-section .medium-item>svg:last-child{position:absolute;right:18px;bottom:18px;color:var(--text-4);transition:transform var(--dur-2) var(--ease-out),color var(--dur-2)}
+:root:not([data-theme]) .medium-section .medium-item:hover>svg:last-child{transform:translateX(5px);color:var(--accent)}
+:root:not([data-theme]) .medium-number{font-family:var(--font-mono);font-size:30px;font-weight:600;color:color-mix(in srgb,var(--text) 18%,transparent);transition:color var(--dur-2)}
+:root:not([data-theme]) .medium-section .medium-item:hover .medium-number{color:color-mix(in srgb,var(--accent) 55%,transparent)}
+
+/* 章节标题 */
+:root:not([data-theme]) .section-heading h2{font-size:var(--t-h2);letter-spacing:.01em}
+:root:not([data-theme]) .section-heading>span{font-family:var(--font-mono);font-size:11px;color:var(--text-4);letter-spacing:var(--ls-mid)}
+
+/* 入场编排：卡片 stagger + hero 三段上升，reduced-motion 由头部全局规则熔断。
+   只动 opacity/translate/scale 三个独立属性，绝不动 transform：卡片的 3D tilt
+   由 HomeView 写内联 transform，动画若用 transform（尤其 both 填充）会按住
+   内联值，悬停倾斜就永远看不到。backwards 只覆盖延迟期，结束后交还属性。 */
+@keyframes md-card-in{from{opacity:0;translate:0 10px;scale:.97}to{opacity:1;translate:0 0;scale:1}}
+:root:not([data-theme]) .medium-section .medium-item{animation:md-card-in .5s var(--ease-out) backwards}
+:root:not([data-theme]) .medium-section .medium-item:nth-child(2){animation-delay:var(--dur-stagger)}
+:root:not([data-theme]) .medium-section .medium-item:nth-child(3){animation-delay:calc(var(--dur-stagger) * 2)}
+:root:not([data-theme]) .medium-section .medium-item:nth-child(4){animation-delay:calc(var(--dur-stagger) * 3)}
+
+/* ---------- 响应式 ---------- */
+@media(max-width:800px){
+  :root:not([data-theme]) .orb-hero-inner{padding-top:52px}
+  :root:not([data-theme]) .home-heading h1{font-size:clamp(48px,13vw,64px)}
+  :root:not([data-theme]) .home-actions{margin-top:24px}
+  :root:not([data-theme]) .topbar.scrolled{height:56px}
+  :root:not([data-theme]) .md-blob{filter:blur(54px);opacity:.62}
+  :root:not([data-theme]) .medium-section{perspective:none}
+  :root:not([data-theme]) .medium-section .medium-item{flex:1 1 calc(50% - 5px);min-height:122px;padding:16px 16px 14px;border-radius:var(--r-md)}
+  :root:not([data-theme]) .medium-section .medium-item strong{font-size:16px}
+  :root:not([data-theme]) .medium-number{font-size:22px}
+  :root:not([data-theme]) .medium-section .medium-item:hover{translate:0 -2px}
+}
+@media(max-width:540px){
+  :root:not([data-theme]) .medium-section .medium-item{flex:none;min-height:64px;display:grid;grid-template-columns:auto 1fr auto;grid-template-rows:auto auto;align-items:center;gap:4px 10px;padding:10px 14px;border-radius:999px}
+  :root:not([data-theme]) .medium-number{display:none}
+  :root:not([data-theme]) .medium-section .medium-item:after,:root:not([data-theme]) .medium-section .medium-item:before{display:none}
+}

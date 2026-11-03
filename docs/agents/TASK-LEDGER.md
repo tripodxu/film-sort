@@ -10,6 +10,23 @@
 
 ## 进行中 / 最近
 
+### T-20261103-MODERN-POLISH · 现代主题二次打磨（PR #2） · 🔄 本地五门禁全绿，待线上走查
+
+- **来源**：fork `jerryxu1949/film-sort` 的 PR #2（`feat/modern-ui-overhaul`）。维护者复核后
+  在 PR 分支上修复缺陷，再 squash 合入 `main`。
+- **收口修复**：
+  - `HeroBackdrop`：指针监听改挂 `.orb-hero`（原挂 `pointer-events:none` 装饰层，事件收不到）；
+    坐标 clamp；`prefers-reduced-motion` 只画静态帧；rAF 收敛即停。
+  - `styles.css`：维度卡入场 `cardAppear … both` → `md-card-in … backwards`（只动
+    `opacity/translate/scale`），恢复内联 3D tilt；`:focus-visible` 补现代主题前缀。
+  - `useRouter`：View Transition 回调加 `flushSync`，且仅现代主题启用。
+  - 测试：新增 `src/modern-ui.test.ts` 5 条绊线。
+- **验证（本地）**：五道门禁全绿（check / lint / format:check / test / build）。
+- **线上验证**：⬜ 未执行——合并部署后需在 sort.logicc.top 走查视差、tilt、进度条、
+  跨视图过渡，并确认其他主题无位移泄漏。
+- **遗留风险**：scroll-driven animation 与 View Transition 均依赖浏览器支持，不支持时
+  自动静态/瞬切（已有降级），需线上 Chrome/Safari 各看一眼。
+
 ### T-20261101-JEV-FREE · Jev 站内免费通道（内置 Key 走 Worker Secret） · 👀 已部署，线上 API 已验证，待 UI 走查
 
 - **起因**：站主要求把一把 TypeSafe Key 以 Secret 形式放进 CF Worker（绝不明文进仓库），

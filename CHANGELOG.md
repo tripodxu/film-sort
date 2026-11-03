@@ -3,6 +3,22 @@
 > 2026-10-29 三批收口的完整复核记录（发现项、根因、验证、线上回归清单）见
 > [`docs/REVIEW-2026-10-29.md`](docs/REVIEW-2026-10-29.md)。
 
+## 2026-11-03 · 现代主题二次打磨（视差 / 3D tilt / 滚动进度 / 跨视图过渡）
+
+**背景**：PR #2 给默认「现代」主题加了一层动效：hero 渐变网格 + 指针视差 + 鼠标光斑、
+维度卡 3D tilt、滚动进度条、跨视图 View Transition。复核发现 4 处会让新特性失效或
+污染其他主题的实现问题，合并前修复。
+
+- **HeroBackdrop**：指针监听从 `pointer-events:none` 的装饰层移到 `.orb-hero` 宿主；
+  坐标 clamp 到 `[0,1]`；尊重 `prefers-reduced-motion`（只画静态帧）；rAF 收敛即停，
+  不再空闲满帧运行。
+- **维度卡入场**：`cardAppear`（`transform` + `both` 填充）改为 `md-card-in`
+  （`opacity/translate/scale` + `backwards`），不再按住 HomeView 写入的内联 3D tilt。
+- **主题隔离**：`.medium-item:focus-visible` 补上 `:root:not([data-theme])` 前缀。
+- **View Transition**：回调内 `flushSync`，确保浏览器拍到 React 提交后的新快照；
+  非现代主题直接同步切换，不套用只为其定义的过渡样式。
+- **测试**：新增 `src/modern-ui.test.ts`（5 条绊线），锁定上述事实。
+
 ## 2026-11-01 · Jev 站内免费通道（内置 Key 走 Worker Secret）
 
 **背景**：Jev（TypeSafe 快排/代判/预测分歧）此前要求每个用户自己申请 API Key。
