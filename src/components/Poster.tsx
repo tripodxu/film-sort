@@ -3,6 +3,7 @@ import { BookOpen, Film, Library, Music2, RotateCcw } from "lucide-react";
 import type { Artwork, MediaKind } from "../data/media";
 import { mediaTypeForKind, posterMediaKey } from "../../shared/posterKey";
 import { emptyPosterState, type PosterOutcome } from "../lib/posterOutcome";
+import { rememberFailure } from "../lib/failureReport";
 import {
   memorySuppliesCover,
   mergeCoverRecall,
@@ -323,8 +324,8 @@ function readRetryHint(): string {
 
 function reportImageFailure(work: Artwork, kind: MediaKind, url: string) {
   const key = `${kind}|${work.title}|${url}`;
-  if (reportedFailures.has(key)) return;
-  reportedFailures.add(key);
+  // 有界去重：长会话里集合不能随失败图数量单调增长。
+  if (!rememberFailure(reportedFailures, key)) return;
   void fetch("/api/poster-errors/client", {
     method: "POST",
     headers: { "content-type": "application/json" },
