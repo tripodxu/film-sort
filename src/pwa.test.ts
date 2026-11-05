@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { existsSync, readFileSync } from "node:fs";
+import { runInNewContext } from "node:vm";
 
 /** PWA 验收绊线（T-20261014-08）：manifest/图标/Service Worker 三件套齐了
  *  才算可安装。文件级断言（不跑浏览器）：字段齐、图标真实存在且非空、
@@ -75,5 +76,88 @@ describe("PWA 可安装三件套", () => {
     const code = read("src/lib/exportPng.ts");
     expect(code).toMatch(/mapPool\(\s*posterCandidates/);
     expect(code).toMatch(/function loadImage\(url: string, timeoutMs = \d+\)/);
+  });
+});
+
+/** 在隔离 realm 里加载 public/sw.js，用桩验证 fetch 事件的真实分支走向。 */
+function swHarness() {
+  const handlers: Record<string, (event: unknown) => void> = {};
+  const state = { fetchCalls: 0, matchCalls: 0, putCalls: 0 };
+  let upstream = new Response("ok");
+  const caches = {
+    match: async () => {
+      state.matchCalls += 1;
+      return undefined;
+    },
+    open: async () => ({ put: async () => void (state.putCalls += 1) }),
+    keys: async () => [],
+    delete: async () => true,
+  };
+  const self = {
+    addEventListener: (name: string, fn: (event: unknown) => void) => {
+      handlers[name] = fn;
+    },
+    skipWaiting: async () => undefined,
+    clients: { claim: async () => undefined },
+    location: { origin: "https://sort.logicc.top" },
+  };
+  runInNewContext(read("public/sw.js"), {
+    self,
+    caches,
+    fetch: async () => {
+      state.fetchCalls += 1;
+      return upstream;
+    },
+    Request,
+    Response,
+    Headers,
+    URL,
+  });
+  const fire = async (url: string, response: Response): Promise<Response> => {
+    upstream = response;
+    let pending: Promise<Response> | undefined;
+    handlers.fetch({
+      request: new Request(url),
+      respondWith: (promise: Promise<Response>) => {
+        pending = promise;
+      },
+    });
+    return await (pending as Promise<Response>);
+  };
+  return { state, fire };
+}
+
+/** 手工构造的 Response 在 Node 里 type 是 "default"，浏览器 fetch 的才是 "basic"。 */
+function swResponse(cacheControl: string): Response {
+  const response = new Response("ok", {
+    status: 200,
+    headers: { "cache-control": cacheControl },
+  });
+  Object.defineProperty(response, "type", { value: "basic" });
+  return response;
+}
+
+describe("Service Worker 的取用顺序与缓存意图", () => {
+  it("无 hash 的 /admin/app.js 走 network-first，且 no-store 响应不写缓存", async () => {
+    const { state, fire } = swHarness();
+    const response = await fire("https://sort.logicc.top/admin/app.js", swResponse("no-store"));
+    expect(await response.text()).toBe("ok");
+    expect(state.fetchCalls).toBe(1);
+    expect(state.matchCalls).toBe(0); // 没有先查缓存
+    expect(state.putCalls).toBe(0); // 尊重 no-store
+  });
+
+  it("network-first 命中可缓存响应时写入缓存，离线可回退", async () => {
+    const { state, fire } = swHarness();
+    await fire("https://sort.logicc.top/vendor/chart.umd.js", swResponse("public, max-age=60"));
+    expect(state.fetchCalls).toBe(1);
+    expect(state.putCalls).toBe(1);
+  });
+
+  it("带 hash 的构建产物仍是 cache-first（不被新分支波及）", async () => {
+    const { state, fire } = swHarness();
+    await fire("https://sort.logicc.top/assets/index-abc123.js", swResponse("public, max-age=60"));
+    expect(state.matchCalls).toBe(1);
+    expect(state.fetchCalls).toBe(1); // 桩里缓存未命中，才回源
   });
 });

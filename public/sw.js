@@ -8,6 +8,19 @@ const STATIC_ASSETS = ["/", "/index.html"];
 // 不预缓存这些，离线打开未访问过的路由会因动态 import 失败而落到 ErrorBoundary。
 const PRECACHE_ASSETS = /*__PRECACHE_ASSETS__*/ [];
 
+// 这些 URL 不带内容 hash，或由 Worker 动态生成并标记 no-store。
+// cache-first 会把它们钉在 RUNTIME_CACHE 里：BUILD_ID 只在前端构建时变，
+// 只改 Worker 脚本时桶名不变，后台就会一直跑旧版 /admin/app.js。
+// 统一走 network-first，离线时仍回退已缓存的那一份。
+const NETWORK_FIRST_PATHS = ["/admin/app.js", "/vendor/chart.umd.js", "/manifest.json", "/sw.js"];
+
+/** 只缓存「不可变且服务端允许」的成功响应。 */
+function cacheableResponse(response) {
+  if (!response || response.status !== 200 || response.type !== "basic") return false;
+  const directive = response.headers.get("cache-control") ?? "";
+  return !/(?:no-store|no-cache|private)/i.test(directive);
+}
+
 self.addEventListener("install", (event) => {
   event.waitUntil(
     caches.open(RUNTIME_CACHE).then(async (cache) => {
@@ -66,13 +79,28 @@ self.addEventListener("fetch", (event) => {
     );
     return;
   }
+  const pathname = new URL(request.url).pathname;
+  if (NETWORK_FIRST_PATHS.includes(pathname)) {
+    event.respondWith(
+      fetch(request)
+        .then((response) => {
+          if (cacheableResponse(response)) {
+            const clone = response.clone();
+            caches.open(RUNTIME_CACHE).then((cache) => cache.put(request, clone));
+          }
+          return response;
+        })
+        .catch(async () => (await caches.match(request)) ?? Response.error()),
+    );
+    return;
+  }
   // 静态资源 cache-first（构建产物文件名带 hash，内容不可变）
   event.respondWith(
     caches.match(request).then((cached) => {
       if (cached) return cached;
       return fetch(request)
         .then((response) => {
-          if (!response || response.status !== 200 || response.type !== "basic") return response;
+          if (!cacheableResponse(response)) return response;
           const clone = response.clone();
           caches.open(RUNTIME_CACHE).then((cache) => cache.put(request, clone));
           return response;
