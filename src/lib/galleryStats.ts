@@ -91,3 +91,16 @@ export function profileStats(profile: Pick<ArtisticProfile, "rankings">): Profil
     span: decadeSpan(items),
   };
 }
+
+/**
+ * gallery 主题所有作品轨道的渲染键。
+ *
+ * `Artwork.id` 是可选的：手动录入 / 文本导入的清单常整批没有 id，
+ * 直接 `key={work.id}` 会产生一片 `undefined` 重复键，React 错位复用 DOM，
+ * 于是「代表 N 件」这类按位置取值的文案会贴到错误作品上
+ * （同 `docs/agents/PITFALLS.md` 4.66 的撞车形状）。
+ * 一律带上榜单内的稳定下标，保证「有 id / 无 id / 重复 id」混排时也绝对唯一。
+ */
+export function galleryWorkKey(work: { id?: string }, index: number): string {
+  return work.id ? `id:${work.id}:${index}` : `index:${index}`;
+}

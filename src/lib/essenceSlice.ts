@@ -18,7 +18,8 @@ export interface EssenceCandidate {
 export interface EssencePick {
   /** 在入参数组中的下标。 */
   index: number;
-  /** 该件与已选集合的最小相似度（越低越「新」）。 */
+  /** 被选中时相对「当时已选集合」的最小差异（0–1，越大越「新」）；
+   *  锚点（首件）没有参照集合，记 1。 */
   novelty: number;
 }
 
@@ -62,8 +63,20 @@ function jaccard(a: Set<string>, b: Set<string>): number {
   return shared / (a.size + b.size - shared);
 }
 
-function creatorKey(creator: string | undefined): string {
-  return creator?.trim().toLocaleLowerCase() ?? "";
+/** 运行时脏数据守卫：导入的 TXT/JSON 不保证字段类型，非字符串按「缺失」处理，
+ *  绝不让 `undefined.trim()` 把 gallery 画像页打进 ErrorBoundary。 */
+function safeText(value: unknown): string {
+  return typeof value === "string" ? value : "";
+}
+
+/** NaN / Infinity 也是 `typeof === "number"`。放进来会让相似度变 NaN，
+ *  `novelty[i] > novelty[best]` 恒 false，最远点采样静默退化成「取前 N 名」。 */
+function finiteYear(value: unknown): number | undefined {
+  return typeof value === "number" && Number.isFinite(value) ? value : undefined;
+}
+
+function creatorKey(creator: unknown): string {
+  return safeText(creator).trim().toLocaleLowerCase();
 }
 
 /** 预计算后的特征：分词只做一次，避免最远点采样里每对比较都重新分词。 */
@@ -75,9 +88,9 @@ interface PreparedCandidate {
 
 function prepareCandidate(candidate: EssenceCandidate): PreparedCandidate {
   return {
-    tokens: titleTokens(candidate.title),
+    tokens: titleTokens(safeText(candidate.title)),
     creator: creatorKey(candidate.creator),
-    year: typeof candidate.year === "number" ? candidate.year : undefined,
+    year: finiteYear(candidate.year),
   };
 }
 
@@ -109,6 +122,7 @@ export function essenceSlice(items: readonly EssenceCandidate[], count: number):
   if (total === 0 || count <= 0) return { picks: [], represented: [], coverage: 0 };
   if (count >= total) {
     return {
+      // 全选时没有「被谁代表」的新颖度概念，统一记 0。
       picks: items.map((_, index) => ({ index, novelty: 0 })),
       represented: items.map(() => 1),
       coverage: 100,
@@ -117,6 +131,8 @@ export function essenceSlice(items: readonly EssenceCandidate[], count: number):
 
   const prepared = items.map(prepareCandidate);
   const selected: number[] = [0];
+  // 被选中那一刻的新颖度；锚点没有参照集合，记 1。
+  const selectedNovelty: number[] = [1];
   const novelty = new Array<number>(total).fill(0);
   for (let i = 0; i < total; i++) novelty[i] = 1 - preparedSimilarity(prepared[0], prepared[i]);
   novelty[0] = -1;
@@ -129,6 +145,9 @@ export function essenceSlice(items: readonly EssenceCandidate[], count: number):
     }
     if (best === -1) break;
     selected.push(best);
+    // 先存再置 -1：旧实现把这一步的值丢掉，最后拿「最终全部切片」重算，
+    // 算出来的不是接口文档写的「被选中时」那个量。
+    selectedNovelty.push(novelty[best]);
     novelty[best] = -1;
     for (let i = 0; i < total; i++) {
       if (novelty[i] < 0) continue;
@@ -137,15 +156,10 @@ export function essenceSlice(items: readonly EssenceCandidate[], count: number):
     }
   }
 
-  const picks: EssencePick[] = selected.map((index, order) => {
-    // 首件没有「与已选集合」的概念，记它与其余切片的差异；其余取最小距离。
-    let nearest = 1;
-    for (const other of selected) {
-      if (other === index) continue;
-      nearest = Math.min(nearest, 1 - preparedSimilarity(prepared[index], prepared[other]));
-    }
-    return { index, novelty: order === 0 ? nearest : nearest };
-  });
+  const picks: EssencePick[] = selected.map((index, order) => ({
+    index,
+    novelty: selectedNovelty[order],
+  }));
 
   const covered = items.filter((_, itemIndex) =>
     selected.some(

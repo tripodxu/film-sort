@@ -1,6 +1,8 @@
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
-import { essenceSimilarity, essenceSlice } from "./essenceSlice";
+import { essenceSimilarity, essenceSlice, type EssenceCandidate } from "./essenceSlice";
+import { galleryWorkKey } from "./galleryStats";
 
 const work = (title: string, creator: string, year: number) => ({ title, creator, year });
 
@@ -65,5 +67,64 @@ describe("essenceSlice", () => {
     expect(essenceSimilarity(base, work("Night Watch", "乙", 2000))).toBeLessThan(1);
     expect(essenceSimilarity(base, work("完全不同", "乙", 2000))).toBeLessThan(1);
     expect(essenceSimilarity(base, work("Night Watch", "甲", 2040))).toBeLessThan(1);
+  });
+
+  it("导入清单的脏字段不击穿最远点采样，也不抛错", () => {
+    // 模拟 TXT/JSON 导入后未归一化的真实形状：NaN / Infinity / 字符串年份 /
+    // 非字符串创作者 / 缺标题。旧实现要么抛 TypeError，要么让相似度变 NaN，
+    // 使采样静默退化成「按顺序取前 N 件」。
+    const dirty = [
+      { title: "夜巡", creator: "甲", year: 2000 },
+      { title: "夜巡 II", creator: "甲", year: Number.NaN },
+      { title: "夜巡 III", creator: "甲", year: Number.POSITIVE_INFINITY },
+      { title: "完全不同的书", creator: 42, year: "2020" },
+      { title: undefined, creator: null, year: Number.NEGATIVE_INFINITY },
+    ] as unknown as EssenceCandidate[];
+
+    expect(() => essenceSlice(dirty, 3)).not.toThrow();
+    const slice = essenceSlice(dirty, 3);
+    expect(slice.picks).toHaveLength(3);
+    expect(slice.picks.every((pick) => Number.isFinite(pick.novelty))).toBe(true);
+    expect(slice.picks.map((pick) => pick.index)).not.toEqual([0, 1, 2]);
+    expect(slice.represented.reduce((sum, value) => sum + value, 0)).toBe(dirty.length);
+    expect(slice.coverage).toBeGreaterThanOrEqual(0);
+    expect(slice.coverage).toBeLessThanOrEqual(100);
+    expect(Number.isFinite(essenceSimilarity(dirty[0], dirty[1]))).toBe(true);
+    expect(Number.isFinite(essenceSimilarity(dirty[3], dirty[4]))).toBe(true);
+  });
+
+  it("picks[].novelty 是被选中时相对当时已选集合的最小差异，锚点记 1", () => {
+    const items = [
+      work("夜巡", "甲", 2000),
+      work("夜巡 II", "甲", 2001),
+      work("夜巡 III", "甲", 2002),
+      work("完全不同的书", "乙", 2020),
+      work("另一本", "丙", 1988),
+    ];
+    const result = essenceSlice(items, 3);
+    expect(result.picks[0].novelty).toBe(1);
+    for (let order = 1; order < result.picks.length; order++) {
+      const picked = items[result.picks[order].index];
+      const earlier = result.picks.slice(0, order).map((pick) => items[pick.index]);
+      const expected = Math.min(...earlier.map((other) => 1 - essenceSimilarity(picked, other)));
+      expect(result.picks[order].novelty).toBeCloseTo(expected, 10);
+    }
+  });
+});
+
+describe("galleryWorkKey", () => {
+  it("多件无 id 与重复 id 混排时，渲染键仍互不重复", () => {
+    const works = [{}, { id: "a" }, {}, { id: "a" }];
+    const keys = works.map((item, index) => galleryWorkKey(item, index));
+    expect(new Set(keys).size).toBe(keys.length);
+  });
+
+  it("精华切片与 2-5 名两条轨道都不许再拿可选 id 直接当 key", () => {
+    const code = readFileSync("src/components/GalleryBento.tsx", "utf8")
+      .replace(/\/\*[\s\S]*?\*\//g, "")
+      .replace(/^[^\S\n]*\/\/.*$/gm, "");
+    expect(code).toContain("key={galleryWorkKey(work, index)}");
+    expect(code).toContain("key={galleryWorkKey(work, offset + 1)}");
+    expect(code).not.toContain("key={work.id}");
   });
 });

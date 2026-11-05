@@ -8,6 +8,7 @@ import {
   GALLERY_KINDS,
   decadeSlices,
   decadeSpan,
+  galleryWorkKey,
   kindCounts,
   profileStats,
 } from "../lib/galleryStats";
@@ -200,8 +201,8 @@ export function GalleryBento({
         )}
         {activeRanking.items.length > 1 && (
           <ol className="gl-hero-next" aria-label={t("第 2 至 5 名", "Runners-up")}>
-            {activeRanking.items.slice(1, 5).map((work) => (
-              <li key={work.id}>
+            {activeRanking.items.slice(1, 5).map((work, offset) => (
+              <li key={galleryWorkKey(work, offset + 1)}>
                 <button onClick={() => openArtworkDetail(work, activeRanking.kind)}>
                   <span className="gl-hero-next-rank">{String(work.rank).padStart(2, "0")}</span>
                   <Poster work={work} kind={activeRanking.kind} />
@@ -305,7 +306,7 @@ export function GalleryBento({
               const meta = [work.creator, work.year].filter(Boolean).join(" · ");
               const represented = essence.represented[order];
               return (
-                <li key={work.id} className="gl-essence-item">
+                <li key={galleryWorkKey(work, index)} className="gl-essence-item">
                   <button
                     onClick={() => openArtworkDetail(work, activeRanking.kind)}
                     aria-label={t(
