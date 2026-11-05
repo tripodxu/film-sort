@@ -7,6 +7,8 @@
  * 不折叠成 null——界面要能说清「是限流、没配置,还是 key 错了」。
  */
 
+import { clearConfig, readJsonConfig, writeJsonConfig } from "./localConfig";
+
 export type JevErrorCode =
   | "invalid_config"
   | "builtin_unavailable"
@@ -25,32 +27,19 @@ export interface JevUserConfig {
 const CONFIG_KEY = "art-rank:typesafe-config";
 
 export function readTypesafeConfig(): JevUserConfig | null {
-  try {
-    const raw = JSON.parse(localStorage.getItem(CONFIG_KEY) ?? "") as unknown;
-    if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
-    const cfg = raw as Record<string, unknown>;
-    return typeof cfg.apiKey === "string" && cfg.apiKey ? { apiKey: cfg.apiKey } : null;
-  } catch {
-    return null;
-  }
+  const raw = readJsonConfig(CONFIG_KEY);
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
+  const cfg = raw as Record<string, unknown>;
+  return typeof cfg.apiKey === "string" && cfg.apiKey ? { apiKey: cfg.apiKey } : null;
 }
 
 /** 返回 false 表示浏览器存储不可用(隐私模式),调用方应提示「仅本次会话有效」。 */
 export function writeTypesafeConfig(config: JevUserConfig): boolean {
-  try {
-    localStorage.setItem(CONFIG_KEY, JSON.stringify(config));
-    return true;
-  } catch {
-    return false;
-  }
+  return writeJsonConfig(CONFIG_KEY, config);
 }
 
 export function clearTypesafeConfig(): void {
-  try {
-    localStorage.removeItem(CONFIG_KEY);
-  } catch {
-    /* 隐私模式 */
-  }
+  clearConfig(CONFIG_KEY);
 }
 
 /** 把已有榜单压成紧凑品味档案:每榜单一行 `[kind] 标题: 前二十名 > 分隔`,总长截断。 */

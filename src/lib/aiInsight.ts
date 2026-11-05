@@ -8,6 +8,7 @@
 
 import type { MediaKind } from "../data/media";
 import type { ArtisticProfile, DimensionComparison, RankingExport } from "./profile";
+import { clearConfig, readJsonConfig, writeJsonConfig } from "./localConfig";
 
 export type AiScene = "ranking" | "profile" | "compare";
 export type AiLocale = "zh" | "en";
@@ -59,47 +60,34 @@ const PROTOCOLS: AiProtocol[] = ["auto", "chat", "responses", "anthropic", "gemi
 // ===== 配置存取（隐私模式下静默降级）=====
 
 export function readAiConfig(): AiUserConfig | null {
-  try {
-    const raw = JSON.parse(localStorage.getItem(CONFIG_KEY) ?? "") as unknown;
-    if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
-    const cfg = raw as Record<string, unknown>;
-    if (
-      typeof cfg.baseUrl !== "string" ||
-      typeof cfg.apiKey !== "string" ||
-      typeof cfg.model !== "string" ||
-      !cfg.baseUrl ||
-      !cfg.apiKey ||
-      !cfg.model
-    )
-      return null;
-    const protocol = cfg.protocol as AiProtocol | undefined;
-    return {
-      baseUrl: cfg.baseUrl,
-      apiKey: cfg.apiKey,
-      model: cfg.model,
-      ...(protocol && PROTOCOLS.includes(protocol) ? { protocol } : {}),
-    };
-  } catch {
+  const raw = readJsonConfig(CONFIG_KEY);
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
+  const cfg = raw as Record<string, unknown>;
+  if (
+    typeof cfg.baseUrl !== "string" ||
+    typeof cfg.apiKey !== "string" ||
+    typeof cfg.model !== "string" ||
+    !cfg.baseUrl ||
+    !cfg.apiKey ||
+    !cfg.model
+  )
     return null;
-  }
+  const protocol = cfg.protocol as AiProtocol | undefined;
+  return {
+    baseUrl: cfg.baseUrl,
+    apiKey: cfg.apiKey,
+    model: cfg.model,
+    ...(protocol && PROTOCOLS.includes(protocol) ? { protocol } : {}),
+  };
 }
 
 /** 返回 false 表示浏览器存储不可用（隐私模式），调用方应提示「仅本次会话有效」。 */
 export function writeAiConfig(config: AiUserConfig): boolean {
-  try {
-    localStorage.setItem(CONFIG_KEY, JSON.stringify(config));
-    return true;
-  } catch {
-    return false;
-  }
+  return writeJsonConfig(CONFIG_KEY, config);
 }
 
 export function clearAiConfig(): void {
-  try {
-    localStorage.removeItem(CONFIG_KEY);
-  } catch {
-    /* 隐私模式 */
-  }
+  clearConfig(CONFIG_KEY);
 }
 
 export function readAiLength(): AiLength {
