@@ -72,6 +72,7 @@ import {
 } from "./douban";
 import { otherSearch, otherDetail, otherCandidateReport } from "./other";
 import { DeadlineError, withDeadline } from "./deadline";
+import { ApiLogQueue } from "./apiLog";
 import {
   gdSearch,
   gdPlayUrl,
@@ -382,43 +383,12 @@ function withSecurityHeaders(response: Response): Response {
 }
 
 // ===== API Logging (batched) =====
-const logQueue: Array<[string, string, number, number, string, string | null, string | null]> = [];
-let logFlushScheduled = false;
-let cachedDB: D1Database | undefined;
-function enqueueLog(
-  db: D1Database | undefined,
-  path: string,
-  method: string,
-  status: number,
-  durationMs: number,
-  source: string,
-  error?: string,
-  ip?: string,
-) {
-  if (db) cachedDB = db;
-  logQueue.push([path, method, status, durationMs, source, error ?? null, ip ?? null]);
-  if (logQueue.length >= 50) void flushLogs();
-  else if (!logFlushScheduled) {
-    logFlushScheduled = true;
-    setTimeout(() => void flushLogs(), 5000);
-  }
-}
-async function flushLogs() {
-  logFlushScheduled = false;
-  const batch = logQueue.splice(0);
-  if (!batch.length || !cachedDB) return;
-  try {
-    const stmt = cachedDB.prepare(
-      "INSERT INTO api_logs (path, method, status, duration_ms, source, error, ip) VALUES (?, ?, ?, ?, ?, ?, ?)",
-    );
-    await cachedDB.batch(
-      batch.map(([p, m, s, d, src, e, ip]) => stmt.bind(p, m, s, d, src, e, ip)),
-    );
-  } catch {
-    /* logging should never break requests */
-  }
-}
-async function logApiCall(
+// 日志队列独立于路由：flush 的承诺必须能交给每个请求的 ctx.waitUntil，
+// 否则 5 秒后的 D1 写入没人等它（worker/apiLog.ts 的修复说明）。
+const apiLogs = new ApiLogQueue();
+
+function logApiCall(
+  ctx: ExecutionContext,
   env: Env | undefined,
   path: string,
   method: string,
@@ -427,9 +397,17 @@ async function logApiCall(
   source: string,
   error?: string,
   ip?: string,
-) {
+): void {
   if (!env?.DB) return;
-  enqueueLog(env.DB, path, method, status, durationMs, source, error, ip);
+  apiLogs.enqueue(ctx, env.DB, [
+    path,
+    method,
+    status,
+    durationMs,
+    source,
+    error ?? null,
+    ip ?? null,
+  ]);
 }
 
 // ===== Admin Auth =====
@@ -2903,9 +2881,7 @@ export default {
         const hit = await edgeCache.match(edgeKey);
         if (hit) {
           if (isApi)
-            ctx.waitUntil(
-              logApiCall(env, path, request.method, hit.status, Date.now() - t0, "cache"),
-            );
+            logApiCall(ctx, env, path, request.method, hit.status, Date.now() - t0, "cache");
           return hit;
         }
       }
@@ -2933,17 +2909,16 @@ export default {
         request.headers.get("cf-connecting-ip") ??
         request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ??
         "";
-      ctx.waitUntil(
-        logApiCall(
-          env,
-          path,
-          request.method,
-          response.status,
-          duration,
-          response.status >= 400 ? "error" : "ok",
-          error,
-          ip,
-        ),
+      logApiCall(
+        ctx,
+        env,
+        path,
+        request.method,
+        response.status,
+        duration,
+        response.status >= 400 ? "error" : "ok",
+        error,
+        ip,
       );
     }
 
