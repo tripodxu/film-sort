@@ -10,6 +10,29 @@
 
 ## 进行中 / 最近
 
+### T-20261105-FULL-AUDIT · 全量代码审计 + 10 点逐项优化 · 🔄 本地门禁全绿，待线上验证
+
+- **来源**：2026-11-05 对当前工作树 `85d5e6b` 的独立全量复核。方法、10 处发现、
+  复核通过项与「登记不做项」见 [`docs/AUDIT-2026-11-05.md`](../AUDIT-2026-11-05.md)；
+  逐点改法 / 验收 / 提交序列见 [`docs/PLAN-2026-11-05.md`](../PLAN-2026-11-05.md)。
+- **产出**：两份新文档 + 9 个代码提交（`fa79472` → `b4be0e8`），每点独立 commit、
+  均 `--no-gpg-sign`，不推送。新增 7 个测试文件，全部带红队变异自检。
+- **改动**：`worker/apiLog.ts`（新）、`worker/index.ts`、`worker/ai.ts`、
+  `src/lib/essenceSlice.ts`、`src/lib/galleryStats.ts`、`src/components/GalleryBento.tsx`、
+  `public/sw.js`、动态列表 key、两处定时器清理、`Poster.tsx` 上报上界、
+  `src/lib/localConfig.ts`（新）与两个调用方。
+- **验证（本地）**：每点五道门禁全绿；收口 `npm run gates`（含 `docs:facts` + `dev:smoke`）全绿。
+  零视觉改动，未跑截图基线。期间一次 Vitest 缓存并发竞态按 `PITFALLS.md` 3.13 处理。
+- **状态**：按铁律**未到 `sort.logicc.top` 实机验证，不标 ✅**；工作区干净、无未提交改动。
+- **下一步（交接给上线走查）**：push 后按计划文档 §2 走查五项——
+  ① `/admin` 三个页签能否加载到新脚本（O-04 改了 `/admin/app.js` 取用路径）；
+  ② 随便打一个 API 后 `api_logs` 是否真的落行（O-01 的行为只能线上验）；
+  ③ gallery 主题画像页精华切片的「代表 N 件」文案是否贴在正确作品上；
+  ④ 比较页导入两份画像后勾选 / 展开态；⑤ 分享页连点复制、画像页连点发布。
+- **遗留风险**：`apiLogQueue` 让每个 API 请求的 `waitUntil` 最多多等一个 5 秒批次，
+  属预期的生命周期延长；若线上出现 waitUntil 超时告警，优先调小 `FLUSH_DELAY_MS`。
+  会话 token 明文入库、大文件拆分、限流 DO 化等仍按审计报告 §4 登记不做。
+
 ### T-20261103-MODERN-POLISH · 现代主题二次打磨（PR #2） · 🔄 已合并（`ed28cdf`），待线上走查
 
 - **来源**：fork `jerryxu1949/film-sort` 的 PR #2（`feat/modern-ui-overhaul`）。维护者复核后
