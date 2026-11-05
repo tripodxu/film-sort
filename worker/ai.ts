@@ -611,6 +611,10 @@ export async function callAi(
   const { url, init } = buildRequest(cfg, spec, maxTokens);
   let response: Response;
   const timeoutMs = opts.timeoutMs ?? 60000;
+  // 兜底竞速的定时器必须清掉：快路径上它永远不会触发，留着就是每次请求
+  // 多一个 timeoutMs+5000 的挂起定时器，把 workerd isolate 钉住。
+  // 与 worker/deadline.ts 的 withDeadline 保持同一写法。
+  let raceTimer: ReturnType<typeof setTimeout> | undefined;
   try {
     response = await Promise.race([
       fetchImpl(url, {
@@ -623,12 +627,14 @@ export async function callAi(
       } as RequestInit),
       // 兜底竞速：本地 miniflare 的 outbound fetch 会偶发挂死且 signal 不生效，
       // 生产 workerd 上该分支永不触发（signal 先到），双保险不改变正常路径。
-      new Promise<never>((_, reject) =>
-        setTimeout(() => reject(new Error("fetch race timeout")), timeoutMs + 5000),
-      ),
+      new Promise<never>((_, reject) => {
+        raceTimer = setTimeout(() => reject(new Error("fetch race timeout")), timeoutMs + 5000);
+      }),
     ]);
   } catch {
     throw new AiError("upstream_error", 502, "AI upstream unreachable");
+  } finally {
+    if (raceTimer !== undefined) clearTimeout(raceTimer);
   }
   if (response.status >= 300 && response.status < 400)
     throw new AiError("invalid_config", 400, "AI baseUrl redirects are not allowed");

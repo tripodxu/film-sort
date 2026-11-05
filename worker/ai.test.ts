@@ -260,6 +260,58 @@ describe("callAi 协议适配", () => {
     });
     expect(text.length).toBe(2000);
   });
+  it("快路径清理兜底竞速定时器：setTimeout 的每个句柄都被 clearTimeout", async () => {
+    const setTimeoutSpy = vi.spyOn(globalThis, "setTimeout");
+    const clearTimeoutSpy = vi.spyOn(globalThis, "clearTimeout");
+    try {
+      const fetchImpl = stubFetch(() => json({ choices: [{ message: { content: "你好" } }] }));
+      await expect(
+        callAi(resolvedFor("chat"), spec(), { fetchImpl, timeoutMs: 60_000 }),
+      ).resolves.toBe("你好");
+      const handles = setTimeoutSpy.mock.results.map((result) => result.value);
+      const cleared = clearTimeoutSpy.mock.calls.map(([handle]) => handle);
+      expect(handles.length).toBeGreaterThan(0);
+      for (const handle of handles) expect(cleared).toContain(handle);
+    } finally {
+      setTimeoutSpy.mockRestore();
+      clearTimeoutSpy.mockRestore();
+    }
+  });
+
+  it("上游 4xx 的失败路径同样清理定时器", async () => {
+    const setTimeoutSpy = vi.spyOn(globalThis, "setTimeout");
+    const clearTimeoutSpy = vi.spyOn(globalThis, "clearTimeout");
+    try {
+      await expect(
+        callAi(resolvedFor("chat"), spec(), { fetchImpl: stubFetch(() => json({}, 401)) }),
+      ).rejects.toMatchObject({ code: "upstream_auth_failed" });
+      const handles = setTimeoutSpy.mock.results.map((result) => result.value);
+      const cleared = clearTimeoutSpy.mock.calls.map(([handle]) => handle);
+      for (const handle of handles) expect(cleared).toContain(handle);
+    } finally {
+      setTimeoutSpy.mockRestore();
+      clearTimeoutSpy.mockRestore();
+    }
+  });
+
+  it("兜底竞速真的超时时仍归类为 upstream_error，且定时器被清理", async () => {
+    vi.useFakeTimers();
+    try {
+      const neverSettles = (() => new Promise<Response>(() => {})) as unknown as typeof fetch;
+      const pending = callAi(resolvedFor("chat"), spec(), {
+        fetchImpl: neverSettles,
+        timeoutMs: 10,
+      });
+      // 先挂上 rejection 处理器再推进时钟，否则 promise 会在断言注册前 reject，
+      // 被 Node 记成 unhandled rejection（假失败）。
+      const assertion = expect(pending).rejects.toMatchObject({ code: "upstream_error" });
+      await vi.advanceTimersByTimeAsync(10 + 5000 + 1);
+      await assertion;
+      expect(vi.getTimerCount()).toBe(0);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });
 
 // ===== 自动探测 =====
