@@ -4,6 +4,7 @@ import { Poster } from "../components/Poster";
 import { MetricHelp } from "../components/MetricHelp";
 import { RankingEntryRow } from "../components/RankingEntryRow";
 import type { RankingExport } from "../lib/profile";
+import { rankingRowKey } from "../lib/rankingKey";
 import { AiInsightCard } from "../components/AiInsightCard";
 import { JevDivergenceCard } from "../components/JevDivergenceCard";
 import { buildCompareData } from "../lib/aiInsight";
@@ -283,7 +284,7 @@ export function CompareView({
                 );
                 return (
                   <RankingEntryRow
-                    key={idx}
+                    key={rankingRowKey(entry, idx)}
                     entry={entry}
                     label={label}
                     showCheck={showCheck}
@@ -317,7 +318,7 @@ export function CompareView({
                 );
                 return (
                   <RankingEntryRow
-                    key={idx}
+                    key={rankingRowKey(entry, idx)}
                     entry={entry}
                     label={label}
                     showCheck={showCheck}

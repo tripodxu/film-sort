@@ -32,6 +32,7 @@ import {
   type RankingExport,
   type RankedArtwork,
 } from "./lib/profile";
+import { rankingRowKey } from "./lib/rankingKey";
 import { importCollection } from "./lib/collections";
 import type { ExportLayout } from "./lib/exportPng";
 import { Modal } from "./components/Modal";
@@ -1895,7 +1896,7 @@ export default function App() {
           <div className="u-col">
             {peer.rankings.map((entry, idx) => (
               <button
-                key={idx}
+                key={rankingRowKey(entry, idx)}
                 className="button secondary"
                 style={{ justifyContent: "flex-start", gap: 12 }}
                 onClick={() => {
