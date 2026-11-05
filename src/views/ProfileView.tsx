@@ -98,6 +98,15 @@ export function ProfileView({
   const [showPublishModal, setShowPublishModal] = useState(false);
   const [publishTarget, setPublishTarget] = useState<"ranking" | "profile">("ranking");
   const [publishBurst, setPublishBurst] = useState(false);
+  // 「发布成功」动效是一次性定时器：卸载后仍 setState 会留活引用，
+  // 连点发布还会由旧定时器提前熄灭动效，统一走 ref + 卸载清理。
+  const publishBurstTimer = useRef<number | null>(null);
+  useEffect(
+    () => () => {
+      if (publishBurstTimer.current !== null) window.clearTimeout(publishBurstTimer.current);
+    },
+    [],
+  );
   const [exporting, setExporting] = useState(false);
   const [editWorksOpen, setEditWorksOpen] = useState(false);
   const [plazaSyncPostId, setPlazaSyncPostId] = useState<number | null>(null);
@@ -131,7 +140,11 @@ export function ProfileView({
     setShowPublishModal(false);
     setPublishDesc("");
     setPublishBurst(true);
-    setTimeout(() => setPublishBurst(false), 1200);
+    if (publishBurstTimer.current !== null) window.clearTimeout(publishBurstTimer.current);
+    publishBurstTimer.current = window.setTimeout(() => {
+      publishBurstTimer.current = null;
+      setPublishBurst(false);
+    }, 1200);
   }
 
   function plazaLinkId() {

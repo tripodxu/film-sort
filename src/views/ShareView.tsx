@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ArrowLeft, Check, Play, Share2 } from "lucide-react";
 import { RankingDetail } from "../components/RankingDetail";
 import { ExpandableNote } from "../components/ExpandableNote";
@@ -24,6 +24,14 @@ export function ShareView({
   const viewNotes = peerNotes && Object.keys(peerNotes).length > 0 ? peerNotes : (notes ?? {});
   const multiRanking = peer.rankings.length > 1;
   const [copied, setCopied] = useState(false);
+  // 连点复制时旧定时器会提前复位「已复制」；卸载后也不该再 setState。
+  const copyTimer = useRef<number | null>(null);
+  useEffect(
+    () => () => {
+      if (copyTimer.current !== null) window.clearTimeout(copyTimer.current);
+    },
+    [],
+  );
   // L3（PLAN-ui-modernization P3）：gallery 家族在榜单区之上渲染「Bento 缩略」
   // 分享卡（Top1 + 雷达 + 年代 + 坐标，无榜单切换）；classic 路径不渲染。
   const isGallery = useThemeFamily() === "gallery";
@@ -167,7 +175,11 @@ export function ShareView({
               /* selection fallback below */
             }
             setCopied(true);
-            window.setTimeout(() => setCopied(false), 2000);
+            if (copyTimer.current !== null) window.clearTimeout(copyTimer.current);
+            copyTimer.current = window.setTimeout(() => {
+              copyTimer.current = null;
+              setCopied(false);
+            }, 2000);
           }}
           title={t("复制当前分享链接，方便转发给其他人", "Copy this share link to forward it")}
         >
