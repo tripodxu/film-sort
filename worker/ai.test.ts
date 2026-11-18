@@ -589,4 +589,19 @@ describe("输出字符兜底截断（insight 截断修复绊线）", () => {
     });
     expect(result.length).toBe(3000);
   });
+  it("callModelAuto（自定义 API）透传 maxTokens / maxOutputChars（deep 档不再被 1000 token / 2000 字截断）", async () => {
+    let sentTokens: unknown;
+    const fetchImpl = stubFetch((_url, init) => {
+      const parsed = JSON.parse(String(init?.body ?? "{}")) as { max_tokens?: number };
+      sentTokens = parsed.max_tokens;
+      return chatReply();
+    });
+    const outcome = await callModelAuto(baseConfig(), spec(), {
+      fetchImpl,
+      maxTokens: 6000,
+      maxOutputChars: 9000,
+    });
+    expect(sentTokens).toBe(6000);
+    expect(outcome.text.length).toBe(3000);
+  });
 });

@@ -188,6 +188,7 @@ export async function handleAiRoutes(
     const length = body.length === "brief" || body.length === "deep" ? body.length : "standard";
     const maxTokens = length === "deep" ? 6000 : length === "standard" ? 3500 : 2000;
     const maxOutputChars = length === "deep" ? 9000 : length === "standard" ? 5000 : 2500;
+    const timeoutMs = length === "deep" ? 110_000 : 60_000;
     const custom = body.config !== undefined ? validateUserConfig(body.config) : null;
     if (body.config !== undefined && !custom)
       return json({ error: "invalid_config", msg: "API 配置不合法（检查地址/密钥/模型名）" }, 400);
@@ -241,7 +242,11 @@ export async function handleAiRoutes(
     if (!spec) return json({ error: "invalid_data", msg: "数据格式不正确" }, 400);
     try {
       if (custom) {
-        const outcome = await callModelAuto(custom, spec);
+        const outcome = await callModelAuto(custom, spec, {
+          maxTokens,
+          maxOutputChars,
+          timeoutMs,
+        });
         return json(
           {
             insight: outcome.text,
@@ -257,7 +262,7 @@ export async function handleAiRoutes(
       const outcome = resolved as ResolvedAi;
       return json(
         {
-          insight: await callAi(outcome, spec, { maxTokens, maxOutputChars }),
+          insight: await callAi(outcome, spec, { maxTokens, maxOutputChars, timeoutMs }),
           source,
           model: outcome.model,
           protocol: outcome.protocol,

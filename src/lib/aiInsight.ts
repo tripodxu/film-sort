@@ -297,8 +297,11 @@ export async function requestInsight(
       }),
       // 服务端默认 60s（推理模型），前端留 10s 余量；外部 signal（取消按钮）可提前掐断。
       signal: opts.signal
-        ? AbortSignal.any([AbortSignal.timeout(70000), opts.signal])
-        : AbortSignal.timeout(70000),
+        ? AbortSignal.any([
+            AbortSignal.timeout(opts.length === "deep" ? 120000 : 70000),
+            opts.signal,
+          ])
+        : AbortSignal.timeout(opts.length === "deep" ? 120000 : 70000),
     });
     if (response.ok) {
       const body = (await response.json()) as {
