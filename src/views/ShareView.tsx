@@ -4,6 +4,7 @@ import { RankingDetail } from "../components/RankingDetail";
 import { ExpandableNote } from "../components/ExpandableNote";
 import { GalleryBento } from "../components/GalleryBento";
 import { useThemeFamily } from "../lib/useTheme";
+import { PEER_KEY } from "../lib/storageKeys";
 import { heading } from "./helpers";
 import type { ShareViewProps } from "./types";
 
@@ -159,7 +160,7 @@ export function ShareView({
           onClick={() => {
             // Compare with me: store peer and navigate to compare view
             try {
-              localStorage.setItem("art-rank:peer:v2", JSON.stringify(peer));
+              localStorage.setItem(PEER_KEY, JSON.stringify(peer));
             } catch {}
             navigateTo("compare");
           }}

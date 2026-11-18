@@ -23,7 +23,7 @@ import { heading } from "./helpers";
 import { MAX_PROFILE_BYTES } from "../lib/profile";
 import type { SourceViewProps } from "./types";
 
-import type { Artwork } from "../data/media";
+import type { Artwork } from "../data/mediaKinds";
 
 interface NeteasePlaylistInfo {
   id: number;

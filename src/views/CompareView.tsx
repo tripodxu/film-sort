@@ -9,6 +9,7 @@ import { AiInsightCard } from "../components/AiInsightCard";
 import { JevDivergenceCard } from "../components/JevDivergenceCard";
 import { buildCompareData } from "../lib/aiInsight";
 import { buildTasteContext } from "../lib/typesafe";
+import { COMPARE_LEVEL_KEY } from "../lib/storageKeys";
 import { heading, fileInput } from "./helpers";
 import type { CompareViewProps } from "./types";
 
@@ -79,7 +80,7 @@ export function CompareView({
   // 比较深度：localStorage 持久化，缺省 classic（与 d5f1ba1 起的行为一致）。
   const [compareLevel, setCompareLevel] = useState<CompareLevel>(() => {
     try {
-      const v = localStorage.getItem("art-rank:compare-level");
+      const v = localStorage.getItem(COMPARE_LEVEL_KEY);
       return v === "simple" || v === "precise" ? v : "classic";
     } catch {
       return "classic";
@@ -88,7 +89,7 @@ export function CompareView({
   const changeLevel = (level: CompareLevel) => {
     setCompareLevel(level);
     try {
-      localStorage.setItem("art-rank:compare-level", level);
+      localStorage.setItem(COMPARE_LEVEL_KEY, level);
     } catch {
       /* 隐私模式 */
     }

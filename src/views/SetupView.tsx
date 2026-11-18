@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Play, Save, Sparkles } from "lucide-react";
 import { Poster } from "../components/Poster";
 import { ADAPTIVE_RELIABLE_ITEM_LIMIT } from "../lib/adaptiveRanking";
+import { RANK_MODE_KEY } from "../lib/storageKeys";
 import { heading } from "./helpers";
 import type { SetupViewProps } from "./types";
 
@@ -68,9 +69,7 @@ export function SetupView({
 }: SetupViewProps) {
   const [rankMode, setRankMode] = useState<string>(() => {
     try {
-      const stored = RANK_MODES.find(
-        (m) => m.value === window.localStorage.getItem("art-rank:rank-mode"),
-      );
+      const stored = RANK_MODES.find((m) => m.value === window.localStorage.getItem(RANK_MODE_KEY));
       return stored ? stored.value : "classic";
     } catch {
       /* 隐私模式 */
@@ -80,7 +79,7 @@ export function SetupView({
   const chooseRankMode = (mode: string) => {
     setRankMode(mode);
     try {
-      window.localStorage.setItem("art-rank:rank-mode", mode);
+      window.localStorage.setItem(RANK_MODE_KEY, mode);
     } catch {
       /* 隐私模式 */
     }

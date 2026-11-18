@@ -18,6 +18,7 @@ import { DeferredOrb } from "../components/DeferredOrb";
 import { HeroBackdrop } from "../components/HeroBackdrop";
 import { Poster } from "../components/Poster";
 import { useThemeFamily } from "../lib/useTheme";
+import { RINGS_LAYOUT_KEY } from "../lib/storageKeys";
 import { fileInput } from "./helpers";
 import type { HomeViewProps } from "./types";
 
@@ -270,7 +271,7 @@ export function HomeView({
                     onClick={() => {
                       setRingsLayout(m as "row" | "col");
                       try {
-                        localStorage.setItem("art-rank:rings-layout", m);
+                        localStorage.setItem(RINGS_LAYOUT_KEY, m);
                       } catch {}
                     }}
                     style={{

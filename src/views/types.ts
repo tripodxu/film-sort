@@ -1,5 +1,5 @@
 import type { RankingMode, RankingState } from "../lib/ranking";
-import type { MediaCollection, MediaKind, Artwork } from "../data/media";
+import type { MediaCollection, MediaKind, Artwork } from "../data/mediaKinds";
 import type { ArtisticProfile, RankingExport, RankedArtwork } from "../lib/profile";
 import type { ExportLayout } from "../lib/exportPng";
 
@@ -110,7 +110,7 @@ export interface SortingViewProps {
   locale: "zh" | "en";
   /** Jev 辅助模式的品味上下文(已有榜单摘要);无画像时缺省 */
   tasteContext?: string;
-  worksById: Map<string, import("../data/media").Artwork>;
+  worksById: Map<string, import("../data/mediaKinds").Artwork>;
   act: (
     action: "left" | "right" | "undo" | "skip-left" | "skip-right" | "defer-left" | "defer-right",
   ) => void;

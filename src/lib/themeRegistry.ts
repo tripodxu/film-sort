@@ -5,9 +5,10 @@
 // 用受控模板重新拼装 <style> 内容。任何逃逸尝试（} ; @import url( ...）都会
 // 在解析阶段被拒绝，而不是被过滤后放过。
 
-import { THEMES } from "./theme";
+import { THEMES } from "./themeConstants";
+import { CUSTOM_THEME_KEY } from "./storageKeys";
 
-export const CUSTOM_THEME_KEY = "art-rank:custom-themes";
+export { CUSTOM_THEME_KEY };
 /** 单包上限与总配额：单主题 ~2KB 足够；64KB 防 localStorage 膨胀。 */
 export const THEME_PACKAGE_LIMIT = 16 * 1024;
 export const CUSTOM_THEMES_QUOTA = 64 * 1024;

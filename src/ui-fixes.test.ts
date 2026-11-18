@@ -269,7 +269,7 @@ describe("P2 aurora 极光主题绊线（PLAN-ui-modernization）", () => {
   });
   it("主题菜单 dot 与 THEMES 注册（id 一经发布不改）", () => {
     expect(css).toContain(".theme-dot.theme-aurora{");
-    const theme = readFileSync("src/lib/theme.ts", "utf8");
+    const theme = readFileSync("src/lib/themeConstants.ts", "utf8");
     expect(theme).toContain('{ id: "aurora", zh: "极光", en: "Aurora" }');
   });
   it("orb 推荐默认：无持久化时 aurora→ribbon（registry 单测覆盖），宿主按推荐重挂", () => {
@@ -381,7 +381,7 @@ describe("P3 gallery 画廊主题绊线（PLAN-ui-modernization）", () => {
   });
   it("主题菜单 dot 与 THEMES 注册（id 一经发布不改）", () => {
     expect(css).toContain(".theme-dot.theme-gallery{");
-    const theme = readFileSync("src/lib/theme.ts", "utf8");
+    const theme = readFileSync("src/lib/themeConstants.ts", "utf8");
     expect(theme).toContain('{ id: "gallery", zh: "画廊", en: "Gallery" }');
   });
 });
@@ -392,7 +392,7 @@ describe("P4 收尾绊线（PLAN-ui-modernization）", () => {
     expect(sw).toContain("NEW_SERIES: ReadonlySet<string>");
     expect(sw).toContain('t("经典", "Classic")');
     expect(sw).toContain('t("新系列", "New Series")');
-    const theme = readFileSync("src/lib/theme.ts", "utf8");
+    const theme = readFileSync("src/lib/themeConstants.ts", "utf8");
     // 11 → 12：S4 按计划新增第 12 套内置主题 atlas（只增不改；旧 11 套的 id 与顺序由
     // src/theme-atlas.test.ts 逐项断言）。本行是「内置主题数量变化必须显式确认」的闸门。
     expect((theme.match(/id: "/g) ?? []).length).toBe(12);
@@ -679,7 +679,10 @@ describe("消歧出口 UI（PLAN-CHOICE-UI）", () => {
     expect(choice).toContain('method: "POST"');
     expect(choice).toContain('"/api/other/cover-choice"');
     // 匿名也必须能用：只是不落库。
-    expect(choice).toContain("art-rank:account-token");
+    expect(choice).toContain("ACCOUNT_TOKEN_KEY");
+    expect(readFileSync("src/lib/storageKeys.ts", "utf8")).toContain(
+      'ACCOUNT_TOKEN_KEY = "art-rank:account-token"',
+    );
     expect(choice).toMatch(/if \(!token\)/);
     expect(app).toContain("onCoverChange={(url) =>");
   });

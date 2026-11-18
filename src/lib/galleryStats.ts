@@ -1,7 +1,7 @@
 // gallery 主题（PLAN-ui-modernization P3）的数据侧纯函数。
 // 铁律：只读现有 profile 结构，零数据层改动——雷达/分布/坐标全部从
 // ArtisticProfile 现场聚合，不落库、不进任何浏览器存储。
-import type { MediaKind } from "../data/media";
+import type { MediaKind } from "../data/mediaKinds";
 import type { ArtisticProfile, RankedArtwork } from "./profile";
 
 /** 雷达图的固定轴序：四种媒介恒全量给出（缺失维度计 0），轴数稳定才能比较。 */

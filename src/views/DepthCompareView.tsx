@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { ConfidenceBadge } from "../components/ConfidenceBadge";
 import { MetricExplainer } from "../components/MetricExplainer";
-import { mediaLabels, type MediaKind } from "../data/media";
+import { mediaLabels, type MediaKind } from "../data/mediaKinds";
 import { computeCompareMetrics, type CompareMetrics } from "../lib/compareMetrics";
 import { computeTasteDistance, type TasteDistanceResult } from "../lib/tasteDistance";
 import { compareProfiles, type DimensionComparison } from "../lib/profile";

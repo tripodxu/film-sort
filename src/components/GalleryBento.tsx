@@ -12,7 +12,7 @@ import {
   kindCounts,
   profileStats,
 } from "../lib/galleryStats";
-import type { MediaKind } from "../data/media";
+import type { MediaKind } from "../data/mediaKinds";
 import type { ArtisticProfile, RankedArtwork, RankingExport } from "../lib/profile";
 import { Poster } from "./Poster";
 

@@ -4,26 +4,9 @@
 // listThemes() 合并枚举，applyTheme 对未注册（已删除）的 id 回退 modern。
 
 import { isCustomTheme } from "./themeRegistry";
+import { THEME_KEY, THEMES, isTheme, type ThemeId } from "./themeConstants";
 
-export const THEME_KEY = "art-rank:theme";
-export const THEMES = [
-  { id: "modern", zh: "现代", en: "Modern" },
-  { id: "retro", zh: "复古纸感", en: "Retro Paper" },
-  { id: "minimal", zh: "极简", en: "Minimal" },
-  { id: "simple", zh: "简约", en: "Simple" },
-  { id: "classic", zh: "古典", en: "Classic" },
-  { id: "cyber", zh: "赛博朋克", en: "Cyberpunk" },
-  { id: "paper", zh: "纸上擂台", en: "Paper Arena" },
-  { id: "editorial", zh: "刊物", en: "Editorial" },
-  { id: "editorial-dark", zh: "刊物暗色", en: "Editorial Dark" },
-  { id: "aurora", zh: "极光", en: "Aurora" },
-  { id: "gallery", zh: "画廊", en: "Gallery" },
-  { id: "atlas", zh: "图册", en: "Atlas" },
-] as const;
-
-export type ThemeId = (typeof THEMES)[number]["id"];
-
-const isTheme = (v: string): v is ThemeId => THEMES.some((t) => t.id === v);
+export { THEME_KEY, THEMES, type ThemeId };
 
 export function readTheme(): string {
   try {

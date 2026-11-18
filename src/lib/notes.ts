@@ -1,4 +1,4 @@
-const NOTES_KEY = "art-rank:notes";
+import { NOTES_KEY } from "./storageKeys";
 
 export type NoteScope = "profile" | "ranking" | "work";
 

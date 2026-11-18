@@ -3,7 +3,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Poster, prefetchPosters } from "./Poster";
 import { ExpandableNote } from "./ExpandableNote";
 import type { RankedArtwork } from "../lib/profile";
-import type { MediaKind } from "../data/media";
+import type { MediaKind } from "../data/mediaKinds";
 
 /**
  * 统一的榜单详情渲染组件。

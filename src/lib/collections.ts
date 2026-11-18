@@ -1,4 +1,9 @@
-import { mediaLabels, type Artwork, type MediaCollection, type MediaKind } from "../data/media";
+import {
+  mediaLabels,
+  type Artwork,
+  type MediaCollection,
+  type MediaKind,
+} from "../data/mediaKinds";
 import { normalizeTitle } from "./profile";
 
 export function importCollection(kind: MediaKind, text: string): MediaCollection {

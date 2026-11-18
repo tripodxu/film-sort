@@ -6,7 +6,7 @@ import { useMemo, useState } from "react";
 import { StickyNote } from "lucide-react";
 import { Poster } from "./Poster";
 import { hasNote, noteKey } from "../lib/notes";
-import type { MediaKind } from "../data/media";
+import type { MediaKind } from "../data/mediaKinds";
 import type { RankedArtwork } from "../lib/profile";
 
 const NOTE_EXCERPT_CHARS = 60;

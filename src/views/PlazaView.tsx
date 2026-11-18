@@ -11,12 +11,13 @@ import {
   StickyNote,
 } from "lucide-react";
 import { Poster } from "../components/Poster";
+import { PLAZA_COLS_KEY } from "../lib/storageKeys";
 import { EmptyState } from "../components/ui/EmptyState";
 import { Skeleton } from "../components/ui/Skeleton";
 import { parseDbTime } from "../lib/dbTime";
 import { rankingSimilarity } from "../lib/similarity";
 import type { PlazaViewProps, PlazaPost } from "./types";
-import type { MediaKind } from "../data/media";
+import type { MediaKind } from "../data/mediaKinds";
 
 const FILTER_KINDS: Array<{ value: string; zh: string; en: string }> = [
   { value: "", zh: "全部", en: "All" },
@@ -50,7 +51,7 @@ export function PlazaView({
   const [search, setSearch] = useState("");
   const [colCount, setColCount] = useState<number>(() => {
     try {
-      return Number(localStorage.getItem("art-rank:plaza-cols")) || 2;
+      return Number(localStorage.getItem(PLAZA_COLS_KEY)) || 2;
     } catch {
       return 2;
     }
@@ -119,7 +120,7 @@ export function PlazaView({
   function changeCols(n: number) {
     setColCount(n);
     try {
-      localStorage.setItem("art-rank:plaza-cols", String(n));
+      localStorage.setItem(PLAZA_COLS_KEY, String(n));
     } catch {}
   }
 

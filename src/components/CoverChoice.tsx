@@ -8,6 +8,7 @@ import {
   shouldOfferChoice,
   type ChoiceBand,
 } from "../lib/coverChoice";
+import { ACCOUNT_TOKEN_KEY } from "../lib/storageKeys";
 
 /**
  * 「让用户选」消歧出口（PLAN-CHOICE-UI）。
@@ -181,7 +182,7 @@ export function CoverChoice({
     onPicked(choice.url, choice.title);
     const token = (() => {
       try {
-        return localStorage.getItem("art-rank:account-token") ?? "";
+        return localStorage.getItem(ACCOUNT_TOKEN_KEY) ?? "";
       } catch {
         return "";
       }

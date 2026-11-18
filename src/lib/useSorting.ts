@@ -35,22 +35,14 @@ import {
   readTypesafeConfig,
   requestJevRanking,
 } from "./typesafe";
+import { COLS_KEY, DRAFT_KEY, IMPORT_CAP_KEY, stored } from "./storageKeys";
 import { track, type Locale } from "./utils";
 
-const DRAFT_KEY = "art-rank:draft:v2";
 /** 草稿体积闸门：读侧超过此值直接丢弃，写侧必须同闸门，否则会「看似保存、实际读不回」。 */
 const DRAFT_MAX_WORKS = 1000;
 const kinds = Object.keys(mediaLabels) as MediaKind[];
 
 export type Draft = { collection: MediaCollection; ranking: string; profileName: string };
-
-function stored(key: string) {
-  try {
-    return localStorage.getItem(key);
-  } catch {
-    return null;
-  }
-}
 
 export function loadDraft(): Draft | null {
   try {
@@ -138,19 +130,19 @@ export function useSorting(deps: SortingDeps) {
   const [search, setSearch] = useState("");
   const [colCount, setColCount] = useState<number>(() => {
     try {
-      return Number(localStorage.getItem("art-rank:cols")) || 3;
+      return Number(localStorage.getItem(COLS_KEY)) || 3;
     } catch {
       return 3;
     }
   });
   const [importCap, setImportCapState] = useState<number>(() => {
-    const v = Number(localStorage.getItem("art-rank:import-cap"));
+    const v = Number(localStorage.getItem(IMPORT_CAP_KEY));
     return v >= 50 && v <= 1000 ? v : 300;
   });
   function setImportCap(v: number) {
     setImportCapState(v);
     try {
-      localStorage.setItem("art-rank:import-cap", String(v));
+      localStorage.setItem(IMPORT_CAP_KEY, String(v));
     } catch {
       /* */
     }
@@ -695,7 +687,7 @@ export function useSorting(deps: SortingDeps) {
   function changeCols(n: number) {
     setColCount(n);
     try {
-      localStorage.setItem("art-rank:cols", String(n));
+      localStorage.setItem(COLS_KEY, String(n));
     } catch {}
   }
 

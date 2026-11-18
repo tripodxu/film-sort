@@ -14,7 +14,7 @@ import {
 } from "../lib/typesafe";
 import { topDivergences, type DivergenceEntry } from "../lib/jevDivergence";
 import type { RankedArtwork } from "../lib/profile";
-import type { MediaKind } from "../data/media";
+import type { MediaKind } from "../data/mediaKinds";
 import { track } from "../lib/utils";
 
 export function JevDivergenceCard({

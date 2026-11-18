@@ -2,9 +2,10 @@
 // 数据边界（设计前已确认）：decisionLog / cycleEvents 只存在于进行中排序草稿
 // （art-rank:draft:v2 的全量 RankingState 序列化），完成的画像里没有——
 // 年鉴卡主体用画像统计（复用 galleryStats），取舍与张力从草稿条件性附加。
-import type { MediaKind } from "../data/media";
+import type { MediaKind } from "../data/mediaKinds";
 import type { ArtisticProfile } from "./profile";
 import { decadeSlices, kindCounts, profileStats } from "./galleryStats";
+import { DRAFT_KEY } from "./storageKeys";
 
 export interface WrappedMediaShare {
   kind: MediaKind;
@@ -100,7 +101,7 @@ export function draftInsight(
  */
 export function readDraftLike(storage: Pick<Storage, "getItem">): DraftLike | null {
   try {
-    const raw = storage.getItem("art-rank:draft:v2");
+    const raw = storage.getItem(DRAFT_KEY);
     if (!raw) return null;
     const parsed = JSON.parse(raw) as { ranking?: unknown };
     const state =

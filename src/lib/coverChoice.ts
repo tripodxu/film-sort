@@ -1,4 +1,4 @@
-import type { MediaKind } from "../data/media";
+import type { MediaKind } from "../data/mediaKinds";
 
 /**
  * 「让用户选」消歧出口的纯判定层（PLAN-CHOICE-UI §3.1）。

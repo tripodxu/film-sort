@@ -10,14 +10,22 @@ import {
   X,
 } from "lucide-react";
 
-import { mediaLabels, type MediaKind } from "./data/media";
+import { englishKinds, mediaLabels, type MediaKind } from "./data/mediaKinds";
+import {
+  ACCOUNT_TOKEN_KEY,
+  clearUserSessionStorage,
+  DRAFT_KEY,
+  GUIDE_DISMISSED_KEY,
+  LIBRARY_KEY,
+  PEER_KEY,
+  PLAZA_LINKS_KEY,
+  RINGS_LAYOUT_KEY,
+} from "./lib/storageKeys";
 import {
   compareDimensions,
   compareProfiles,
   compareRankings,
-  LIBRARY_KEY,
   MAX_PROFILE_BYTES,
-  RECOVERY_KEY,
   mergeDimensionRankings,
   mergeProfiles,
   mergeRanking,
@@ -103,10 +111,7 @@ import { useRouter, type View } from "./lib/useRouter";
 import { useAuth } from "./lib/useAuth";
 import { resolveRankingTabKey, useSorting } from "./lib/useSorting";
 
-const DRAFT_KEY = "art-rank:draft:v2";
-const PEER_KEY = "art-rank:peer:v2";
 const kinds = Object.keys(mediaLabels) as MediaKind[];
-const englishKinds = { film: "Films", book: "Books", music: "Music", other: "Other" };
 
 function loadPeer() {
   try {
@@ -181,7 +186,7 @@ export default function App() {
   } | null>(null);
   const [ringsLayout, setRingsLayout] = useState<"row" | "col">(() => {
     try {
-      return (localStorage.getItem("art-rank:rings-layout") as "row" | "col") || "row";
+      return (localStorage.getItem(RINGS_LAYOUT_KEY) as "row" | "col") || "row";
     } catch {
       return "row";
     }
@@ -201,7 +206,7 @@ export default function App() {
 
   const [showGuide, setShowGuide] = useState(() => {
     try {
-      return !localStorage.getItem("art-rank:guide-dismissed");
+      return !localStorage.getItem(GUIDE_DISMISSED_KEY);
     } catch {
       return true;
     }
@@ -482,7 +487,7 @@ export default function App() {
           setAccountEmail(data.email);
           setAccountNickname(data.nickname ?? "");
           try {
-            localStorage.setItem("art-rank:account-token", data.token);
+            localStorage.setItem(ACCOUNT_TOKEN_KEY, data.token);
           } catch {}
           const name = data.nickname ?? "";
           if (!name || name === data.email.split("@")[0]) {
@@ -714,14 +719,7 @@ export default function App() {
     setNotes({});
     // 备份键也要一起清掉，否则读取端会把「已清除」的画像从备份里再恢复回来。
     // notes 与登出清理集合对齐（REVIEW §6）。
-    try {
-      localStorage.removeItem(LIBRARY_KEY);
-      localStorage.removeItem(RECOVERY_KEY);
-      localStorage.removeItem(DRAFT_KEY);
-      localStorage.removeItem(PEER_KEY);
-      localStorage.removeItem("art-rank:notes");
-      localStorage.removeItem("art-rank:plaza-links");
-    } catch {}
+    clearUserSessionStorage({ keepAccountToken: true });
     setNotice(t("本地数据已清除。", "Local data cleared."));
   }
   async function openArtworkDetail(work: RankedArtwork, detailKind: MediaKind) {
@@ -976,9 +974,9 @@ export default function App() {
       const data = (await response.json()) as { id?: number; error?: string };
       if (response.ok && data.id) {
         try {
-          const links = JSON.parse(localStorage.getItem("art-rank:plaza-links") ?? "{}");
+          const links = JSON.parse(localStorage.getItem(PLAZA_LINKS_KEY) ?? "{}");
           links[`${ranking.kind}|${ranking.collectionTitle}`] = data.id;
-          localStorage.setItem("art-rank:plaza-links", JSON.stringify(links));
+          localStorage.setItem(PLAZA_LINKS_KEY, JSON.stringify(links));
         } catch {
           /* 关联记录失败不影响发布 */
         }
@@ -1015,9 +1013,9 @@ export default function App() {
       const data = (await response.json()) as { id?: number; error?: string };
       if (response.ok && data.id) {
         try {
-          const links = JSON.parse(localStorage.getItem("art-rank:plaza-links") ?? "{}");
+          const links = JSON.parse(localStorage.getItem(PLAZA_LINKS_KEY) ?? "{}");
           links[`profile|${next.profileId}`] = data.id;
-          localStorage.setItem("art-rank:plaza-links", JSON.stringify(links));
+          localStorage.setItem(PLAZA_LINKS_KEY, JSON.stringify(links));
         } catch {
           /* 关联记录失败不影响发布 */
         }
@@ -2438,7 +2436,7 @@ export default function App() {
               className="button quiet"
               onClick={() => {
                 try {
-                  localStorage.setItem("art-rank:guide-dismissed", "1");
+                  localStorage.setItem(GUIDE_DISMISSED_KEY, "1");
                 } catch {}
                 setShowGuide(false);
               }}

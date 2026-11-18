@@ -14,7 +14,7 @@ import {
   type LyricResult,
 } from "../lib/gdMusic";
 import type { RankedArtwork } from "../lib/profile";
-import type { MediaKind } from "../data/media";
+import type { MediaKind } from "../data/mediaKinds";
 
 export interface ArtworkDetailInfo {
   work: RankedArtwork;

@@ -20,9 +20,10 @@ import { parseDbTime } from "../lib/dbTime";
 import { rankingSimilarity } from "../lib/similarity";
 import { RankingDetail } from "../components/RankingDetail";
 import { ExpandableNote } from "../components/ExpandableNote";
+import { PEER_KEY } from "../lib/storageKeys";
 import { heading } from "./helpers";
 import type { PlazaPostViewProps, PlazaPost, PlazaComment } from "./types";
-import type { MediaKind } from "../data/media";
+import type { MediaKind } from "../data/mediaKinds";
 import type { ArtisticProfile, RankedArtwork } from "../lib/profile";
 
 export function PlazaPostView({
@@ -248,7 +249,7 @@ export function PlazaPostView({
       };
       setPeer(profilePeer);
       try {
-        localStorage.setItem("art-rank:peer:v2", JSON.stringify(profilePeer));
+        localStorage.setItem(PEER_KEY, JSON.stringify(profilePeer));
       } catch {}
       navigateTo("compare");
       return;
@@ -274,7 +275,7 @@ export function PlazaPostView({
     };
     setPeer(ranking);
     try {
-      localStorage.setItem("art-rank:peer:v2", JSON.stringify(ranking));
+      localStorage.setItem(PEER_KEY, JSON.stringify(ranking));
     } catch {}
     navigateTo("compare");
   }

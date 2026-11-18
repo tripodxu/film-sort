@@ -94,9 +94,40 @@ export function adaptiveObservations(state: RankingState): PreferenceObservation
  * 早期观测先把方差收窄，后面证据再多也拉不动（实测 top-5 只命中 3/5）。
  * 批量拟合与观测顺序无关，方差反映总证据量（见 preferenceModel.fitPreferenceModel）。
  */
+let cachedModel: {
+  decisionLog: RankingState["decisionLog"];
+  decisionLogLen: number;
+  sourceIds: RankingState["sourceIds"];
+  sourceIdsLen: number;
+  skippedIds: RankingState["skippedIds"];
+  skippedIdsLen: number;
+  model: PreferenceModelState;
+} | null = null;
+
 export function buildAdaptiveModel(state: RankingState): PreferenceModelState {
+  if (
+    cachedModel &&
+    cachedModel.decisionLog === state.decisionLog &&
+    cachedModel.decisionLogLen === state.decisionLog.length &&
+    cachedModel.sourceIds === state.sourceIds &&
+    cachedModel.sourceIdsLen === state.sourceIds.length &&
+    cachedModel.skippedIds === state.skippedIds &&
+    cachedModel.skippedIdsLen === state.skippedIds.length
+  ) {
+    return cachedModel.model;
+  }
   const ids = adaptivePoolIds(state);
-  return fitPreferenceModel(ids, adaptiveObservations(state));
+  const model = fitPreferenceModel(ids, adaptiveObservations(state));
+  cachedModel = {
+    decisionLog: state.decisionLog,
+    decisionLogLen: state.decisionLog.length,
+    sourceIds: state.sourceIds,
+    sourceIdsLen: state.sourceIds.length,
+    skippedIds: state.skippedIds,
+    skippedIdsLen: state.skippedIds.length,
+    model,
+  };
+  return model;
 }
 
 /** 每件作品接触过的不同对手数（覆盖率补偿的输入）。 */

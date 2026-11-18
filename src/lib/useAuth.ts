@@ -1,11 +1,8 @@
 import { useState, useEffect, useRef, useCallback } from "react";
-import { parseProfile, LIBRARY_KEY, type ArtisticProfile } from "./profile";
+import { parseProfile, type ArtisticProfile } from "./profile";
 import { readNotes, writeNotes } from "./notes";
 import { buildProfileSyncBody, isCurrentGeneration } from "./profileSync";
-import { stored } from "./utils";
-
-const PEER_KEY = "art-rank:peer:v2";
-const DRAFT_KEY = "art-rank:draft:v2";
+import { ACCOUNT_TOKEN_KEY, clearUserSessionStorage, stored } from "./storageKeys";
 
 /** 账号请求超时：弱网/上游挂起时不能永久 pending（前端存量缺陷收口 2026-10-29）。 */
 const AUTH_TIMEOUT_MS = 20_000;
@@ -57,10 +54,10 @@ export function useAuth(deps: Omit<AuthDeps, "setDraft"> & { setDraft?: (d: unkn
   );
   const [accountEmail, setAccountEmail] = useState("");
   const [accountNickname, setAccountNickname] = useState("");
-  const [accountToken, setAccountToken] = useState(() => stored("art-rank:account-token") ?? "");
+  const [accountToken, setAccountToken] = useState(() => stored(ACCOUNT_TOKEN_KEY) ?? "");
   const tokenRef = useRef(accountToken);
   tokenRef.current = accountToken;
-  const currentToken = () => tokenRef.current || stored("art-rank:account-token") || "";
+  const currentToken = () => tokenRef.current || stored(ACCOUNT_TOKEN_KEY) || "";
   const [authMode, setAuthMode] = useState<"login" | "register" | "reset">("login");
   const [authEmail, setAuthEmail] = useState("");
   const [authPassword, setAuthPassword] = useState("");
@@ -313,7 +310,7 @@ export function useAuth(deps: Omit<AuthDeps, "setDraft"> & { setDraft?: (d: unkn
         setAuthNickname("");
         setAuthCode("");
         try {
-          localStorage.setItem("art-rank:account-token", data.token);
+          localStorage.setItem(ACCOUNT_TOKEN_KEY, data.token);
         } catch {}
         d.setNotice(d.t("登录成功！", "Signed in!"));
         // 云端画像/批注的水合由 accountToken 驱动的 effect 统一处理：
@@ -397,15 +394,7 @@ export function useAuth(deps: Omit<AuthDeps, "setDraft"> & { setDraft?: (d: unkn
     d.setNotes({});
     d.setPeer(null);
     setDraftRef.current(null);
-    try {
-      localStorage.removeItem("art-rank:account-token");
-      localStorage.removeItem(LIBRARY_KEY);
-      localStorage.removeItem(`${LIBRARY_KEY}:recovery`);
-      localStorage.removeItem(DRAFT_KEY);
-      localStorage.removeItem(PEER_KEY);
-      localStorage.removeItem("art-rank:notes");
-      localStorage.removeItem("art-rank:plaza-links");
-    } catch {}
+    clearUserSessionStorage();
   }, []);
 
   // Auto-sync debounced (900ms) — re-arms when profile, notes, or token changes; a deps-less
@@ -497,7 +486,7 @@ export function useAuth(deps: Omit<AuthDeps, "setDraft"> & { setDraft?: (d: unkn
           } else {
             setAccountToken("");
             try {
-              localStorage.removeItem("art-rank:account-token");
+              localStorage.removeItem(ACCOUNT_TOKEN_KEY);
             } catch {}
           }
           setCloudHydrated(true);

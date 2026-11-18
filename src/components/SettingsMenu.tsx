@@ -3,6 +3,7 @@ import { Bot, Eraser, Settings2 } from "lucide-react";
 import { AiConfigDialog } from "./AiConfigDialog";
 import { readAiConfig } from "../lib/aiInsight";
 import { markCachePurged } from "../lib/cacheBust";
+import { ACCOUNT_TOKEN_KEY } from "../lib/storageKeys";
 
 const CAPS = [100, 300, 500, 1000];
 
@@ -62,7 +63,7 @@ export function SettingsMenu({
     // 服务端清缓存要求登录（全局缓存代次不能被匿名者反复刷新）。
     let token: string | null = null;
     try {
-      token = localStorage.getItem("art-rank:account-token");
+      token = localStorage.getItem(ACCOUNT_TOKEN_KEY);
     } catch {
       // 隐私模式 / 禁用存储：按未登录处理，不能因为读存储抛错而丢掉提示。
     }

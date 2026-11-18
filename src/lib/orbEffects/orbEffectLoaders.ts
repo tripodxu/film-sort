@@ -8,7 +8,7 @@
 // —— 字面量动态 import 是 vite 的依赖分析入口，必须能被静态扫到；用一层函数包住
 // 同样保留字面量（见下方 loaders），既满足扫，又让「表结构」和「id 集合」可单测。
 import type { OrbEffect } from "./types";
-import { EFFECT_META } from "./registry";
+import { EFFECT_META } from "./meta";
 
 type EffectFactory = OrbEffect["create"];
 

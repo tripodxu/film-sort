@@ -33,6 +33,7 @@ import { undoLastAction } from "../lib/ranking";
 import { noteKey, hasNote } from "../lib/notes";
 import { AiInsightCard } from "../components/AiInsightCard";
 import { buildProfileData, buildRankingData } from "../lib/aiInsight";
+import { PLAZA_LINKS_KEY } from "../lib/storageKeys";
 import type { ProfileViewProps } from "./types";
 import type { RankedArtwork } from "../lib/profile";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -149,7 +150,7 @@ export function ProfileView({
 
   function plazaLinkId() {
     try {
-      const links = JSON.parse(localStorage.getItem("art-rank:plaza-links") ?? "{}");
+      const links = JSON.parse(localStorage.getItem(PLAZA_LINKS_KEY) ?? "{}");
       return links[`${activeRanking.kind}|${activeRanking.collectionTitle}`] ?? null;
     } catch {
       return null;
@@ -948,7 +949,7 @@ function ReorderList({
   openNoteModal,
 }: {
   items: RankedArtwork[];
-  kind: import("../data/media").MediaKind;
+  kind: import("../data/mediaKinds").MediaKind;
   t: (zh: string, en: string) => string;
   moveItem: (from: number, to: number) => void;
   onSave: () => void;
@@ -957,7 +958,7 @@ function ReorderList({
   openNoteModal: (
     key: string,
     title: string,
-    kind: import("../data/media").MediaKind,
+    kind: import("../data/mediaKinds").MediaKind,
     posterUrls?: readonly string[],
   ) => void;
 }) {
@@ -1078,7 +1079,7 @@ function WorkEditor({
   onCancel,
   onSave,
 }: {
-  ranking: { kind: import("../data/media").MediaKind; items: RankedArtwork[] };
+  ranking: { kind: import("../data/mediaKinds").MediaKind; items: RankedArtwork[] };
   t: (zh: string, en: string) => string;
   onCancel: () => void;
   onSave: (items: RankedArtwork[]) => void;

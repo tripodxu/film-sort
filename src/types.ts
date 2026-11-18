@@ -1,4 +1,4 @@
-export type Locale = "zh" | "en";
+export type { Locale } from "./data/mediaKinds";
 
 export interface LocalizedText {
   readonly zh: string;
@@ -30,18 +30,3 @@ export interface FilmList {
   readonly posterUrl?: string;
   readonly movies: readonly Movie[];
 }
-
-export interface RankedMovie extends Movie {
-  readonly rank: number;
-}
-
-export interface RankingResult {
-  readonly listId: string;
-  readonly listName: LocalizedText;
-  readonly rankedMovies: readonly RankedMovie[];
-  readonly comparisonCount: number;
-  readonly completedAt: string;
-  readonly topK: number;
-}
-
-export const localize = (text: LocalizedText, locale: Locale): string => text[locale];

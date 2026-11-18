@@ -1,5 +1,5 @@
 import type { ArtisticProfile, RankedArtwork, RankingExport } from "./profile";
-import type { MediaKind } from "../data/media";
+import type { MediaKind } from "../data/mediaKinds";
 import { buildWrappedStats, type WrappedDraftInsight } from "./wrapped";
 import { mapPool } from "./utils";
 

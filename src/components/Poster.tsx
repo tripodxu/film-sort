@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { BookOpen, Film, Library, Music2, RotateCcw } from "lucide-react";
-import type { Artwork, MediaKind } from "../data/media";
+import type { Artwork, MediaKind } from "../data/mediaKinds";
 import { mediaTypeForKind, posterMediaKey } from "../../shared/posterKey";
 import { emptyPosterState, type PosterOutcome } from "../lib/posterOutcome";
 import { rememberFailure } from "../lib/failureReport";

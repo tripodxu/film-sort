@@ -1,4 +1,5 @@
-import { mediaLabels, type Artwork, type MediaKind } from "../data/media";
+import { mediaLabels, type Artwork, type MediaKind } from "../data/mediaKinds";
+import { LIBRARY_KEY, PROFILE_PREFIX, RECOVERY_KEY } from "./storageKeys";
 import {
   MAX_PAYLOAD_BYTES,
   toStoredWork,
@@ -26,13 +27,7 @@ export interface ArtisticProfile {
   rankings: RankingExport[];
 }
 
-export const LIBRARY_KEY = "art-rank:library:v2";
-/**
- * 解析失败时的备份键。
- * 旧版本在解析失败时会**删除主键**并把原文丢到这里，于是"刷新后榜单消失"；
- * 现在主键永不删除，读取端还会在解析放宽后从这个备份把画像恢复回来。
- */
-export const RECOVERY_KEY = `${LIBRARY_KEY}:recovery`;
+export { LIBRARY_KEY, RECOVERY_KEY };
 /** 与 Worker 端共用同一个字节上限，避免两侧口径漂移。 */
 export const MAX_PROFILE_BYTES = MAX_PAYLOAD_BYTES;
 /** 单份榜单的作品上限；超出时截断并告警，而不是让整份画像失效。 */
@@ -266,7 +261,7 @@ export function readProfile(storage: Storage): ArtisticProfile | null {
     const legacy: RankingExport[] = [];
     for (let index = 0; index < storage.length; index++) {
       const key = storage.key(index);
-      if (!key?.startsWith("art-rank:profile:")) continue;
+      if (!key?.startsWith(PROFILE_PREFIX)) continue;
       try {
         legacy.push(...parseProfile(JSON.parse(storage.getItem(key) ?? "")).rankings);
       } catch {

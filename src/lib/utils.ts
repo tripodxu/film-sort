@@ -1,19 +1,13 @@
 import { parseProfile, MAX_PROFILE_BYTES } from "./profile";
+import { SESSION_KEY, stored } from "./storageKeys";
 
-export type Locale = "zh" | "en";
-
-export function stored(key: string) {
-  try {
-    return localStorage.getItem(key);
-  } catch {
-    return null;
-  }
-}
+export type { Locale } from "../data/mediaKinds";
+export { stored };
 
 export function track(event: string, payload: Record<string, string | number>) {
   try {
-    const id = stored("art-rank:session:v1") ?? crypto.randomUUID();
-    localStorage.setItem("art-rank:session:v1", id);
+    const id = stored(SESSION_KEY) ?? crypto.randomUUID();
+    localStorage.setItem(SESSION_KEY, id);
     void fetch("/api/events", {
       method: "POST",
       headers: { "content-type": "application/json" },

@@ -6,7 +6,7 @@
  * 配置（三参数 + 可选协议）只存本浏览器 localStorage；不配置时走服务端内置通道。
  */
 
-import type { MediaKind } from "../data/media";
+import type { MediaKind } from "../data/mediaKinds";
 import type { ArtisticProfile, DimensionComparison, RankingExport } from "./profile";
 import { clearConfig, readJsonConfig, writeJsonConfig } from "./localConfig";
 
