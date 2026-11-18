@@ -929,6 +929,7 @@ const RESET_SCOPES: Record<string, { label: string; tables: string[]; statements
       "shared_links",
     ],
     statements: [
+      "DELETE FROM qr_transactions",
       "DELETE FROM user_sessions",
       "DELETE FROM user_oauth",
       "DELETE FROM user_cookie_vault",
@@ -1288,17 +1289,21 @@ async function route(request: Request, env: Env): Promise<Response> {
   }
   if (url.pathname === "/api/health" && request.method === "GET") {
     const checks: Record<string, string> = { storage: env.DB ? "d1" : "disabled" };
+    let healthy = true;
     if (env.DB) {
       try {
         await env.DB.prepare("SELECT 1").first();
         checks.database = "ok";
       } catch {
         checks.database = "error";
+        healthy = false;
       }
     }
-    return json({ ok: true, version: "2.0.0", timestamp: new Date().toISOString(), checks }, 200, {
-      "cache-control": "no-store",
-    });
+    return json(
+      { ok: healthy, version: "2.0.0", timestamp: new Date().toISOString(), checks },
+      healthy ? 200 : 503,
+      { "cache-control": "no-store" },
+    );
   }
   if (url.pathname === "/api/events" && request.method === "POST") {
     if (!(await allowUpstreamRequest(request, "events", 120)))
@@ -1566,7 +1571,10 @@ async function route(request: Request, env: Env): Promise<Response> {
     const title = url.searchParams.get("q")?.trim();
     const english = url.searchParams.get("en")?.trim() ?? "";
     const year = Number(url.searchParams.get("year")) || undefined;
-    const type = url.searchParams.get("type") as "movie" | "book" | "music" | undefined;
+    const rawType = url.searchParams.get("type")?.trim();
+    if (rawType !== undefined && rawType !== "movie" && rawType !== "book" && rawType !== "music")
+      return json({ error: "invalid_query" }, 400);
+    const type = rawType as "movie" | "book" | "music" | undefined;
     if (
       !title ||
       title.length > 160 ||
@@ -2867,17 +2875,29 @@ export default {
     let error: string | undefined;
 
     try {
-      const cacheable =
-        request.method === "GET" &&
-        ["/api/douban/top250", "/api/douban/suggest", "/api/posters", "/api/image"].includes(path);
-      // 键带「其他」代次：清缓存推进代次后，旧边缘条目自然孤儿化
+      const posterRoutes = ["/api/posters", "/api/image"];
+      const miscRoutes = [
+        "/api/douban/top250",
+        "/api/douban/books/top250",
+        "/api/douban/music/top250",
+        "/api/douban/suggest",
+        "/api/douban/books/suggest",
+      ];
+      const isPosterCacheRoute = request.method === "GET" && posterRoutes.includes(path);
+      const isMiscCacheRoute = request.method === "GET" && miscRoutes.includes(path);
+      const cacheable = isPosterCacheRoute || isMiscCacheRoute;
+      // 键带对应作用域代次：海报/图片路由绑定 posters，豆瓣榜单/搜索绑定 misc，清缓存时各自精准作废
+      const cacheScope = isPosterCacheRoute ? "posters" : "misc";
       const edgeKey = cacheable
         ? new Request(
-            `https://route-cache.art-rank.internal/${generationOf("misc")}${url.pathname}${url.search}`,
+            `https://route-cache.art-rank.internal/${generationOf(cacheScope)}${url.pathname}${url.search}`,
           )
         : null;
-      if (cacheable && edgeKey) {
-        const edgeCache = (caches as unknown as { default: Cache }).default;
+      const edgeCache =
+        cacheable && edgeKey && typeof caches !== "undefined"
+          ? (caches as unknown as { default: Cache }).default
+          : null;
+      if (edgeCache && edgeKey) {
         const hit = await edgeCache.match(edgeKey);
         if (hit) {
           if (isApi)
@@ -2886,10 +2906,8 @@ export default {
         }
       }
       response = await route(request, env);
-      if (cacheable && edgeKey && response.ok)
-        ctx.waitUntil(
-          (caches as unknown as { default: Cache }).default.put(edgeKey, response.clone()),
-        );
+      if (edgeCache && edgeKey && response.ok)
+        ctx.waitUntil(edgeCache.put(edgeKey, response.clone()));
     } catch (err) {
       if (err instanceof HttpError) {
         response = json({ error: err.code, message: err.message }, err.status);
@@ -2943,6 +2961,12 @@ export default {
           "DELETE FROM qr_transactions WHERE julianday(expires_at) <= julianday('now')",
         ),
         env.DB.prepare("DELETE FROM shared_links WHERE julianday(expires_at) < julianday('now')"),
+        env.DB.prepare(
+          "DELETE FROM verification_codes WHERE created_at < datetime('now', '-1 day')",
+        ),
+        env.DB.prepare(
+          "DELETE FROM poster_batch_stats WHERE created_at < datetime('now', '-90 days')",
+        ),
         // 跨 isolate 限流窗口：过期条目不再约束任何人，直接清掉避免长期累积。
         env.DB.prepare("DELETE FROM rate_limits WHERE started_at < ?").bind(
           Date.now() - RATE_WINDOW_MS,

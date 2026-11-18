@@ -16,14 +16,15 @@ import { join } from "node:path";
 
 const MANIFEST_TOKEN = "/*__PRECACHE_ASSETS__*/ []";
 const BUILD_ID_TOKEN = '/*__BUILD_ID__*/ "dev"';
-/** 只预缓存「代码 + 字体」：图片靠运行时 cache-first 自然积累，不必撑大安装期。 */
+/** 只预缓存核心代码与字体，跳过 530KB Three.js 装饰特效 chunk（保留运行时按需缓存，不击穿省流防线）。 */
 const PRECACHE_EXTENSIONS = /\.(?:js|css|woff2?)$/i;
+const SKIP_PRECACHE = /^(?:three\.module|OrbScene|plasma|halo|blackhole|ribbon)-/i;
 
 export function collectPrecacheAssets(distDir) {
   const assetsDir = join(distDir, "assets");
   if (!existsSync(assetsDir)) return [];
   return readdirSync(assetsDir)
-    .filter((name) => PRECACHE_EXTENSIONS.test(name))
+    .filter((name) => PRECACHE_EXTENSIONS.test(name) && !SKIP_PRECACHE.test(name))
     .sort()
     .map((name) => `/assets/${name}`);
 }

@@ -216,9 +216,10 @@ export async function plazaRoute(request: Request, env: Env): Promise<Response> 
     const isProfilePost = post.post_type === "profile";
     // 读取时也过一遍白名单：库里残留 posterUrls 的旧行读出来即干净，
     // 客户端下一次保存就自动瘦身——不需要数据迁移脚本。
-    const works = isProfilePost ? [] : toStoredWorks(rawItems);
-    const posterUrls = await resolveStoredPosterUrls(env.DB, post.kind, works);
-    const items: unknown[] = isProfilePost ? toStoredRankings(rawItems) : works;
+    const posterUrls = isProfilePost
+      ? []
+      : await resolveStoredPosterUrls(env.DB, post.kind, toStoredWorks(rawItems));
+    const items: unknown[] = isProfilePost ? toStoredRankings(rawItems) : toStoredWorks(rawItems);
     return json({
       post: {
         ...post,
@@ -452,10 +453,12 @@ export async function plazaRoute(request: Request, env: Env): Promise<Response> 
     if (existing.user_id !== user.id) return json({ error: "forbidden" }, 403);
 
     const body = await readJsonObject(request);
-    // 与创建/编辑路径同口径：字符串 "false"/"0" 不能被当成公开。
-    const visibility = parseVisibility(body?.is_public);
-    if (visibility === null) return json({ error: "invalid_is_public" }, 400);
-    const isPublic = visibility ?? 0;
+    if (!body) return json({ error: "invalid_is_public" }, 400);
+    // 与创建/编辑路径同口径：字符串 "false"/"0" 或缺失字段均不能静默隐藏帖子。
+    const visibility = parseVisibility(body.is_public);
+    if (visibility === null || visibility === undefined)
+      return json({ error: "invalid_is_public" }, 400);
+    const isPublic = visibility;
     await env.DB.prepare(
       "UPDATE plaza_posts SET is_public = ?, updated_at = datetime('now') WHERE id = ?",
     )

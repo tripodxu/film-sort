@@ -24,12 +24,11 @@ function cacheableResponse(response) {
 self.addEventListener("install", (event) => {
   event.waitUntil(
     caches.open(RUNTIME_CACHE).then(async (cache) => {
-      // 单条失败不拖垮整个安装：预缓存是增强，缺一张图不该让 SW 装不上。
-      await Promise.allSettled(
-        [...STATIC_ASSETS, ...PRECACHE_ASSETS].map((url) =>
-          cache.add(new Request(url, { cache: "reload" })),
-        ),
-      );
+      // 单条失败不拖垮整个安装；带 hash 产物走默认缓存模式复用刚下载的 HTTP 缓存，避免双倍流量。
+      await Promise.allSettled([
+        ...STATIC_ASSETS.map((url) => cache.add(new Request(url, { cache: "reload" }))),
+        ...PRECACHE_ASSETS.map((url) => cache.add(url)),
+      ]);
       await self.skipWaiting();
     }),
   );
@@ -55,7 +54,8 @@ self.addEventListener("fetch", (event) => {
   // Only handle GET requests for same-origin resources
   if (request.method !== "GET" || !request.url.startsWith(self.location.origin)) return;
   // Skip API calls
-  if (request.url.includes("/api/")) return;
+  const pathname = new URL(request.url).pathname;
+  if (pathname.startsWith("/api/")) return;
   // 页面导航请求 network-first：部署新版本后立即生效，离线时回退到缓存的 index.html
   // 只有 SPA 壳本身的响应才写进 "/index.html" 缓存键：/admin（服务端看板）、/share/* 等
   // 非壳页若也写进同一键，网络失败回退时会互相顶替（离线开看板得到 App、离线开 App 得到看板）。
@@ -63,7 +63,6 @@ self.addEventListener("fetch", (event) => {
     event.respondWith(
       fetch(request)
         .then((response) => {
-          const pathname = new URL(request.url).pathname;
           if (
             (pathname === "/" || pathname === "/index.html") &&
             response &&
@@ -71,22 +70,35 @@ self.addEventListener("fetch", (event) => {
             response.type === "basic"
           ) {
             const clone = response.clone();
-            caches.open(RUNTIME_CACHE).then((cache) => cache.put("/index.html", clone));
+            event.waitUntil(
+              caches
+                .open(RUNTIME_CACHE)
+                .then((cache) => cache.put("/index.html", clone))
+                .catch(() => {}),
+            );
           }
           return response;
         })
-        .catch(async () => (await caches.match("/index.html")) ?? Response.error()),
+        .catch(async () =>
+          pathname.startsWith("/admin")
+            ? Response.error()
+            : ((await caches.match("/index.html")) ?? Response.error()),
+        ),
     );
     return;
   }
-  const pathname = new URL(request.url).pathname;
   if (NETWORK_FIRST_PATHS.includes(pathname)) {
     event.respondWith(
       fetch(request)
         .then((response) => {
           if (cacheableResponse(response)) {
             const clone = response.clone();
-            caches.open(RUNTIME_CACHE).then((cache) => cache.put(request, clone));
+            event.waitUntil(
+              caches
+                .open(RUNTIME_CACHE)
+                .then((cache) => cache.put(request, clone))
+                .catch(() => {}),
+            );
           }
           return response;
         })
@@ -102,7 +114,12 @@ self.addEventListener("fetch", (event) => {
         .then((response) => {
           if (!cacheableResponse(response)) return response;
           const clone = response.clone();
-          caches.open(RUNTIME_CACHE).then((cache) => cache.put(request, clone));
+          event.waitUntil(
+            caches
+              .open(RUNTIME_CACHE)
+              .then((cache) => cache.put(request, clone))
+              .catch(() => {}),
+          );
           return response;
         })
         .catch(() => new Response("", { status: 503 }));

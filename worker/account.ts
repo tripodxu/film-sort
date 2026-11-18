@@ -1026,10 +1026,15 @@ export async function accountRoute(request: Request, env: Env): Promise<Response
       env.DB.prepare(
         "DELETE FROM plaza_likes WHERE user_id = ? OR post_id IN (SELECT id FROM plaza_posts WHERE user_id = ?)",
       ).bind(userId, userId),
+      // 先解除他人回复指向被删用户评论的 parent_id 自引用外键，防止 DELETE plaza_comments 触发 FK 500
+      env.DB.prepare(
+        "UPDATE plaza_comments SET parent_id = NULL WHERE parent_id IN (SELECT id FROM plaza_comments WHERE user_id = ? OR post_id IN (SELECT id FROM plaza_posts WHERE user_id = ?))",
+      ).bind(userId, userId),
       env.DB.prepare(
         "DELETE FROM plaza_comments WHERE user_id = ? OR post_id IN (SELECT id FROM plaza_posts WHERE user_id = ?)",
       ).bind(userId, userId),
       env.DB.prepare("DELETE FROM plaza_posts WHERE user_id = ?").bind(userId),
+      env.DB.prepare("DELETE FROM qr_transactions WHERE user_id = ?").bind(userId),
       env.DB.prepare("DELETE FROM user_cookie_vault WHERE user_id = ?").bind(userId),
       env.DB.prepare("DELETE FROM user_sessions WHERE user_id = ?").bind(userId),
       env.DB.prepare("DELETE FROM user_oauth WHERE user_id = ?").bind(userId),

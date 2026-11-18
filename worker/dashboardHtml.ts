@@ -701,6 +701,10 @@ async function openPlazaDetail(id){
     if (!r.ok) throw new Error(d.error||'加载失败');
     var p = d.post;
     var items = (p.items||[]).map(function(w,i){
+      if (p.post_type === 'profile' && w && Array.isArray(w.items)) {
+        var topTitles = w.items.slice(0,3).map(function(x){ return esc(x&&x.title); }).join(' / ');
+        return '<div class="rank-row"><span class="rank-medal">'+String(i+1).padStart(2,'0')+'</span><div style="min-width:0"><strong>'+esc(w.collectionTitle||'未命名榜单')+'</strong><div class="mini-note">'+esc(w.kind||'')+' · '+w.items.length+' 件'+(topTitles?' · '+topTitles:'')+'</div></div></div>';
+      }
       var rank = Number(w.rank) || (i+1);
       return '<div class="rank-row"><span class="rank-medal">'+(rank<=3?(rank===1?'🥇':rank===2?'🥈':'🥉'):String(rank).padStart(2,'0'))+'</span><div style="min-width:0"><strong>'+esc(w.title)+'</strong><div class="mini-note">'+esc(w.creator||'')+' '+esc(w.year||'')+'</div></div></div>';
     }).join('');
