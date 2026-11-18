@@ -4,7 +4,7 @@
 // 交互对齐 AiInsightCard 先例：点击才发请求（不预取）、自持 busy/失败态、
 // 数据签名变化即视为过期（切维度/换画像后显示引导文案而非旧结果）。
 import { useMemo, useState } from "react";
-import { Settings2, Sparkles, TrendingDown, TrendingUp } from "lucide-react";
+import { Settings2, TrendingDown, TrendingUp } from "lucide-react";
 import { Poster } from "./Poster";
 import {
   jevFailureText,
@@ -87,7 +87,7 @@ export function JevDivergenceCard({
     <div className="comparison-ai" aria-live="polite">
       <div style={{ minWidth: 0, flex: 1 }}>
         <span className="eyebrow" style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
-          <Sparkles size={13} /> {t("预测分歧 · JEV", "PREDICTED DIVERGENCE · JEV")}
+          <span aria-hidden="true">§</span> {t("预测分歧 · JEV", "PREDICTED DIVERGENCE · JEV")}
         </span>
         {busy ? (
           <p>
@@ -212,7 +212,6 @@ export function JevDivergenceCard({
           disabled={busy || tooFew}
           onClick={() => void predict()}
         >
-          <Sparkles size={14} />
           {busy
             ? t("预测中…", "Predicting…")
             : entries && !stale

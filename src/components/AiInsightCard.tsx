@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { PenLine, RefreshCw, Settings2, Sparkles } from "lucide-react";
+import { PenLine, RefreshCw, Settings2 } from "lucide-react";
 import { Skeleton } from "./ui/Skeleton";
 import {
   cacheKeyOf,
@@ -164,7 +164,7 @@ export function AiInsightCard({
     >
       <div style={{ minWidth: 0, flex: 1 }}>
         <span className="eyebrow" style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
-          <Sparkles size={13} /> {eyebrow}
+          <span aria-hidden="true">§</span> {eyebrow}
         </span>
         {busy ? (
           <>
