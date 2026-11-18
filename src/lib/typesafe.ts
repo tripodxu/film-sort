@@ -22,6 +22,7 @@ export type JevErrorCode =
 
 export interface JevUserConfig {
   apiKey: string;
+  baseUrl?: string;
 }
 
 const CONFIG_KEY = "art-rank:typesafe-config";
@@ -30,7 +31,9 @@ export function readTypesafeConfig(): JevUserConfig | null {
   const raw = readJsonConfig(CONFIG_KEY);
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
   const cfg = raw as Record<string, unknown>;
-  return typeof cfg.apiKey === "string" && cfg.apiKey ? { apiKey: cfg.apiKey } : null;
+  if (typeof cfg.apiKey !== "string" || !cfg.apiKey) return null;
+  const baseUrl = typeof cfg.baseUrl === "string" ? cfg.baseUrl.trim() : "";
+  return baseUrl ? { apiKey: cfg.apiKey, baseUrl } : { apiKey: cfg.apiKey };
 }
 
 /** 返回 false 表示浏览器存储不可用(隐私模式),调用方应提示「仅本次会话有效」。 */

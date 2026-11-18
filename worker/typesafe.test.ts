@@ -14,10 +14,48 @@ import {
 } from "./typesafe";
 
 describe("validateJevConfig", () => {
-  it("接受合法 key", () => {
+  it("接受合法 key 与合法第三方 baseUrl（自动补齐 /v1/systemone）", () => {
     expect(validateJevConfig({ apiKey: "ts_abcdef123456" })).toEqual({
       apiKey: "ts_abcdef123456",
     });
+    expect(
+      validateJevConfig({
+        apiKey: "ts_abcdef123456",
+        baseUrl: "https://jev-proxy.example.com/v1/",
+      }),
+    ).toEqual({
+      apiKey: "ts_abcdef123456",
+      url: "https://jev-proxy.example.com/v1/systemone",
+    });
+    expect(
+      validateJevConfig({
+        apiKey: "ts_abcdef123456",
+        baseUrl: "https://jev-proxy.example.com/v1/systemone",
+      }),
+    ).toEqual({
+      apiKey: "ts_abcdef123456",
+      url: "https://jev-proxy.example.com/v1/systemone",
+    });
+    expect(
+      validateJevConfig({ apiKey: "ts_abcdef123456", baseUrl: "https://jev-proxy.example.com" }),
+    ).toEqual({
+      apiKey: "ts_abcdef123456",
+      url: "https://jev-proxy.example.com/v1/systemone",
+    });
+  });
+  it("拒绝非法或含 SSRF 风险的第三方 baseUrl", () => {
+    expect(
+      validateJevConfig({ apiKey: "ts_abcdef123456", baseUrl: "http://jev-proxy.example.com/v1" }),
+    ).toBeNull();
+    expect(
+      validateJevConfig({ apiKey: "ts_abcdef123456", baseUrl: "https://127.0.0.1/v1" }),
+    ).toBeNull();
+    expect(
+      validateJevConfig({ apiKey: "ts_abcdef123456", baseUrl: "https://localhost:8443/v1" }),
+    ).toBeNull();
+    expect(
+      validateJevConfig({ apiKey: "ts_abcdef123456", baseUrl: "https://foo.internal/v1" }),
+    ).toBeNull();
   });
   it("拒绝过短/过长/含控制字符/非字符串 key", () => {
     expect(validateJevConfig({ apiKey: "short" })).toBeNull();

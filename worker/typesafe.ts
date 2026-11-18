@@ -42,12 +42,44 @@ export interface JevRankResult {
   inputTokens: number;
 }
 
-export function validateJevConfig(raw: unknown): { apiKey: string } | null {
+/** 校验并归一化第三方 Jev Base URL（防 SSRF：仅 https、禁 IP/内网/端口/凭据）。 */
+export function resolveJevEndpoint(rawBaseUrl: string): string | null {
+  const trimmed = rawBaseUrl.trim();
+  if (!trimmed || trimmed.length > 2083) return null;
+  let url: URL;
+  try {
+    url = new URL(trimmed);
+  } catch {
+    return null;
+  }
+  if (url.protocol !== "https:") return null;
+  if (url.username || url.password) return null;
+  if (url.port) return null;
+  const host = url.hostname.toLowerCase();
+  if (/^\d{1,3}(?:\.\d{1,3}){3}$/.test(host) || host.startsWith("[")) return null;
+  if (host === "localhost" || host.endsWith(".localhost")) return null;
+  if (host.endsWith(".internal") || host === "metadata.cloudflare.com") return null;
+  if (host.split(".").length < 2) return null;
+  const base = `${url.origin}${url.pathname}`.replace(/\/+$/, "");
+  if (base.endsWith("/systemone")) return base;
+  if (base.endsWith("/v1")) return `${base}/systemone`;
+  return `${base}/v1/systemone`;
+}
+
+export function validateJevConfig(raw: unknown): JevCallConfig | null {
   if (typeof raw !== "object" || raw === null || Array.isArray(raw)) return null;
   const cfg = raw as Record<string, unknown>;
   if (typeof cfg.apiKey !== "string") return null;
   const apiKey = cfg.apiKey;
   if (apiKey.length < 8 || apiKey.length > 256 || CONTROL_RE.test(apiKey)) return null;
+  if (cfg.baseUrl !== undefined) {
+    if (typeof cfg.baseUrl !== "string") return null;
+    if (cfg.baseUrl.trim() !== "") {
+      const url = resolveJevEndpoint(cfg.baseUrl);
+      if (!url) return null;
+      return { apiKey, url };
+    }
+  }
   return { apiKey };
 }
 
@@ -149,20 +181,21 @@ async function callSystemOne(
   config: JevCallConfig,
   fetchImpl: typeof fetch,
 ): Promise<SystemOneResponse> {
+  const targetUrl = config.url ?? SYSTEMONE_URL;
+  const targetHost = new URL(targetUrl).hostname.toLowerCase();
   let response: Response;
   try {
     response = await fetchBounded(
-      config.url ?? SYSTEMONE_URL,
+      targetUrl,
       {
         method: "POST",
         headers: { authorization: `Bearer ${config.apiKey}`, "content-type": "application/json" },
         body: JSON.stringify(payload),
       },
-      // 上游域名固定、非用户可控:精确白名单 + 30s 超时 + 1MB 响应上限。
-      // jev.logicc.top 是站主自建反代,仅供内置免费通道;两个主机都进白名单,
-      // 反代若 30x 到官方域也能逐跳复核通过。
+      // 默认通道走 api.typesafe.ai / jev.logicc.top 精确白名单；
+      // 若配置了已通过 resolveJevEndpoint SSRF 校验的第三方地址，锁定其精确 hostname。
       {
-        allowedHosts: ["api.typesafe.ai", "jev.logicc.top"],
+        allowedHosts: config.url ? [targetHost] : ["api.typesafe.ai", "jev.logicc.top"],
         maxBytes: MAX_RESPONSE_BYTES,
         timeoutMs: 30_000,
         maxRedirects: 2,

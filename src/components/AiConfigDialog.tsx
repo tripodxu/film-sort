@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Check, Plug, RefreshCw, Sparkles } from "lucide-react";
+import { Check, Plug, RefreshCw } from "lucide-react";
 import { Modal } from "./Modal";
 import {
   clearAiConfig,
@@ -64,13 +64,16 @@ export function AiConfigDialog({
   const [testBusy, setTestBusy] = useState(false);
   const [listBusy, setListBusy] = useState(false);
   const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null);
-  const [jevKey, setJevKey] = useState(readTypesafeConfig()?.apiKey ?? "");
+  const existingJev = readTypesafeConfig();
+  const [jevBaseUrl, setJevBaseUrl] = useState(existingJev?.baseUrl ?? "");
+  const [jevKey, setJevKey] = useState(existingJev?.apiKey ?? "");
   const [jevAssistOn, setJevAssistOn] = useState(readJevAssistEnabled());
   const [jevThreshold, setJevThreshold] = useState(readJevAssistThreshold());
   const assistPct = Math.round(jevThreshold * 100);
   const [jevTestBusy, setJevTestBusy] = useState(false);
   const [jevMessage, setJevMessage] = useState<{ ok: boolean; text: string } | null>(null);
-  const canSaveJev = jevKey.trim().length >= 8;
+  const jevBaseValid = jevBaseUrl.trim() === "" || jevBaseUrl.trim().startsWith("https://");
+  const canSaveJev = jevKey.trim().length >= 8 && jevBaseValid;
 
   // 「获取模型列表」只依赖地址与密钥——取列表恰恰是因为还不知道 Model 该填什么；
   // 测试连接/保存才会真正调用模型，需要三参齐备。
@@ -145,11 +148,15 @@ export function AiConfigDialog({
   async function runJevTest() {
     if (jevTestBusy) return;
     const trimmed = jevKey.trim();
+    const baseTrimmed = jevBaseUrl.trim();
     // 空 key = 测试站内免费通道;≥8 字符 = 测试用户自己的 key;中间态不测
     if (trimmed.length > 0 && trimmed.length < 8) return;
+    if (trimmed.length > 0 && !jevBaseValid) return;
     setJevTestBusy(true);
     setJevMessage(null);
-    const result = await testJevConfig(trimmed ? { apiKey: trimmed } : null);
+    const result = await testJevConfig(
+      trimmed ? { apiKey: trimmed, ...(baseTrimmed ? { baseUrl: baseTrimmed } : {}) } : null,
+    );
     setJevTestBusy(false);
     setJevMessage(
       result.ok
@@ -168,7 +175,11 @@ export function AiConfigDialog({
 
   function saveJev() {
     if (!canSaveJev) return;
-    const stored = writeTypesafeConfig({ apiKey: jevKey.trim() });
+    const baseTrimmed = jevBaseUrl.trim();
+    const stored = writeTypesafeConfig({
+      apiKey: jevKey.trim(),
+      ...(baseTrimmed ? { baseUrl: baseTrimmed } : {}),
+    });
     setJevMessage({
       ok: stored,
       text: stored
@@ -380,10 +391,22 @@ export function AiConfigDialog({
       </div>
       <p style={{ fontSize: 13, color: "var(--muted)", lineHeight: 1.7, marginBottom: 10 }}>
         {t(
-          "用于准备页的「AI 快排」与排序中的「Jev 代判」。未配置 Key 时自动使用站内免费通道（限频共用）；也可填自己的 API Key（console.typesafe.ai 申请），Key 仅保存在本浏览器。",
-          'Powers "AI quick rank" on the prepare page and "Jev assist" while sorting. Without a key, the built-in free channel is used automatically (shared, rate-limited); or add your own key from console.typesafe.ai — stored in this browser only.',
+          "用于准备页的「AI 快排」与排序中的「Jev 代判」。未配置 Key 时自动使用站内免费通道（限频共用）；也可填自己的 API Key 与可选第三方 Base URL，所有请求均经本站同源代理转发（无浏览器 CORS 拦截），配置仅保存在本浏览器。",
+          'Powers "AI quick rank" on the prepare page and "Jev assist" while sorting. Without a key, the built-in free channel is used automatically; or add your own API key and optional third-party Base URL — requests go through our same-origin proxy (no browser CORS block) and stay in this browser only.',
         )}
       </p>
+      <div style={{ marginBottom: 8 }}>
+        <div style={label}>
+          {t("Jev Base URL（可选，留空走官方 api.typesafe.ai）", "Jev Base URL (optional)")}
+        </div>
+        <input
+          value={jevBaseUrl}
+          onChange={(event) => setJevBaseUrl(event.target.value)}
+          placeholder="https://api.typesafe.ai/v1"
+          spellCheck={false}
+          aria-label={t("Jev Base URL", "Jev Base URL")}
+        />
+      </div>
       <div style={{ display: "flex", gap: 6, marginBottom: 8 }}>
         <input
           type={showKey ? "text" : "password"}
@@ -396,11 +419,11 @@ export function AiConfigDialog({
         />
         <button
           className="button secondary"
-          disabled={(jevKey.trim().length > 0 && !canSaveJev) || jevTestBusy}
+          disabled={(jevKey.trim().length > 0 && (!canSaveJev || !jevBaseValid)) || jevTestBusy}
           onClick={() => void runJevTest()}
           style={{ minHeight: 36, paddingInline: 10, fontSize: 12 }}
         >
-          <Sparkles size={14} />
+          <Plug size={14} />
           {jevTestBusy
             ? t("测试中…", "Testing…")
             : jevKey.trim().length === 0
