@@ -127,6 +127,14 @@ describe("P1b/P2/P3 收敛绊线", () => {
     // onClose（关两次、副作用翻倍），Esc 收敛为 FocusTrap 单一归属。
     expect(modal).toContain("<FocusTrap onEscape={onClose}>");
     expect(modal).not.toMatch(/onKeyDown=\{\(event\) =>[\s\S]{0,80}Escape/);
+    // 弹窗必须通过 createPortal 挂载到 document.body，防止被顶栏 .topbar 的 backdrop-filter 困住 fixed 定位；
+    // 背景点击必须校验 pointerDown 也在背景层上，防止弹窗内拖拽/框选到外面松手时误关弹窗。
+    const artworkDetail = strip(readFileSync("src/components/ArtworkDetail.tsx", "utf8"));
+    for (const src of [modal, artworkDetail]) {
+      expect(src).toContain("createPortal(");
+      expect(src).toContain("onPointerDown");
+      expect(src).toContain("event.target === event.currentTarget");
+    }
   });
 });
 

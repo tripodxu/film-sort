@@ -11,7 +11,8 @@
  * 本组件只负责把「声明 + 背景点击 + 事件冒泡」这三件的接线锁成唯一正解。
  */
 import { X } from "lucide-react";
-import type { CSSProperties, ReactNode } from "react";
+import { useRef, type CSSProperties, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import { FocusTrap } from "./FocusTrap";
 import { IconButton } from "../views/IconButton";
 
@@ -48,9 +49,20 @@ export function Modal({
   title,
   children,
 }: ModalProps) {
-  return (
+  const backdropDownRef = useRef(false);
+  const content = (
     <FocusTrap onEscape={onClose}>
-      <div className={backdropClassName} onClick={onClose}>
+      <div
+        className={backdropClassName}
+        onPointerDown={(event) => {
+          backdropDownRef.current = event.target === event.currentTarget;
+        }}
+        onClick={(event) => {
+          const shouldClose = backdropDownRef.current && event.target === event.currentTarget;
+          backdropDownRef.current = false;
+          if (shouldClose) onClose();
+        }}
+      >
         <section
           className={panelClassName}
           style={panelStyle}
@@ -80,4 +92,5 @@ export function Modal({
       </div>
     </FocusTrap>
   );
+  return typeof document !== "undefined" ? createPortal(content, document.body) : content;
 }

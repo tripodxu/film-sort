@@ -1,4 +1,5 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
+import { createPortal } from "react-dom";
 import { Music2, Play, X } from "lucide-react";
 import { Poster, rememberPickedCover } from "./Poster";
 import { CoverChoice } from "./CoverChoice";
@@ -57,6 +58,7 @@ export function ArtworkDetail({
   const [lyrics, setLyrics] = useState<LyricResult | null>(null);
   const [lyricBusy, setLyricBusy] = useState(false);
   const [lyricError, setLyricError] = useState("");
+  const backdropDownRef = useRef(false);
   const isMusic = detail.kind === "music";
 
   useEffect(() => {
@@ -129,13 +131,24 @@ export function ArtworkDetail({
       setLyricBusy(false);
     }
   }
-  return (
+  const content = (
     // 焦点与键盘：role="dialog" + aria-modal 只是给 AT 的一行**声明**，
     // 声明本身不产生行为——焦点仍留在打开它的那个按钮上、Tab 会走到弹窗背后去、
     // 读屏用户按 Esc 什么也不会发生。FocusTrap 把 Esc / Tab 循环 / 首焦点都实现了，
     // 这里只是**接上**（全站唯一漏接的模态，PLAN-DETAIL-DIALOG-A11Y §3.1）。
     <FocusTrap onEscape={onClose}>
-      <div className="modal-backdrop" style={{ zIndex: 60 }} onClick={onClose}>
+      <div
+        className="modal-backdrop"
+        style={{ zIndex: 60 }}
+        onPointerDown={(event) => {
+          backdropDownRef.current = event.target === event.currentTarget;
+        }}
+        onClick={(event) => {
+          const shouldClose = backdropDownRef.current && event.target === event.currentTarget;
+          backdropDownRef.current = false;
+          if (shouldClose) onClose();
+        }}
+      >
         <section
           className="detail-dialog"
           role="dialog"
@@ -291,4 +304,5 @@ export function ArtworkDetail({
       </div>
     </FocusTrap>
   );
+  return typeof document !== "undefined" ? createPortal(content, document.body) : content;
 }
