@@ -8,8 +8,9 @@
 import { describe, it, expect } from "vitest";
 import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
+import { readMainStyles } from "./lib/readStyles";
 
-const css = readFileSync("src/styles.css", "utf8");
+const css = readMainStyles();
 const walk = (dir: string): string[] =>
   readdirSync(dir, { withFileTypes: true }).flatMap((e) =>
     e.isDirectory()
@@ -665,7 +666,7 @@ describe("消歧出口 UI（PLAN-CHOICE-UI）", () => {
   const app = readFileSync("src/App.tsx", "utf8");
   const detail = readFileSync("src/components/ArtworkDetail.tsx", "utf8");
   const choice = readFileSync("src/components/CoverChoice.tsx", "utf8");
-  const cssSource = readFileSync("src/styles.css", "utf8");
+  const cssSource = readMainStyles();
 
   it("触发条件里 poolSize>=2 与 coverCount>0 都在（weak+pool=0 不许弹空列表）", () => {
     const lib = readFileSync("src/lib/coverChoice.ts", "utf8");

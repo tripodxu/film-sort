@@ -11,8 +11,9 @@
  */
 import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
+import { readMainStyles } from "./lib/readStyles";
 
-const css = readFileSync("src/styles.css", "utf8");
+const css = readMainStyles();
 const backdrop = readFileSync("src/components/HeroBackdrop.tsx", "utf8");
 const router = readFileSync("src/lib/useRouter.ts", "utf8");
 

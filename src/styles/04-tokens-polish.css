@@ -1,0 +1,142 @@
+/* =============================================================================
+   §Z 统一设计语言层（T-20261028-UI）
+   -----------------------------------------------------------------------------
+   前面各批次的规则是「按模块堆出来的」，同一个视觉意图有多种写法：三套卡片外壳
+   （border+padding+radius 值各不相同）、四处 ellipsis 三件套、十几处 flex 排版
+   全写成 style={{}}。本层不推翻任何既有视觉，只提供**一份**轴位（token）和
+   **一组**低特异性工具类，让后续改动有唯一落点。
+
+   三条纪律（违反会踩既有绊线）：
+   1. 不重复声明 --ev-1/2/3 与 --t-micro —— ui-fixes 断言它们在全文件各只有一份。
+   2. 不出现裸 hex —— 「散落 hex 归零」只允许在 --var:#hex 里出现。
+   3. 工具类一律单类（0,1,0），不加强制覆盖；需要压过组件样式时靠本层位置靠后取胜。
+   ============================================================================= */
+
+/* Z.1 token 补剂：只补缺口的语义 token，不覆写既有值 */
+:root{
+  --tap-min:44px;        /* WCAG 2.5.5 最小触控目标 */
+  --tap-icon:28px;       /* 图标按钮边长；同上 */
+  --card-min:250px;      /* 网格卡片最小宽度 */
+  --qr-size:min(300px,100%);
+}
+
+/* --qr-bg 是颜色基元（二维码必须白底：扫描容错依赖与背景的强反差），
+   按「散落 hex 只允许出现在 token 定义层」的规矩写在下面 §Z.1 之前。 */
+
+/* Z.2 排版工具 */
+.u-ellipsis{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+/* Z.3 布局工具：取值全部来自 --sp-*，杜绝再次出现魔法数字。
+   纪律：本层的每个类都必须在生产代码里有调用点 —— 本次清理删掉了 46 条
+   无引用的旧规则，新工具层不许自己制造下一批死代码。 */
+.u-row{display:flex;align-items:center;gap:var(--sp-3)}
+.u-row-tight{display:flex;align-items:center;gap:var(--sp-2)}
+.u-row-between{display:flex;align-items:center;justify-content:space-between;gap:var(--sp-3)}
+.u-col{display:flex;flex-direction:column;gap:var(--sp-2)}
+.u-wrap{flex-wrap:wrap}
+.u-spacer{flex:1}
+.u-mb{margin-bottom:var(--sp-3)}
+.u-my{margin:var(--sp-6) 0}
+.u-divider{flex:1;height:1px;background:var(--line)}
+
+/* Z.4 文本工具 */
+.u-meta{font-size:var(--t-small);color:var(--muted);line-height:1.7}
+.u-meta-sm{font-size:var(--t-meta);color:var(--muted);line-height:1.6}
+
+/* Z.7 空状态 / 骨架屏：此前 17 处空状态各写一套内联 padding（40/60/无），
+   骨架屏此前有两套动画节奏（手写 1.5s 与 --dur-pulse），
+   2026-10-28 起统一由 src/components/ui/Skeleton.tsx 承载 skeleton-pulse。 */
+.empty-state-title{font-size:var(--t-h3);font-weight:600;color:var(--text);margin:0 0 var(--sp-2)}
+.empty-state-actions{display:flex;gap:var(--sp-2);justify-content:center;flex-wrap:wrap;margin-top:var(--sp-4)}
+.empty-state-pad{padding:var(--sp-7) var(--sp-4)}
+.empty-state-pad-sm{padding:var(--sp-5) var(--sp-3)}
+.empty-state-error .empty-state-title{color:var(--red)}
+.skeleton{
+  position:relative;overflow:hidden;border-radius:var(--r-sm);background:var(--line);
+  animation:skeleton-pulse var(--dur-pulse) var(--ease-out) infinite
+}
+.skeleton-line{height:14px}
+.skeleton-line-sm{height:10px}
+.skeleton-block{border-radius:var(--r-md)}
+@keyframes skeleton-pulse{0%,100%{opacity:1}50%{opacity:.45}}
+@media(prefers-reduced-motion:reduce){.skeleton{animation:none;opacity:.7}}
+
+/* Z.8 首页「品味年轮」布局：原先是三组内联 style（容器/列/列表）+ 硬编码
+   minWidth:200。资料被困在每一源自妥的宽度 —— 两列 200+200+gap20=420px，
+   在 360px 视口（可用宽 336px）下必然横向溢出。改为 data-layout + 本层执政，
+   min-width 归零。 */
+.coordinate-grid{display:flex;gap:20px;flex-wrap:wrap}
+.coordinate-grid[data-layout=col]{flex-direction:row}
+.coordinate-grid[data-layout=row]{flex-direction:column}
+.coordinate-col{flex:1 1 var(--card-min);min-width:0}
+.coordinate-grid[data-layout=row] .coordinate-col{flex:none}
+.coordinate-kind{
+  margin-bottom:var(--sp-2);color:var(--accent);font-size:var(--t-meta);font-weight:600;
+  text-transform:uppercase;letter-spacing:var(--ls-mid)
+}
+.coordinate-rail{display:flex;gap:var(--sp-3);flex-wrap:wrap}
+.coordinate-grid[data-layout=col] .coordinate-rail{flex-direction:column}
+.coordinate-grid[data-layout=row] .coordinate-rail{flex-direction:row}
+@media(max-width:720px){
+  .coordinate-grid,.coordinate-grid[data-layout=col]{flex-direction:column}
+  .coordinate-rail{flex-direction:column}
+}
+
+/* Z.9 扫码登录弹窗：二维码此前是硬编码 300×300px 内联图，.qr-stage 又没有
+   flex-wrap —— 在 360px 视口下 300px 图 + 12px gap 直接挤出 min(460px,100%) 容器。
+   尺寸下沉为 --qr-size 并允许换行。 */
+.qr-stage{flex-wrap:wrap}
+.qr-image{
+  width:var(--qr-size);height:auto;aspect-ratio:1/1;max-width:100%;padding:var(--sp-3);
+  background:var(--qr-bg);border-radius:var(--r-md)
+}
+@media(max-width:540px){.qr-stage{flex-direction:column}}
+
+/* Z.10b 扫码弹窗的壳（QrConnectModal 抽取时顺带下沉）：此前弹窗主体是
+   `style={{display:"grid",placeItems:"center",gap:12}}`，状态色与居中对齐
+   各写在三个内联对象里 —— 豆瓣与网易云两份，改一次要改两遍。现在结构在组件里，
+   样式在这里，状态色走 data-state 属性选择器（不再靠 JS 拼颜色字符串）。 */
+.qr-body{display:grid;place-items:center;gap:var(--sp-3)}
+.qr-hint{font-size:13px;line-height:1.7;margin:0;text-align:center;color:var(--muted)}
+.qr-hint[data-state=scanned]{color:var(--accent)}
+.qr-hint[data-state=confirmed]{color:var(--green)}
+.qr-note{text-align:center;margin:0}
+.qr-help-link{align-self:center;font-size:11px}
+
+/* Z.10 清单源宫格：此前由内联 grid-template-columns 直接执政 —— CSS 管不到、也没有
+   ≤800px 兜底，4 列在 600px 下每列约 140px，卡片内容被挤成重叠。改由 --collection-cols
+   传值（与既有 --plaza-cols 同一手法），列数的事实仍在调用方，降级规则回到 CSS。
+   注意：降级必须直接覆盖 grid-template-columns，不能只改 --collection-cols ——
+   调用方是内联设的变量，内联自定义属性优先级高于样式表，覆盖同名变量无效。 */
+.collection-list{--collection-cols:2;grid-template-columns:repeat(var(--collection-cols,2),minmax(0,1fr))}
+@media(max-width:800px){.collection-list{grid-template-columns:repeat(2,minmax(0,1fr))}}
+
+/* Z.11 比较页双栏输入区：原只有 ≤800px 单列一条规则，540px 起两栏各 ~240px，
+   「28px 媒介标签 + checkbox + Top3 海报 + 标题 + TOP n」单行必溢。 */
+@media(max-width:800px){.comparison-inputs{gap:var(--sp-5)}}
+@media(max-width:540px){
+  .comparison-inputs{gap:var(--sp-4)}
+  /* Top3 作品名 100px 定宽（既有规则 styles.css 中段）在窄屏会被截到 2 个字 */
+  .ranking-card-top3-name{max-width:none}
+  /* 媒介标签同理：28px 是为对齐中文两字测出来的，窄屏下让位给清单名 */
+  .ranking-entry-kind{width:auto;min-width:0}
+}
+
+/* Z.12 密集小控件的一致性兜底：全站出现 28 / 22 / 16px 三种小控件尺寸，
+   命中区统一由既有 .hit-expand（inset:-4px 透明层）提供；这里把继承形状补圆，
+   避免方形透明层在圆形按钮上露出直角压实痕迹。 */
+.hit-expand::after{border-radius:inherit}
+/* 28px 小图标按钮此前逐处内联 width/height；尺寸下沉后「降尺 + 命中区」两件事分离：
+   视觉 28px 由本类给，44px 命中区仍交给 .hit-expand。 */
+.icon-button-sm{width:var(--tap-icon);height:var(--tap-icon)}
+
+/* Z.13 更强的对比度偏好：用户显式要求时，次级文字与描边各提一档。
+   （减少动态效果由文件头部的全局 @media 规则统一熔断，此处不重复。） */
+@media(prefers-contrast:more){
+  :root{
+    --text-3:color-mix(in srgb,var(--text) 92%,var(--bg));
+    --line:color-mix(in srgb,var(--text) 34%,transparent);
+    --border-2:color-mix(in srgb,var(--text) 48%,transparent);
+  }
+}
+

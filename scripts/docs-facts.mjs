@@ -71,7 +71,10 @@ check(!walk("src").some((file) => /🥇|🥈|🥉/.test(read(file))), "src/: 不
 for (const file of ["README.md", "docs/USAGE.md"]) {
   check(!/🥇|🥈|🥉/.test(read(file)), `${file}: 代码已无奖牌 emoji，文档不得再声称`);
 }
-check(!/jellyBounce/.test(read("src/styles.css")), "src/styles.css: 不应复活 jellyBounce");
+const mainCss = [...read("src/styles/index.css").matchAll(/@import\s+["']\.\/([^"']+)["'];/g)]
+  .map((m) => read(`src/styles/${m[1]}`))
+  .join("\n");
+check(!/jellyBounce/.test(mainCss), "src/styles/: 不应复活 jellyBounce");
 check(!/果冻悬停/.test(readme), "README.md: 代码已无果冻动画");
 
 // 5. PITFALLS 编号不得重复

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { readFileSync } from "node:fs";
+import { readMainStyles } from "./lib/readStyles";
 
 /** T-20261014-10 打磨绊线：11 主题真机对比度审计的结论 + hero/图标动效。
  *
@@ -12,7 +12,7 @@ import { readFileSync } from "node:fs";
  * 其余 9 主题全部 ≥4.5，无需动。 */
 
 function css(): string {
-  return readFileSync(new URL("./styles.css", import.meta.url), "utf8");
+  return readMainStyles();
 }
 
 describe("ui polish（T-20261014-10）", () => {

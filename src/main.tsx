@@ -4,7 +4,7 @@ import App from "./App";
 import { readTheme } from "./lib/theme";
 import { restoreCustomThemes } from "./lib/themeRegistry";
 import { readLayout } from "./lib/layout";
-import "./styles.css";
+import "./styles/index.css";
 // S4：第 12 套内置主题 atlas 的变量块。单独文件、紧跟主样式表之后引入，
 // 同层未分层靠源码顺序取胜；主样式表本身一行未改。
 import "./styles/atlas.css";

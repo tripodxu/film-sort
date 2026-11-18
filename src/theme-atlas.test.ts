@@ -1,5 +1,6 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
+import { readMainStyles } from "./lib/readStyles";
 import { THEMES } from "./lib/theme";
 
 /**
@@ -19,7 +20,7 @@ const MAIN = read("./main.tsx");
 const SWITCHER_CODE = read("./components/ThemeSwitcher.tsx")
   .replace(/\/\*[\s\S]*?\*\//g, "")
   .replace(/(^|[^:])\/\/.*$/gm, "$1");
-const CSS = read("./styles.css");
+const CSS = readMainStyles();
 const SHOTS = JSON.parse(read("../scripts/ui-shots-themes.json")) as Array<{
   name: string;
   path: string;
@@ -128,8 +129,8 @@ describe("S4 样式：新主题独立成文件，结构上不可能影响旧主�
     expect(CSS).not.toContain("atlas.css");
   });
 
-  it("main.tsx 在 styles.css 之后引入 atlas.css", () => {
-    const base = MAIN.indexOf('"./styles.css"');
+  it("main.tsx 在 styles/index.css 之后引入 atlas.css", () => {
+    const base = MAIN.indexOf('"./styles/index.css"');
     const atlas = MAIN.indexOf('"./styles/atlas.css"');
     expect(base).toBeGreaterThan(-1);
     expect(atlas).toBeGreaterThan(base);

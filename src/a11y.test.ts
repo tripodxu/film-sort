@@ -1,5 +1,6 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
+import { readMainStyles } from "./lib/readStyles";
 
 /**
  * S5（无障碍纯追加修补）的源码绊线。
@@ -109,7 +110,7 @@ describe("S5-2 · ProfileView / PlazaPostView / FocusTrap 无障碍补全", () =
   it("死代码清理不回退：plaza-search 死类不再出现，theme-simple 色点与主题 accent 一致", () => {
     const plaza = read("./views/PlazaView.tsx");
     expect(plaza).not.toContain("plaza-search");
-    const css = read("./styles.css");
+    const css = readMainStyles();
     expect(css).not.toContain(".theme-menu-sep{");
     expect(css).not.toContain(".identity{top:18px}");
     expect(css).toContain(".theme-dot.theme-simple{--dot-a:#f5f7fa;--dot-b:#2b64d8;");

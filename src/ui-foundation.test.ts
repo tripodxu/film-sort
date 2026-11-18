@@ -1,5 +1,6 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
+import { readMainStyles } from "./lib/readStyles";
 
 /**
  * 前端统一设计语言层（§Z）与原语组件的回归绊线（T-20261028-UI）。
@@ -11,7 +12,7 @@ import { describe, expect, it } from "vitest";
  * 与 ui-fixes.test.ts 的分工：那边守历史批次的事实，这边守本层的存在与作用边界。
  */
 const read = (rel: string) => readFileSync(new URL(rel, import.meta.url), "utf8");
-const css = read("./styles.css");
+const css = readMainStyles();
 const zLayer = css.slice(css.indexOf("§Z 统一设计语言层"));
 
 describe("§Z 统一设计语言层", () => {

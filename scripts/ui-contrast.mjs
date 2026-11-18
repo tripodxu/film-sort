@@ -6,10 +6,13 @@ import { fileURLToPath } from "node:url";
 import { dirname, join, resolve } from "node:path";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-const css =
-  readFileSync(join(ROOT, "src/styles.css"), "utf8") +
-  "\n" +
-  readFileSync(join(ROOT, "src/styles/atlas.css"), "utf8");
+const readStylesIndex = () => {
+  const idx = readFileSync(join(ROOT, "src/styles/index.css"), "utf8");
+  return [...idx.matchAll(/@import\s+["']\.\/([^"']+)["'];/g)]
+    .map((m) => readFileSync(join(ROOT, "src/styles", m[1]), "utf8"))
+    .join("\n");
+};
+const css = readStylesIndex() + "\n" + readFileSync(join(ROOT, "src/styles/atlas.css"), "utf8");
 
 const THEMES = [
   "modern",

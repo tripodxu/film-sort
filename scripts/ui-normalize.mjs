@@ -10,7 +10,7 @@ import { fileURLToPath } from "node:url";
 import { dirname, join, resolve } from "node:path";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-const FILE = join(ROOT, "src/styles.css");
+const FILE = join(ROOT, "src/styles/00-base.css");
 
 const SPACE_BASE = [0, 4, 8, 12, 16, 24, 32, 48, 64];
 const spaceMap = (px) => {

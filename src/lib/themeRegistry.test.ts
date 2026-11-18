@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { readMainStyles } from "./readStyles";
 import { describe, expect, it } from "vitest";
 import {
   isKnownThemeVar,
@@ -126,7 +126,7 @@ describe("parseThemePackage 校验器", () => {
   });
 
   it("KNOWN_VARS 覆盖 styles.css 中 :root 声明的所有 CSS 变量（含 --shadow-tint / --ev-*）", () => {
-    const css = readFileSync(new URL("../styles.css", import.meta.url), "utf8");
+    const css = readMainStyles();
     const rootBlocks = [...css.matchAll(/:root\{([^}]*)\}/g)].map((m) => m[1]).join(";");
     const rootVars = [...new Set([...rootBlocks.matchAll(/(--[a-z0-9-]+):/g)].map((m) => m[1]))];
     const missing = rootVars.filter((v) => !isKnownThemeVar(v));

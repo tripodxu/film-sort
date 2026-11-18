@@ -23,7 +23,9 @@ const lines = (t) => {
 const count = (re, s) => (s.match(re) ?? []).length;
 const uniq = (xs) => [...new Set(xs)];
 
-const css = read("src/styles.css");
+const css = [...read("src/styles/index.css").matchAll(/@import\s+["']\.\/([^"']+)["'];/g)]
+  .map((m) => read(`src/styles/${m[1]}`))
+  .join("\n");
 const app = read("src/App.tsx");
 const ls = lines(css);
 const la = lines(app);

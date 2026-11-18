@@ -1,0 +1,135 @@
+/* ===== Depth Compare（S3 新增，纯增量：只追加 .depth-* / .confidence-badge / .metric-explainer 规则，
+   不改既有 545 个令牌、不加 @layer、不写裸 hex；风格与上方 S2 的 .adaptive-* 块保持一致） ===== */
+.depth-view{display:grid;gap:var(--sp-6)}
+.depth-head{display:grid;gap:var(--sp-2);max-width:760px}
+.depth-lede{margin:0;color:var(--text-3);font-size:var(--t-small);line-height:1.8}
+.depth-kinds{justify-self:start}
+.depth-hero{display:grid;grid-template-columns:minmax(0,220px) minmax(0,1fr);gap:var(--sp-5);align-items:center;padding:var(--sp-5);border:1px solid var(--line);border-radius:var(--r-md);background:var(--surface-2)}
+.depth-score{display:grid;gap:var(--sp-1);justify-items:start}
+.depth-score-value{font-family:var(--font-display);font-size:var(--t-h1);line-height:1.1;color:var(--accent)}
+.depth-score-label{font-family:var(--font-mono);font-size:var(--t-micro);letter-spacing:var(--ls-wide);text-transform:uppercase;color:var(--text-3)}
+.depth-hero-copy{display:grid;gap:var(--sp-2);font-size:var(--t-body)}
+.depth-hero-copy strong{font-family:var(--font-mono)}
+.depth-note{margin:0;max-width:70ch;color:var(--text-3);font-size:var(--t-meta);line-height:1.7}
+.depth-section{display:grid;gap:var(--sp-3)}
+.depth-section h2{font-size:var(--t-h2)}
+.depth-metrics{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:var(--sp-3)}
+.depth-metric{display:grid;gap:var(--sp-1);padding:var(--sp-4);border:1px solid var(--line);border-radius:var(--r-sm);background:var(--surface-3)}
+.depth-metric-label{font-family:var(--font-mono);font-size:var(--t-micro);letter-spacing:var(--ls-mid);text-transform:uppercase;color:var(--text-3)}
+.depth-metric-value{font-family:var(--font-display);font-size:var(--t-h2);color:var(--text)}
+.depth-metric-note{color:var(--text-3);font-size:var(--t-meta);line-height:1.6}
+.depth-explainers{display:grid;gap:var(--sp-2)}
+.metric-explainer{border:1px solid var(--line);border-radius:var(--r-sm);background:var(--surface)}
+.metric-explainer-toggle{display:flex;align-items:center;gap:var(--sp-2);width:100%;padding:10px var(--sp-4);color:var(--text-2);font-size:var(--t-small);text-align:left}
+.metric-explainer-toggle:hover{color:var(--accent)}
+.metric-explainer.is-open .metric-explainer-toggle{color:var(--accent)}
+.metric-explainer-caret{font-family:var(--font-mono);color:var(--accent)}
+.metric-explainer-body{padding:0 var(--sp-4) var(--sp-4);color:var(--text-3);font-size:var(--t-meta);line-height:1.8}
+.metric-explainer-body p{margin:0}
+.confidence-badge{display:inline-flex;align-items:center;gap:6px;padding:2px 8px;border:1px solid var(--border-2);border-radius:var(--r-pill);font-family:var(--font-mono);font-size:var(--t-micro);letter-spacing:var(--ls-mid);text-transform:uppercase;color:var(--text-3)}
+.confidence-badge-dot{width:6px;height:6px;border-radius:var(--r-pill);background:currentColor}
+.confidence-badge.is-high{color:var(--accent);border-color:color-mix(in srgb,var(--accent) 45%,transparent)}
+.confidence-badge.is-medium{color:var(--text-2)}
+.confidence-badge.is-low{border-style:dashed;color:var(--text-3)}
+.depth-rows{display:grid;gap:var(--sp-2);margin:0;padding:0;list-style:none}
+.depth-row{display:grid;grid-template-columns:minmax(0,1.4fr) auto auto;align-items:center;gap:4px var(--sp-4);padding:var(--sp-3) var(--sp-4);border:1px solid var(--line);border-radius:var(--r-sm);background:var(--surface)}
+.depth-row-title{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:var(--t-small)}
+.depth-row-ranks{font-family:var(--font-mono);font-size:var(--t-meta);color:var(--text-3);white-space:nowrap}
+.depth-row-ranks strong{color:var(--text)}
+.depth-row-delta{font-family:var(--font-mono);font-size:var(--t-meta);color:var(--text-3);white-space:nowrap}
+.depth-row-delta.is-own{color:var(--accent)}
+.depth-rank-bar{position:relative;grid-column:1/-1;height:2px;background:var(--line);border-radius:var(--r-pill)}
+.depth-rank-track{position:absolute;inset:0}
+.depth-rank-own{position:absolute;top:-2px;width:6px;height:6px;margin-left:-3px;border-radius:var(--r-pill);background:var(--accent)}
+.depth-rank-peer{position:absolute;top:-2px;width:6px;height:6px;margin-left:-3px;border:1px solid var(--text-3);border-radius:var(--r-pill);background:var(--bg)}
+.depth-legacy{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:var(--sp-2) var(--sp-4);margin:0;padding:var(--sp-4);border:1px solid var(--line);border-radius:var(--r-sm);background:var(--surface)}
+.depth-legacy-row{display:flex;justify-content:space-between;gap:var(--sp-3);min-width:0}
+.depth-legacy-row dt{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--text-3);font-size:var(--t-meta)}
+.depth-legacy-row dd{margin:0;font-family:var(--font-mono);font-size:var(--t-meta);color:var(--text)}
+.depth-cross{display:flex;flex-wrap:wrap;gap:var(--sp-2) var(--sp-5);padding:var(--sp-3) var(--sp-4);border:1px solid var(--line);border-radius:var(--r-sm);background:var(--surface-2);color:var(--text-3);font-size:var(--t-meta)}
+.depth-cross strong{font-family:var(--font-mono);color:var(--text)}
+.depth-foot{margin:0;color:var(--text-3);font-size:var(--t-meta)}
+@media (max-width:720px){.depth-hero{grid-template-columns:minmax(0,1fr);gap:var(--sp-3);padding:var(--sp-4)}.depth-row{grid-template-columns:minmax(0,1fr) auto;gap:4px var(--sp-3)}.depth-row-ranks{grid-column:1/-1}.depth-legacy{grid-template-columns:minmax(0,1fr)}}
+
+/* ===== T-20261025-01 打磨第二轮（ROADMAP §二 A/B/C/D） ===== */
+/* B 组·触控目标：视觉 28px 不动，::after 透明命中区扩到 36px（-4px 四向）。
+   相邻 gap:2 的行内按钮命中区边界互有 6px 重叠，按 DOM 序后者覆盖，可接受。 */
+.hit-expand::after{content:"";position:absolute;inset:-4px}
+/* T-20261029-TOUCH：11px 文本按钮（取消/复制）视觉不动，透明命中区补到 ≥32px。 */
+.hit-expand-sm{position:relative}
+.hit-expand-sm::after{content:"";position:absolute;inset:-8px}
+
+/* C 组·着色横幅工具类：替代 PlazaPostView/ProfileView 手搓同款横幅（warn/accent 两态）。
+   墨色用 color-mix 把 warn 拉向正文色——浅色主题下纯 --warn 对比不足。 */
+.notice-banner{display:flex;align-items:center;gap:8px;padding:10px 14px;margin:0 0 16px;border-radius:var(--r-md);font-size:12px}
+.notice-banner>svg{flex-shrink:0}
+.notice-banner-warn{background:color-mix(in srgb,var(--warn) 6%,transparent);border:1px solid color-mix(in srgb,var(--warn) 35%,transparent);color:color-mix(in srgb,var(--warn) 55%,var(--text))}
+.notice-banner-accent{background:color-mix(in srgb,var(--accent) 6%,transparent);border:1px solid color-mix(in srgb,var(--accent) 25%,transparent);color:var(--muted)}
+
+/* C 组·RankingDetail 高亮行（原内联三件套，值逐字相同） */
+.ranking-hit{background:color-mix(in srgb,var(--accent) 8%,transparent);border-left:3px solid var(--accent);padding-left:14px}
+
+/* C 组·sync-dot 角标几何（原 AiInsightCard 内联） */
+.sync-dot-pinned{position:absolute;top:4px;right:4px;width:7px;height:7px;border-radius:50%;border:1.5px solid var(--bg)}
+
+/* D 组·共识分解行：110px 定宽改 auto——英文标签（Weighted agreement ×30%）不再折行 */
+.consensus-factor{display:grid;grid-template-columns:auto minmax(0,1fr) 64px;gap:10px;align-items:center;font-size:12px}
+.consensus-factor>span{color:var(--muted)}
+.consensus-factor>span small{opacity:.7}
+.consensus-factor-bar{height:6px;border-radius:var(--r-xs);background:var(--line);overflow:hidden}
+.consensus-factor-fill{height:100%;background:var(--accent);border-radius:var(--r-xs)}
+.consensus-factor>strong{text-align:right;font-variant-numeric:tabular-nums}
+
+/* A 组·广场贴纸卡：整卡 role=button 内嵌真实按钮 → 标题链拉伸覆盖卡面（stretched link）。
+   键盘 = 标题链 + 两个动作按钮；动作按钮 z-index 抬到链上层。 */
+.plaza-sticker{position:relative}
+.plaza-sticker-link{display:block;padding:0;white-space:inherit;overflow-wrap:inherit}
+.plaza-sticker-link::after{content:"";position:absolute;inset:0;z-index:1;border-radius:inherit}
+.plaza-sticker-link:focus-visible::after{outline:2px solid var(--accent);outline-offset:4px}
+.plaza-sticker-actions{position:relative;z-index:2}
+
+/* A 组·比较页共识表：行容器改 div，海报+标题合成一个真实按钮，名次格各自成按钮 */
+.comparison-open{display:grid;grid-column:1/3;grid-template-columns:40px minmax(0,1fr);gap:16px;align-items:center;min-width:0;padding:0;background:none;border:0;text-align:left;color:inherit;font:inherit;cursor:pointer}
+.comparison-open:hover .comparison-title{color:var(--accent)}
+.comparison-open .comparison-poster{display:flex}
+.reorder-item .ranking-card-poster{cursor:default}
+.plaza-sticker-arrow{pointer-events:none}
+/* T-20261025-02：贴纸卡小按钮（32/26/28px）无定位上下文，hit-expand 的 ::after 需要锚点 */
+.plaza-sticker-btn{position:relative}
+
+/* ===== 2026-10-27 视觉审查批（线上真机截图发现，逐条对应缺陷） ===== */
+
+/* 1) 榜单卡头部：≤600px 时标题被挤成「2025 年…」、按钮文字折成「添加/批注」两行。
+   标题与动作各占一整行，按钮文字永不折行。 */
+.rank-pill{white-space:nowrap}
+@media(max-width:600px){
+  .rank-heading{flex-wrap:wrap;row-gap:10px}
+  .rank-heading>h2,.rank-heading>.rank-actions{flex:1 1 100%}
+  .rank-heading>.rank-actions{justify-content:flex-start}
+}
+
+/* 2) 名次 04 起墨色 30%→52%：截图里 04/05 读起来像禁用态（对底 ~2.1:1）。
+   前三名仍是满版 accent 墨块，层级不变。 */
+.row-number{color:color-mix(in srgb,var(--text) 52%,transparent)}
+
+/* 3) 广场列数切换：≤800px 的 .plaza-grid 已被强制单列（1fr!important），
+   控件仍在却点了没反应 —— 该宽度下隐藏。 */
+@media(max-width:800px){.plaza-toolbar-right{display:none}}
+
+/* 4) 首页引言末行只剩「一个。」（孤行）：balance 让两行长度接近。 */
+.home-heading p{text-wrap:balance}
+
+/* 5) 26–44px 小海报缺封面时，9px 标题被格子挤成孤立单字（看起来像坏图）。
+   改为只描媒介图标：一眼可知「这条暂无封面」，而不是「加载失败」。 */
+.cover-fallback-slim{justify-content:center;align-items:center}
+.cover-fallback-slim svg{display:block;opacity:.7}
+
+/* 6) 深链空态（/catalog/setup 直开等）：文案贴顶、下方近一屏纯黑 —— 视口内居中。 */
+.empty-state-standalone{
+  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;
+  min-height:calc(100svh - 320px);text-align:center
+}
+
+/* 7) 深度比较空态：标题与说明居中，动作行却贴左（flex 不吃 text-align）—— 一起居中。 */
+.depth-view .empty-state .action-row{justify-content:center}
+

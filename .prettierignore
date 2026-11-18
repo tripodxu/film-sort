@@ -26,7 +26,7 @@ docs
 # 终止符吃掉，于是字符串凭空多出一个前导空格，折叠标记会真的位移。
 # 只为了把 `--bg:#x` 改成 `--bg: #x` 而引入一次 1276 节点的重排并附赠一个
 # 真实视觉改动，不划算。
-src/styles.css
+src/styles/*.css
 # S4：主题变量块与主样式表同款写法（一行一条规则、紧凑声明），同样交给手写。
 src/styles/atlas.css
 public/vendor/

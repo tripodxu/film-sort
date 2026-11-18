@@ -1,0 +1,874 @@
+/* ===== 主题：复古纸感（编辑部暖纸风，参照 film-sort2） ===== */
+[data-theme=retro]{
+  --bg:#f4f2ec;--text:#1d2521;--accent:#173c32;--accent-2:#e66d3f;--accent-ink:#f4f2ec;
+  --ok:#2f7d52;--warn:#c98a2b;--danger:#c0492b;--danger-2:#b8543f;--indigo:#5a6b8c;--pink:#a05a7a;
+  --film:#173c32;--book:#e66d3f;--music:#3d7a68;--other:#8a6d3b;
+  --scrim:rgba(19,37,31,.55);--toast-bg:#e7efdf;--toast-bg-2:#dfe9d4;--toast-ink:#1d2521;--toast-border:#a9b89a;
+  --font-body:"Segoe UI","Microsoft YaHei",sans-serif;--font-display:"Segoe UI","Microsoft YaHei",sans-serif;
+  --reader-dim:.9;--reader-poster-opacity:.22;
+  --status-ok:#3fa06a;--status-warn:#e0a33e;--status-danger:#d85a3a;
+}
+[data-theme=retro] .button,[data-theme=retro] .rank-pill,[data-theme=retro] .dim-chip{border-radius:6px}
+[data-theme=retro] .eyebrow{text-transform:uppercase;letter-spacing:.12em;color:var(--accent-2)}
+[data-theme=retro] .home-heading h1{letter-spacing:-.03em}
+[data-theme=retro] .list-card:hover,[data-theme=retro] .collection-row:hover{box-shadow:var(--ev-2)}
+
+/* ===== 主题：极简（纯黑白灰细线） ===== */
+[data-theme=minimal]{
+  --bg:#fafafa;--text:#141414;--accent:#141414;--accent-2:#6b6b6b;--accent-ink:#ffffff;
+  --ok:#141414;--warn:#141414;--danger:#b3261e;--danger-2:#c4574f;--indigo:#3a3a3a;--pink:#3a3a3a;
+  --film:#141414;--book:#4a4a4a;--music:#6b6b6b;--other:#8f8f8f;
+  --scrim:rgba(0,0,0,.5);--toast-bg:#141414;--toast-bg-2:#2a2a2a;--toast-ink:#fafafa;--toast-border:#141414;
+  --reader-dim:.92;--reader-poster-opacity:.16;
+  --status-ok:#2e9e4f;--status-warn:#c98a00;--status-danger:#d0342c;
+}
+[data-theme=minimal] .button.primary{border-radius:3px}
+[data-theme=minimal] .topbar nav button.active:after{height:1px}
+[data-theme=minimal] .poster{box-shadow:none}
+/* minimal 的玻璃关闭已并入下方统一规则 */
+
+/* ===== 主题：简约（浅色扁平蓝灰） ===== */
+[data-theme=simple]{
+  --bg:#f5f7fa;--text:#26313d;--accent:#2b64d8;--accent-2:#5b8def;--accent-ink:#ffffff;
+  --ok:#1a9e5a;--warn:#d99400;--danger:#e04b4b;--danger-2:#e77b7b;--indigo:#6b7fd7;--pink:#d76ba8;
+  --film:#2b64d8;--book:#e08a4b;--music:#3aa6a0;--other:#8a7fd0;
+  --scrim:rgba(20,30,45,.45);--toast-bg:#eaf1ff;--toast-bg-2:#dfeaff;--toast-ink:#1d3a6b;--toast-border:#b9cff5;
+  --reader-dim:.92;--reader-poster-opacity:.2;
+}
+/* simple 的玻璃关闭已并入下方统一规则 */
+
+/* ===== 主题：古典（衬线米黄双线框印章红） ===== */
+[data-theme=classic]{
+  --bg:#f3ead6;--text:#3a2f22;--accent:#8c1c13;--accent-2:#a63b2e;--accent-ink:#f6efdd;
+  --ok:#3f6b3a;--warn:#b8860b;--danger:#8c1c13;--danger-2:#a6544c;--indigo:#4a5b7a;--pink:#9a4a6a;
+  --film:#8c1c13;--book:#6b4a2a;--music:#3f6b3a;--other:#4a5b7a;
+  --scrim:rgba(40,28,18,.55);--toast-bg:#efe3c8;--toast-bg-2:#e8dab8;--toast-ink:#3a2f22;--toast-border:#b9a878;
+  --reader-dim:.9;--reader-poster-opacity:.2;
+  --status-ok:#4a8a4f;--status-warn:#c99a1a;--status-danger:#b83a2a;
+  --font-body:Georgia,"Songti SC","Microsoft YaHei",serif;--font-display:Georgia,"Songti SC",serif;
+}
+[data-theme=classic] .profile-layout section,[data-theme=classic] .profile-layout aside{border:1px solid var(--line);box-shadow:none}
+[data-theme=classic] .button{border-radius:3px}
+[data-theme=classic] .eyebrow{letter-spacing:.18em}
+/* 纸感/浅色主题统一关闭玻璃（新增浮层组件只需加进这个 :is 列表；
+   cyber 为霓虹玻璃风，有意保留 backdrop） */
+[data-theme=paper] :is(.topbar,.glass-capsule,.segmented,.medium-item,.account-dialog,.artwork-main,.toast,.dim-chip,.rank-pill,.rank-menu,.settings-menu,.plaza-header,.scroll-top,.custom-suggestions,.detail-dialog,.rank-detail-dialog,.theme-menu),[data-theme=minimal] :is(.topbar,.glass-capsule,.segmented,.medium-item,.account-dialog,.artwork-main,.toast,.dim-chip,.rank-pill,.rank-menu,.settings-menu,.plaza-header,.scroll-top,.custom-suggestions,.detail-dialog,.rank-detail-dialog,.theme-menu),[data-theme=simple] :is(.topbar,.glass-capsule,.segmented,.medium-item,.account-dialog,.artwork-main,.toast,.dim-chip,.rank-pill,.rank-menu,.settings-menu,.plaza-header,.scroll-top,.custom-suggestions,.detail-dialog,.rank-detail-dialog,.theme-menu),[data-theme=classic] :is(.topbar,.glass-capsule,.segmented,.medium-item,.account-dialog,.artwork-main,.toast,.dim-chip,.rank-pill,.rank-menu,.settings-menu,.plaza-header,.scroll-top,.custom-suggestions,.detail-dialog,.rank-detail-dialog,.theme-menu){backdrop-filter:none;-webkit-backdrop-filter:none}
+/* classic 的玻璃关闭已并入下方统一规则 */
+
+/* ===== 主题：赛博朋克（黑底霓虹青/品红发光） ===== */
+[data-theme=cyber]{
+  --bg:#05060a;--text:#d7f5ff;--accent:#00f0ff;--accent-2:#ff2d95;--accent-ink:#001318;
+  --ok:#00ffa3;--warn:#ffe600;--danger:#ff3b5c;--danger-2:#ff7a90;--indigo:#7a5cff;--pink:#ff2d95;
+  --film:#00f0ff;--book:#ff2d95;--music:#00ffa3;--other:#ffe600;
+  --scrim:rgba(2,4,10,.78);--toast-bg:#062026;--toast-bg-2:#08282f;--toast-ink:#7ffcff;--toast-border:#00f0ff;
+  --font-body:"Segoe UI","Microsoft YaHei",sans-serif;
+}
+[data-theme=cyber] .button.primary{box-shadow:none}
+[data-theme=cyber] .topbar nav button.active:after{box-shadow:none}
+[data-theme=cyber] .rank-pill,[data-theme=cyber] .dim-chip.active{border-color:color-mix(in srgb,var(--accent) 50%,transparent)}
+[data-theme=cyber] .eyebrow{letter-spacing:.14em;color:var(--accent)}
+
+/* ===== 主题：纸上擂台（编辑纸擂台风：米黄纸底 + 朱砂印章红 + 衬线，映射自纸上擂台 demo） ===== */
+[data-theme=paper]{
+  --bg:#F2EDE3;--text:#171310;--text-2:#4A423A;--text-3:#6B5F50;--muted:#6B5F50;
+  --accent:#A82A1E;--accent-2:#D33A2C;--accent-ink:#FBF8F1;
+  --ok:#3E6B4A;--warn:#B08528;--danger:#D33A2C;--danger-2:#A82A1E;--indigo:#27405C;--pink:#A05A7A;
+  --film:#A82A1E;--book:#B08528;--music:#3E6B4A;--other:#27405C;
+  --scrim:rgba(23,19,16,.55);--toast-bg:#FBF8F1;--toast-bg-2:#F2EDE3;--toast-ink:#171310;--toast-border:#D9D0BF;
+  --font-body:"Noto Sans SC","Source Han Sans SC","PingFang SC","Microsoft YaHei",sans-serif;
+  --font-display:"Noto Serif SC","Source Han Serif SC","Songti SC","STSong","SimSun",serif;
+  --reader-dim:.9;--reader-poster-opacity:.2;
+  --status-ok:#3E6B4A;--status-warn:#B08528;--status-danger:#D33A2C;
+  --surface:#E8E1D3;--surface-2:#E0D8C6;--surface-3:#FBF8F1;--surface-4:#EFE8D8;--surface-glow:#F5EFE2;--surface-hover:#EFE8D8;
+  --line:#D9D0BF;--border-2:#C9BFA9;--r-xs:0;--r-sm:2px;--r-md:2px;--r-lg:3px;--r-pill:3px;
+}
+[data-theme=paper] .topbar{border-bottom:3px double var(--line)}
+
+/* ===== 主题：刊物 / 刊物暗色（PLAN-ui-modernization P1 · 组件级差异 9 项） =====
+   杂志封面式首页（L3 海报堆叠）+ 衬线标题 + 序号导航 + pill 按钮 +
+   去卡片化 duel + 回合水印 + 页码进度 + 行式榜单 + 坐标纸维度条 + 直角弹窗。 */
+[data-theme=editorial]{
+  --bg:#F4F1EA;--text:#1A1A18;--text-2:#353331;--text-3:#4A4946;--muted:#6E6A60;
+  --accent:#B4432F;--accent-2:#D96A4A;--accent-ink:#FBF8F1;
+  --line:#CBC8BE;--border-2:#B4B0A4;
+  --surface:#E7E4DB;--surface-2:#DFDCD3;--surface-3:#D8D4CA;--surface-hover:#DBD7CD;
+  --ok:#2F6B45;--warn:#B08528;--danger:#B4432F;--danger-2:#C05A45;--indigo:#5B5EA6;--pink:#A05A7A;
+  --film:#B4432F;--book:#2F4A3C;--music:#8A6D2F;--other:#5B5EA6;
+  --scrim:rgba(26,26,24,.55);--toast-bg:#1A1A18;--toast-bg-2:#2A2A26;--toast-ink:#F4F1EA;--toast-border:#1A1A18;
+  --font-display:Georgia,"Noto Serif SC","Songti SC","STSong","SimSun",serif;
+  --reader-dim:.92;--reader-poster-opacity:.18;
+  --status-ok:#3E8A5A;--status-warn:#C99A1A;--status-danger:#C04A35;
+  --r-xs:2px;--r-sm:3px;--r-md:4px;--r-lg:6px;
+}
+[data-theme=editorial-dark]{
+  --bg:#1A1A18;--text:#F2EFE6;--text-2:#D8D5CD;--text-3:#C2C0B9;--muted:#9A9689;
+  --accent:#E0644A;--accent-2:#EC8A70;--accent-ink:#1A1A18;
+  --line:#3A3934;--border-2:#4A4944;
+  --surface:#292924;--surface-2:#322F29;--surface-3:#3A3833;--surface-hover:#35332D;
+  --ok:#5FB87E;--warn:#D9AE5F;--danger:#E0644A;--danger-2:#EC8A70;--indigo:#9FA3E0;--pink:#D48AAB;
+  --film:#E0644A;--book:#7FA98C;--music:#D9AE5F;--other:#9FA3E0;
+  --scrim:rgba(0,0,0,.66);--toast-bg:#F2EFE6;--toast-bg-2:#E4E0D2;--toast-ink:#1A1A18;--toast-border:#F2EFE6;
+  --font-display:Georgia,"Noto Serif SC","Songti SC","STSong","SimSun",serif;
+  --reader-dim:.28;--reader-poster-opacity:.5;
+  --status-ok:#5FB87E;--status-warn:#D9AE5F;--status-danger:#E0644A;
+  --r-xs:2px;--r-sm:3px;--r-md:4px;--r-lg:6px;
+}
+/* 刊物系关闭玻璃（纸感统一规则只列了旧主题，刊物单独一条，避免动那行多主题长选择器） */
+[data-theme=editorial] :is(.topbar,.glass-capsule,.segmented,.medium-item,.account-dialog,.artwork-main,.toast,.dim-chip,.rank-pill,.rank-menu,.settings-menu,.plaza-header,.scroll-top,.custom-suggestions,.detail-dialog,.rank-detail-dialog,.theme-menu),[data-theme=editorial-dark] :is(.topbar,.glass-capsule,.segmented,.medium-item,.account-dialog,.artwork-main,.toast,.dim-chip,.rank-pill,.rank-menu,.settings-menu,.plaza-header,.scroll-top,.custom-suggestions,.detail-dialog,.rank-detail-dialog,.theme-menu){backdrop-filter:none;-webkit-backdrop-filter:none}
+/* 差异 2 · 标题体系：h1/h2 衬线 + 紧字距 */
+[data-theme=editorial] h1,[data-theme=editorial] h2,[data-theme=editorial] .section-heading h2,[data-theme=editorial-dark] h1,[data-theme=editorial-dark] h2,[data-theme=editorial-dark] .section-heading h2{font-family:var(--font-display);letter-spacing:-.01em}
+[data-theme=editorial] .home-heading h1>span,[data-theme=editorial-dark] .home-heading h1>span{font-family:var(--font-display)}
+/* 差异 3 · topbar：序号前缀导航（01 排序 / 02 画像），active 去下划线改序号着色 */
+[data-theme=editorial] .topbar nav,[data-theme=editorial-dark] .topbar nav{counter-reset:ednav}
+[data-theme=editorial] .topbar nav button,[data-theme=editorial-dark] .topbar nav button{counter-increment:ednav}
+[data-theme=editorial] .topbar nav button:before,[data-theme=editorial-dark] .topbar nav button:before{content:"0" counter(ednav);margin-right:6px;font-family:var(--font-display);font-size:11px;color:var(--muted)}
+[data-theme=editorial] .topbar nav button.active:before,[data-theme=editorial-dark] .topbar nav button.active:before{color:var(--accent)}
+[data-theme=editorial] .topbar nav button.active:after,[data-theme=editorial-dark] .topbar nav button.active:after{display:none}
+/* 差异 4 · 按钮：pill 实色，无玻璃无描边 */
+[data-theme=editorial] .button,[data-theme=editorial-dark] .button{border-radius:999px;border-color:transparent;transition:transform var(--dur-2) var(--ease-settle),background var(--dur-1),color var(--dur-1)}
+[data-theme=editorial] .button:hover,[data-theme=editorial-dark] .button:hover{transform:translateY(-1px)}
+/* 差异 5 · duel 去卡片化：海报铺底 + 衬线标题（回合水印 DOM 由 L3 注入，样式在此） */
+[data-theme=editorial] .artwork-main,[data-theme=editorial-dark] .artwork-main{background:none;border:0;box-shadow:none;padding:0;border-radius:0}
+[data-theme=editorial] .artwork-info h2,[data-theme=editorial-dark] .artwork-info h2{font-family:var(--font-display);font-weight:600}
+[data-theme=editorial] .artwork-card,[data-theme=editorial-dark] .artwork-card{border:0;background:none;box-shadow:none}
+[data-theme=editorial] .view-sorting,[data-theme=editorial-dark] .view-sorting{position:relative}
+.ed-round-mark{position:absolute;top:72px;left:50%;transform:translateX(-50%);z-index:0;pointer-events:none;font-family:var(--font-display);font-size:min(38vw,300px);line-height:1;color:color-mix(in srgb,var(--text) 7%,transparent);white-space:nowrap;user-select:none}
+[data-theme=editorial] .duel-grid,[data-theme=editorial-dark] .duel-grid{position:relative;z-index:1}
+/* 差异 6 · 进度：发丝轨道 + 尺规细线刻度 + 页码排印 */
+[data-theme=editorial] .progress-track,[data-theme=editorial-dark] .progress-track{position:relative;height:2px;background:var(--line);border-radius:0}
+[data-theme=editorial] .progress-track>span,[data-theme=editorial-dark] .progress-track>span{background:var(--text);border-radius:0}
+/* 刻度尺规：::after 后绘于填充 span 之上，1px 细线每 5% 一刻（纯装饰，pointer-events 关） */
+[data-theme=editorial] .progress-track::after,[data-theme=editorial-dark] .progress-track::after{content:"";position:absolute;inset:0;pointer-events:none;background-image:repeating-linear-gradient(90deg,color-mix(in srgb,var(--text) 42%,transparent) 0 1px,transparent 1px 5%)}
+[data-theme=editorial] .progress-meta,[data-theme=editorial-dark] .progress-meta{font-family:var(--font-display);letter-spacing:.06em}
+/* 差异 7 · 榜单：行式排印——衬线巨号 + 细分隔线，去卡片 */
+[data-theme=editorial] .ranking-list li,[data-theme=editorial-dark] .ranking-list li{border:0;border-bottom:1px solid var(--line);border-radius:0;background:none;box-shadow:none}
+[data-theme=editorial] .row-number,[data-theme=editorial-dark] .row-number{font-family:var(--font-display);font-size:29px;color:var(--accent)}
+/* 差异 9 · 弹窗：直角 + 2px 实线框（杂志跨页感） */
+[data-theme=editorial] :is(.account-dialog,.detail-dialog,.rank-detail-dialog,.settings-menu,.rank-menu,.theme-menu,.toast,.guide-modal,.tech-modal),[data-theme=editorial-dark] :is(.account-dialog,.detail-dialog,.rank-detail-dialog,.settings-menu,.rank-menu,.theme-menu,.toast,.guide-modal,.tech-modal){border-radius:0;border:2px solid color-mix(in srgb,var(--text) 78%,transparent);box-shadow:none}
+/* 差异 1 · 首页 hero（L3 分支 DOM 的样式：ed-hero 仅刊物家族渲染） */
+.ed-hero-inner{position:relative}
+.ed-hero-inner .identity.glass-capsule{position:absolute;top:0;right:0;z-index:5;margin:0}
+/* 刊物是干净纸面：hero 的半调网点（::after）与左缘衬纸渐变（::before 弱化保留） */
+[data-theme=editorial] .orb-hero.orb-hero::after,[data-theme=editorial-dark] .orb-hero.orb-hero::after{display:none}
+.ed-hero-inner .home-heading h1.ed-title{font-family:var(--font-display);font-size:min(60px,7vw);line-height:1.16;font-weight:600;letter-spacing:-.015em;max-width:12em}
+/* 双行报头：首行墨色，次行强调斜体（base 的 h1>span 是 accent 斜体，这里按行分工） */
+.ed-hero-inner .home-heading h1.ed-title>span{color:var(--text);font-style:normal}
+.ed-hero-inner .home-heading h1.ed-title>em{color:var(--accent);font-style:italic}
+.ed-hero-inner .home-heading p{max-width:34em}
+.ed-stack{position:absolute;right:0;top:50%;transform:translateY(-50%);width:min(400px,36%);height:340px;pointer-events:auto}
+.ed-stack-item{position:absolute;width:150px;height:216px;border-radius:3px;overflow:hidden;box-shadow:0 10px 30px color-mix(in srgb,var(--text) 22%,transparent);transition:transform var(--dur-3) var(--ease-settle)}
+.ed-stack-item .poster{width:100%;height:100%}
+.ed-stack-item:nth-child(1){left:0;top:26px;transform:rotate(-6deg);z-index:1}
+.ed-stack-item:nth-child(2){left:108px;top:0;transform:rotate(-1deg);z-index:3}
+.ed-stack-item:nth-child(3){left:224px;top:34px;transform:rotate(5deg);z-index:2}
+.ed-stack-item:nth-child(4){left:168px;top:112px;transform:rotate(2deg);z-index:4}
+.ed-stack:hover .ed-stack-item:nth-child(1){transform:rotate(-9deg) translateX(-14px)}
+.ed-stack:hover .ed-stack-item:nth-child(2){transform:rotate(-1deg) translateY(-12px)}
+.ed-stack:hover .ed-stack-item:nth-child(3){transform:rotate(8deg) translateX(14px)}
+.ed-stack:hover .ed-stack-item:nth-child(4){transform:rotate(4deg) translateY(10px)}
+.ed-stack-blank{display:block;width:100%;height:100%;background:var(--ed-blank,var(--surface-3));border:1px solid var(--line)}
+.ed-stack-item:nth-child(1) .ed-stack-blank{--ed-blank:color-mix(in srgb,var(--film) 30%,var(--bg))}
+.ed-stack-item:nth-child(2) .ed-stack-blank{--ed-blank:color-mix(in srgb,var(--book) 42%,var(--bg))}
+.ed-stack-item:nth-child(3) .ed-stack-blank{--ed-blank:color-mix(in srgb,var(--music) 34%,var(--bg))}
+.ed-stack-item:nth-child(4) .ed-stack-blank{--ed-blank:color-mix(in srgb,var(--other) 34%,var(--bg))}
+@media(prefers-reduced-motion:reduce){.ed-stack:hover .ed-stack-item{transform:inherit}}
+/* 移动端（PLAN P1）：海报堆叠 → 单张轮播（scroll-snap，零 JS 零依赖）。
+   注意：.ed-stack 改 relative 后会被 v2 网格自动编排进第二列（auto 轨），
+   必须把 ed-hero-inner 显式改单列并逐项放置（PITFALLS 4.12 同源纪律）；
+   orb-index 的 grid-column:2 在单列网格会炸出隐式列，直接隐藏。
+   特异性陷阱：基座 .orb-hero-inner 的 grid-template-columns 在 L846（本媒体查询之后），
+   同名类 (0,1,0) 后来者胜——直接写 .ed-hero-inner{grid-template-columns:...} 是死代码，
+   mobile 实际跑的是双轨 + 48px column-gap（轮播容器实测 438 = 486-48，窄 48px）。
+   必须双类抬到 (0,2,0)。行模板保持基座 auto 1fr auto（轮播行吸收剩余高度，卡片垂直居中）。 */
+@media(max-width:800px){
+  .ed-hero-inner.ed-hero-inner{grid-template-columns:minmax(0,1fr)}
+  .ed-hero-inner .home-heading{grid-column:1;grid-row:1}
+  .ed-hero-inner .ed-stack{
+    position:relative;right:auto;top:auto;transform:none;
+    grid-column:1;grid-row:2;
+    display:flex;align-items:center;gap:14px;
+    width:100%;margin-top:28px;padding:4px 6px 10px;
+    overflow-x:auto;overflow-y:hidden;
+    scroll-snap-type:x mandatory;-webkit-overflow-scrolling:touch;
+    scrollbar-width:none;
+  }
+  .ed-hero-inner .ed-stack::-webkit-scrollbar{display:none}
+  .ed-stack-item{
+    position:relative;left:auto;top:auto;transform:none;
+    flex:0 0 auto;width:clamp(128px,32%,180px);aspect-ratio:2/3;
+    scroll-snap-align:center;
+    box-shadow:0 8px 22px color-mix(in srgb,var(--text) 20%,transparent);
+  }
+  /* 桌面 nth-child 定位规则（left/top/rotate，特异性 0,2,0）会压过上面同名类的
+     移动端覆写（0,1,0）——媒体查询本身不加特异性。必须用「后代前缀+nth-child」
+     把特异性抬到 (0,3,0)，轮播卡片才真正归位；否则实测泄漏： rotate(-6deg) 倾斜、
+     left:108px 推右成 127px 巨间隙、top:26px 垂直错位。hover 扩散抬到 (0,4,0)
+     与桌面同分、后来者胜。 */
+  .ed-hero-inner .ed-stack-item:nth-child(n){left:auto;top:auto;transform:none}
+  .ed-hero-inner .ed-stack:hover .ed-stack-item:nth-child(n){transform:none}
+  .ed-hero-inner .orb-index{display:none}
+  .ed-hero-inner .home-heading h1.ed-title{font-size:min(44px,11vw)}
+  .ed-round-mark{font-size:28vw;top:96px}
+}
+@media(max-width:540px){
+  .ed-stack-item{width:clamp(120px,42%,160px)}
+  [data-theme=editorial] .topbar nav button:before,[data-theme=editorial-dark] .topbar nav button:before{margin-right:3px;font-size:10px}
+}
+
+/* ===== 主题：极光（PLAN-ui-modernization P2 · 组件级差异 7 项） =====
+   深夜蓝底 + 极光薄荷青/紫罗兰；玻璃 2.0 三层表面 + 悬浮胶囊导航 +
+   duel 胜出辉光脉冲 + conic 渐变描边按钮 + 深景深弹窗 + 流光进度条。
+   注意：--ev-1/2/3 已于 P4 全局定义（:root 三级公式），此处只覆写 --shadow-tint
+   色相（蓝黑），景深分级随全局公式走。 */
+[data-theme=aurora]{
+  --bg:#070B16;--text:#E9F1FF;--text-2:#C9D6EF;--text-3:#9FB0D0;--muted:#9FB0D0;
+  --accent:#45E3B0;--accent-2:#8B7CFF;--accent-ink:#04231B;
+  --line:#26335A;--border-2:#37457A;
+  --surface:#0D1526;--surface-2:#111A30;--surface-3:#16223C;--surface-4:#1B2A47;--surface-hover:#13203A;
+  --ok:#3FD98A;--warn:#F5D06A;--danger:#FF7A8F;--danger-2:#FFA3B3;--indigo:#8B7CFF;--pink:#F09CC8;
+  --film:#45E3B0;--book:#8B7CFF;--music:#5FC9F8;--other:#F09CC8;
+  --scrim:rgba(4,6,18,.82);--toast-bg:#0E1830;--toast-bg-2:#13203C;--toast-ink:#E9F1FF;--toast-border:#28406B;
+  --shadow-tint:#04060F;
+  --status-ok:#3FD98A;--status-warn:#F5D06A;--status-danger:#FF7A8F;
+  --r-xs:6px;--r-sm:10px;--r-md:14px;--r-lg:20px;
+}
+.theme-dot.theme-aurora{--dot-a:#070B16;--dot-b:#45E3B0;background:linear-gradient(135deg,var(--dot-a) 50%,var(--dot-b) 50%)}
+/* 差异 1 · 玻璃 2.0：底（ev-2 深影）+ 1px 内高光 + 外柔光晕，三层叠加。
+   注意：.medium-item 在 P0.7 已是透明扁平目录行（无底板），加投影会形成悬浮
+   矩形板——不纳入本规则。 */
+[data-theme=aurora] .identity.glass-capsule,
+[data-theme=aurora] .home-actions.glass-capsule,
+[data-theme=aurora] .segmented{
+  box-shadow:var(--ev-2),inset 0 1px 0 color-mix(in srgb,var(--accent-2) 18%,transparent),0 0 26px color-mix(in srgb,var(--accent) 10%,transparent)
+}
+/* 弹窗/菜单：ev-3 更深景深 + 内高光 + 柔光晕；scrim 由变量块加重 */
+[data-theme=aurora] :is(.account-dialog,.detail-dialog,.rank-detail-dialog,.settings-menu,.rank-menu,.theme-menu,.toast,.guide-modal,.tech-modal){
+  box-shadow:var(--ev-3),inset 0 1px 0 color-mix(in srgb,var(--accent-2) 14%,transparent),0 0 36px color-mix(in srgb,var(--accent) 12%,transparent)
+}
+[data-theme=aurora] .modal-backdrop{backdrop-filter:blur(14px) saturate(120%);-webkit-backdrop-filter:blur(14px) saturate(120%)}
+/* 差异 2 · topbar 悬浮胶囊：脱离子页面顶线（去通栏底线与玻璃条），nav 成圆角胶囊；
+   滚动态 .scrolled 由 App.tsx 滚动监听切 class（仅 aurora 有对应 CSS）。
+   移动端 ≤540px 降级为无底板扁平组——四导航项 11px 字号会胀破胶囊（PITFALLS 4.7）。 */
+[data-theme=aurora] .topbar{
+  position:sticky;top:0;
+  background:transparent;backdrop-filter:none;-webkit-backdrop-filter:none;
+  border-bottom:0
+}
+[data-theme=aurora] .topbar nav{
+  gap:4px;height:44px;padding:5px;align-items:center;
+  border-radius:999px;
+  background:color-mix(in srgb,var(--surface-3) 55%,transparent);
+  border:1px solid color-mix(in srgb,var(--text) 16%,transparent);
+  box-shadow:var(--ev-1),0 10px 32px color-mix(in srgb,var(--shadow-tint) 45%,transparent);
+  backdrop-filter:blur(16px) saturate(1.3);-webkit-backdrop-filter:blur(16px) saturate(1.3);
+  transition:background var(--dur-2) var(--ease-out),box-shadow var(--dur-2) var(--ease-out)
+}
+[data-theme=aurora] .topbar.scrolled nav{
+  background:color-mix(in srgb,var(--surface-3) 82%,transparent);
+  box-shadow:var(--ev-2),0 12px 36px color-mix(in srgb,var(--shadow-tint) 58%,transparent)
+}
+[data-theme=aurora] .topbar nav button{border-radius:999px;padding:0 14px}
+[data-theme=aurora] .topbar nav button.active{background:color-mix(in srgb,var(--accent) 16%,transparent);color:var(--accent)}
+[data-theme=aurora] .topbar nav button.active:after{display:none}
+@media(max-width:540px){
+  [data-theme=aurora] .topbar nav{
+    background:transparent;border:0;box-shadow:none;padding:0;gap:6px;height:auto;
+    backdrop-filter:none;-webkit-backdrop-filter:none
+  }
+  [data-theme=aurora] .topbar nav button{padding:0 6px}
+}
+/* 差异 3 · duel 卡：卡角加大到 --r-lg（20px）；胜出瞬间（:active=落子）辉光脉冲，
+   reduced-motion 由全局 animation:none!important 兜底跳过 */
+[data-theme=aurora] .artwork-main{border-radius:var(--r-lg) var(--r-lg) 0 0}
+[data-theme=aurora] .artwork-card-tools{border-radius:0 0 var(--r-lg) var(--r-lg)}
+[data-theme=aurora] .artwork-card .artwork-main:hover{
+  border-color:color-mix(in srgb,var(--accent) 55%,transparent);
+  box-shadow:0 0 22px color-mix(in srgb,var(--accent) 18%,transparent)
+}
+[data-theme=aurora] .artwork-card .artwork-main:active{animation:au-win-pulse .55s var(--ease-out)}
+@keyframes au-win-pulse{
+  0%{box-shadow:0 0 0 0 color-mix(in srgb,var(--accent) 55%,transparent)}
+  70%{box-shadow:0 0 28px 8px color-mix(in srgb,var(--accent) 28%,transparent)}
+  100%{box-shadow:0 0 0 0 color-mix(in srgb,var(--accent) 0%,transparent)}
+}
+/* 差异 4 · 按钮：conic 渐变描边（@property 注册角度，hover 流转一周；
+   渐变全周期 360° 且周期性，收起时 360→0 跳变不可见）+ 内发光；primary 带柔光投影。
+   quiet 文字按钮不参与描边。home-actions 胶囊内按钮由既有守卫规则保持 pill 圆角。 */
+@property --au-angle{syntax:"<angle>";inherits:false;initial-value:0deg}
+@keyframes au-border-flow{from{--au-angle:0deg}to{--au-angle:360deg}}
+[data-theme=aurora] .button:not(.quiet){
+  --au-angle:0deg;
+  border-radius:var(--r-md);
+  border:1px solid transparent;
+  background:
+    linear-gradient(var(--surface-2),var(--surface-2)) padding-box,
+    conic-gradient(from var(--au-angle),var(--accent),var(--accent-2),var(--music),var(--other),var(--accent)) border-box;
+  box-shadow:inset 0 1px 0 color-mix(in srgb,var(--accent-2) 20%,transparent)
+}
+[data-theme=aurora] .button:not(.quiet):hover{
+  animation:au-border-flow var(--dur-3) linear;
+  box-shadow:inset 0 1px 0 color-mix(in srgb,var(--accent-2) 26%,transparent),0 0 18px color-mix(in srgb,var(--accent) 22%,transparent)
+}
+[data-theme=aurora] .button.primary{
+  background:
+    linear-gradient(var(--accent),var(--accent)) padding-box,
+    conic-gradient(from var(--au-angle),var(--accent-2),var(--music),var(--accent)) border-box;
+  box-shadow:0 6px 24px color-mix(in srgb,var(--accent) 32%,transparent),inset 0 1px 0 color-mix(in srgb,var(--accent-2) 30%,transparent)
+}
+[data-theme=aurora] .button.primary:hover{
+  box-shadow:0 8px 32px color-mix(in srgb,var(--accent) 45%,transparent),inset 0 1px 0 color-mix(in srgb,var(--accent-2) 36%,transparent)
+}
+/* 差异 5 · 进度条流光填充：渐变条 + 微光头部扫过；reduced-motion 退化为纯色 */
+[data-theme=aurora] .progress-track{height:6px;border-radius:999px;background:color-mix(in srgb,var(--text) 10%,transparent)}
+[data-theme=aurora] .progress-track>span{
+  position:relative;border-radius:999px;overflow:hidden;
+  background:linear-gradient(90deg,var(--accent),var(--accent-2));
+  box-shadow:0 0 12px color-mix(in srgb,var(--accent) 35%,transparent)
+}
+[data-theme=aurora] .progress-track>span::after{
+  content:"";position:absolute;inset:0;
+  background:linear-gradient(90deg,transparent,color-mix(in srgb,var(--accent-2) 70%,transparent),transparent);
+  transform:translateX(-100%);
+  animation:au-flow 1.8s var(--ease-out) infinite
+}
+@keyframes au-flow{to{transform:translateX(100%)}}
+@media(prefers-reduced-motion:reduce){
+  [data-theme=aurora] .progress-track>span{background:var(--accent);box-shadow:none}
+  [data-theme=aurora] .progress-track>span::after{display:none}
+}
+/* 维度页签（profile-dimension）：active 底部媒介色辉光，呼应流光语言 */
+[data-theme=aurora] .profile-dimension.active{
+  border-bottom-color:var(--medium-color);
+  box-shadow:inset 0 -2px 14px color-mix(in srgb,var(--medium-color) 26%,transparent)
+}
+
+/* ===== 比较指标：共识评分 hero + 悬浮解释 + 折叠明细 ===== */
+.consensus-hero{display:flex;align-items:center;gap:24px;margin:0 0 24px;padding:24px 24px;border:1px solid var(--line);border-radius:12px;background:color-mix(in srgb,var(--surface-3) 55%,transparent)}
+.consensus-dial{position:relative;width:96px;height:96px;flex-shrink:0;border-radius:50%;display:flex;flex-direction:column;align-items:center;justify-content:center}
+.consensus-dial::before{content:"";position:absolute;inset:0;border-radius:50%;background:conic-gradient(var(--accent) var(--metric-pct,0%),var(--line) 0);-webkit-mask:radial-gradient(circle closest-side,transparent 62%,var(--mask-opaque) 63%);mask:radial-gradient(circle closest-side,transparent 62%,var(--mask-opaque) 63%)}
+.consensus-dial strong,.consensus-dial span{position:relative;z-index:1}
+.consensus-dial strong{line-height:1;text-align:center;font-family:var(--font-mono);font-size:29px;font-weight:600;color:var(--text)}
+.consensus-dial span{margin-top:4px;text-align:center;font-family:var(--font-mono);font-size:10px;color:var(--muted)}
+.consensus-copy{min-width:0}
+.consensus-copy .eyebrow{color:var(--accent)}
+.consensus-copy h3{margin:4px 0 4px;font-size:22px;font-weight:600}
+.consensus-copy p{font-size:13px;color:var(--muted);line-height:1.7}
+.metric-help{position:relative;display:inline-flex;align-items:center;justify-content:center;width:16px;height:16px;margin-left:4px;border:1px solid var(--line);border-radius:50%;font-style:normal;font-size:11px;color:var(--muted);cursor:help;vertical-align:1px}
+.metric-help:hover{color:var(--accent);border-color:var(--accent)}
+.metric-help::after{content:attr(data-tip);position:absolute;left:50%;bottom:calc(100% + 7px);transform:translateX(-50%) translateY(3px);z-index:40;width:max-content;max-width:min(240px,80vw);padding:8px 12px;border:1px solid var(--border-2);border-radius:12px;background:var(--surface-4);color:var(--text-hi);font-family:var(--font-body);font-size:13px;line-height:1.6;letter-spacing:0;text-align:left;white-space:normal;box-shadow:var(--ev-2);opacity:0;visibility:hidden;pointer-events:none;transition:opacity .15s,transform .15s,visibility .15s}
+.metric-help:hover::after,.metric-help:focus-visible::after,.metric-help:focus::after{opacity:1;visibility:visible;transform:translateX(-50%) translateY(0)}
+.metric-help:focus{outline:none}
+/* 最左列的 ?（作品重合度 / Kendall τ 首格）气泡改左对齐，避免居中伸出视口左缘被截断 */
+.metrics>div:first-child .metric-help::after,.metrics-more-grid>div:first-child .metric-help::after{left:0;transform:translateY(3px)}
+.metrics>div:first-child .metric-help:hover::after,.metrics>div:first-child .metric-help:focus-visible::after,.metrics>div:first-child .metric-help:focus::after,.metrics-more-grid>div:first-child .metric-help:hover::after,.metrics-more-grid>div:first-child .metric-help:focus-visible::after,.metrics-more-grid>div:first-child .metric-help:focus::after{transform:translateY(0)}
+.metrics-more{grid-column:1/-1;margin-top:4px}
+.metrics-more summary{cursor:pointer;font-size:13px;color:var(--muted);list-style:none;display:inline-flex;gap:8px;align-items:center;user-select:none;padding:8px 12px;border:1px solid var(--line);border-radius:999px;background:color-mix(in srgb,var(--surface-2) 55%,transparent);transition:color .15s,border-color .15s}
+.metrics-more summary:hover{color:var(--accent);border-color:color-mix(in srgb,var(--accent) 40%,transparent)}
+.metrics-more summary::-webkit-details-marker{display:none}
+.metrics-more summary::after{content:"▾";font-size:10px;transition:transform .18s;color:var(--muted)}
+.metrics-more[open] summary::after{transform:rotate(180deg)}
+.metrics-more[open] summary{margin-bottom:12px}
+.metrics-more-grid{display:flex;flex-wrap:wrap;gap:8px}
+.metrics-more-grid>div{display:inline-flex;align-items:baseline;gap:8px;padding:8px 12px;border:1px solid var(--line);border-radius:12px;background:color-mix(in srgb,var(--surface) 60%,transparent)}
+.metrics-more-grid>div span{font-size:11px;color:var(--muted);white-space:nowrap}
+.metrics-more-grid>div strong{font-family:var(--font-mono);font-size:17px;font-weight:600;color:var(--text)}
+.metrics-more-grid>div small{font-size:11px;color:var(--muted)}
+.metrics-more-grid .metric-help{width:15px;height:15px;font-size:11px}
+@media(max-width:600px){.consensus-hero{gap:16px;padding:16px}.consensus-dial{width:76px;height:76px}.consensus-dial strong{font-size:24px}}
+
+.note-char-count{font-family:var(--font-mono);font-size:10px;letter-spacing:.08em;color:color-mix(in srgb,var(--text) 40%,transparent);align-self:center;padding:0 4px;white-space:nowrap}
+.sync-dot{background:var(--muted)}
+.sync-dot[data-status="saving"]{background:var(--status-warn)}
+.sync-dot[data-status="saved"]{background:var(--status-ok)}
+.sync-dot[data-status="error"]{background:var(--status-danger)}
+
+/* ===== 全主题统一：胶囊容器内的按钮必须保持圆角，避免圆容器套方按钮 ===== */
+/* 主题块里的 [data-theme=x] .button 扁平方角规则只作用于独立按钮；
+   嵌在 .home-actions / .identity 这类 999px 胶囊内的按钮用更高特异度守卫回圆角 */
+[data-theme] .home-actions .button,
+[data-theme] .home-actions .button.primary,
+[data-theme] .home-actions .button.secondary,
+.home-actions .button{border-radius:999px}
+
+/* ===== 补齐此前缺失的类定义（mini-note/badge 系）+ 手机端比较页指标溢出兜底 ===== */
+.mini-note{font-size:11px;color:var(--muted);line-height:1.6}
+.badge{display:inline-block;padding:4px 8px;border-radius:6px;font-size:11px;font-weight:500}
+.badge-visit{background:color-mix(in srgb,var(--ok) 14%,transparent);color:var(--ok)}
+@media(max-width:850px){.metrics{overflow-x:clip}}
+
+/* ==================== P0.7 北极星屏 · 样板（Home + Profile，2026-09-22） ====================
+   样板区块：P1a/P3a 时按 §2.1 段落排序约定并入正式段落。
+   [data-ns="index"] = medium 区对比稿 B（档案索引条目）；默认 = A（索引卡/胶囊）。
+   设计语言：夜间档案馆 —— mono 编号 + 中性色 eyebrow（前置 16px 短线）+ hairline 秩序 +
+   纸感噪点 + 玻璃两级（贵级 16px saturate：hero 胶囊；普级 8px：卡片）。
+   ================================================================================ */
+/* L1/L2 token 已并入顶部正式 token 段（P1a）——此处不再重复声明 */
+/* 纸感噪点：融进 body 背景层（不做 fixed 合成层，§2.3） */
+body{
+  background-color:var(--bg);
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='g'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='140' height='140' filter='url(%23g)' opacity='.045'/%3E%3C/svg%3E");
+}
+/* ---- v2 封面式构图（2026-09-22 二稿：动骨架，不是打磨） ---- */
+.orb-hero.orb-hero{
+  border-bottom:3px double var(--line);height:auto;min-height:min(680px,calc(100svh - 124px))
+}
+/* 半调网点：hero 底纹（印刷材质候选；radial-gradient 仅作图案非渐变铺底） */
+.orb-hero::after{
+  content:"";position:absolute;inset:0;z-index:0;pointer-events:none;
+  background-image:radial-gradient(circle,color-mix(in srgb,var(--text) 7%,transparent) .8px,transparent 1.1px);
+  background-size:4px 4px;opacity:.55;
+  -webkit-mask-image:linear-gradient(to bottom,transparent 0%,black 78%);
+  mask-image:linear-gradient(to bottom,transparent 0%,black 78%)
+}
+.orb-hero-inner{
+  z-index:1;display:grid;grid-template-columns:minmax(0,1fr) auto;grid-template-rows:auto 1fr auto;
+  column-gap:48px;align-content:stretch
+}
+.home-heading{grid-column:1;grid-row:1/3;position:relative;align-self:center}
+.home-actions.home-actions{
+  position:static;inset:auto;
+  grid-column:1;grid-row:3;align-self:end;justify-self:start;margin-top:32px}
+.orb-index{grid-column:2;grid-row:3;justify-self:end;align-self:end}
+/* 档案标头：mono eyebrow + 前置 16px 短线 + 11px（中英皆生效） */
+.home-heading .eyebrow{
+  font-family:var(--font-mono);font-size:var(--t-meta);letter-spacing:var(--ls-wide);
+  color:var(--text-3);text-transform:uppercase;display:inline-flex;align-items:center;gap:8px}
+.home-heading .eyebrow::before{content:"";width:16px;height:1px;background:currentColor;opacity:.7}
+/* masthead 报头 v3：衬线报名体三行叠印（ART / 斜杠 / RANK，斜杠即分隔线）+ 上下夹线 */
+.home-heading h1{
+  margin:24px 0 0;padding:16px 0 24px;border-top:1px solid var(--line);border-bottom:3px double var(--line);
+  font-family:var(--font-serif);font-weight:700;letter-spacing:-.01em;line-height:.8;font-size:clamp(58px,8.6vw,126px);
+  display:flex;flex-direction:column;align-items:flex-start
+}
+.home-heading h1>span{color:var(--accent);font-style:italic;padding-block:.02em}
+/* 竖排书脊：中文副标沿右缘竖排（writing-mode 对 CJK 是一等公民） */
+.home-heading h1>small{
+  position:absolute;right:0;top:6px;writing-mode:vertical-rl;margin:0;
+  font-family:var(--font-mono);font-size:13px;font-weight:500;letter-spacing:.5em;color:var(--text-3)
+}
+.home-heading p{
+  position:relative;margin-top:24px;padding-left:56px;max-width:27em;
+  font-family:var(--font-serif);font-size:var(--t-body);line-height:2;color:var(--text-2)
+}
+.home-heading p::before{content:"";position:absolute;left:0;top:.85em;width:40px;height:1px;background:var(--text-3)}
+/* CJK 首字下沉：印刷正文的经典起手式 */
+.home-heading p::first-letter{
+  float:left;font-family:var(--font-serif);font-size:52px;line-height:.84;
+  padding:4px 12px 0 0;color:var(--text-hi)
+}
+/* ---- 玻璃两级 v2：塑封档案卡（identity）+ 冲切标签条（home-actions）——几何从胶囊改直角 ---- */
+.identity.glass-capsule{
+  position:relative;border-radius:var(--r-xs);
+  backdrop-filter:blur(16px) saturate(1.2);-webkit-backdrop-filter:blur(16px) saturate(1.2);
+  background:color-mix(in srgb,var(--surface-3) 55%,transparent);
+  border:1px solid color-mix(in srgb,var(--text) 22%,transparent);
+  box-shadow:var(--ev-2),inset 0 1px 0 color-mix(in srgb,var(--text) 8%,transparent)}
+.identity.glass-capsule::after{
+  content:"";position:absolute;top:-1px;left:-1px;width:10px;height:10px;
+  border-top:2px solid var(--accent);border-left:2px solid var(--accent)
+}
+.home-actions.glass-capsule{
+  border-radius:var(--r-xs);padding:4px;gap:4px;
+  backdrop-filter:blur(16px) saturate(1.2);-webkit-backdrop-filter:blur(16px) saturate(1.2);
+  background:color-mix(in srgb,var(--surface-3) 55%,transparent);
+  border:1px solid color-mix(in srgb,var(--text) 22%,transparent);
+  box-shadow:var(--ev-2)}
+.orb-hero .home-actions .button{border-radius:var(--r-xs);letter-spacing:.05em}
+.orb-hero .home-actions .button+.button{border-left:1px solid var(--line)}
+/* ---- 分区标头 ---- */
+.medium-section .section-heading,.profile-overview .section-heading,.profile-layout .section-heading{
+  border-top:3px double var(--line);padding-top:16px;align-items:baseline
+}
+.medium-section .section-heading h2,.profile-overview .section-heading h2,.profile-layout .section-heading h2{
+  display:flex;align-items:center;gap:12px;font-family:var(--font-body);font-size:17px;
+  font-weight:600;letter-spacing:var(--ls-mid);color:var(--text-hi)
+}
+.medium-section .section-heading h2::before,.profile-overview .section-heading h2::before,.profile-layout .section-heading h2::before{
+  content:"";width:22px;height:3px;background:var(--accent);flex:none
+}
+.section-heading>span{
+  font-family:var(--font-mono);font-size:var(--t-meta);letter-spacing:var(--ls-mid);
+  color:var(--text-3);font-variant-numeric:tabular-nums
+}
+/* ---- 媒介色职责表：3px 顶部短标 + 小色块（仅此处与 poster 兜底用媒介色） ---- */
+.medium-film{--media:var(--film)}.medium-book{--media:var(--book)}
+.medium-music{--media:var(--music)}.medium-other{--media:var(--other)}
+/* ---- medium 目录巨号行（v2 默认稿）：印刷目录 —— 巨号 + 小海报 + 点线引 ---- */
+.medium-grid{display:block}
+.medium-grid.medium-grid>.medium-item.medium-item{
+  --media:var(--text-3);
+  position:relative;display:grid;grid-template-columns:84px 64px minmax(0,1fr) 28px;grid-template-rows:auto auto;
+  align-items:center;column-gap:24px;row-gap:4px;width:100%;text-align:left;
+  padding:24px 4px;border:0;border-bottom:1px solid var(--line);border-radius:0;background:transparent;box-shadow:none;
+  transition:background var(--dur-1) var(--ease-out)
+}
+.medium-grid.medium-grid>.medium-item.medium-item::before{
+  content:"";position:absolute;left:0;top:calc(50% - 14px);width:3px;height:28px;background:var(--media);opacity:.9
+}
+.medium-grid.medium-grid>.medium-item.medium-item:hover{background:color-mix(in srgb,var(--text) 3.5%,transparent)}
+.medium-grid.medium-grid>.medium-item.medium-item>.medium-number{
+  grid-column:1;grid-row:1/3;position:relative;z-index:0;margin-left:-16px;
+  font-family:var(--font-mono);font-size:52px;line-height:.9;
+  letter-spacing:.02em;color:color-mix(in srgb,var(--text) 30%,transparent);
+  font-variant-numeric:tabular-nums;transition:color var(--dur-1) var(--ease-out)
+}
+.medium-grid.medium-grid>.medium-item.medium-item:hover>.medium-number{color:var(--accent)}
+/* 海报出血叠压：冲破上下行线 + 静态深度（印刷拼贴，非 hover 浮起） */
+.medium-grid.medium-grid>.medium-item.medium-item .poster-small,.medium-grid.medium-grid>.medium-item.medium-item .poster-large{
+  grid-column:2;grid-row:1/3;position:relative;z-index:1;width:68px;height:98px;
+  aspect-ratio:auto;max-height:none;object-fit:cover;margin-left:-14px;margin-block:-12px;
+  border-radius:var(--r-xs);
+  box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--text) 10%,transparent),var(--ev-2)}
+.medium-grid.medium-grid>.medium-item.medium-item>strong{
+  grid-column:3;grid-row:1;align-self:end;font-family:var(--font-display);font-size:27px;
+  font-weight:600;letter-spacing:.01em;color:var(--text-hi)
+}
+.medium-grid.medium-grid>.medium-item.medium-item>small{
+  grid-column:3;grid-row:2;align-self:start;display:flex;align-items:center;gap:12px;
+  justify-content:flex-start;margin:0;padding-right:0;
+  font-family:var(--font-mono);font-size:var(--t-meta);color:var(--text-3);letter-spacing:.04em;text-align:left
+}
+.medium-grid.medium-grid>.medium-item.medium-item>small::after{
+  content:"";flex:1 1 auto;border-bottom:1px dotted color-mix(in srgb,var(--text) 38%,transparent)
+}
+.medium-grid.medium-grid>.medium-item.medium-item>svg:last-child{
+  grid-column:4;grid-row:1/3;position:static;color:var(--text-3);
+  transition:color var(--dur-1) var(--ease-out),transform var(--dur-2) var(--ease-out)
+}
+.medium-grid.medium-grid>.medium-item.medium-item:hover>svg:last-child{color:var(--accent);transform:translateX(3px)}
+@media(max-width:800px){
+  .medium-grid.medium-grid>.medium-item.medium-item{grid-template-columns:64px 56px minmax(0,1fr) 24px;column-gap:16px;padding:16px 4px}
+  .medium-grid.medium-grid>.medium-item.medium-item>.medium-number{font-size:36px}
+  .medium-grid.medium-grid>.medium-item.medium-item>strong{font-size:22px}
+}
+@media(max-width:540px){
+  /* 结构性例外保留：小屏仍是胶囊横排（§2.1） */
+  .medium-grid{display:flex;flex-wrap:wrap;gap:8px;border:0}
+  .medium-grid.medium-grid>.medium-item.medium-item{
+    display:grid;grid-template-columns:auto auto minmax(0,1fr) auto;grid-template-rows:auto auto;
+    align-items:center;gap:4px 8px;min-height:58px;padding:8px 12px;border-radius:var(--r-pill);border-bottom:0
+  }
+  .medium-grid.medium-grid>.medium-item.medium-item::before{display:none}
+  .medium-grid.medium-grid>.medium-item.medium-item .poster-small,.medium-grid.medium-grid>.medium-item.medium-item .poster-large{
+    width:34px;height:48px;grid-row:1/3;grid-column:2;aspect-ratio:auto;max-height:none
+  }
+  .medium-grid.medium-grid>.medium-item.medium-item>.medium-number{display:none}
+  .medium-grid.medium-grid>.medium-item.medium-item>strong{grid-row:1;grid-column:3;font-size:15px;line-height:1.2;align-self:auto}
+  .medium-grid.medium-grid>.medium-item.medium-item>small{
+    grid-row:2;grid-column:3;display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:var(--t-micro)
+  }
+  .medium-grid.medium-grid>.medium-item.medium-item>small::after{display:none}
+  .medium-grid.medium-grid>.medium-item.medium-item>svg:last-child{grid-row:1/3;grid-column:4;align-self:center}
+}
+/* ---- 对比稿 B：档案索引条目（[data-ns="index"]，≥541px 生效） ---- */
+@media(min-width:541px){
+  [data-ns="index"] .medium-grid{display:block;border-top:1px solid var(--line)}
+  [data-ns="index"] .medium-item{
+    display:grid;grid-template-columns:34px 54px minmax(0,1fr) 28px;align-items:center;
+    width:100%;min-height:104px;gap:16px;padding:16px 8px;border:0;border-bottom:1px solid var(--line);
+    border-radius:0;background:transparent;box-shadow:none
+  }
+  [data-ns="index"] .medium-item::before{display:none}
+  [data-ns="index"] .medium-number{font-size:var(--t-small);text-align:right;grid-column:1}
+  [data-ns="index"] .medium-item .poster-small,[data-ns="index"] .medium-item .poster-large{
+    width:54px;height:78px;aspect-ratio:auto;max-height:none;grid-column:2;grid-row:1
+  }
+  [data-ns="index"] .medium-item>strong{grid-column:3;grid-row:1;font-family:var(--font-display);font-size:20px}
+  [data-ns="index"] .medium-item>small{grid-column:3;grid-row:2;margin-top:4px;text-align:left}
+  [data-ns="index"] .medium-item>svg:last-child{position:static;grid-column:4;grid-row:1/3}
+  [data-ns="index"] .medium-item:hover{background:color-mix(in srgb,var(--text) 3.5%,transparent);border-bottom-color:color-mix(in srgb,var(--accent) 45%,transparent)}
+  [data-ns="index"] .medium-grid.medium-grid>.medium-item.medium-item{
+    display:grid;grid-template-columns:34px 54px minmax(0,1fr) 28px;align-items:center;
+    width:100%;min-height:104px;gap:16px;padding:16px 8px;border:0;border-bottom:1px solid var(--line);
+    border-radius:0;background:transparent;box-shadow:none
+  }
+}
+/* ---- Profile 榜单页 v2：名录账簿 —— 巨号名次 + 双线分区 + 索引页签 ---- */
+.profile-dimensions{gap:8px;margin-bottom:var(--sp-7);border-block:0;align-items:end}
+.dim-chip{
+  position:relative;overflow:visible;border:1px solid var(--line);border-top:3px solid var(--media,var(--text-3));
+  border-radius:var(--r-xs);background:color-mix(in srgb,var(--surface) 55%,transparent);padding:12px 16px;gap:12px;
+  transition:border-color var(--dur-1) var(--ease-out),background var(--dur-1) var(--ease-out),transform var(--dur-2) var(--ease-out)
+}
+.dim-chip.active{transform:translateY(-4px);border-color:color-mix(in srgb,var(--accent) 55%,transparent);background:color-mix(in srgb,var(--accent) 7%,transparent)}
+.dim-chip-meta{
+  font-family:var(--font-mono);font-size:var(--t-micro);letter-spacing:var(--ls-mid);
+  color:var(--text-3);text-transform:uppercase
+}
+.dim-chip-text strong{display:block;font-family:var(--font-display);font-size:17px;font-weight:600;color:var(--text-hi);margin-top:4px}
+.ranking-list{border-top:3px double var(--line)}
+.ranking-list>li{
+  display:grid;grid-template-columns:92px 52px minmax(0,1fr) auto;gap:24px;align-items:center;
+  padding:16px 4px;border-bottom:1px solid var(--line);
+  transition:background var(--dur-1) var(--ease-out)
+}
+.ranking-list>li:hover{background:color-mix(in srgb,var(--text) 3.5%,transparent)}
+.row-number{
+  align-self:stretch;display:flex;align-items:center;padding-inline:16px;margin-inline:-8px;
+  font-family:var(--font-mono);font-size:38px;line-height:.9;color:color-mix(in srgb,var(--text) 30%,transparent);
+  background:color-mix(in srgb,var(--text) 5%,transparent);
+  font-variant-numeric:tabular-nums;text-align:left
+}
+/* 前三名满版墨块：印刷名录的名次牌 */
+.ranking-list>li:nth-child(-n+3) .row-number{background:var(--accent);color:var(--bg);font-weight:600}
+.ranking-card-poster .poster-small{
+  width:52px;height:76px;border-radius:var(--r-xs);
+  box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--text) 10%,transparent)}
+.ranking-list>li strong{display:block;font-family:var(--font-display);font-size:23px;font-weight:600;letter-spacing:.01em;color:var(--text-hi)}
+.ranking-list>li small{font-family:var(--font-mono);font-size:var(--t-meta);letter-spacing:.05em;color:var(--text-3)}
+/* 档案著录卡：角标裁切 + mono 标签 */
+.export-tools{position:relative;border:1px solid var(--line);border-radius:var(--r-xs);padding:16px}
+.export-tools::before{
+  content:"";position:absolute;top:-1px;left:-1px;width:12px;height:12px;
+  border-top:2px solid var(--accent);border-left:2px solid var(--accent)
+}
+.export-tools::after{
+  content:"";position:absolute;bottom:-1px;right:-1px;width:12px;height:12px;
+  border-bottom:2px solid var(--accent);border-right:2px solid var(--accent)
+}
+.export-tools label{
+  font-family:var(--font-mono);font-size:var(--t-micro);letter-spacing:var(--ls-wide);
+  text-transform:uppercase;color:var(--text-3)
+}
+@media(max-width:600px){
+  .dim-chip{min-height:46px;padding:4px 12px 4px 4px}
+  .dim-chip.active{transform:none}
+  .dim-chip-text strong{max-width:110px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+}
+@media(max-width:540px){
+  .ranking-list>li{grid-template-columns:56px 44px minmax(0,1fr) auto;gap:12px}
+  .row-number{font-size:24px}
+  .ranking-card-poster .poster-small{width:44px;height:64px}
+}
+
+/* ===== P0.9 速赢批补位（2026-09-22）：toast 位置 P2 定案（help 迁 topbar 后回到近底）+ 海报单反馈收尾 ===== */
+.toast{bottom:24px;right:24px}
+.poster img{transition:transform .22s ease}
+
+/* ===== P1b-1 玻璃两级制定案（2026-09-22）：贵级 16px+saturate(1.2) / 普级 8px / 其余 17 类退哑光 =====
+   贵级=identity 胶囊 + 弹层面板；普级=topbar + medium-item；note-reader 依 §9 保护清单维持原样。 */
+.glass-capsule{backdrop-filter:blur(16px) saturate(1.2);-webkit-backdrop-filter:blur(16px) saturate(1.2)}
+.topbar{backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px)}
+.medium-grid.medium-grid>.medium-item.medium-item{backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px)}
+.account-dialog,.detail-dialog,.rank-detail-dialog,.note-backdrop{backdrop-filter:blur(16px) saturate(1.2);-webkit-backdrop-filter:blur(16px) saturate(1.2)}
+:is(.segmented,.artwork-main,.toast,.dim-chip,.rank-pill,.rank-menu,.plaza-header,.scroll-top,.custom-suggestions,details,.collection-row .row-number){
+  backdrop-filter:none;-webkit-backdrop-filter:none
+}
+
+/* ===== P2 壳层（2026-09-22）：footer 版本记录行 + 弹层 scrim 统一 + topbar 导航微调 ===== */
+footer{
+  border-top:1px solid var(--line);padding-block:24px;
+  font-family:var(--font-mono);font-size:var(--t-micro);letter-spacing:var(--ls-mid);color:var(--text-3)
+}
+.modal-backdrop{background:var(--scrim)}
+.topbar nav button{letter-spacing:.02em}
+
+/* ===== P3a-1 Sorting 对战卡四态规格 + 内滚区治本（2026-09-22）====================
+   四态：默认 / hover / focus-visible / 按压已选——0.2s 可辨、非单色（对角裁切角标 + 按压缩放
+   两个非颜色线索）、触屏无 hover 依赖（hover:none 下 :active 承载）。
+   内滚区治本：overscroll-behavior:contain + 简介区事件守卫（SortingView 一处，§0 第七类）。 */
+.artwork-card .artwork-info{overscroll-behavior:contain}
+.artwork-card .artwork-main{position:relative;transition:border-color var(--dur-1) var(--ease-out),transform var(--dur-1) var(--ease-out),background var(--dur-1) var(--ease-out)}
+.artwork-card .artwork-main::after{
+  content:"";position:absolute;top:-1px;right:-1px;width:12px;height:12px;
+  border-top:2px solid var(--accent);border-right:2px solid var(--accent);
+  opacity:0;transition:opacity var(--dur-2) var(--ease-out)
+}
+.artwork-card .artwork-main:hover{border-color:color-mix(in srgb,var(--accent) 55%,transparent)}
+.artwork-card .artwork-main:hover::after{opacity:1}
+.artwork-card .artwork-main:focus-visible::after{opacity:1}
+.artwork-card .artwork-main:focus-visible{outline:2px solid var(--accent);outline-offset:3px}
+.artwork-card .artwork-main:active{transform:scale(.985);border-color:var(--accent)}
+.artwork-card .artwork-main:active::after{opacity:1;border-width:3px}
+@media(hover:none){
+  .artwork-card .artwork-main:hover{border-color:var(--line)}
+  .artwork-card .artwork-main:hover::after{opacity:0}
+  .artwork-card .artwork-main:active{transform:none;background:color-mix(in srgb,var(--accent) 8%,transparent)}
+}
+
+/* ===== P3a-2 Setup 屏 + Home 品味年轮（2026-09-22）============================
+   印刷标签化 segmented / 索引化 candidate 行 / 滚动域 contain / 分区标头全量接入 /
+   品味年轮（coordinate/empty-profile/sample-covers）收编档案语言。 */
+.section-heading{
+  border-top:3px double var(--line);padding-top:18px;align-items:baseline
+}
+.section-heading h2{display:flex;align-items:center;gap:12px;font-family:var(--font-body);font-size:16px;font-weight:600;letter-spacing:var(--ls-mid);color:var(--text-hi)}
+.section-heading h2::before{content:"";width:22px;height:3px;background:var(--accent);flex:none}
+.segmented button{
+  border-radius:6px;font-family:var(--font-mono);font-size:var(--t-meta);letter-spacing:.06em;
+  transition:background var(--dur-1) var(--ease-out),color var(--dur-1) var(--ease-out)
+}
+.segmented button.active{box-shadow:inset 0 -2px 0 var(--accent)}
+.segmented.inline{margin-bottom:0}
+.candidate-scroll{overscroll-behavior:contain}
+.candidate-row{
+  border-bottom:1px solid var(--line);padding:12px 6px;
+  transition:background var(--dur-1) var(--ease-out)
+}
+.candidate-row:hover{background:color-mix(in srgb,var(--text) 3.5%,transparent)}
+.candidate-row:has(input:checked){box-shadow:inset 3px 0 0 var(--accent)}
+.check-all{font-family:var(--font-mono);font-size:var(--t-micro);letter-spacing:var(--ls-mid);color:var(--text-3)}
+.coordinate,.empty-profile{border-top:1px solid var(--line);padding-top:20px}
+.empty-profile h3{font-family:var(--font-display);font-size:var(--t-h3);color:var(--text-hi)}
+.empty-profile span{font-family:var(--font-mono);font-size:var(--t-micro);letter-spacing:var(--ls-mid);color:var(--text-3)}
+
+/* ===== P3b Profile 余部（2026-09-22）：rank-pill 工具群收编印刷标签 / 名次日期 mono / 页头双线收口 ===== */
+.rank-pill{
+  border-radius:6px;font-family:var(--font-mono);font-size:var(--t-meta);letter-spacing:.05em;
+  transition:background var(--dur-1) var(--ease-out),color var(--dur-1) var(--ease-out),border-color var(--dur-1) var(--ease-out)
+}
+.rank-pill:hover{border-color:color-mix(in srgb,var(--accent) 55%,transparent)}
+.rank-pill.accent{letter-spacing:.08em}
+.rank-date{font-family:var(--font-mono);font-size:var(--t-micro);letter-spacing:.06em;color:var(--text-3);font-variant-numeric:tabular-nums}
+.page-heading{border-bottom:3px double var(--line);padding-bottom:22px;margin-bottom:var(--sp-6)}
+.page-heading h1{letter-spacing:-.01em}
+.page-heading p{font-family:var(--font-mono);font-size:var(--t-meta);letter-spacing:.08em;color:var(--text-3);margin-top:10px}
+
+/* ===== P3c 八界面（2026-09-22）：Compare/Share/Plaza/PlazaPost/RankingDetail/批注底栏 =====
+   NoteReader 主体依 §9 保护清单不动，仅收编其批注底栏按钮 chrome。 */
+.comparison-row .row-number,.reorder-item .row-number{font-variant-numeric:tabular-nums}
+.comparison-row{transition:background var(--dur-1) var(--ease-out)}
+.comparison-row:hover{background:color-mix(in srgb,var(--text) 3.5%,transparent)}
+.metrics strong,.metrics-wide strong{font-variant-numeric:tabular-nums;letter-spacing:-.01em}
+.metrics>div>span,.metrics-wide>div>span{font-family:var(--font-mono);font-size:var(--t-micro);letter-spacing:var(--ls-mid);text-transform:uppercase;color:var(--text-3)}
+.plaza-post-detail{border-top:1px solid var(--line);padding-top:20px}
+.plaza-sticker-medal{
+  font-family:var(--font-mono);font-size:var(--t-micro);font-weight:600;
+  font-variant-numeric:tabular-nums;letter-spacing:.04em
+}
+.plaza-ability,.badge-visit{
+  border-radius:6px;font-family:var(--font-mono);font-size:var(--t-micro);letter-spacing:.05em
+}
+.comment-item{border-bottom:1px solid var(--line);padding:14px 2px}
+.comment-author{font-family:var(--font-display);font-size:var(--t-body);color:var(--text-hi)}
+.comment-time{font-family:var(--font-mono);font-size:var(--t-micro);letter-spacing:.05em;color:var(--text-3);font-variant-numeric:tabular-nums}
+.comment-content{font-family:var(--font-serif);line-height:1.9;color:var(--text-2);margin-top:6px}
+.share-section{border-top:3px double var(--line);padding-top:20px}
+.note-footer-btn{
+  border-radius:6px;font-family:var(--font-mono);font-size:var(--t-meta);letter-spacing:.05em
+}
+.note-footer-primary{letter-spacing:.08em}
+
+/* ===== P4 全站收编（2026-09-22）：hover 分级治理 / 骨架屏 token 化 / 内滚 fade / 表单收编 =====
+   浮起分级（§2.3）：卡片级（作品卡/贴纸卡）才许浮起且只用 --ev-2；行级/页签级只用背景+hairline。
+   骨架屏：两套 skeleton 已存在（plaza/profile），统一节奏 token；reduced-motion 由全局豁免兜底。 */
+:root{--dur-pulse:1.5s}
+/* .plaza-skeleton 已由统一骨架屏组件 src/components/ui/Skeleton.tsx 取代（节奏仍走 --dur-pulse） */
+.artwork-info,.candidate-scroll{
+  -webkit-mask-image:linear-gradient(to bottom,black calc(100% - 24px),transparent);
+  mask-image:linear-gradient(to bottom,black calc(100% - 24px),transparent)
+}
+.button{letter-spacing:.02em}
+.file-button{font-family:var(--font-mono);font-size:var(--t-meta);letter-spacing:.05em}
+
+/* ===== P5a 主题人格化·机制 + retro/cyber/minimal 先行（2026-09-22）================
+   人格 = 色板（主题块 L1）× 排印/材质/圆角/动效（本块 L2 persona）。每主题非色彩差异 ≥2。
+   cyber 发光依 §5.1（主题人格发光合法）；CJK 硬标准：正文 ≥11px、retro 衬线栈含宋体族。 */
+/* —— retro 旧式印刷所：直角 + 衬线全面主导 + 双线书眉 + 纸纹/信纸纹 + 慢半拍 + 62ch 首行缩进 —— */
+[data-theme=retro]{--r-xs:0;--r-sm:0;--r-md:2px;--r-lg:2px;--dur-1:200ms;--dur-2:320ms;--dur-3:420ms}
+body[data-theme=retro]{font-family:Georgia,"Times New Roman","Noto Serif SC","Source Han Serif SC","Songti SC",STSong,SimSun,serif;font-size:15px}
+[data-theme=retro] .wordmark,[data-theme=retro] h1,[data-theme=retro] h2,[data-theme=retro] h3,[data-theme=retro] .home-heading h1,[data-theme=retro] .ranking-list>li strong{
+  font-family:Georgia,"Times New Roman","Noto Serif SC","Source Han Serif SC","Songti SC",STSong,SimSun,serif;font-weight:700
+}
+[data-theme=retro] .topbar{border-bottom:3px double var(--line)}
+[data-theme=retro] .eyebrow{font-variant:small-caps;letter-spacing:.14em}
+body[data-theme=retro]{
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='28' height='28'%3E%3Crect width='28' height='27' fill='%23fff' opacity='.012'/%3E%3Crect y='27' width='28' height='1' fill='%23fff' opacity='.05'/%3E%3C/svg%3E")
+}
+[data-theme=retro] .comment-content,[data-theme=retro] .guide-step-body p,[data-theme=retro] .comparison-ai p{
+  max-width:62ch;text-indent:2em;line-height:2
+}
+/* —— cyber 终端 HUD：mono 全面主导 + 人格发光 + 扫描线纹 —— */
+body[data-theme=cyber]{font-family:"Cascadia Mono","Consolas",var(--font-mono)}
+[data-theme=cyber]{--r-xs:2px;--r-sm:4px;--r-md:6px;--r-lg:8px;--dur-1:110ms;--dur-2:180ms}
+[data-theme=cyber] .button.primary,[data-theme=cyber] .rank-pill.accent{
+  box-shadow:0 0 18px color-mix(in srgb,var(--accent) 35%,transparent)
+}
+[data-theme=cyber] .topbar nav button.active{text-shadow:0 0 12px color-mix(in srgb,var(--accent) 55%,transparent)}
+body[data-theme=cyber]{
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='4' height='3'%3E%3Crect y='2' width='4' height='1' fill='%23fff' opacity='.03'/%3E%3C/svg%3E")
+}
+/* —— minimal 瑞士网格：全直角 + 字重/字距对比 + 加长 hairline 标记 —— */
+[data-theme=minimal]{--r-xs:0;--r-sm:0;--r-md:0;--r-lg:0}
+[data-theme=minimal] h1,[data-theme=minimal] .home-heading h1{font-weight:800;letter-spacing:-.02em;line-height:.92}
+[data-theme=minimal] .section-heading h2::before{width:32px;height:1px;background:var(--text)}
+[data-theme=minimal] .medium-grid.medium-grid>.medium-item.medium-item,[data-theme=minimal] .ranking-list>li{box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--text) 6%,transparent)}
+
+/* ===== P5b simple/classic 收尾 + 纹理配额（2026-09-22）========================
+   纹理配额：主题人格纹 ≤3% 不透明度（retro 信纸线 .05 属线纹例外、cyber 扫描线 .03、classic 纸纹 .02）。 */
+/* —— simple 亲和蓝：圆角升档 + 按钮胶囊化 + 快节奏柔和动效 —— */
+[data-theme=simple]{--r-xs:4px;--r-sm:8px;--r-md:14px;--r-lg:22px;--dur-1:120ms;--dur-2:200ms;--dur-3:280ms}
+[data-theme=simple] .button,[data-theme=simple] .rank-pill{border-radius:var(--r-pill)}
+[data-theme=simple] .medium-grid.medium-grid>.medium-item.medium-item,[data-theme=simple] .dim-chip,[data-theme=simple] .candidate-row{border-radius:var(--r-md);border-color:transparent;background:color-mix(in srgb,var(--surface) 70%,transparent)}
+/* —— classic 文学博物馆：衬线标题 + 双线框 + 印章红方块标头 + 纸纹 —— */
+[data-theme=classic]{--r-xs:2px;--r-sm:4px;--r-md:6px;--r-lg:8px;--dur-1:180ms;--dur-2:280ms}
+[data-theme=classic] h1,[data-theme=classic] h2,[data-theme=classic] h3,[data-theme=classic] .home-heading h1,[data-theme=classic] .ranking-list>li strong{
+  font-family:Georgia,"Times New Roman","Noto Serif SC","Source Han Serif SC","Songti SC",STSong,SimSun,serif
+}
+[data-theme=classic] .section-heading h2::before{width:10px;height:10px;background:var(--accent)}
+[data-theme=classic] .section-heading{border-top:3px double var(--line)}
+[data-theme=classic] .detail-dialog,[data-theme=classic] .account-dialog,[data-theme=classic] .rank-detail-dialog{border:3px double var(--border-2)}
+body[data-theme=classic]{
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='p'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='120' height='120' filter='url(%23p)' opacity='.02'/%3E%3C/svg%3E")
+}
+
+/* ===== P5c 布局模式：journey 胶片盘 / bento 档案格（2026-09-22）================
+   data-layout 与 data-theme 正交；archive 缺省（属性不挂）= 逐像素不变（机制保证非口头承诺）。
+   journey 安全项：chevron 44px affordance / 轨道 mask 渐隐 / ≤540 snap 降 proximity / 嵌套仅一层。
+   bento 三板斧：仅首项扩格（零空洞构造保证）/ hairline 无阴影 / 编号+eyebrow 节奏。 */
+.journey-rail{position:relative}
+[data-layout="journey"] .journey-rail{
+  -webkit-mask-image:linear-gradient(90deg,transparent 0,black 36px,black calc(100% - 36px),transparent 100%);
+  mask-image:linear-gradient(90deg,transparent 0,black 36px,black calc(100% - 36px),transparent 100%)
+}
+[data-layout="journey"] .medium-grid{
+  display:flex;overflow-x:auto;scroll-snap-type:x mandatory;gap:0;
+  scrollbar-width:none;border-block:1px solid var(--line)
+}
+[data-layout="journey"] .medium-grid>.medium-item{
+  flex:0 0 60vw;max-width:520px;scroll-snap-align:start;
+  border:0;border-right:1px solid var(--line);border-radius:0
+}
+.journey-chevron{
+  position:absolute;top:50%;transform:translateY(-50%);z-index:2;display:none;
+  width:44px;height:44px;align-items:center;justify-content:center;
+  border:1px solid var(--line);border-radius:6px;
+  background:color-mix(in srgb,var(--surface-3) 85%,transparent);
+  color:var(--text-2);font-family:var(--font-mono);cursor:pointer
+}
+[data-layout="journey"] .journey-chevron{display:inline-flex}
+.journey-prev{left:-10px}
+.journey-next{right:-10px}
+@media(max-width:540px){
+  [data-layout="journey"] .medium-grid{scroll-snap-type:x proximity}
+}
+[data-layout="bento"] .medium-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr))}
+[data-layout="bento"] .medium-grid>.medium-item:first-child{grid-column:span 2}
+[data-layout="bento"] .plaza-grid{--plaza-cols:3}
+[data-layout="bento"] .plaza-grid>:first-child{grid-column:span 2}
+[data-layout="bento"] .medium-grid>.medium-item,[data-layout="bento"] .plaza-grid>*{box-shadow:none}
+[data-layout="bento"] .medium-grid>.medium-item:hover{box-shadow:none;border-color:color-mix(in srgb,var(--accent) 55%,transparent)}
+.layout-dot{
+  width:14px;height:14px;flex-shrink:0;border:1px solid var(--border-2);border-radius:3px;
+  background:color-mix(in srgb,var(--text) 8%,transparent)
+}
+.layout-journey{background:linear-gradient(90deg,var(--accent) 0 3px,transparent 3px 5px,var(--accent) 5px 8px,transparent 8px 10px,var(--accent) 10px 13px)}
+.layout-bento{background:linear-gradient(135deg,var(--accent) 0 6px,transparent 6px 8px,color-mix(in srgb,var(--text) 20%,transparent) 8px 14px)}
+
+/* ===== 用户报障修复（2026-09-22）：hero 按钮区"层块"违和 =====================================
+   病灶双源：① home-actions 玻璃底板 + --ev-2 重影在颗粒/半调背景上形成异质矩形板（blur 抹平纹理
+   更显"与大背景不相符"）；② 半调网点在 hero 底部满强度成带。修法：容器去底（按钮自带 chrome，
+   冲切标签条语言更纯）、半调降耳语级 + 全高缓显。 */
+.home-actions.home-actions{
+  background:transparent;box-shadow:none;backdrop-filter:none;-webkit-backdrop-filter:none;
+  border:none;padding:0;gap:8px
+}
+.orb-hero .home-actions .button.secondary{
+  background:transparent;border-color:color-mix(in srgb,var(--text) 24%,transparent)
+}
+.orb-hero.orb-hero::after{
+  opacity:.18;
+  -webkit-mask-image:linear-gradient(to bottom,transparent 0,black 100%);
+  mask-image:linear-gradient(to bottom,transparent 0,black 100%)
+}
+

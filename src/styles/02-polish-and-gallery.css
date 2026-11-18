@@ -1,0 +1,422 @@
+/* ===== P6 打磨批（2026-09-27）：移动端 Hero 修复 + 光球衬纸 ====================
+   ① identity 胶囊在 v2 网格里常驻 col2，≤800px 时把报头挤到 ~130px，导致
+      ART/RANK 断行成 RA/NK、竖排书脊压住眉标——小屏改回绝对定位右上，退出网格流。
+   ② ≤540px 竖排书脊（writing-mode:vertical-rl）转横排：印刷书脊是桌面装置，
+      窄屏上与眉标重叠，横排小字承接同一语义。
+   ③ 光球直压正文：hero 加一层「衬纸」——同色底渐变（非玻璃），桌面左缘、
+      移动端上下缘，保证 masthead 与正文的读感不受球体亮度影响。 */
+.orb-hero::before{
+  content:"";position:absolute;inset:0;z-index:0;pointer-events:none;
+  background:linear-gradient(90deg,color-mix(in srgb,var(--bg) 58%,transparent) 0%,color-mix(in srgb,var(--bg) 22%,transparent) 44%,transparent 66%)
+}
+/* T-20261024-02：identity 胶囊全宽度统一为右上角绝对定位（用户报「本地游客/登录·同步
+   位置太偏下，应更靠右上方」）。桌面此前被 v2 玻璃卡的 position:relative（0,2,0）拉回
+   网格流 col2-row1，落在顶栏下方 ~104px，与 ≤800px 补丁、ed-hero 家族（top:0）三处
+   不一致——统一为 top:14px 右上（对齐顶栏图标右缘）。:not(.ed-hero) 让刊物家族完全
+   沿用自有 .ed-hero-inner 规则（top:0，L732 附近），互不干扰。 */
+.orb-hero:not(.ed-hero) .identity.glass-capsule{position:absolute;top:14px;right:0;z-index:2;margin:0}
+@media(max-width:540px){
+  .orb-hero::before{
+    background:linear-gradient(180deg,color-mix(in srgb,var(--bg) 34%,transparent) 0%,transparent 26%,color-mix(in srgb,var(--bg) 26%,transparent) 62%,color-mix(in srgb,var(--bg) 60%,transparent) 100%)
+  }
+  .home-heading h1>small{
+    position:static;writing-mode:horizontal-tb;margin:12px 0 0;
+    font-size:11px;letter-spacing:.42em
+  }
+  .orb-hero-inner{padding-top:84px}
+}
+
+/* P6 追加（2026-09-27）：手动重排行 flex 覆盖。
+   (0,2,1) 特异性 + 文件末位，稳压上面所有 .ranking-list>li 的 grid 声明。 */
+.ranking-list.reorder-list>li{
+  display:flex;align-items:center;gap:16px
+}
+.ranking-list.reorder-list .reorder-handle{align-self:stretch;display:flex;align-items:center}
+
+/* ===== P7 移动端顶栏收纳 + 下拉菜单锚定护栏（2026-09-28）================
+   病灶（线上实测）：顶栏内容（报头 + 4 导航 + 5 图标）在任何手机宽度都横向
+   溢出约 120px（docScrollW 恒 440 vs 视口 320-390）——「登录/同步」图标整枚
+   出屏，浏览器恢复横向滚动位时打开设置菜单即现「最前端截断」；zh 导航
+   （我的文化索引）比 en 更宽，两语溢出量不同 = 格式误差。
+   修法（第二版，第一版的 overflow-x:auto 已回退——overflow 非 visible 会把
+   overflow-y 隐式转 auto，下拉菜单被 64px 顶栏整块裁掉，「点击设置什么都
+   看不见」）：
+   ① ≤540px 真收纳：导航第 4 项（我的文化索引/My Index）不占顶栏——画像在
+     首页「品味年轮」区仍有同名入口，功能不损失；报头 13px / 导航 10px /
+     图标 27px / 间距收紧后，双语在 320px 都放得下，页面零横向滚动；
+   ② 设置/主题下拉改锚 topbar（right:10px），菜单任意宽度完整在屏；
+   ③ 菜单加 max-width 护栏，en 长标签自动换行不出屏。 */
+@media(max-width:540px){
+  .topbar,.main,footer{width:calc(100% - 20px)}
+  .topbar{gap:7px}
+  .wordmark{font-size:13px}
+  .topbar nav{gap:6px}
+  .topbar nav button{font-size:10px;padding:0;letter-spacing:0}
+  /* 只隐藏「我的文化索引」(登录后才渲染的项)，用显式类名避免插入导航项后误伤「广场」。 */
+  .topbar nav button.nav-profile-only{display:none}
+  .header-tools{gap:0}
+  .header-tools .icon-button{width:27px;height:27px}
+  /* 下拉锚定改挂 topbar：按钮壳 static 化后，absolute 菜单以 topbar 为
+     定位基准——right:10 使菜单恒在屏内，不再被溢出的按钮位置带出屏。 */
+  .topbar .theme-switcher{position:static}
+  .topbar .rank-menu{right:10px}
+  .settings-menu{max-width:calc(100vw - 24px)}
+}
+/* 极窄机型（≤360px）再收一档：en 长标签下 320px 也零溢出 */
+@media(max-width:360px){
+  .wordmark{font-size:12px}
+  .topbar nav button{font-size:9.5px}
+  .header-tools .icon-button{width:25px;height:25px}
+}
+
+/* ===== P8 hero 按钮排布 + 触屏 tooltip 根治（2026-09-28）====================
+   ① 草稿存在时 hero 第三颗「继续上次进度」原为无边框裸文本（.button.quiet），
+      挂在两颗 chip 下面像游离链接，按钮行节奏散掉（用户报「首页排列与最初
+      不一样」）。收编为与相邻按钮一致的 chip：同边框、自动宽度。
+   ② 触屏（hover:none）上 tap 图标后 :hover 粘滞，tooltip 名称常驻不消失
+      （用户报「设置的名称一直还在」）。tooltip 本就是悬停装置，触屏一律隐藏；
+      图标按钮的 title 属性仍向读屏提供名称，无障碍不受影响。 */
+.orb-hero .home-actions .button.quiet{
+  width:auto;
+  border:1px solid color-mix(in srgb,var(--text) 24%,transparent);
+  color:var(--text-2);
+}
+@media(hover:none){
+  .icon-button .tooltip{display:none!important}
+}
+/* 换行后的「继续上次进度」与「开始准备」左对齐：v1 残留的
+   justify-content:flex-end 会把第二行 chip 推向右缘。 */
+@media(max-width:540px){
+  .home-actions.home-actions{justify-content:flex-start}
+}
+
+/* ===== P9 对战滑动手势（2026-09-28,优化冲刺 Phase 1）========================
+   触屏「往哪边甩就选哪边」（与键盘 ←/A = 左同语义）。touch-action:pan-y 把
+   水平手势留给 JS、垂直滚动留给浏览器；拖动中的跟随位移由 SortingView 直接
+   写 transform（reduced-motion 跳过）。提示语按输入方式切换。 */
+.duel-grid{touch-action:pan-y}
+.artwork-card{will-change:auto}
+.touch-hint{display:none}
+@media(hover:none){
+  .keyboard-hint .kb-only{display:none}
+  .keyboard-hint .touch-hint{display:inline}
+}
+
+/* ===== P10 广场品味相似度徽章（2026-09-28,优化冲刺 Phase 3）================ */
+.plaza-sticker-match{
+  display:inline-flex;align-items:center;gap:4px;
+  padding:2px 8px;border-radius:999px;
+  background:color-mix(in srgb,var(--accent) 10%,transparent);
+  color:var(--accent);
+  font-family:var(--font-mono);font-size:10px;font-weight:600;letter-spacing:.04em
+}
+
+/* 路由懒加载占位:与页面等高的最小骨架 */
+.route-loading{min-height:60vh}
+/* 视觉隐藏但读屏可读（route-loading 加载文案等无障碍文本用） */
+.sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;border:0}
+
+/* ===== 空封面三态（PLAN-EMPTY-COVER-STATE） =====
+   服务端一直分得清「确实没有」(absent) 和「暂时取不到」(throttled)，
+   但历史上没把分类发到前端，于是两者都长成同一个静默图标。
+   degraded 是唯一一档该说话、也该给动作的：文案一行 + 一枚 44px 的重试按钮。
+   排版刻意收窄——它出现在整页几十个格子里，任何加粗都会变成噪音。 */
+.cover-fallback-retry{gap:12px}
+/* 小号海报兜底（非 large 分支）：格子只有 26-52px 宽，大号专用的 gap:32px +
+   36px 图标必然把 9px 文字挤出格子底边（探针实测最重溢出 25px）。收成纯文字、
+   断词改 break-word——空格断行优先，不再把「Substance」折成「Substan/ce」。 */
+.cover-fallback-slim{gap:0;padding:4%}
+.cover-fallback-slim svg{display:none}
+.cover-fallback-slim span{overflow-wrap:break-word}
+.cover-retry-hint{
+  margin:0;max-width:30ch;
+  color:var(--muted);font-size:11px;line-height:1.5;text-align:center
+}
+.cover-retry{
+  display:inline-flex;align-items:center;gap:5px;
+  min-height:44px;padding:0 12px;
+  border:1px solid var(--border-2);border-radius:8px;
+  background:var(--surface);color:var(--text-2);
+  font-size:12px;line-height:1;white-space:nowrap;
+  transition:color .15s,border-color .15s
+}
+.cover-retry:hover:not(:disabled){color:var(--accent);border-color:var(--accent)}
+.cover-retry:disabled{opacity:.55}
+.cover-retry svg{animation:none}
+.cover-retry:disabled svg{animation:coverRetrySpin .9s linear infinite}
+/* 贴纸卡一行只 40px 高，重试按钮塞不进去也不该塞：那里保持静默图标，
+   与 .collection-row .cover-fallback 的既有约定一致。 */
+.collection-row .cover-retry{display:none}
+/* 小格子（榜单行 / 排名卡 / 维度片，最小 26×38）放不下文案，按钮也不给。 */
+.poster-small .cover-retry{display:none}
+.poster-small .cover-retry-hint{display:none}
+@keyframes coverRetrySpin{to{transform:rotate(360deg)}}
+@media(prefers-reduced-motion:reduce){.cover-retry:disabled svg{animation:none}}
+
+/* ===== 消歧出口「换一个封面」（PLAN-CHOICE-UI） =====
+   位置在 detail-copy 内、其余文案之上，是弹窗里唯一「主动认错」的东西，
+   所以语气与排版都不能像错误提示：极窄的一行小字 + 一排竖版缩略图。
+   缩略图尺寸刻意贴近 .poster-large 的宽度（对话弹窗里并排两张最舒服），
+   且固定 2/3 比例，避免没取到图时整行高度塌掉。 */
+.cover-choice{
+  margin:0 0 16px;padding:12px 14px;
+  border:1px solid color-mix(in srgb,var(--other) 28%,transparent);
+  border-radius:12px;
+  background:color-mix(in srgb,var(--other) 5%,transparent)
+}
+.cover-choice-hint{
+  display:flex;align-items:flex-start;gap:6px;margin:0 0 10px;
+  color:var(--muted);font-size:12px;line-height:1.5
+}
+.cover-choice-hint svg{flex-shrink:0;margin-top:3px;color:var(--other)}
+.cover-choice-row{display:flex;flex-wrap:wrap;gap:10px}
+.cover-choice-item{
+  display:flex;flex-direction:column;align-items:center;gap:4px;
+  width:76px;padding:6px 4px 7px;
+  border:1px solid transparent;border-radius:10px;
+  background:none;color:inherit;cursor:pointer;text-align:center;
+  transition:border-color .15s ease,background .15s ease
+}
+.cover-choice-item:hover:not(:disabled){background:color-mix(in srgb,var(--other) 9%,transparent)}
+.cover-choice-item:disabled{cursor:default;opacity:.5}
+/* 键盘可达：<button> 的默认 outline 已被全局重置，这里显式还回来 */
+.cover-choice-item:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.cover-choice-item.is-active{border-color:color-mix(in srgb,var(--accent) 55%,transparent);background:color-mix(in srgb,var(--accent) 7%,transparent)}
+.cover-choice-thumb{
+  position:relative;display:block;width:100%;aspect-ratio:2/3;
+  border-radius:6px;overflow:hidden;background:color-mix(in srgb,var(--text) 8%,transparent)
+}
+.cover-choice-thumb img{width:100%;height:100%;object-fit:cover;display:block}
+.cover-choice-thumb-blank{display:block;width:100%;height:100%}
+.cover-choice-check{
+  position:absolute;right:3px;bottom:3px;display:grid;place-items:center;
+  width:15px;height:15px;border-radius:50%;
+  background:var(--accent);color:var(--accent-ink)
+}
+.cover-choice-name{
+  font-size:11px;line-height:1.3;word-break:break-word;
+  display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden
+}
+.cover-choice-year{font-family:var(--font-mono);font-size:10px;color:var(--muted)}
+.cover-choice-msg{display:block;margin-top:8px;color:var(--muted);font-size:11px;line-height:1.5}
+
+/* AI 代判标注:mono 微字 + accent,置于 progress-meta 与对战区之间 */
+.assist-marker{
+  display:flex;align-items:center;gap:6px;margin:-6px 0 12px;
+  color:var(--accent);font-family:var(--font-mono);font-size:11px;letter-spacing:.05em
+}
+.assist-marker svg{flex-shrink:0}
+
+/* ===== 主题：画廊（PLAN-ui-modernization P3 · 组件级差异 8 项） =====
+   冷白展厅 + 克莱因蓝。数据画廊语言：Bento 网格画像页（L3）+ 手写雷达图 +
+   年代堆叠条 + 卡片墙翻转（L3）+ 对称报刊亭 topbar + 拍立得广场贴纸 + 大圆角弹窗。
+   注意：--ev-1/2/3 全站处于「被引用但从未定义 = none」的基线状态（PITFALLS 4.20，
+   旧主题 zero-diff 基线依赖它）——本主题**不定义 --ev-\***，阴影一律显式书写
+   color-mix(var(--shadow-tint))，形同 aurora 的 --shadow-tint 先例。 */
+[data-theme=gallery]{
+  --bg:#F7F7F4;--text:#17181A;--text-2:#3A3C40;--text-3:#55585E;--muted:#666A72;
+  --accent:#1D4ED8;--accent-2:#E8590C;--accent-ink:#FFFFFF;
+  --line:#D8D8D2;--border-2:#C6C6BF;
+  --surface:#FFFFFF;--surface-2:#F2F2EF;--surface-3:#EAEAE6;--surface-4:#E2E2DD;--surface-hover:#EFEFEB;--surface-glow:#EDF1FC;
+  --ok:#15803D;--warn:#B45309;--danger:#DC2626;--danger-2:#B91C1C;--indigo:#4F46E5;--pink:#BE185D;
+  --film:#1D4ED8;--book:#B45309;--music:#0F766E;--other:#6D28D9;
+  --scrim:rgba(18,20,24,.5);--toast-bg:#17181A;--toast-bg-2:#232529;--toast-ink:#F7F7F4;--toast-border:#17181A;
+  --reader-dim:.92;--reader-poster-opacity:.18;
+  --status-ok:#15803D;--status-warn:#B45309;--status-danger:#DC2626;
+  --shadow-tint:#101215;
+  --r-xs:8px;--r-sm:12px;--r-md:16px;--r-lg:24px;
+}
+.theme-dot.theme-gallery{--dot-a:#F7F7F4;--dot-b:#1D4ED8;background:linear-gradient(135deg,var(--dot-a) 50%,var(--dot-b) 50%)}
+/* 画廊是干净展厅：玻璃关闭（浅色纸感统一纪律，独立成条避免动旧主题长选择器） */
+[data-theme=gallery] :is(.topbar,.glass-capsule,.segmented,.medium-item,.account-dialog,.artwork-main,.toast,.dim-chip,.rank-pill,.rank-menu,.settings-menu,.plaza-header,.scroll-top,.custom-suggestions,.detail-dialog,.rank-detail-dialog,.theme-menu){backdrop-filter:none;-webkit-backdrop-filter:none}
+/* 差异 · 弹窗/菜单/浮层：大圆角（--r-lg=24）+ 无边框纯阴影——与 editorial 直角两极 */
+[data-theme=gallery] :is(.account-dialog,.detail-dialog,.rank-detail-dialog,.settings-menu,.rank-menu,.theme-menu,.toast,.guide-modal,.tech-modal){
+  border:0;border-radius:var(--r-lg);
+  box-shadow:0 28px 80px color-mix(in srgb,var(--shadow-tint) 26%,transparent),0 4px 14px color-mix(in srgb,var(--shadow-tint) 12%,transparent)
+}
+/* 差异 · topbar：对称报刊亭——Logo 居中，导航居左、工具居右（display:grid 显式声明，
+   PITFALLS 4.12：基座是 flex，不显式改 grid 则网格轨道全部失效） */
+[data-theme=gallery] .topbar{display:grid;grid-template-columns:minmax(0,1fr) auto minmax(0,1fr);align-items:center;gap:24px}
+[data-theme=gallery] .topbar .wordmark{justify-self:center}
+[data-theme=gallery] .topbar nav{justify-self:start}
+[data-theme=gallery] .topbar .header-tools{margin-left:0;justify-self:end}
+/* 差异 · 榜单行（编辑器/重排/详情弹窗/分享页仍在用的行式列表）：hairline + mono 名次，
+   去 P0.7 的墨块名次牌语言；画廊主榜单本体走卡片墙（L3），行式列表只做配套降级 */
+[data-theme=gallery] .ranking-list{border-top:1px solid var(--line)}
+[data-theme=gallery] .ranking-list>li{gap:16px;border-bottom:1px solid var(--line);background:none;box-shadow:none;border-radius:var(--r-sm)}
+[data-theme=gallery] .ranking-list>li:hover{background:color-mix(in srgb,var(--text) 3.5%,transparent)}
+[data-theme=gallery] .row-number{align-self:auto;background:none;padding-inline:0;margin-inline:0;font-size:15px;color:var(--accent)}
+[data-theme=gallery] .ranking-list>li:nth-child(-n+3) .row-number{background:none;color:var(--accent);font-weight:600}
+[data-theme=gallery] .ranking-list>li strong{font-size:15px;font-weight:600}
+/* 手动重排行守卫：本块 (0,2,1) 的 grid 声明在文件后部会压过 P6 的 flex 覆盖（同分后来者胜），
+   必须以更高特异性把 flex 重新要回来（PITFALLS 4.19 同源纪律），否则第 5 个子元素折行 */
+[data-theme=gallery] .ranking-list.reorder-list>li{display:flex;gap:16px}
+[data-theme=gallery] .ranking-list.reorder-list .reorder-handle{align-self:stretch;display:flex;align-items:center}
+/* 差异 · 广场贴纸：拍立得形态——白框、底部手写感标题区、微旋转、hover 立起（纯 L2） */
+[data-theme=gallery] .plaza-sticker{
+  position:relative;flex-direction:column;align-items:stretch;gap:0;
+  padding:10px 10px 14px;border:0;border-radius:4px;
+  background:color-mix(in srgb,var(--surface) 88%,var(--bg));
+  box-shadow:0 14px 34px color-mix(in srgb,var(--shadow-tint) 18%,transparent),0 2px 6px color-mix(in srgb,var(--shadow-tint) 10%,transparent);
+  transform:rotate(-1.15deg)
+}
+[data-theme=gallery] .plaza-sticker:nth-child(even){transform:rotate(1.2deg)}
+[data-theme=gallery] .plaza-sticker:hover{
+  transform:rotate(0deg) translateY(-4px);
+  box-shadow:0 24px 52px color-mix(in srgb,var(--shadow-tint) 26%,transparent),0 4px 12px color-mix(in srgb,var(--shadow-tint) 14%,transparent)
+}
+[data-theme=gallery] .plaza-sticker-posters{justify-content:center;gap:6px;padding:4px 2px 10px}
+[data-theme=gallery] .plaza-sticker-info{padding:10px 2px 0;gap:6px}
+[data-theme=gallery] .plaza-sticker-title{text-align:center;font-family:var(--font-serif);font-style:italic;font-size:14px;white-space:normal;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
+[data-theme=gallery] .plaza-sticker-meta{justify-content:center}
+[data-theme=gallery] .plaza-sticker-desc{border-left:0;padding-left:0;text-align:center}
+[data-theme=gallery] .plaza-sticker-stats{justify-content:center}
+[data-theme=gallery] .plaza-sticker-actions{position:absolute;top:14px;right:12px}
+[data-theme=gallery] .plaza-sticker-arrow{display:none}
+[data-theme=gallery] .plaza-sticker-compact{padding:8px 8px 10px}
+[data-theme=gallery] .plaza-sticker-compact .plaza-sticker-title{font-size:12px}
+/* 差异 · 分享卡：二维码融入网格（与链接并排的展签格），不再孤悬贴角 */
+[data-theme=gallery] .share-output{display:grid;grid-template-columns:auto minmax(0,1fr);gap:12px;align-items:center;padding:12px;border:1px solid var(--line);border-radius:var(--r-md);background:var(--surface)}
+[data-theme=gallery] .share-output img{width:96px;margin:0}
+
+/* ===== gallery L3 支撑样式（DOM 仅 gallery 家族渲染，类名 gl-* 全新命名空间，
+   不与基座同名——旧主题 selectors 永远命中不到） ===== */
+/* Bento 网格：显式 display:grid（PITFALLS 4.12）+ grid-area 编排；
+   Top1 大卡占 2×2，雷达/坐标居右，年代条与榜单索引压底 */
+.gl-bento{
+  display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin:0 0 28px;
+  grid-template-areas:
+    "hero hero radar"
+    "hero hero coords"
+    "decades decades entries"
+    "essence essence essence"
+}
+.gl-bento--share{
+  grid-template-areas:
+    "hero hero radar"
+    "hero hero coords"
+    "decades decades decades"
+    "essence essence essence"
+}
+.gl-cell{min-width:0;display:flex;flex-direction:column;gap:10px;padding:16px;border:1px solid var(--line);border-radius:var(--r-md);background:var(--surface)}
+.gl-cell-label{font-family:var(--font-mono);font-size:var(--t-meta);letter-spacing:var(--ls-wide);text-transform:uppercase;color:var(--text-3)}
+.gl-cell-hero{grid-area:hero}
+.gl-cell-radar{grid-area:radar}
+.gl-cell-decades{grid-area:decades}
+.gl-cell-coords{grid-area:coords}
+.gl-cell-entries{grid-area:entries}
+.gl-cell-essence{grid-area:essence;gap:12px}
+/* 精华切片：一条编辑式「接触印相带」——细线分隔、等宽序号、可横向滑动，
+   与 gl-* 既有语言一致；不引入新色值，只用 accent/line/surface 令牌。 */
+.gl-essence-head{display:flex;align-items:baseline;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.gl-essence-coverage{font-family:var(--font-mono);font-size:var(--t-meta);color:var(--text-3);font-variant-numeric:tabular-nums}
+.gl-essence{list-style:none;margin:0;padding:0;display:flex;overflow-x:auto;overscroll-behavior-x:contain;scroll-snap-type:x proximity;border-top:1px solid var(--line);border-left:1px solid var(--line)}
+.gl-essence-item{flex:1 0 min(170px,46%);min-width:0;border-right:1px solid var(--line);border-bottom:1px solid var(--line);scroll-snap-align:start}
+.gl-essence-item button{display:flex;align-items:baseline;gap:10px;width:100%;min-height:52px;padding:10px 14px;border:0;background:none;text-align:left;color:inherit;cursor:pointer}
+.gl-essence-item button:hover{background:var(--surface-hover)}
+.gl-essence-item button:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
+.gl-essence-rank{flex-shrink:0;font-family:var(--font-mono);font-size:var(--t-meta);color:var(--text-3);font-variant-numeric:tabular-nums}
+.gl-essence-item:first-child .gl-essence-rank{color:var(--accent)}
+.gl-essence-body{display:flex;flex-direction:column;gap:2px;min-width:0}
+.gl-essence-body strong{font-size:13px;font-weight:600;line-height:1.35;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.gl-essence-body small{font-family:var(--font-mono);font-size:10px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.gl-empty{font-size:13px;color:var(--muted)}
+/* Top1 大卡：大幅海报 + 巨号名次 + 2-5 名跟进行。
+   海报走文档流 + aspect-ratio（不能绝对定位撑满按钮——Bento 格高由雷达/坐标行
+   决定，绝对填充会把跟进行挤出格底、被后续格子盖住）。 */
+.gl-hero{display:flex;gap:16px;align-items:flex-start;flex:1;min-height:0;padding:0;border:0;background:none;text-align:left;cursor:pointer}
+.gl-hero-poster{flex:0 0 auto;width:min(44%,176px);aspect-ratio:2/3;border-radius:var(--r-sm);overflow:hidden;background:var(--surface-2)}
+.gl-hero-poster .poster{display:block;width:100%;height:100%}
+.gl-hero-poster .poster img{width:100%;height:100%;object-fit:cover}
+.gl-hero-info{display:flex;flex-direction:column;justify-content:flex-start;gap:8px;min-width:0;padding-top:6px}
+.gl-hero-rank{font-family:var(--font-mono);font-size:44px;font-weight:600;line-height:.9;color:var(--accent);font-variant-numeric:tabular-nums}
+.gl-hero-info strong{font-size:20px;font-weight:600;line-height:1.35}
+.gl-hero-info small{font-family:var(--font-mono);font-size:var(--t-meta);color:var(--text-3)}
+.gl-hero-next{list-style:none;margin:2px 0 0;padding:0;display:grid;gap:4px}
+.gl-hero-next li button{display:flex;align-items:center;gap:10px;width:100%;min-height:44px;padding:4px 6px;border:0;border-radius:var(--r-xs);background:none;text-align:left;cursor:pointer;min-width:0}
+.gl-hero-next li button:hover{background:var(--surface-hover)}
+.gl-hero-next-rank{width:22px;flex-shrink:0;font-family:var(--font-mono);font-size:13px;color:var(--text-3);font-variant-numeric:tabular-nums}
+.gl-hero-next .poster{width:26px;height:38px;border-radius:3px;flex-shrink:0}
+.gl-hero-next-title{flex:1;min-width:0;font-size:13px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+/* 雷达图（手写 SVG） */
+.gl-radar{width:100%;height:auto;max-height:240px;margin-top:auto}
+.gl-radar-label{font-family:var(--font-body);font-size:11px;fill:var(--text-2)}
+.gl-radar-count{font-family:var(--font-mono);font-weight:600}
+/* 年代堆叠条：按维度分行，段色随年代由浅入深；跨度刻度在右 */
+.gl-decade-row{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:10px;align-items:center}
+.gl-decade-kind{font-size:11px;font-weight:600;white-space:nowrap}
+.gl-decade-bar{display:flex;gap:2px;height:14px;border-radius:3px;overflow:hidden;background:color-mix(in srgb,var(--text) 5%,transparent)}
+.gl-decade-bar>span{display:block;min-width:3px;height:100%}
+.gl-decade-span{font-family:var(--font-mono);font-size:10px;color:var(--muted);white-space:nowrap}
+/* 口味坐标：2×2 关键数格 */
+.gl-stats{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px 16px;flex:1;align-content:center}
+.gl-stat strong{display:block;font-family:var(--font-mono);font-size:24px;font-weight:600;line-height:1.1;color:var(--text);font-variant-numeric:tabular-nums}
+.gl-stat span{font-size:11px;color:var(--muted)}
+/* 榜单索引（承接维度页签的切换职能） */
+.gl-entries{display:grid;gap:2px;max-height:300px;overflow-y:auto}
+.gl-entry{display:flex;align-items:center;gap:10px;min-height:44px;min-width:0;padding:4px 8px;border:0;border-radius:var(--r-xs);background:none;text-align:left;cursor:pointer}
+.gl-entry:hover{background:var(--surface-hover)}
+.gl-entry.active{background:color-mix(in srgb,var(--accent) 8%,transparent)}
+.gl-entry-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+.gl-entry-poster .poster{width:26px;height:38px;border-radius:3px;flex-shrink:0}
+.gl-entry-title{flex:1;min-width:0;font-size:13px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.gl-entry.active .gl-entry-title{color:var(--accent)}
+.gl-entry-count{font-family:var(--font-mono);font-size:11px;color:var(--muted);flex-shrink:0}
+/* 卡片墙：海报正面 / 批注背面，hover（桌面）或 .flipped（触屏点按）3D 翻转；
+   focus-within 翻面保证键盘可读背面。通用选择器只作用于 .gl-* 命名空间（PITFALLS 4.11）。 */
+.gl-wall{list-style:none;margin:4px 0 0;padding:0;display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:14px}
+.gl-card{position:relative;aspect-ratio:2/3;perspective:1100px;min-width:0}
+.gl-card-inner{position:relative;width:100%;height:100%;transform-style:preserve-3d;transition:transform var(--dur-3) var(--ease-out);cursor:pointer;border-radius:var(--r-sm);outline-offset:4px}
+@media(hover:hover){.gl-card:hover .gl-card-inner{transform:rotateY(180deg)}}
+.gl-card.flipped .gl-card-inner,.gl-card:focus-within .gl-card-inner{transform:rotateY(180deg)}
+.gl-card-face{position:absolute;inset:0;backface-visibility:hidden;-webkit-backface-visibility:hidden;display:flex;flex-direction:column;border:1px solid var(--line);border-radius:var(--r-sm);overflow:hidden;background:var(--surface)}
+.gl-card-front .poster{width:100%;height:100%}
+.gl-card-front .poster img{width:100%;height:100%;object-fit:cover}
+.gl-card-rank{position:absolute;top:8px;left:8px;z-index:2;padding:2px 7px;border-radius:var(--r-xs);background:var(--accent);color:var(--accent-ink);font-family:var(--font-mono);font-size:11px;font-weight:600;font-variant-numeric:tabular-nums}
+.gl-card-caption{position:absolute;left:0;right:0;bottom:0;z-index:1;padding:26px 10px 8px;font-size:12px;font-weight:500;line-height:1.4;color:var(--bg);background:linear-gradient(transparent,color-mix(in srgb,var(--shadow-tint) 76%,transparent));display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.gl-card-back{transform:rotateY(180deg);padding:12px;gap:6px}
+.gl-card-back .gl-card-rank{left:auto;right:8px}
+.gl-card-back strong{font-size:14px;font-weight:600;line-height:1.4;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.gl-card-back small{font-family:var(--font-mono);font-size:10px;color:var(--text-3)}
+.gl-card-note{flex:1;min-height:0;margin:0;font-size:11px;line-height:1.6;color:var(--text-2);overflow:hidden;display:-webkit-box;-webkit-line-clamp:5;-webkit-box-orient:vertical}
+.gl-card-actions{display:flex;gap:6px}
+.gl-card-actions .rank-pill{min-height:26px;padding:0 8px;font-size:10px}
+/* reduced-motion 平铺展开：弃 3D 变换，正反面改为文档流上下铺开（PITFALLS 4.16） */
+@media(prefers-reduced-motion:reduce){
+  .gl-card{aspect-ratio:auto}
+  .gl-card-inner{height:auto;transform:none!important}
+  .gl-card-face{position:relative;inset:auto;transform:none;backface-visibility:visible}
+  .gl-card-front{border-radius:var(--r-sm) var(--r-sm) 0 0}
+  .gl-card-front .poster{height:auto;aspect-ratio:2/3}
+  .gl-card-back{border-top:0;border-radius:0 0 var(--r-sm) var(--r-sm)}
+}
+/* Bento 移动端：单列堆叠（grid-template-areas 逐格重排，保持显式声明纪律） */
+@media(max-width:800px){
+  .gl-bento{grid-template-columns:minmax(0,1fr);grid-template-areas:"hero" "radar" "decades" "coords" "essence" "entries"}
+  .gl-bento--share{grid-template-areas:"hero" "radar" "decades" "coords" "essence"}
+}
+@media(max-width:540px){
+  .gl-cell{padding:12px}
+  .gl-hero-poster{width:132px}
+  .gl-hero-rank{font-size:34px}
+  .gl-hero-info strong{font-size:16px}
+  .gl-stats strong{font-size:20px}
+  .gl-wall{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+  .gl-card-actions .rank-pill{min-height:24px;padding:0 6px}
+  [data-theme=gallery] .topbar{gap:8px}
+}
+
+/* ===== S2（docs/PLAN-ADDITIVE-UPGRADE.md）adaptive 模式：名次区间条 =====
+   纯新增类名，旧三模式不渲染这些节点，旧主题零像素改动。全部用既有 token，无裸 hex。 */
+.adaptive-strip{display:grid;gap:8px;margin:0 0 24px;padding:12px 16px;border:1px solid var(--line);border-radius:var(--r-sm);background:var(--surface-2)}
+.adaptive-strip-head{display:flex;justify-content:space-between;gap:16px;align-items:baseline;color:var(--text-3);font-size:var(--t-meta);font-family:var(--font-mono)}
+.adaptive-row{display:grid;grid-template-columns:86px minmax(0,1fr);gap:4px 12px;align-items:center;font-size:var(--t-small)}
+.adaptive-row strong{min-width:0;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.adaptive-rank{color:var(--accent);font-family:var(--font-mono);font-size:var(--t-meta);white-space:nowrap}
+.rank-interval-bar{position:relative;grid-column:1/-1;height:2px;background:var(--line);border-radius:var(--r-pill)}
+.rank-interval-band{position:absolute;top:-3px;bottom:-3px;background:color-mix(in srgb,var(--accent) 28%,transparent);border-radius:var(--r-pill)}
+.rank-interval-mark{position:absolute;top:-4px;bottom:-4px;width:2px;margin-left:-1px;background:var(--accent);border-radius:var(--r-pill)}
+.adaptive-hint{margin:0;color:var(--text-3);font-size:var(--t-meta)}
+.adaptive-strip.is-settled .rank-interval-band{background:color-mix(in srgb,var(--text) 18%,transparent)}
+@media (max-width:720px){.adaptive-row{grid-template-columns:minmax(0,1fr);gap:4px}.adaptive-strip{padding:12px}}
+

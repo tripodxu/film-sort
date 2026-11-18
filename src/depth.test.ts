@@ -1,5 +1,6 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
+import { readMainStyles } from "./lib/readStyles";
 
 /**
  * S3（深度比较页 /depth）的源码绊线。
@@ -23,7 +24,7 @@ const APP = read("./App.tsx");
 const COMPARE = read("./views/CompareView.tsx");
 const DEPTH = read("./views/DepthCompareView.tsx");
 const TYPES = read("./views/types.ts");
-const CSS = read("./styles.css");
+const CSS = readMainStyles();
 
 const S3_MARKER = "/* ===== Depth Compare（S3 新增";
 const s3Css = CSS.slice(CSS.indexOf(S3_MARKER));

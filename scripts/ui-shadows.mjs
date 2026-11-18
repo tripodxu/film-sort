@@ -10,7 +10,7 @@ import { fileURLToPath } from "node:url";
 import { dirname, join, resolve } from "node:path";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-const FILE = join(ROOT, "src/styles.css");
+const FILE = join(ROOT, "src/styles/00-base.css");
 
 function splitLayers(value) {
   const out = [];
