@@ -28,10 +28,7 @@ export interface SendResult {
   reason?: string;
 }
 
-import { createElement } from "react";
-// 显式 browser 入口：react-dom/server 默认导出条件在 workerd 下解析到 Node 版（node:stream → 崩）。
-import { renderToStaticMarkup } from "react-dom/server.browser";
-import { VerificationCodeEmail } from "./VerificationCodeEmail";
+import { renderVerificationCodeEmailHtml } from "./VerificationCodeEmail";
 import { fetchBounded, readBoundedText, type OutboundPolicy } from "./outbound";
 
 // 发信上游响应很小（JSON ack）；64 KiB 预算 + manual redirect，防异常上游耗资源。
@@ -54,10 +51,7 @@ const LUCKYCOLA_URLS = [
 ];
 
 function buildHtml(action: string, code: string): string {
-  // React Email 模板（worker/VerificationCodeEmail.tsx）→ 静态标记；react-dom/server 在 Workers 运行时安全。
-  return (
-    "<!DOCTYPE html>" + renderToStaticMarkup(createElement(VerificationCodeEmail, { action, code }))
-  );
+  return renderVerificationCodeEmailHtml({ action, code });
 }
 
 /** Resend 主通道。 */

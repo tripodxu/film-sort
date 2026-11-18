@@ -1,21 +1,5 @@
-// React 显式引入：wrangler 的 esbuild 对 worker TSX 走 classic runtime（React.createElement），
-// 与 tsc 的 react-jsx 自动 runtime 双兼容。
-import React from "react";
-import {
-  Body,
-  Column,
-  Container,
-  Head,
-  Heading,
-  Hr,
-  Html,
-  Row,
-  Section,
-  Text,
-} from "@react-email/components";
-
-// 验证码邮件模板（React Email）——「夜间档案馆」印刷语言的纸上表达：
-// 纸白底 + 墨色正文 + 双线分区 + mono 验证码铭牌 + 衬线报名。全部内联样式，邮件客户端安全。
+// 验证码邮件模板（纯 HTML + 严格转义，无 React/react-dom 运行时开销）——
+// 「夜间档案馆」印刷语言的纸上表达：纸白底 + 墨色正文 + 双线分区 + mono 验证码铭牌 + 衬线报名。
 
 const ink = "#1a1a17";
 const inkSoft = "#57564f";
@@ -34,122 +18,79 @@ export interface VerificationCodeEmailProps {
   minutes?: number;
 }
 
-export function VerificationCodeEmail({ action, code, minutes = 10 }: VerificationCodeEmailProps) {
-  return (
-    <Html lang="zh-CN">
-      <Head />
-      <Body style={{ margin: 0, background: paper, fontFamily: serif, color: ink }}>
-        <Container style={{ maxWidth: 520, margin: "0 auto", padding: "36px 24px" }}>
-          {/* 报名区：衬线叠印 + 柠檬斜线 */}
-          <Section style={{ paddingBottom: 18 }}>
-            <Row>
-              <Column>
-                <Heading
-                  as="h1"
-                  style={{
-                    margin: 0,
-                    fontFamily: serif,
-                    fontSize: 30,
-                    lineHeight: 1,
-                    letterSpacing: 1,
-                  }}
-                >
-                  ART
-                  <span style={{ color: accent, fontStyle: "italic", padding: "0 4px" }}>/</span>
-                  RANK
-                </Heading>
-              </Column>
-              <Column align="right" style={{ verticalAlign: "bottom" }}>
-                <Text
-                  style={{
-                    margin: 0,
-                    fontFamily: mono,
-                    fontSize: 10,
-                    letterSpacing: 2,
-                    color: inkSoft,
-                    textTransform: "uppercase",
-                  }}
-                >
-                  Personal culture index
-                </Text>
-              </Column>
-            </Row>
-          </Section>
-
-          {/* 双线分区（印刷语言） */}
-          <Hr style={{ border: "none", borderTop: `3px double ${hairline}`, margin: "0 0 22px" }} />
-
-          <Text
-            style={{
-              margin: "0 0 6px",
-              fontFamily: mono,
-              fontSize: 10,
-              letterSpacing: 3,
-              color: inkSoft,
-              textTransform: "uppercase",
-            }}
-          >
-            Verification code · 验证码
-          </Text>
-          <Heading
-            as="h2"
-            style={{ margin: "0 0 18px", fontFamily: serif, fontSize: 20, fontWeight: 700 }}
-          >
-            你正在{action}
-          </Heading>
-
-          {/* 验证码铭牌 */}
-          <Section
-            style={{
-              background: plate,
-              border: `2px solid ${ink}`,
-              borderRadius: 2,
-              padding: "22px 0",
-              textAlign: "center",
-              margin: "0 0 18px",
-            }}
-          >
-            <Text
-              style={{
-                margin: 0,
-                fontFamily: mono,
-                fontSize: 38,
-                fontWeight: 700,
-                letterSpacing: 12,
-                color: ink,
-                fontVariantNumeric: "tabular-nums",
-              }}
-            >
-              {code}
-            </Text>
-          </Section>
-
-          <Text style={{ margin: "0 0 4px", fontSize: 14, lineHeight: 1.9, color: ink }}>
-            该验证码 <strong style={{ fontFamily: mono }}>{minutes} 分钟</strong>
-            内有效，输入后即可{action}。
-          </Text>
-          <Text style={{ margin: 0, fontSize: 12, lineHeight: 1.9, color: inkSoft }}>
-            若非本人操作，请忽略本邮件；验证码不要转发给任何人。
-          </Text>
-
-          <Hr
-            style={{ border: "none", borderTop: `1px solid ${hairline}`, margin: "26px 0 14px" }}
-          />
-          <Text
-            style={{
-              margin: 0,
-              fontFamily: mono,
-              fontSize: 10,
-              letterSpacing: 1,
-              color: inkSoft,
-            }}
-          >
-            ART/RANK · 自动发送，请勿回复
-          </Text>
-        </Container>
-      </Body>
-    </Html>
-  );
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
 }
 
-export default VerificationCodeEmail;
+export function renderVerificationCodeEmailHtml({
+  action,
+  code,
+  minutes = 10,
+}: VerificationCodeEmailProps): string {
+  const safeAction = escapeHtml(action);
+  const safeCode = escapeHtml(code);
+  const safeMinutes = escapeHtml(String(minutes));
+  return `<!DOCTYPE html>
+<html lang="zh-CN">
+<head><meta charset="utf-8" /></head>
+<body style="margin:0;background:${paper};font-family:${serif};color:${ink};">
+  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:${paper};">
+    <tr>
+      <td align="center" style="padding:36px 24px;">
+        <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:520px;margin:0 auto;">
+          <tr>
+            <td style="padding-bottom:18px;">
+              <table role="presentation" width="100%" cellspacing="0" cellpadding="0">
+                <tr>
+                  <td>
+                    <h1 style="margin:0;font-family:${serif};font-size:30px;line-height:1;letter-spacing:1px;">
+                      ART<span style="color:${accent};font-style:italic;padding:0 4px;">/</span>RANK
+                    </h1>
+                  </td>
+                  <td align="right" valign="bottom">
+                    <p style="margin:0;font-family:${mono};font-size:10px;letter-spacing:2px;color:${inkSoft};text-transform:uppercase;">
+                      Personal culture index
+                    </p>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+          <tr>
+            <td>
+              <hr style="border:none;border-top:3px double ${hairline};margin:0 0 22px;" />
+              <p style="margin:0 0 6px;font-family:${mono};font-size:10px;letter-spacing:3px;color:${inkSoft};text-transform:uppercase;">
+                Verification code · 验证码
+              </p>
+              <h2 style="margin:0 0 18px;font-family:${serif};font-size:20px;font-weight:700;">
+                你正在${safeAction}
+              </h2>
+              <div style="background:${plate};border:2px solid ${ink};border-radius:2px;padding:22px 0;text-align:center;margin:0 0 18px;">
+                <p style="margin:0;font-family:${mono};font-size:38px;font-weight:700;letter-spacing:12px;color:${ink};font-variant-numeric:tabular-nums;">
+                  ${safeCode}
+                </p>
+              </div>
+              <p style="margin:0 0 4px;font-size:14px;line-height:1.9;color:${ink};">
+                该验证码 <strong style="font-family:${mono};">${safeMinutes} 分钟</strong>内有效，输入后即可${safeAction}。
+              </p>
+              <p style="margin:0;font-size:12px;line-height:1.9;color:${inkSoft};">
+                若非本人操作，请忽略本邮件；验证码不要转发给任何人。
+              </p>
+              <hr style="border:none;border-top:1px solid ${hairline};margin:26px 0 14px;" />
+              <p style="margin:0;font-family:${mono};font-size:10px;letter-spacing:1px;color:${inkSoft};">
+                ART/RANK · 自动发送，请勿回复
+              </p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>`;
+}

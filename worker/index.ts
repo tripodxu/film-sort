@@ -621,13 +621,11 @@ async function getStats(env: Env): Promise<Response> {
   try {
     const row = await env.DB.prepare(
       `SELECT
-        COUNT(CASE WHEN event_name = 'ranking_completed' THEN 1 END) AS completed_total,
-        COUNT(CASE WHEN event_name = 'ranking_completed' AND created_at >= datetime('now', 'start of day') THEN 1 END) AS completed_today,
-        ROUND(AVG(CASE
-          WHEN event_name = 'ranking_completed'
-          THEN CAST(json_extract(payload, '$.comparison_count') AS REAL)
-        END), 1) AS average_comparisons
-      FROM analytics_events`,
+        COUNT(*) AS completed_total,
+        COUNT(CASE WHEN created_at >= datetime('now', 'start of day') THEN 1 END) AS completed_today,
+        ROUND(AVG(CAST(json_extract(payload, '$.comparison_count') AS REAL)), 1) AS average_comparisons
+      FROM analytics_events
+      WHERE event_name = 'ranking_completed'`,
     ).first<StatsRow>();
 
     return json(
@@ -1218,7 +1216,7 @@ async function serveOgHtml(request: Request, env: Env): Promise<Response | null>
       if (row) tags = buildShareTags(row.profile, url.toString());
     } else if (plazaMatch) {
       const row = await env.DB.prepare(
-        `SELECT p.collection_title, p.kind, p.item_count, p.post_type, p.items, u.nickname
+        `SELECT p.collection_title, p.kind, p.item_count, p.post_type, json_extract(p.items, '$[0]') AS first_item, u.nickname
          FROM plaza_posts p LEFT JOIN user_accounts u ON p.user_id = u.id
          WHERE p.id = ? AND p.is_public = 1`,
       )
@@ -1228,16 +1226,15 @@ async function serveOgHtml(request: Request, env: Env): Promise<Response | null>
           kind: string;
           item_count: number;
           post_type: string;
-          items: string;
+          first_item: string | null;
           nickname: string | null;
         }>();
       if (row) {
         // 首位作品:ranking 帖 items[0] 即作品;profile 帖 items[0] 是榜单,取其 items[0]
         let topWork: { title?: unknown; subtitle?: unknown; year?: unknown } | null = null;
         try {
-          const parsed = JSON.parse(row.items) as unknown;
-          if (Array.isArray(parsed) && parsed.length > 0) {
-            const first = parsed[0] as Record<string, unknown>;
+          if (row.first_item) {
+            const first = JSON.parse(row.first_item) as Record<string, unknown>;
             topWork =
               row.post_type === "profile" && Array.isArray(first.items)
                 ? ((first.items as Array<Record<string, unknown>>)[0] ?? null)
@@ -1255,7 +1252,11 @@ async function serveOgHtml(request: Request, env: Env): Promise<Response | null>
             /* 海报解析失败只影响图片 */
           }
         }
-        tags = buildPlazaTags({ ...row, topPosterUrl }, url.toString(), url.origin);
+        tags = buildPlazaTags(
+          { ...row, items: row.first_item ? `[${row.first_item}]` : "[]", topPosterUrl },
+          url.toString(),
+          url.origin,
+        );
       }
     }
   } catch {

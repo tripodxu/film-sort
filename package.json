@@ -28,7 +28,6 @@
     "ai:mock": "node scripts/ai-mock-server.mjs"
   },
   "dependencies": {
-    "@react-email/components": "^1.0.11",
     "fflate": "^0.8.2",
     "lucide-react": "^0.468.0",
     "qrcode": "^1.5.4",
@@ -46,8 +45,8 @@
     "@vitejs/plugin-react": "^4.3.4",
     "eslint": "^9.39.4",
     "eslint-plugin-react-hooks": "^5.2.0",
-    "prettier": "^3.9.8",
     "playwright": "^1.60.0",
+    "prettier": "^3.9.8",
     "typescript": "~5.7.2",
     "typescript-eslint": "^8.70.0",
     "vite": "^6.0.5",

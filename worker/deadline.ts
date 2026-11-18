@@ -24,13 +24,23 @@ export class DeadlineError extends Error {
   }
 }
 
-export async function withDeadline<T>(work: Promise<T>, ms: number, label: string): Promise<T> {
+export async function withDeadline<T>(
+  work: Promise<T> | ((signal: AbortSignal) => Promise<T>),
+  ms: number,
+  label: string,
+): Promise<T> {
   let timer: ReturnType<typeof setTimeout> | undefined;
+  const controller = typeof work === "function" ? new AbortController() : null;
+  const target = typeof work === "function" ? work(controller!.signal) : work;
   try {
     return await Promise.race([
-      work,
+      target,
       new Promise<never>((_, reject) => {
-        timer = setTimeout(() => reject(new DeadlineError(label, ms)), ms);
+        timer = setTimeout(() => {
+          const err = new DeadlineError(label, ms);
+          controller?.abort(err);
+          reject(err);
+        }, ms);
       }),
     ]);
   } finally {
