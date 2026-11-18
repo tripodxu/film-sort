@@ -3,6 +3,17 @@
 > 2026-10-29 三批收口的完整复核记录（发现项、根因、验证、线上回归清单）见
 > [`docs/REVIEW-2026-10-29.md`](docs/REVIEW-2026-10-29.md)。
 
+## 2026-11-18 · 前端「现代、简洁、优雅、去 AI 感」体验升级（Phase U1–U4）
+
+**方案文档**：[`docs/PLAN-FRONTEND-ELEGANCE-2026-11.md`](docs/PLAN-FRONTEND-ELEGANCE-2026-11.md)（`dbc201d`）
+
+- **Phase U1（`48362e1`）**：升级现代无衬线 / 人文衬线 / 等宽数字字体栈，排行榜序号与统计指标启用 `tabular-nums`，统一基础圆角并移除 `.collection-list .collection-row` 的 18 处 `!important` 覆盖。
+- **Phase U2（`6f51473`）**：对默认 `modern` 主题做去 AI 感减法，移除 `HeroBackdrop` 三色漂浮高斯模糊彩团、按钮/卡片 `skewX` 斜切扫光、维度卡 3D `rotateX/Y` 摇晃与 `48px` 荧光绿外发光，保留克制环境光与 `DeferredOrb` 单一舞台主角。
+- **Phase U3（`5acb50a`）**：将 `.comparison-ai`、`AiInsightCard`、`JevDivergenceCard` 改造为「左侧 `2px` 垂直引线 + 衬线体正文」的编辑部策展按语风格，移除泛滥的 `Sparkles` 图标。
+- **Phase U4**：`ui-contrast.mjs` 全 12 套主题最小对比度 `4.62`（满足 WCAG AA）与 `npm run gates` 全套门禁通过。
+
+---
+
 ## 2026-11-18 · 全栈深度重构与性能/可靠性治理（分阶段原子提交）
 
 **背景**：完成全仓深度审计后，按「真缺陷止血 → 构建与测试基座 → 前端解耦与组件化 → 样式与 Worker 模块化 → CI 与文档收口」分步落地重构：

@@ -10,6 +10,12 @@
 
 ## 进行中 / 最近
 
+### T-20261118-UI-ELEGANCE · 前端「现代、简洁、优雅、去 AI 感」升级（Phase U1–U4） · 🔄 本地全门禁全绿，待部署线上走查
+
+- **方案**：[`docs/PLAN-FRONTEND-ELEGANCE-2026-11.md`](../PLAN-FRONTEND-ELEGANCE-2026-11.md)（`dbc201d`）
+- **改动**：`48362e1`（U1 字体/圆角/去 `!important`）→ `6f51473`（U2 `modern` 主题去彩团/扫光/3D 摇晃/外发光）→ `5acb50a`（U3 AI/Jev 编辑部按语改造）。
+- **验证（本地）**：`ui-contrast.mjs`（最小对比度 4.62）、`ui-shadows.mjs` 与 `npm run gates` 全绿。
+
 ### T-20261118-FULL-REFACTOR · 全栈深度重构与前端解耦（Phase 0–4） · 🔄 本地全门禁全绿，待部署线上验证
 
 - **改动**：
