@@ -137,9 +137,11 @@ describe("保存清单的下限：本地 1 件、云端 2 件", () => {
   });
 
   it("本地落库发生在云端分支之前（1 件清单也要进画像）", () => {
-    const persistAt = saveCustomWorks.indexOf("d.persist(mergeRanking(");
+    const mergeAt = saveCustomWorks.indexOf("mergeRanking(");
+    const persistAt = saveCustomWorks.indexOf("d.persist(");
     const cloudAt = saveCustomWorks.indexOf("void saveCollectionCloudFn(");
-    expect(persistAt).toBeGreaterThan(-1);
+    expect(mergeAt).toBeGreaterThan(-1);
+    expect(persistAt).toBeGreaterThan(mergeAt);
     expect(cloudAt).toBeGreaterThan(persistAt);
   });
 

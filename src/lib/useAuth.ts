@@ -22,6 +22,8 @@ export interface AuthDeps {
   getProfile: () => ArtisticProfile | null;
   /** Current profile snapshot, refreshed each render — needed for the auto-sync effect dependency array. */
   profile: ArtisticProfile | null;
+  /** Current notes snapshot, refreshed each render — needed so note edits/clears trigger auto-sync. */
+  notes?: Record<string, string>;
   /** Current notes map. */
   getNotes: () => Record<string, string>;
   /** Build a named copy of the current profile. */
@@ -45,7 +47,7 @@ export interface AuthDeps {
 export function useAuth(deps: Omit<AuthDeps, "setDraft"> & { setDraft?: (d: unknown) => void }) {
   const depsRef = useRef(deps);
   depsRef.current = deps;
-  const { profile } = deps;
+  const { profile, notes } = deps;
   // setDraft may be set lazily via updateSetDraft() to break circular dependency
   const setDraftRef = useRef<(d: unknown) => void>(() => {});
   if (deps.setDraft) setDraftRef.current = deps.setDraft;
@@ -56,6 +58,9 @@ export function useAuth(deps: Omit<AuthDeps, "setDraft"> & { setDraft?: (d: unkn
   const [accountEmail, setAccountEmail] = useState("");
   const [accountNickname, setAccountNickname] = useState("");
   const [accountToken, setAccountToken] = useState(() => stored("art-rank:account-token") ?? "");
+  const tokenRef = useRef(accountToken);
+  tokenRef.current = accountToken;
+  const currentToken = () => tokenRef.current || stored("art-rank:account-token") || "";
   const [authMode, setAuthMode] = useState<"login" | "register" | "reset">("login");
   const [authEmail, setAuthEmail] = useState("");
   const [authPassword, setAuthPassword] = useState("");
@@ -87,7 +92,7 @@ export function useAuth(deps: Omit<AuthDeps, "setDraft"> & { setDraft?: (d: unkn
 
   const syncProfile = useCallback(async (keepalive: boolean) => {
     const d = depsRef.current;
-    const token = stored("art-rank:account-token") ?? "";
+    const token = currentToken();
     const profile = d.getProfile();
     if (!token || !profile) return;
     if (syncing.current) {
@@ -132,7 +137,7 @@ export function useAuth(deps: Omit<AuthDeps, "setDraft"> & { setDraft?: (d: unkn
 
   const accountLoad = useCallback(async (autoApply: boolean) => {
     const d = depsRef.current;
-    const token = stored("art-rank:account-token") ?? "";
+    const token = currentToken();
     if (!token) return;
     const generation = ++sessionGeneration.current;
     activeHydration.current?.abort();
@@ -181,7 +186,7 @@ export function useAuth(deps: Omit<AuthDeps, "setDraft"> & { setDraft?: (d: unkn
 
   const accountSave = useCallback(async () => {
     const d = depsRef.current;
-    const token = stored("art-rank:account-token") ?? "";
+    const token = currentToken();
     if (!token) {
       d.setNotice(d.t("请先登录。", "Please sign in first."));
       return;
@@ -325,7 +330,7 @@ export function useAuth(deps: Omit<AuthDeps, "setDraft"> & { setDraft?: (d: unkn
   const saveNickname = useCallback(async () => {
     const d = depsRef.current;
     const name = editingNickname ? editNicknameValue.trim() : authNickname.trim();
-    const token = stored("art-rank:account-token") ?? "";
+    const token = currentToken();
     if (!name || !token) return;
     setBusy(true);
     try {
@@ -350,7 +355,7 @@ export function useAuth(deps: Omit<AuthDeps, "setDraft"> & { setDraft?: (d: unkn
 
   const accountLogout = useCallback(async () => {
     const d = depsRef.current;
-    const token = stored("art-rank:account-token") ?? "";
+    const token = currentToken();
     // 先终结当前会话的所有在途请求与定时器，再做最终保存与本地清理，
     // 避免旧会话响应在登出后落地（DATA-04）。
     sessionGeneration.current += 1;
@@ -399,10 +404,11 @@ export function useAuth(deps: Omit<AuthDeps, "setDraft"> & { setDraft?: (d: unkn
       localStorage.removeItem(DRAFT_KEY);
       localStorage.removeItem(PEER_KEY);
       localStorage.removeItem("art-rank:notes");
+      localStorage.removeItem("art-rank:plaza-links");
     } catch {}
   }, []);
 
-  // Auto-sync debounced (900ms) — re-arms only when profile or token changes; a deps-less
+  // Auto-sync debounced (900ms) — re-arms when profile, notes, or token changes; a deps-less
   // effect would re-arm on every render (incl. its own syncStatus updates) and PUT forever.
   // 水合门：云端恢复完成前绝不自动 PUT（DATA-04）。
   useEffect(() => {
@@ -414,7 +420,7 @@ export function useAuth(deps: Omit<AuthDeps, "setDraft"> & { setDraft?: (d: unkn
     return () => {
       if (syncTimer.current !== null) window.clearTimeout(syncTimer.current);
     };
-  }, [profile, accountToken, cloudHydrated, syncProfile]);
+  }, [profile, notes, accountToken, cloudHydrated, syncProfile]);
 
   // Sync on pagehide / visibilitychange / online
   useEffect(() => {

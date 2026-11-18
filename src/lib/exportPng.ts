@@ -14,6 +14,23 @@ export function pickExportScale(w: number, h: number): number {
   return EXPORT_SCALES[EXPORT_SCALES.length - 1];
 }
 
+export function computeWrappedCanvasHeight(opts: {
+  mediaShareCount: number;
+  decadesCount: number;
+  hasDraft: boolean;
+  itemsCount: number;
+}): number {
+  const headerAndMediaShare = 520 + Math.ceil(Math.max(0, opts.mediaShareCount) / 3) * 30;
+  const decadesHeight = opts.decadesCount > 0 ? 52 + opts.decadesCount * 26 : 0;
+  const draftHeight = opts.hasDraft ? 180 : 0;
+  const itemsHeight = 54 + Math.max(0, opts.itemsCount) * 40;
+  const footerReserve = 96;
+  return Math.max(
+    900,
+    headerAndMediaShare + decadesHeight + draftHeight + itemsHeight + footerReserve,
+  );
+}
+
 export type ExportLayout = "editorial" | "collage" | "minimal" | "filmstrip" | "podium";
 
 export interface PngExportContext {
@@ -706,7 +723,12 @@ export async function renderWrappedPng({
     .flatMap((entry) => entry.items.slice(0, 3).map((item) => ({ entry, item })))
     .slice(0, MAX_WRAPPED_ITEMS);
   const hasDraft = draft !== null;
-  const H = Math.max(900, 430 + (hasDraft ? 300 : 0) + 190 + items.length * 40 + 150);
+  const H = computeWrappedCanvasHeight({
+    mediaShareCount: stats.mediaShare.length,
+    decadesCount: stats.topDecades.length,
+    hasDraft,
+    itemsCount: items.length,
+  });
 
   const canvas = document.createElement("canvas");
   const scale = pickExportScale(W, H);

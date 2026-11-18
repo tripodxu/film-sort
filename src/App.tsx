@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useMemo, useState, type ReactNode } from "react";
+import { lazy, Suspense, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   ArrowLeft,
   Check,
@@ -101,7 +101,7 @@ function LazySpot() {
 import { stored, track, decode, saveFile, type Locale } from "./lib/utils";
 import { useRouter, type View } from "./lib/useRouter";
 import { useAuth } from "./lib/useAuth";
-import { useSorting } from "./lib/useSorting";
+import { resolveRankingTabKey, useSorting } from "./lib/useSorting";
 
 const DRAFT_KEY = "art-rank:draft:v2";
 const PEER_KEY = "art-rank:peer:v2";
@@ -132,13 +132,7 @@ export default function App() {
     }
   });
   const [peer, setPeer] = useState<ArtisticProfile | null>(loadPeer);
-  const [profileName, setProfileName] = useState(() => {
-    try {
-      return readProfile(localStorage)?.profileName ?? "我的艺术人格";
-    } catch {
-      return "我的艺术人格";
-    }
-  });
+  const [profileName, setProfileName] = useState(() => profile?.profileName ?? "我的艺术人格");
   const [activeKind, setActiveKind] = useState<string>("film");
   const [compareActiveKind, setCompareActiveKind] = useState<MediaKind>("film");
   const [compareMode, setCompareMode] = useState<"auto" | "manual">("auto");
@@ -220,6 +214,7 @@ export default function App() {
   const auth = useAuth({
     getProfile: () => profile,
     profile,
+    notes,
     getNotes: () => notes,
     namedProfile: () => {
       if (!profile) return null;
@@ -277,6 +272,7 @@ export default function App() {
     accountLoad,
     saveNickname,
     accountLogout,
+    busy: authBusy,
   } = auth;
 
   const sorting = useSorting({
@@ -374,6 +370,7 @@ export default function App() {
   );
   const activeRanking =
     profile?.rankings.find((entry, idx) => `${entry.kind}-${idx}` === activeKind) ??
+    profile?.rankings.find((entry) => entry.kind === activeKind) ??
     profile?.rankings[0];
 
   function openNoteModal(
@@ -493,19 +490,8 @@ export default function App() {
             setAccountOpen(true);
           }
           setNotice(t("登录成功！", "Signed in!"));
-          // Restore notes from cloud after OAuth login
-          try {
-            const r = await fetch("/api/account/profile", {
-              headers: { authorization: `Bearer ${data.token}` },
-            });
-            if (!r.ok) return;
-            const d = (await r.json()) as { notes?: Record<string, string> };
-            if (d.notes && typeof d.notes === "object") {
-              const merged = { ...readNotes(), ...d.notes };
-              setNotes(merged);
-              writeNotes(merged);
-            }
-          } catch {}
+          // 云端画像与批注恢复统一交由 useAuth 内按 accountToken 触发的水合门处理，
+          // 避免此处无代际守卫的重复请求覆盖冲突选择或登出状态。
         })
         .catch(() => setNotice(t("登录失败，请重试。", "Sign-in failed. Please retry.")));
     } else if (oauthError === "error") {
@@ -734,6 +720,7 @@ export default function App() {
       localStorage.removeItem(DRAFT_KEY);
       localStorage.removeItem(PEER_KEY);
       localStorage.removeItem("art-rank:notes");
+      localStorage.removeItem("art-rank:plaza-links");
     } catch {}
     setNotice(t("本地数据已清除。", "Local data cleared."));
   }
@@ -837,7 +824,8 @@ export default function App() {
         for (const item of imported.rankings)
           next = mergeRanking(next, { ...item, profileName: imported.profileName });
         if (next) persist(next);
-        setActiveKind(imported.rankings[0].kind);
+        const first = imported.rankings[0];
+        setActiveKind(resolveRankingTabKey(next, first.kind, first.collectionTitle));
         navigateTo(peer ? "compare" : "profile");
       }
       setNotice("");
@@ -1169,18 +1157,23 @@ export default function App() {
       works: entry.items,
     });
   }
+  const peerImportGenRef = useRef(0);
   async function importPeerFromUrl() {
     const url = peerUrl.trim();
-    if (!url) return;
+    if (!url || peerUrlBusy) return;
+    const gen = ++peerImportGenRef.current;
     setPeerUrlBusy(true);
     try {
       const parsed = new URL(url, location.origin);
       // Handle /share/:code URLs
       const shareMatch = parsed.pathname.match(/^\/share\/([0-9a-f]{8,12})$/i);
       if (shareMatch) {
-        const r = await fetch(`/api/share/${shareMatch[1]}`);
+        const r = await fetch(`/api/share/${shareMatch[1]}`, {
+          signal: AbortSignal.timeout(15000),
+        });
         if (!r.ok) throw new Error();
         const d = (await r.json()) as { profile: unknown; notes?: Record<string, string> };
+        if (gen !== peerImportGenRef.current) return;
         acceptPeer(parseProfile(d.profile));
         if (d.notes && typeof d.notes === "object") setPeerNotes(d.notes);
         setPeerUrl("");
@@ -1192,24 +1185,30 @@ export default function App() {
         new URLSearchParams(parsed.hash.slice(1)).get("profile");
       if (payload) {
         if (/^[0-9a-f]{8,12}$/i.test(payload)) {
-          const r = await fetch(`/api/share/${payload}`);
+          const r = await fetch(`/api/share/${payload}`, { signal: AbortSignal.timeout(15000) });
           if (!r.ok) throw new Error();
           const d = (await r.json()) as { profile: unknown };
+          if (gen !== peerImportGenRef.current) return;
           acceptPeer(parseProfile(d.profile));
         } else {
-          acceptPeer(await decode(payload));
+          const decoded = await decode(payload);
+          if (gen !== peerImportGenRef.current) return;
+          acceptPeer(decoded);
         }
         setPeerUrl("");
         return;
       }
-      const r = await fetch(url);
+      const r = await fetch(url, { signal: AbortSignal.timeout(15000) });
       if (!r.ok) throw new Error();
-      acceptPeer(parseProfile(await r.json()));
+      const parsedJson: unknown = await r.json();
+      if (gen !== peerImportGenRef.current) return;
+      acceptPeer(parseProfile(parsedJson));
       setPeerUrl("");
     } catch {
-      setNotice(t("链接无效或无法读取，请检查 URL。", "Invalid or unreachable URL."));
+      if (gen === peerImportGenRef.current)
+        setNotice(t("链接无效或无法读取，请检查 URL。", "Invalid or unreachable URL."));
     } finally {
-      setPeerUrlBusy(false);
+      if (gen === peerImportGenRef.current) setPeerUrlBusy(false);
     }
   }
 
@@ -2024,7 +2023,7 @@ export default function App() {
               />
               <button
                 className="button primary"
-                disabled={busy || !authNickname.trim()}
+                disabled={authBusy || !authNickname.trim()}
                 onClick={() => void saveNickname()}
               >
                 {t("确认昵称", "Set nickname")}
@@ -2112,7 +2111,7 @@ export default function App() {
               </p>
               <button
                 className="button primary"
-                disabled={busy || !profile}
+                disabled={authBusy || !profile}
                 onClick={accountSave}
                 style={{ marginBottom: 8 }}
               >
@@ -2121,7 +2120,7 @@ export default function App() {
               </button>
               <button
                 className="button secondary"
-                disabled={busy}
+                disabled={authBusy}
                 onClick={() => void accountLoad(false)}
                 style={{ marginBottom: 8 }}
               >
@@ -2254,7 +2253,7 @@ export default function App() {
                   />
                   <button
                     className="button secondary"
-                    disabled={busy || codeCooldown > 0}
+                    disabled={authBusy || codeCooldown > 0}
                     onClick={() => void sendAuthCode()}
                     style={{ whiteSpace: "nowrap" }}
                   >
@@ -2278,7 +2277,7 @@ export default function App() {
               />
               <button
                 className="button primary"
-                disabled={busy}
+                disabled={authBusy}
                 onClick={() => void accountAuth(authMode)}
               >
                 {authMode === "login"

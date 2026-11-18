@@ -49,6 +49,7 @@ export function PlazaPostView({
   const [likeCount, setLikeCount] = useState(0);
   const [commentText, setCommentText] = useState("");
   const [commentBusy, setCommentBusy] = useState(false);
+  const [editBusy, setEditBusy] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState(false);
   const [editItems, setEditItems] = useState<RankedArtwork[] | null>(null);
   // 服务端旁路带来的海报地址（与 post.items 等长、按位置对齐）。
@@ -80,35 +81,46 @@ export function PlazaPostView({
   })();
   const [replyTo, setReplyTo] = useState<number | null>(null);
   const [replyText, setReplyText] = useState("");
+  const loadSeqRef = useRef(0);
+  const loadAbortRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
     void loadPost();
+    return () => {
+      loadAbortRef.current?.abort();
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- loadPost 是渲染期函数身份；按 postId 触发即可
   }, [postId]);
 
   async function loadPost() {
+    const seq = ++loadSeqRef.current;
+    loadAbortRef.current?.abort();
+    const controller = new AbortController();
+    loadAbortRef.current = controller;
     setLoading(true);
     setError("");
     try {
-      const response = await fetch(
-        `/api/plaza/posts/${postId}`,
-        accountToken ? { headers: { authorization: `Bearer ${accountToken}` } } : undefined,
-      );
+      const response = await fetch(`/api/plaza/posts/${postId}`, {
+        ...(accountToken ? { headers: { authorization: `Bearer ${accountToken}` } } : {}),
+        signal: controller.signal,
+      });
       if (!response.ok) throw new Error();
       const data = (await response.json()) as {
         post: PlazaPost;
         posterUrls?: Array<string[] | null>;
         comments: PlazaComment[];
       };
+      if (seq !== loadSeqRef.current) return;
       setPost(data.post);
       setPosterSideChannel(Array.isArray(data.posterUrls) ? data.posterUrls : []);
       setComments(data.comments);
       setLikeCount(data.post.like_count);
       setLiked(!!data.post.liked_by_me);
     } catch {
+      if (controller.signal.aborted || seq !== loadSeqRef.current) return;
       setError(t("无法加载帖子详情。", "Failed to load post details."));
     } finally {
-      setLoading(false);
+      if (seq === loadSeqRef.current) setLoading(false);
     }
   }
 
@@ -360,8 +372,8 @@ export function PlazaPostView({
   }
 
   async function saveEditInfo() {
-    if (!post) return;
-    setCommentBusy(true);
+    if (!post || editBusy) return;
+    setEditBusy(true);
     try {
       const body: Record<string, unknown> = {
         description: infoDesc.trim() || null,
@@ -389,7 +401,7 @@ export function PlazaPostView({
     } catch {
       setNotice(t("保存失败，请重试。", "Failed to save. Please retry."));
     } finally {
-      setCommentBusy(false);
+      setEditBusy(false);
     }
   }
 
@@ -497,8 +509,8 @@ export function PlazaPostView({
     setEditManual("");
   }
   async function saveEdit() {
-    if (!post || !editItems || !editItems.length) return;
-    setCommentBusy(true);
+    if (!post || !editItems || !editItems.length || editBusy) return;
+    setEditBusy(true);
     try {
       const before = (post.items ?? []).map((w) => w.title);
       const after = editItems.map((w) => w.title);
@@ -526,7 +538,7 @@ export function PlazaPostView({
     } catch {
       setNotice(t("保存失败，请重试。", "Failed to save. Please retry."));
     } finally {
-      setCommentBusy(false);
+      setEditBusy(false);
     }
   }
   async function openEditHistory() {
@@ -590,8 +602,12 @@ export function PlazaPostView({
             <button
               className="text-button"
               onClick={() => {
-                setEditHistory(editHistory ? null : []);
-                void openEditHistory();
+                if (editHistory) {
+                  setEditHistory(null);
+                } else {
+                  setEditHistory([]);
+                  void openEditHistory();
+                }
               }}
               style={{ fontSize: 12 }}
             >
@@ -696,11 +712,11 @@ export function PlazaPostView({
             </button>
             <button
               className="button primary"
-              disabled={commentBusy}
+              disabled={editBusy}
               onClick={() => void saveEditInfo()}
               style={{ minHeight: 34 }}
             >
-              {commentBusy ? t("保存中…", "Saving…") : t("保存", "Save")}
+              {editBusy ? t("保存中…", "Saving…") : t("保存", "Save")}
             </button>
           </div>
         </div>
@@ -832,11 +848,11 @@ export function PlazaPostView({
               </button>
               <button
                 className="button primary"
-                disabled={commentBusy}
+                disabled={editBusy}
                 onClick={() => void saveEdit()}
                 style={{ minHeight: 34 }}
               >
-                {commentBusy ? t("保存中…", "Saving…") : t("保存", "Save")}
+                {editBusy ? t("保存中…", "Saving…") : t("保存", "Save")}
               </button>
             </div>
           </div>

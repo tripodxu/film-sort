@@ -122,7 +122,8 @@ export function createBlackholeEffect(host: OrbHost, palette: OrbPalette): OrbIn
           0.4 + Math.sin(t * 0.55 + index * 0.9) * 0.12;
       });
       // 星尘内旋：半径收缩，进入视界即回到外圈
-      const attr = dustGeometry.getAttribute("position") as BufferAttribute;
+      const posAttr = dustGeometry.getAttribute("position") as BufferAttribute;
+      const colorAttr = dustGeometry.getAttribute("color") as BufferAttribute;
       for (let index = 0; index < count; index += 1) {
         radii[index] -= host.reducedMotion ? 0 : speeds[index] * 0.004;
         if (radii[index] < 1.12) radii[index] = 3.6 + random() * 0.5;
@@ -130,19 +131,23 @@ export function createBlackholeEffect(host: OrbHost, palette: OrbPalette): OrbIn
         const r = radii[index];
         const a = angles[index];
         const tilt = tilts[index];
-        positions[index * 3] = r * Math.cos(a);
-        positions[index * 3 + 1] = r * Math.sin(a) * Math.cos(tilt) * 0.42;
-        positions[index * 3 + 2] = r * Math.sin(a) * Math.sin(tilt);
-        // 靠近视界时被"加热"变亮
+        posAttr.setXYZ(
+          index,
+          r * Math.cos(a),
+          r * Math.sin(a) * Math.cos(tilt) * 0.42,
+          r * Math.sin(a) * Math.sin(tilt),
+        );
+        // 靠近视界时被"加热"变亮（写入 color 缓冲而非覆盖三维坐标）
         const heat = Math.max(0, 1 - (r - 1.12) / 2.4);
-        attr.setXYZ(
+        colorAttr.setXYZ(
           index,
           colors[index * 3] + heat * 0.5,
           colors[index * 3 + 1] + heat * 0.4,
           colors[index * 3 + 2] + heat * 0.3,
         );
       }
-      attr.needsUpdate = true;
+      posAttr.needsUpdate = true;
+      colorAttr.needsUpdate = true;
     },
     resize(width) {
       group.position.x = width > 700 ? 0.68 : 0;

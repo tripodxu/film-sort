@@ -92,6 +92,22 @@ export interface SortingDeps {
   locale: Locale;
 }
 
+export function resolveRankingTabKey(
+  profile: ArtisticProfile | null,
+  kind: MediaKind,
+  collectionTitle?: string,
+): string {
+  if (!profile) return kind;
+  if (collectionTitle) {
+    const exactIdx = profile.rankings.findIndex(
+      (r) => r.kind === kind && r.collectionTitle === collectionTitle,
+    );
+    if (exactIdx >= 0) return `${kind}-${exactIdx}`;
+  }
+  const kindIdx = profile.rankings.findIndex((r) => r.kind === kind);
+  return kindIdx >= 0 ? `${kind}-${kindIdx}` : kind;
+}
+
 export function useSorting(deps: SortingDeps) {
   const depsRef = useRef(deps);
   depsRef.current = deps;
@@ -299,8 +315,9 @@ export function useSorting(deps: SortingDeps) {
       createdAt: new Date().toISOString(),
       items,
     };
-    d.persist(mergeRanking(d.getProfile(), ranking));
-    d.setActiveKind(kind);
+    const mergedProfile = mergeRanking(d.getProfile(), ranking);
+    d.persist(mergedProfile);
+    d.setActiveKind(resolveRankingTabKey(mergedProfile, kind, ranking.collectionTitle));
     if (canSyncCloud) {
       void saveCollectionCloudFn({
         id: `custom-${kind}-${crypto.randomUUID()}`,
@@ -365,8 +382,9 @@ export function useSorting(deps: SortingDeps) {
       createdAt: new Date().toISOString(),
       items,
     };
-    d.persist(mergeRanking(d.getProfile(), ranking));
-    d.setActiveKind(collection.kind);
+    const mergedProfile = mergeRanking(d.getProfile(), ranking);
+    d.persist(mergedProfile);
+    d.setActiveKind(resolveRankingTabKey(mergedProfile, collection.kind, ranking.collectionTitle));
     d.setNotice(
       merged > 0
         ? d.t(
@@ -799,8 +817,9 @@ export function useSorting(deps: SortingDeps) {
         createdAt: new Date().toISOString(),
         items,
       };
-      d.persist(mergeRanking(d.getProfile(), result));
-      d.setActiveKind(result.kind);
+      const mergedProfile = mergeRanking(d.getProfile(), result);
+      d.persist(mergedProfile);
+      d.setActiveKind(resolveRankingTabKey(mergedProfile, result.kind, result.collectionTitle));
       setDraft(null);
       try {
         localStorage.removeItem(DRAFT_KEY);

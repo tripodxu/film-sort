@@ -77,9 +77,19 @@ function withViewTransition(render: () => void) {
   }
 }
 
+function readInitialRoute(): { view: View; plazaPostId: number } {
+  if (typeof location === "undefined") return { view: "home", plazaPostId: 0 };
+  const initialView = pathToView(location.pathname) ?? "home";
+  if (initialView === "plazaPost") {
+    const match = location.pathname.match(/^\/plaza\/(\d+)/);
+    return { view: initialView, plazaPostId: match ? Number(match[1]) : 0 };
+  }
+  return { view: initialView, plazaPostId: 0 };
+}
+
 export function useRouter() {
-  const [view, setView] = useState<View>("home");
-  const [plazaPostId, setPlazaPostId] = useState<number>(0);
+  const [view, setView] = useState<View>(() => readInitialRoute().view);
+  const [plazaPostId, setPlazaPostId] = useState<number>(() => readInitialRoute().plazaPostId);
 
   function navigateTo(nextViewOrPlaza: View | string) {
     const nextView =
@@ -100,17 +110,6 @@ export function useRouter() {
     const qs = lang ? `?lang=${lang}` : "";
     history.pushState({ view: nextView }, "", VIEW_PATH[nextView] + qs);
   }
-
-  useEffect(() => {
-    const initialView = pathToView(location.pathname);
-    if (initialView) {
-      setView(initialView);
-      if (initialView === "plazaPost") {
-        const match = location.pathname.match(/^\/plaza\/(\d+)/);
-        if (match) setPlazaPostId(Number(match[1]));
-      }
-    }
-  }, []);
 
   useEffect(() => {
     function onPopState() {

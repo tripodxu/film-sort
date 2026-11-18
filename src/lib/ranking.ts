@@ -212,7 +212,7 @@ function estimateTotalComparisons(itemCount: number, topN: number, mode: Ranking
   let total = 0;
   for (let candidateIndex = 1; candidateIndex < itemCount; candidateIndex += 1)
     total += Math.ceil(Math.log2(Math.min(candidateIndex, topN) + 1));
-  return mode === "precise" ? total * 1.4 : total;
+  return mode === "precise" ? Math.ceil(total * 1.4) : total;
 }
 function estimateVerificationCount(itemCount: number, topN: number, mode: RankingMode): number {
   if (itemCount < 2 || topN < 2) return 0;
@@ -1019,6 +1019,7 @@ export function getRankingResult(state: RankingState): string[] {
   return [...state.rankedIds];
 }
 export function getRankingProgress(state: RankingState): RankingProgress {
+  const verificationRemaining = state.verificationQueue.length + (state.activeVerification ? 1 : 0);
   const remaining = state.sourceIds.length - state.processedCount;
   // Blend: use observed rate when enough data, otherwise theoretical
   const observedRate =
@@ -1026,11 +1027,16 @@ export function getRankingProgress(state: RankingState): RankingProgress {
   const theoreticalRate =
     state.sourceIds.length > 0 ? state.estimatedTotalComparisons / state.sourceIds.length : 0;
   const rate = observedRate !== null ? 0.6 * observedRate + 0.4 * theoreticalRate : theoreticalRate;
-  const estimatedFromRate =
-    Math.round(remaining * rate) +
-    state.verificationQueue.length +
-    (state.activeVerification ? 1 : 0);
-  const estimatedRemaining = state.completed ? 0 : Math.max(estimatedFromRate, 0);
+  const estimatedFromRate = Math.round(remaining * rate) + verificationRemaining;
+  const adaptiveRemaining =
+    state.phase === "ranking"
+      ? Math.max(1, state.estimatedTotalComparisons - state.comparisonCount) + verificationRemaining
+      : verificationRemaining;
+  const estimatedRemaining = state.completed
+    ? 0
+    : state.mode === "adaptive"
+      ? adaptiveRemaining
+      : Math.max(estimatedFromRate, 0);
   const estimatedTotal = state.completed
     ? state.comparisonCount
     : state.comparisonCount + estimatedRemaining;
@@ -1039,10 +1045,12 @@ export function getRankingProgress(state: RankingState): RankingProgress {
     : estimatedTotal === 0
       ? 0
       : Math.min(
-          Math.max(
-            state.comparisonCount / estimatedTotal,
-            state.processedCount / state.sourceIds.length,
-          ),
+          state.mode === "adaptive"
+            ? state.comparisonCount / estimatedTotal
+            : Math.max(
+                state.comparisonCount / estimatedTotal,
+                state.processedCount / state.sourceIds.length,
+              ),
           0.99,
         );
   return {
@@ -1053,7 +1061,7 @@ export function getRankingProgress(state: RankingState): RankingProgress {
     total: state.sourceIds.length,
     fraction,
     phase: state.phase,
-    verificationRemaining: state.verificationQueue.length + (state.activeVerification ? 1 : 0),
+    verificationRemaining,
   };
 }
 export function serializeRankingState(state: RankingState): string {
