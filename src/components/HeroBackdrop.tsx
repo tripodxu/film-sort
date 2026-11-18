@@ -24,7 +24,6 @@ export function HeroBackdrop() {
     // 指针事件不会落在它身上；必须监听包裹它的 hero 区域。
     const host = root.closest<HTMLElement>(".orb-hero") ?? root;
     const spot = root.querySelector<HTMLElement>(".md-spot");
-    const layers = Array.from(root.querySelectorAll<HTMLElement>("[data-depth]"));
     if (!spot) return;
 
     // 头部全局 CSS 只能熔断 CSS 动画，JS 的 rAF 写入要自己尊重该偏好。
@@ -39,19 +38,11 @@ export function HeroBackdrop() {
     let disposed = false;
 
     const paint = () => {
-      const dx = (cx - 0.5) * 30;
-      const dy = (cy - 0.5) * 30;
+      const dx = (cx - 0.5) * 24;
+      const dy = (cy - 0.5) * 24;
       spot.style.setProperty("--md-mx", `${(cx * 100).toFixed(2)}%`);
       spot.style.setProperty("--md-my", `${(cy * 100).toFixed(2)}%`);
       spot.style.transform = `translate3d(${dx.toFixed(2)}px, ${dy.toFixed(2)}px, 0)`;
-      // 指针视差：每层按 data-depth 深度做相对位移（光球自带的漂移动画在子层，
-      // 这里只动父级 translate3d，两者不冲突）。
-      for (const layer of layers) {
-        const depth = Number(layer.dataset.depth ?? "0");
-        const ox = (cx - 0.5) * 44 * depth;
-        const oy = (cy - 0.5) * 32 * depth;
-        layer.style.transform = `translate3d(${ox.toFixed(2)}px, ${oy.toFixed(2)}px, 0)`;
-      }
     };
 
     const tick = () => {
@@ -104,7 +95,6 @@ export function HeroBackdrop() {
       spot.style.removeProperty("--md-mx");
       spot.style.removeProperty("--md-my");
       spot.style.transform = "";
-      for (const layer of layers) layer.style.transform = "";
     };
   }, [isModern]);
 
@@ -112,15 +102,6 @@ export function HeroBackdrop() {
 
   return (
     <div className="md-backdrop" aria-hidden="true" ref={rootRef}>
-      <div className="md-layer" data-depth="0.35">
-        <div className="md-blob md-blob-a" />
-      </div>
-      <div className="md-layer" data-depth="0.7">
-        <div className="md-blob md-blob-b" />
-      </div>
-      <div className="md-layer" data-depth="1">
-        <div className="md-blob md-blob-c" />
-      </div>
       <div className="md-spot" />
       <div className="md-grain" />
     </div>

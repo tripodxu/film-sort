@@ -17,7 +17,7 @@ import { getCollectionsByKind, mediaLabels, type Artwork, type MediaKind } from 
 import { DeferredOrb } from "../components/DeferredOrb";
 import { HeroBackdrop } from "../components/HeroBackdrop";
 import { Poster } from "../components/Poster";
-import { useTheme, useThemeFamily } from "../lib/useTheme";
+import { useThemeFamily } from "../lib/useTheme";
 import { RINGS_LAYOUT_KEY } from "../lib/storageKeys";
 import { fileInput } from "./helpers";
 import type { HomeViewProps } from "./types";
@@ -75,44 +75,13 @@ export function HomeView({
   // classic（旧主题与自定义包）走下方既有 DOM，一字节不变。
   const family = useThemeFamily();
   const isEditorial = family === "editorial";
-  const isModern = useTheme() === "modern";
-
-  // Modern 层指针交互：磁性按钮高光 + 维度卡 3D tilt，坐标全部写进 CSS 变量，
-  // 不直接改 transform（CSS 用独立 rotateX/Y 轴做倾斜）。全程 passive，
-  // reduced-motion 下 CSS 头部全局规则会熔断动画。
-  const onHeroPointerMove = (e: React.PointerEvent<HTMLElement>) => {
-    if (!isModern) return;
-    const el = e.currentTarget;
-    el.style.setProperty(
-      "--md-sx",
-      `${(e.clientX - el.getBoundingClientRect().left).toFixed(2)}px`,
-    );
-    el.style.setProperty("--md-sy", `${(e.clientY - el.getBoundingClientRect().top).toFixed(2)}px`);
-  };
-  const onCardPointerMove = (e: React.PointerEvent<HTMLElement>) => {
-    if (!isModern) return;
-    const el = e.currentTarget;
-    const r = el.getBoundingClientRect();
-    const nx = (e.clientX - r.left) / r.width;
-    const ny = (e.clientY - r.top) / r.height;
-    el.style.setProperty("--md-tilt-x", `${((0.5 - ny) * 5).toFixed(2)}deg`);
-    el.style.setProperty("--md-tilt-y", `${((nx - 0.5) * 5).toFixed(2)}deg`);
-  };
-  const onCardPointerLeave = (e: React.PointerEvent<HTMLElement>) => {
-    if (!isModern) return;
-    e.currentTarget.style.setProperty("--md-tilt-x", "0deg");
-    e.currentTarget.style.setProperty("--md-tilt-y", "0deg");
-  };
 
   return (
     <>
       <section className={`orb-hero${isEditorial ? " ed-hero" : ""}`}>
         {!isEditorial && <DeferredOrb />}
         {!isEditorial && <HeroBackdrop />}
-        <div
-          className={`orb-hero-inner${isEditorial ? " ed-hero-inner" : " md-hero-inner"}`}
-          onPointerMove={isEditorial ? undefined : onHeroPointerMove}
-        >
+        <div className={`orb-hero-inner${isEditorial ? " ed-hero-inner" : " md-hero-inner"}`}>
           <div className="home-heading">
             <div>
               <span className="eyebrow">
@@ -214,8 +183,6 @@ export function HomeView({
                   className={`medium-item medium-${item}`}
                   key={item}
                   onClick={() => chooseKind(item)}
-                  onPointerMove={onCardPointerMove}
-                  onPointerLeave={onCardPointerLeave}
                 >
                   <span className="medium-number">{mediaLabels[item].symbol}</span>
                   {latest ? (
