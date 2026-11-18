@@ -14,13 +14,13 @@ function read(rel: string): string {
 
 describe("rankMode 显式传参", () => {
   it("useSorting.startRanking 接 mode 参数并校验白名单", () => {
-    const code = read("./lib/useSorting.ts");
+    const code = read("./lib/useSortingSession.ts");
     expect(code).toMatch(/function startRanking\(mode: RankingMode\)/);
     expect(code).toMatch(/RANKING_MODES\.includes\(mode\) \? mode : "classic"/);
   });
 
   it("useSorting 起跑不再读 localStorage 的 rank-mode（隐式耦合已断）", () => {
-    const code = read("./lib/useSorting.ts");
+    const code = read("./lib/useSortingSession.ts");
     expect(code).not.toContain("art-rank:rank-mode");
   });
 

@@ -89,21 +89,27 @@ describe("P1b/P2/P3 收敛绊线", () => {
     expect(css).toMatch(/\.artwork-info,\.candidate-scroll\{[^}]*mask-image/);
   });
   it("dialog 面板 role/aria-modal 覆盖不回退（9 份外壳已收敛到 <Modal>，覆盖强度不降）", () => {
-    const app = readFileSync("src/App.tsx", "utf8");
+    const modalFiles = [
+      "src/App.tsx",
+      "src/components/modals/CloudConflictModal.tsx",
+      "src/components/modals/ShareExpiryModal.tsx",
+      "src/components/modals/NoteModals.tsx",
+      "src/components/modals/PeerCompareModals.tsx",
+      "src/components/modals/AccountModal.tsx",
+      "src/components/modals/GuideModal.tsx",
+      "src/components/modals/TechModal.tsx",
+    ];
     // 同 P4b：剥掉注释再扫，否则我写的解释性注释会把断言喂绿。
     const strip = (s: string) =>
       s.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^[^\S\n]*\/\/.*$/gm, "");
     const modal = strip(readFileSync("src/components/Modal.tsx", "utf8"));
-    const appCode = strip(app);
-    // 收敛前是「9 个弹窗各写一份 role=dialog」，计数 ≥9 只能证明「有 9 份」。
-    // 收敛后改用**更强的两条**锁：① 9 个调用点都真用了 <Modal>；
-    // ② App 里不许再出现任何手写的 dialog ARIA —— 否则外壳会重新散开成第 10 份。
-    expect((appCode.match(/<Modal\b/g) ?? []).length).toBeGreaterThanOrEqual(9);
-    expect(appCode).not.toContain('role="dialog"');
-    expect(appCode).not.toContain("aria-modal");
+    const allDialogCode = modalFiles.map((f) => strip(readFileSync(f, "utf8"))).join("\n");
+    expect((allDialogCode.match(/<Modal\b/g) ?? []).length).toBeGreaterThanOrEqual(9);
+    expect(allDialogCode).not.toContain('role="dialog"');
+    expect(allDialogCode).not.toContain("aria-modal");
     // note-reader 的背景层多一个修饰类，走 backdropClassName 传值；这里按
     // 「谁的属性写的」判，允许它出现在 prop 值里，不允许出现在 className 里。
-    expect(appCode).not.toContain('className="modal-backdrop');
+    expect(allDialogCode).not.toContain('className="modal-backdrop');
     // ARIA 三件套 + Esc / 背景点击 / 冒泡拦截，集中在 Modal 内部逐条点名
     for (const token of [
       'role="dialog"',
@@ -549,33 +555,33 @@ describe("首屏依赖图绊线（PLAN-BUNDLE-SPLIT）", () => {
  * 一直占着首包。这类"扫过一次就不再回看"的债务最容易复发，所以逐条锁死。
  */
 describe("首屏依赖图绊线（PLAN-ROUTE-EAGER）", () => {
-  // 必须 lazy 的六个：都是「用户先点一下才会挂载」的模块。
+  // 必须 lazy 的非首屏模块（含 SortingView 与拆出的弹窗）。
   const MUST_BE_LAZY = [
-    ["./components/AiConfigDialog", "AiConfigDialog"],
-    ["./components/RankingDetail", "RankingDetail"],
-    ["./components/SettingsMenu", "SettingsMenu"],
-    ["./views/SetupView", "SetupView"],
-    ["./views/PlazaView", "PlazaView"],
+    ["./components/AiConfigDialog", "AiConfigDialog", "src/App.tsx"],
+    ["../RankingDetail", "RankingDetail", "src/components/modals/PeerCompareModals.tsx"],
+    ["./components/SettingsMenu", "SettingsMenu", "src/App.tsx"],
+    ["./views/SetupView", "SetupView", "src/App.tsx"],
+    ["./views/PlazaView", "PlazaView", "src/App.tsx"],
+    ["./views/SortingView", "SortingView", "src/App.tsx"],
   ] as const;
-  // 必须保持同步的：落地视图 / 排序主流程 / 首屏立刻要用（PLAN-ROUTE-EAGER §3.2）。
-  const MUST_STAY_EAGER = [
-    ["./views/HomeView", "HomeView"],
-    ["./views/SortingView", "SortingView"],
-  ] as const;
+  // 必须保持同步的：落地视图。
+  const MUST_STAY_EAGER = [["./views/HomeView", "HomeView"]] as const;
 
   const app = readFileSync("src/App.tsx", "utf8");
   // 剥掉注释后再扫描：解释性注释里会提到模块路径，按代码判定会误伤。
-  const code = app.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^[^\S\n]*\/\/.*$/gm, "");
+  const strip = (s: string) => s.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^[^\S\n]*\/\/.*$/gm, "");
+  const code = strip(app);
 
-  it("六个非首屏模块不得回到同步 import", () => {
-    for (const [specifier, name] of MUST_BE_LAZY) {
-      expect(code, `${name} 同步 import 会把它拖回首包`).not.toMatch(
+  it("非首屏模块不得回到同步 import", () => {
+    for (const [specifier, name, file] of MUST_BE_LAZY) {
+      const targetCode = strip(readFileSync(file, "utf8"));
+      expect(targetCode, `${name} 同步 import 会把它拖回首包`).not.toMatch(
         new RegExp(`^import[^;\\n]*from\\s+["']${specifier.replace(/[./]/g, "\\$&")}["']`, "m"),
       );
-      expect(code, `${name} 必须走 lazy(() => import(...))`).toContain(
+      expect(targetCode, `${name} 必须走 lazy(() => import(...))`).toContain(
         `lazy(() =>\n  import("${specifier}")`,
       );
-      expect(code).toContain(`default: module.${name}`);
+      expect(targetCode).toContain(`default: module.${name}`);
     }
   });
 
@@ -606,7 +612,12 @@ describe("首屏依赖图绊线（PLAN-ROUTE-EAGER）", () => {
     // 裸 aria-label 的 div 无 role 会被 AT 忽略（T-20261014-05 修法，锁死新写法）。
     expect(code).toContain('className="route-loading" role="status" aria-live="polite"');
     expect(code).toContain('className="sr-only"');
-    expect(code.match(/<Suspense fallback=\{<LazySpot \/>\}>/g) ?? []).toHaveLength(2);
+    const peerModalCode = strip(
+      readFileSync("src/components/modals/PeerCompareModals.tsx", "utf8"),
+    );
+    expect(
+      (code + peerModalCode).match(/<Suspense fallback=\{<LazySpot \/>\}>/g) ?? [],
+    ).toHaveLength(2);
     // 顶栏那个不能露出布局空洞，用 null 兜底
     expect(code).toContain("<Suspense fallback={null}>");
   });
@@ -953,16 +964,20 @@ describe("懒加载失败与迟到响应守卫（回归审查 2026-10）", () =>
   const code = stripComments(app);
 
   it("界外三处 Suspense 必须各自包着静默 ErrorBoundary（chunk 失败不许白屏整站）", () => {
-    // main 内的路由树有边界（PLAN-ROUTE-EAGER 那条断言锁着）；顶栏 SettingsMenu、
-    // AI 设置弹窗、榜单详情弹窗挂在边界之外，必须各自有 fallback=null 的边界——
-    // 失败就当没渲染/没点开，绝不能让 React 卸掉整棵根。
-    expect(code.match(/<ErrorBoundary fallback=\{null\}>/g) ?? []).toHaveLength(3);
-    for (const name of ["SettingsMenu", "AiConfigDialog", "RankingDetail"]) {
-      const lazyAt = code.indexOf(`<${name}`);
+    const peerModalCode = stripComments(
+      readFileSync("src/components/modals/PeerCompareModals.tsx", "utf8"),
+    );
+    const checks: Array<[string, string]> = [
+      ["SettingsMenu", code],
+      ["AiConfigDialog", code],
+      ["RankingDetail", peerModalCode],
+    ];
+    for (const [name, src] of checks) {
+      const lazyAt = src.indexOf(`<${name}`);
       expect(lazyAt, `${name} 必须以 JSX 挂载`).toBeGreaterThan(-1);
-      const boundaryAt = code.lastIndexOf("<ErrorBoundary fallback={null}>", lazyAt);
+      const boundaryAt = src.lastIndexOf("<ErrorBoundary fallback={null}>", lazyAt);
       expect(boundaryAt, `${name} 外层必须先有 ErrorBoundary`).toBeGreaterThan(-1);
-      const closeAt = code.indexOf("</ErrorBoundary>", lazyAt);
+      const closeAt = src.indexOf("</ErrorBoundary>", lazyAt);
       expect(closeAt, `${name} 的 ErrorBoundary 必须包住它`).toBeGreaterThan(lazyAt);
     }
   });

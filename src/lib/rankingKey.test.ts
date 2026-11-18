@@ -30,11 +30,11 @@ describe("rankingRowKey", () => {
   });
 
   it("三处动态榜单列表都改用内容键，不再出现 key={idx}", () => {
-    const app = stripComments(read("src/App.tsx"));
+    const peerModal = stripComments(read("src/components/modals/PeerCompareModals.tsx"));
     const compare = stripComments(read("src/views/CompareView.tsx"));
-    expect(app).not.toContain("key={idx}");
+    expect(peerModal).not.toContain("key={idx}");
     expect(compare).not.toContain("key={idx}");
-    expect(app).toContain("key={rankingRowKey(entry, idx)}");
+    expect(peerModal).toContain("key={rankingRowKey(entry, idx)}");
     expect(compare.match(/key=\{rankingRowKey\(entry, idx\)\}/g) ?? []).toHaveLength(2);
   });
 });

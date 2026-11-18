@@ -114,10 +114,10 @@ describe("importCollection", () => {
  * 与 saveWithoutSorting 自相矛盾。这里锁死「本地照存、云端 <2 跳过并明说」的行为。
  */
 describe("保存清单的下限：本地 1 件、云端 2 件", () => {
-  const code = readFileSync(new URL("./useSorting.ts", import.meta.url), "utf8");
+  const code = readFileSync(new URL("./useCollectionImporter.ts", import.meta.url), "utf8");
   const saveCustomWorks = code.slice(
-    code.indexOf("function saveCustomWorksFn()"),
-    code.indexOf("function clearCustomWorksFn()"),
+    code.indexOf("function saveCustomWorks()"),
+    code.indexOf("function clearCustomWorks()"),
   );
 
   it("空清单仍然先拦下", () => {
@@ -132,20 +132,21 @@ describe("保存清单的下限：本地 1 件、云端 2 件", () => {
 
   it("云端上传被 items.length >= 2 守卫，1 件时提示「只保存在本地」", () => {
     expect(saveCustomWorks).toMatch(/const canSyncCloud = items\.length >= 2;/);
-    expect(saveCustomWorks).toMatch(/if \(canSyncCloud\) \{\s*void saveCollectionCloudFn\(/);
+    expect(saveCustomWorks).toMatch(/if \(canSyncCloud\) \{\s*void d\.saveCollectionCloud\(/);
     expect(saveCustomWorks).toMatch(/云端清单至少需要 2 件作品，本次只保存在本地/);
   });
 
   it("本地落库发生在云端分支之前（1 件清单也要进画像）", () => {
     const mergeAt = saveCustomWorks.indexOf("mergeRanking(");
     const persistAt = saveCustomWorks.indexOf("d.persist(");
-    const cloudAt = saveCustomWorks.indexOf("void saveCollectionCloudFn(");
+    const cloudAt = saveCustomWorks.indexOf("void d.saveCollectionCloud(");
     expect(mergeAt).toBeGreaterThan(-1);
     expect(persistAt).toBeGreaterThan(mergeAt);
     expect(cloudAt).toBeGreaterThan(persistAt);
   });
 
   it("saveWithoutSorting 仍允许单件榜单（它本来就不上传云端）", () => {
-    expect(code).toMatch(/请至少选择 1 件作品/);
+    const sessionCode = readFileSync(new URL("./useSortingSession.ts", import.meta.url), "utf8");
+    expect(sessionCode).toMatch(/请至少选择 1 件作品/);
   });
 });

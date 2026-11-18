@@ -35,7 +35,7 @@ describe("撤销路径（P0-1）", () => {
   });
 
   it("rewindLastChoice 走反序列化快照，且完全不碰重放", () => {
-    const hook = strip(read("./lib/useSorting.ts"));
+    const hook = strip(read("./lib/useSortingSession.ts"));
     const body = hook.slice(hook.indexOf("function rewindLastChoice"));
     const fn = body.slice(0, body.indexOf("\n  function "));
     expect(fn).toContain("rankingSnapshots.current.pop()");
@@ -54,7 +54,7 @@ describe("撤销路径（P0-1）", () => {
   });
 
   it("快照栈上限仍是 50（单份可达数百 KB，500 份会爆内存）", () => {
-    const hook = strip(read("./lib/useSorting.ts"));
+    const hook = strip(read("./lib/useSortingSession.ts"));
     expect(hook).toContain(
       "if (rankingSnapshots.current.length >= 50) rankingSnapshots.current.shift();",
     );

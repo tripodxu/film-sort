@@ -1,23 +1,12 @@
 import { lazy, Suspense, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import {
-  ArrowLeft,
-  Check,
-  CloudDownload,
-  CloudUpload,
-  Github,
-  Languages,
-  UserRound,
-  X,
-} from "lucide-react";
+import { ArrowLeft, Github, Languages, UserRound, X } from "lucide-react";
 
-import { englishKinds, mediaLabels, type MediaKind } from "./data/mediaKinds";
+import { mediaLabels, type MediaKind } from "./data/mediaKinds";
 import {
   ACCOUNT_TOKEN_KEY,
   clearUserSessionStorage,
   DRAFT_KEY,
   GUIDE_DISMISSED_KEY,
-  LIBRARY_KEY,
-  PEER_KEY,
   PLAZA_LINKS_KEY,
   RINGS_LAYOUT_KEY,
 } from "./lib/storageKeys";
@@ -27,38 +16,29 @@ import {
   compareRankings,
   MAX_PROFILE_BYTES,
   mergeDimensionRankings,
-  mergeProfiles,
   mergeRanking,
   parseProfile,
   profileText,
-  readProfile,
-  renameRanking,
-  deleteRanking,
-  reorderRanking,
-  toRankedItems,
   type ArtisticProfile,
   type RankingExport,
   type RankedArtwork,
 } from "./lib/profile";
-import { rankingRowKey } from "./lib/rankingKey";
 import { importCollection } from "./lib/collections";
 import type { ExportLayout } from "./lib/exportPng";
-import { Modal } from "./components/Modal";
 import { ErrorBoundary } from "./components/ErrorBoundary";
-import { readNotes, writeNotes, setNote } from "./lib/notes";
-import { buildProfileSyncBody } from "./lib/profileSync";
 import { buildTasteContext } from "./lib/typesafe";
 import { epochQuery } from "./lib/cacheBust";
-import { Poster } from "./components/Poster";
 import { ArtworkDetail, type ArtworkDetailInfo } from "./components/ArtworkDetail";
 import { IconButton } from "./views/IconButton";
 import { ThemeSwitcher } from "./components/ThemeSwitcher";
 import { applyTheme, readTheme } from "./lib/theme";
 import { HomeView } from "./views/HomeView";
 import { applyLayout, readLayout } from "./lib/layout";
-import { SortingView } from "./views/SortingView";
-// 非首页的大视图按路由拆包(DeferredOrb 同款模式):四个千行视图占主包大头,
+// 非首页的大视图按路由拆包(DeferredOrb 同款模式):大视图占主包大头,
 // 首屏用不到的不进 index chunk。首页是落地视图,保持同步渲染。
+const SortingView = lazy(() =>
+  import("./views/SortingView").then((module) => ({ default: module.SortingView })),
+);
 const SourceView = lazy(() =>
   import("./views/SourceView").then((module) => ({ default: module.SourceView })),
 );
@@ -80,12 +60,8 @@ const PlazaPostView = lazy(() =>
 );
 // 弹窗与次级视图同样不进首屏:它们要等用户先点一下(齿轮/AI 设置/榜单海报)才会挂载,
 // 同步 import 只会让它们连同各自的 lucide 图标白白占住主包(PLAN-ROUTE-EAGER §3.1)。
-// 写法与上面五条保持一致:这些模块都是具名导出,default 需要显式包一层。
 const AiConfigDialog = lazy(() =>
   import("./components/AiConfigDialog").then((module) => ({ default: module.AiConfigDialog })),
-);
-const RankingDetail = lazy(() =>
-  import("./components/RankingDetail").then((module) => ({ default: module.RankingDetail })),
 );
 const SettingsMenu = lazy(() =>
   import("./components/SettingsMenu").then((module) => ({ default: module.SettingsMenu })),
@@ -96,6 +72,42 @@ const SetupView = lazy(() =>
 const PlazaView = lazy(() =>
   import("./views/PlazaView").then((module) => ({ default: module.PlazaView })),
 );
+const CloudConflictModal = lazy(() =>
+  import("./components/modals/CloudConflictModal").then((m) => ({
+    default: m.CloudConflictModal,
+  })),
+);
+const ShareExpiryModal = lazy(() =>
+  import("./components/modals/ShareExpiryModal").then((m) => ({
+    default: m.ShareExpiryModal,
+  })),
+);
+const NoteEditModal = lazy(() =>
+  import("./components/modals/NoteModals").then((m) => ({ default: m.NoteEditModal })),
+);
+const NoteViewModal = lazy(() =>
+  import("./components/modals/NoteModals").then((m) => ({ default: m.NoteViewModal })),
+);
+const PeerRankPickModal = lazy(() =>
+  import("./components/modals/PeerCompareModals").then((m) => ({
+    default: m.PeerRankPickModal,
+  })),
+);
+const CompareRankDetailModal = lazy(() =>
+  import("./components/modals/PeerCompareModals").then((m) => ({
+    default: m.CompareRankDetailModal,
+  })),
+);
+const AccountModal = lazy(() =>
+  import("./components/modals/AccountModal").then((m) => ({ default: m.AccountModal })),
+);
+const GuideModal = lazy(() =>
+  import("./components/modals/GuideModal").then((m) => ({ default: m.GuideModal })),
+);
+const TechModal = lazy(() =>
+  import("./components/modals/TechModal").then((m) => ({ default: m.TechModal })),
+);
+
 // 挂载在 <Suspense> 之外的三处(顶栏齿轮 / AI 设置 / 榜单海报)没有现成 fallback,
 // 首次点击会白屏一瞬。复用已有的 .route-loading,不新增 CSS。
 function LazySpot() {
@@ -106,84 +118,124 @@ function LazySpot() {
   );
 }
 
-import { stored, track, decode, saveFile, type Locale } from "./lib/utils";
-import { useRouter, type View } from "./lib/useRouter";
+import { track, decode, saveFile } from "./lib/utils";
+import type { View } from "./lib/useRouter";
 import { useAuth } from "./lib/useAuth";
 import { resolveRankingTabKey, useSorting } from "./lib/useSorting";
+import { AppEnvProvider, useAppEnv } from "./contexts/AppEnvContext";
+import { useProfileStore } from "./lib/useProfileStore";
+import { usePeerCompare } from "./lib/usePeerCompare";
 
 const kinds = Object.keys(mediaLabels) as MediaKind[];
 
-function loadPeer() {
-  try {
-    return parseProfile(JSON.parse(stored(PEER_KEY) ?? ""));
-  } catch {
-    return null;
-  }
+export default function App() {
+  return (
+    <AppEnvProvider>
+      <AppShell />
+    </AppEnvProvider>
+  );
 }
 
-export default function App() {
-  const [locale, setLocale] = useState<Locale>(() =>
-    new URLSearchParams(location.search).get("lang") === "en" ? "en" : "zh",
-  );
-  const t = (zh: string, en: string) => (locale === "zh" ? zh : en);
-  const label = (kind: MediaKind) =>
-    locale === "zh" ? mediaLabels[kind].label : englishKinds[kind];
-  const { view, setView, navigateTo, plazaPostId } = useRouter();
-  const [profile, setProfile] = useState<ArtisticProfile | null>(() => {
-    try {
-      return readProfile(localStorage);
-    } catch {
-      return null;
-    }
-  });
-  const [peer, setPeer] = useState<ArtisticProfile | null>(loadPeer);
-  const [profileName, setProfileName] = useState(() => profile?.profileName ?? "我的艺术人格");
-  const [activeKind, setActiveKind] = useState<string>("film");
-  const [compareActiveKind, setCompareActiveKind] = useState<MediaKind>("film");
-  const [compareMode, setCompareMode] = useState<"auto" | "manual">("auto");
-  const [manualOwnSelections, setManualOwnSelections] = useState<Set<number>>(new Set());
-  const [manualPeerSelections, setManualPeerSelections] = useState<Set<number>>(new Set());
-  const [compareRankDetail, setCompareRankDetail] = useState<{
-    side: "own" | "peer";
-    collectionTitle: string;
-    ranking: RankingExport | null;
-    highlightId?: string;
-  } | null>(null);
-  const [compareSortBy, setCompareSortBy] = useState<"own" | "peer">("own");
-  const [peerRankPickOpen, setPeerRankPickOpen] = useState(false);
-  const [aiConfigOpen, setAiConfigOpen] = useState(false);
-  // toast 队列：后到的通知排在后面，避免互相顶掉（最多保留 5 条）
-  const [noticeQueue, setNoticeQueue] = useState<string[]>([]);
-  const notice = noticeQueue[0] ?? "";
-  const setNotice = (n: string) => {
-    if (!n) {
-      setNoticeQueue([]);
-      return;
-    }
-    setNoticeQueue((q) => [...q, n].slice(-5));
-  };
-  const [format, setFormat] = useState<"json" | "txt" | "md" | "csv" | "png">("json");
-  const [exportLayout, setExportLayout] = useState<ExportLayout>("editorial");
+function AppShell() {
+  const {
+    locale,
+    setLocale,
+    t,
+    label,
+    notice,
+    hasNotice,
+    setNotice,
+    dismissNotice,
+    view,
+    setView,
+    navigateTo,
+    plazaPostId,
+  } = useAppEnv();
   const [shareUrl, setShareUrl] = useState("");
   const [qrUrl, setQrUrl] = useState("");
+  const profileStore = useProfileStore({
+    t,
+    setNotice,
+    onPersist: () => {
+      setShareUrl("");
+      setQrUrl("");
+    },
+  });
+  const {
+    profile,
+    setProfile,
+    profileName,
+    setProfileName,
+    setActiveKind,
+    activeRanking,
+    editingRankIdx,
+    setEditingRankIdx,
+    editingRankTitle,
+    setEditingRankTitle,
+    notes,
+    setNotes,
+    noteModal,
+    setNoteModal,
+    noteDraft,
+    setNoteDraft,
+    noteViewModal,
+    setNoteViewModal,
+    reorderMode,
+    setReorderMode,
+    reorderItems,
+    setReorderItems,
+    openNoteModal,
+    openNoteView,
+    saveNote,
+    persist,
+    renameRank,
+    deleteRank,
+    updateRankingWorks,
+    startReorder,
+    saveReorder,
+    cancelReorder,
+    moveItem,
+  } = profileStore;
+  const sortingRef = useRef<ReturnType<typeof useSorting> | null>(null);
+  const peerStore = usePeerCompare({
+    t,
+    setNotice,
+    setActiveKind,
+    navigateTo: (v) => navigateTo(v),
+    chooseKind: (k) => sortingRef.current?.chooseKind(k),
+    openCollection: (c) => sortingRef.current?.openCollection(c),
+  });
+  const {
+    peer,
+    setPeer,
+    peerNotes,
+    setPeerNotes,
+    compareActiveKind,
+    setCompareActiveKind,
+    compareMode,
+    setCompareMode,
+    manualOwnSelections,
+    setManualOwnSelections,
+    manualPeerSelections,
+    setManualPeerSelections,
+    compareRankDetail,
+    setCompareRankDetail,
+    compareSortBy,
+    setCompareSortBy,
+    peerRankPickOpen,
+    setPeerRankPickOpen,
+    peerUrl,
+    setPeerUrl,
+    peerUrlBusy,
+    acceptPeer,
+    createFromPeer,
+    importPeerFromUrl,
+  } = peerStore;
+  const [aiConfigOpen, setAiConfigOpen] = useState(false);
+  const [format, setFormat] = useState<"json" | "txt" | "md" | "csv" | "png">("json");
+  const [exportLayout, setExportLayout] = useState<ExportLayout>("editorial");
   const [shareModal, setShareModal] = useState<{ ranking?: RankingExport } | null>(null);
   const [shareExpires, setShareExpires] = useState("");
-  const [editingRankIdx, setEditingRankIdx] = useState<number | null>(null);
-  const [editingRankTitle, setEditingRankTitle] = useState("");
-  const [notes, setNotes] = useState<Record<string, string>>(readNotes);
-  const [peerNotes, setPeerNotes] = useState<Record<string, string>>({});
-  const [noteModal, setNoteModal] = useState<{
-    key: string;
-    title: string;
-    kind: MediaKind;
-    posterUrls?: readonly string[];
-  } | null>(null);
-  const [noteDraft, setNoteDraft] = useState("");
-  const [noteViewModal, setNoteViewModal] = useState<{
-    title: string;
-    text: string;
-    posterUrls?: readonly string[];
-  } | null>(null);
   const [ringsLayout, setRingsLayout] = useState<"row" | "col">(() => {
     try {
       return (localStorage.getItem(RINGS_LAYOUT_KEY) as "row" | "col") || "row";
@@ -192,8 +244,6 @@ export default function App() {
     }
   });
   const [detailWork, setDetailWork] = useState<ArtworkDetailInfo | null>(null);
-  const [peerUrl, setPeerUrl] = useState("");
-  const [peerUrlBusy, setPeerUrlBusy] = useState(false);
   const [sharePeer, setSharePeer] = useState<ArtisticProfile | null>(null);
   // 分享内容加载失败的页内反馈：fetch 挂起（DNS 污染/代理中断会把连接黑洞掉，
   // 既不 resolve 也不 reject）时，「正在加载」占位必须能变成明确的错误态，
@@ -212,8 +262,6 @@ export default function App() {
     }
   });
   const [showTech, setShowTech] = useState(false);
-  const [reorderMode, setReorderMode] = useState<number | null>(null);
-  const [reorderItems, setReorderItems] = useState<RankedArtwork[]>([]);
   const [showScrollTop, setShowScrollTop] = useState(false);
 
   const auth = useAuth({
@@ -359,6 +407,7 @@ export default function App() {
     startJevRanking,
     jevBusy,
   } = sorting;
+  sortingRef.current = sorting;
   const busy = sortingBusy;
 
   // Wire auth's setDraft to sorting's setDraft (breaks circular dependency).
@@ -373,65 +422,6 @@ export default function App() {
     () => (profile ? buildTasteContext(profile.rankings) : undefined),
     [profile],
   );
-  const activeRanking =
-    profile?.rankings.find((entry, idx) => `${entry.kind}-${idx}` === activeKind) ??
-    profile?.rankings.find((entry) => entry.kind === activeKind) ??
-    profile?.rankings[0];
-
-  function openNoteModal(
-    key: string,
-    title: string,
-    kind: MediaKind,
-    posterUrls?: readonly string[],
-  ) {
-    setNoteModal({ key, title, kind, posterUrls });
-    setNoteDraft(notes[key] ?? "");
-  }
-  function openNoteView(title: string, text: string, posterUrls?: readonly string[]) {
-    setNoteViewModal({ title, text, posterUrls });
-  }
-  function saveNote() {
-    if (!noteModal) return;
-    const next = setNote(notes, noteModal.key, noteDraft);
-    setNotes(next);
-    writeNotes(next);
-    setNoteModal(null);
-  }
-  function persist(next: ArtisticProfile) {
-    // 复用唯一可落库形状（shared/storedItem.ts，经 profile.ts 的 toRankedItems）：
-    // posterUrls 与任何未知字段都由白名单挡住，不再依赖这里手写 destructure。
-    const cleaned: ArtisticProfile = {
-      ...next,
-      rankings: next.rankings.map((r) => ({ ...r, items: toRankedItems(r.items) })),
-    };
-    setProfile(cleaned);
-    setProfileName(cleaned.profileName);
-    setShareUrl("");
-    setQrUrl("");
-    try {
-      localStorage.setItem(LIBRARY_KEY, JSON.stringify(cleaned));
-      writeNotes(notes);
-    } catch (e) {
-      console.error("[persist] localStorage write failed:", e);
-      setNotice(
-        t(
-          "浏览器无法保存，请及时导出画像。",
-          "Browser storage is unavailable. Export your profile to keep it.",
-        ),
-      );
-    }
-  }
-  function acceptPeer(next: ArtisticProfile) {
-    setPeer(next);
-    setActiveKind(next.rankings[0].kind);
-    setCompareActiveKind(next.rankings[0].kind);
-    navigateTo("compare");
-    try {
-      localStorage.setItem(PEER_KEY, JSON.stringify(next));
-    } catch {
-      /* Keep the in-memory copy. */
-    }
-  }
   useEffect(() => {
     track("visit", { lang: locale, app_version: "2.0.0" });
     const payload =
@@ -573,12 +563,7 @@ export default function App() {
     setEditingRankTitle("");
     setReorderMode(null);
     setReorderItems([]);
-  }, [view]);
-  useEffect(() => {
-    if (!noticeQueue.length) return;
-    const timer = setTimeout(() => setNoticeQueue((q) => q.slice(1)), 4000);
-    return () => clearTimeout(timer);
-  }, [noticeQueue]);
+  }, [view, setEditingRankIdx, setEditingRankTitle, setReorderMode, setReorderItems]);
   useEffect(() => {
     const handler = (event: KeyboardEvent) => {
       // 排序快捷键不得穿透任何弹窗：弹窗打开时 A/D/←/→ 必须留给弹窗本身
@@ -630,36 +615,6 @@ export default function App() {
     act,
   ]);
 
-  function renameRank(idx: number) {
-    if (!profile || !editingRankTitle.trim()) return;
-    const next = renameRanking(profile, idx, editingRankTitle.trim());
-    persist(next);
-    setEditingRankIdx(null);
-    setEditingRankTitle("");
-  }
-  function deleteRank(idx: number) {
-    if (!profile) return;
-    const next = deleteRanking(profile, idx);
-    if (next) persist(next);
-    else {
-      setProfile(null);
-      try {
-        localStorage.removeItem(LIBRARY_KEY);
-      } catch {}
-    }
-    setEditingRankIdx(null);
-  }
-  function updateRankingWorks(rankingIdx: number, works: RankedArtwork[]) {
-    if (!profile || works.length < 1) return;
-    const rankings = [...profile.rankings];
-    if (rankingIdx < 0 || rankingIdx >= rankings.length) return;
-    rankings[rankingIdx] = {
-      ...rankings[rankingIdx],
-      items: works.map((w, i) => ({ ...w, rank: i + 1 })),
-    };
-    persist({ ...profile, rankings, updatedAt: new Date().toISOString() });
-    setNotice(t("榜单作品已更新。", "Ranking works updated."));
-  }
   async function syncPlazaPost(postId: number, rankingIdx: number) {
     if (!accountToken || !profile) return;
     const ranking = profile.rankings[rankingIdx];
@@ -684,32 +639,6 @@ export default function App() {
     } finally {
       setBusy(false);
     }
-  }
-  function startReorder(rankingIdx: number) {
-    if (!profile) return;
-    setReorderMode(rankingIdx);
-    setReorderItems([...profile.rankings[rankingIdx].items]);
-  }
-  function saveReorder() {
-    if (!profile || reorderMode === null) return;
-    const newOrderIds = reorderItems.map((item) => item.id);
-    const next = reorderRanking(profile, reorderMode, newOrderIds);
-    persist(next);
-    setReorderMode(null);
-    setReorderItems([]);
-  }
-  function cancelReorder() {
-    setReorderMode(null);
-    setReorderItems([]);
-  }
-  function moveItem(from: number, to: number) {
-    setReorderItems((current) => {
-      if (to < 0 || to >= current.length || from === to) return current;
-      const next = [...current];
-      const [moved] = next.splice(from, 1);
-      next.splice(to, 0, moved);
-      return next;
-    });
   }
   function clearAllData() {
     setProfile(null);
@@ -1137,76 +1066,6 @@ export default function App() {
       setNotice(t("生成链接失败。", "Failed to create link."));
     } finally {
       setBusy(false);
-    }
-  }
-  function createFromPeer(nextKind: MediaKind) {
-    const entry = peer?.rankings.find((item) => item.kind === nextKind);
-    if (!entry || entry.items.length < 2) {
-      chooseKind(nextKind);
-      return;
-    }
-    openCollection({
-      id: `peer-${entry.profileId}`,
-      kind: nextKind,
-      source: "custom",
-      title: entry.collectionTitle,
-      description: "",
-      topN: entry.items.length,
-      works: entry.items,
-    });
-  }
-  const peerImportGenRef = useRef(0);
-  async function importPeerFromUrl() {
-    const url = peerUrl.trim();
-    if (!url || peerUrlBusy) return;
-    const gen = ++peerImportGenRef.current;
-    setPeerUrlBusy(true);
-    try {
-      const parsed = new URL(url, location.origin);
-      // Handle /share/:code URLs
-      const shareMatch = parsed.pathname.match(/^\/share\/([0-9a-f]{8,12})$/i);
-      if (shareMatch) {
-        const r = await fetch(`/api/share/${shareMatch[1]}`, {
-          signal: AbortSignal.timeout(15000),
-        });
-        if (!r.ok) throw new Error();
-        const d = (await r.json()) as { profile: unknown; notes?: Record<string, string> };
-        if (gen !== peerImportGenRef.current) return;
-        acceptPeer(parseProfile(d.profile));
-        if (d.notes && typeof d.notes === "object") setPeerNotes(d.notes);
-        setPeerUrl("");
-        return;
-      }
-      // Handle /encounter?payload= URLs
-      const payload =
-        parsed.searchParams.get("payload") ??
-        new URLSearchParams(parsed.hash.slice(1)).get("profile");
-      if (payload) {
-        if (/^[0-9a-f]{8,12}$/i.test(payload)) {
-          const r = await fetch(`/api/share/${payload}`, { signal: AbortSignal.timeout(15000) });
-          if (!r.ok) throw new Error();
-          const d = (await r.json()) as { profile: unknown };
-          if (gen !== peerImportGenRef.current) return;
-          acceptPeer(parseProfile(d.profile));
-        } else {
-          const decoded = await decode(payload);
-          if (gen !== peerImportGenRef.current) return;
-          acceptPeer(decoded);
-        }
-        setPeerUrl("");
-        return;
-      }
-      const r = await fetch(url, { signal: AbortSignal.timeout(15000) });
-      if (!r.ok) throw new Error();
-      const parsedJson: unknown = await r.json();
-      if (gen !== peerImportGenRef.current) return;
-      acceptPeer(parseProfile(parsedJson));
-      setPeerUrl("");
-    } catch {
-      if (gen === peerImportGenRef.current)
-        setNotice(t("链接无效或无法读取，请检查 URL。", "Invalid or unreachable URL."));
-    } finally {
-      if (gen === peerImportGenRef.current) setPeerUrlBusy(false);
     }
   }
 
@@ -1648,13 +1507,10 @@ export default function App() {
         <span>ART/RANK</span>
         <span>{t("偏好没有标准答案", "Preference has no answer key")}</span>
       </footer>
-      {(noticeQueue.length > 0 || notice) && (
+      {(hasNotice || notice) && (
         <div className="toast" role="status" aria-live="polite">
           <span>{notice}</span>
-          <IconButton
-            title={t("关闭提示", "Dismiss")}
-            onClick={() => setNoticeQueue((q) => q.slice(1))}
-          >
+          <IconButton title={t("关闭提示", "Dismiss")} onClick={dismissNotice}>
             <X size={16} />
           </IconButton>
         </div>
@@ -1676,67 +1532,22 @@ export default function App() {
         </ErrorBoundary>
       )}
       {cloudConflict && (
-        <Modal
-          t={t}
-          headingId="cloud-conflict-heading"
-          title={t("数据冲突", "Data conflict")}
-          onClose={() => setCloudConflict(null)}
-        >
-          <p style={{ marginBottom: 16, fontSize: 13, color: "var(--muted)", lineHeight: 1.6 }}>
-            {t(
-              "本地有游客数据，云端也有数据。请选择如何处理：",
-              "You have local guest data and cloud data. Choose how to proceed:",
-            )}
-          </p>
-          <div className="u-col">
-            <button
-              className="button primary"
-              onClick={() => {
-                if (profile && cloudConflict) {
-                  const merged = mergeProfiles(cloudConflict.profile, profile);
-                  persist(merged);
-                  setSyncStatus("saving");
-                  // 增量合并必须同时提交合并后的批注映射，否则另一侧刚删除的批注
-                  // 会在下次同步时复活（DATA-03）。
-                  fetch("/api/account/profile", {
-                    method: "PUT",
-                    headers: {
-                      "content-type": "application/json",
-                      authorization: `Bearer ${accountToken}`,
-                    },
-                    body: JSON.stringify(buildProfileSyncBody(merged, notes, true)),
-                  })
-                    .then((r) => {
-                      setSyncStatus(r.ok ? "saved" : "error");
-                      if (r.ok) setNotice(t("已增量合并到云端。", "Merged to cloud."));
-                    })
-                    .catch(() => setSyncStatus("error"));
-                }
-                setCloudConflict(null);
-              }}
-            >
-              <CloudUpload size={16} />
-              {t("增量合并到云端", "Merge to cloud")}
-            </button>
-            <button
-              className="button secondary"
-              onClick={() => {
-                persist(cloudConflict.profile);
-                // 「使用云端数据」以云端为准：画像与批注一起原子替换（DATA-04）。
-                setNotes({ ...cloudConflict.notes });
-                writeNotes({ ...cloudConflict.notes });
-                setCloudConflict(null);
-                setNotice(t("已使用云端数据。", "Cloud data applied."));
-              }}
-            >
-              <CloudDownload size={16} />
-              {t("使用云端数据", "Use cloud data")}
-            </button>
-            <button className="button quiet" onClick={() => setCloudConflict(null)}>
-              {t("取消，各自保留", "Cancel, keep both")}
-            </button>
-          </div>
-        </Modal>
+        <ErrorBoundary fallback={null}>
+          <Suspense fallback={null}>
+            <CloudConflictModal
+              t={t}
+              cloudConflict={cloudConflict}
+              profile={profile}
+              notes={notes}
+              accountToken={accountToken}
+              persist={persist}
+              setNotes={setNotes}
+              setSyncStatus={setSyncStatus}
+              setNotice={setNotice}
+              onClose={() => setCloudConflict(null)}
+            />
+          </Suspense>
+        </ErrorBoundary>
       )}
       {detailWork && (
         <ArtworkDetail
@@ -1752,980 +1563,135 @@ export default function App() {
         />
       )}
       {shareModal && (
-        <Modal
-          t={t}
-          headingId="share-expiry-heading"
-          eyebrow="SHARE"
-          title={t("分享链接有效期", "Share link expiry")}
-          onClose={() => setShareModal(null)}
-        >
-          <p style={{ fontSize: 13, color: "var(--muted)", lineHeight: 1.7, margin: 0 }}>
-            {t(
-              "选择链接有效期，到期后他人将无法再打开该链接。生成后链接自动复制。",
-              "Pick how long the link stays valid — it stops working after expiry. The link is copied automatically.",
-            )}
-          </p>
-          <div className="u-col">
-            {[7, 30, 90, 365].map((days) => (
-              <button
-                key={days}
-                className="button secondary u-row-between"
-                disabled={busy}
-                onClick={() => {
-                  const picked = shareModal;
-                  setShareModal(null);
-                  void generateShareLink(picked?.ranking, days);
-                }}
-              >
-                <span>{days === 365 ? t("一年", "1 year") : `${days} ${t("天", "days")}`}</span>
-                <small>
-                  {new Date(Date.now() + days * 86400000).toLocaleDateString(
-                    locale === "zh" ? "zh-CN" : "en-US",
-                  )}
-                </small>
-              </button>
-            ))}
-          </div>
-        </Modal>
+        <ErrorBoundary fallback={null}>
+          <Suspense fallback={null}>
+            <ShareExpiryModal
+              t={t}
+              locale={locale}
+              busy={busy}
+              shareModal={shareModal}
+              onClose={() => setShareModal(null)}
+              onSelectDays={(ranking, days) => {
+                void generateShareLink(ranking, days);
+              }}
+            />
+          </Suspense>
+        </ErrorBoundary>
       )}
       {noteModal && (
-        <Modal
-          t={t}
-          headingId="note-heading"
-          panelClassName="note-reader"
-          backdropClassName="modal-backdrop note-backdrop"
-          onClose={() => setNoteModal(null)}
-        >
-          <div
-            className="note-reader-bg"
-            style={{
-              backgroundImage: noteModal.posterUrls?.[0]
-                ? `url(/api/image?url=${encodeURIComponent(noteModal.posterUrls[0])})`
-                : undefined,
-            }}
-          />
-          <div className="note-reader-header">
-            <span className="note-reader-eyebrow">NOTE</span>
-            <h2 id="note-heading">{noteModal.title}</h2>
-          </div>
-          <textarea
-            className="note-reader-body"
-            value={noteDraft}
-            onChange={(e) => setNoteDraft(e.target.value)}
-            placeholder={t(
-              "写下你对这部作品的看法、感想、回忆…",
-              "Write your thoughts, feelings, memories about this work...",
-            )}
-            autoFocus
-          />
-          <div className="note-reader-footer">
-            <button
-              className="note-footer-btn"
-              onClick={() => {
-                const next = setNote(notes, noteModal.key, "");
-                setNotes(next);
-                writeNotes(next);
-                setNoteDraft("");
-                setNotice(t("批注已清除。", "Note cleared."));
-              }}
-            >
-              {t("清除", "Clear")}
-            </button>
-            {noteDraft.length > 0 && (
-              <span className="note-char-count">
-                {noteDraft.length} {t("字", "chars")}
-              </span>
-            )}
-            <div className="u-spacer" />
-            <button className="note-footer-btn" onClick={() => setNoteModal(null)}>
-              {t("取消", "Cancel")}
-            </button>
-            <button className="note-footer-btn note-footer-primary" onClick={saveNote}>
-              {t("保存", "Save")}
-            </button>
-          </div>
-        </Modal>
+        <ErrorBoundary fallback={null}>
+          <Suspense fallback={null}>
+            <NoteEditModal
+              t={t}
+              noteModal={noteModal}
+              noteDraft={noteDraft}
+              setNoteDraft={setNoteDraft}
+              notes={notes}
+              setNotes={setNotes}
+              setNotice={setNotice}
+              onSave={saveNote}
+              onClose={() => setNoteModal(null)}
+            />
+          </Suspense>
+        </ErrorBoundary>
       )}
       {noteViewModal && (
-        <Modal
-          t={t}
-          headingId="note-view-heading"
-          panelClassName="note-reader"
-          backdropClassName="modal-backdrop note-backdrop"
-          onClose={() => setNoteViewModal(null)}
-        >
-          <div
-            className="note-reader-bg"
-            style={{
-              backgroundImage: noteViewModal.posterUrls?.[0]
-                ? `url(/api/image?url=${encodeURIComponent(noteViewModal.posterUrls[0])})`
-                : undefined,
-            }}
-          />
-          <div className="note-reader-header">
-            <span className="note-reader-eyebrow">NOTE</span>
-            <h2 id="note-view-heading">{noteViewModal.title}</h2>
-          </div>
-          <div className="note-reader-body note-reader-view">
-            <p>{noteViewModal.text}</p>
-          </div>
-          <div className="note-reader-footer">
-            <div className="u-spacer" />
-            <button
-              className="note-footer-btn note-footer-primary"
-              onClick={() => setNoteViewModal(null)}
-            >
-              {t("关闭", "Close")}
-            </button>
-          </div>
-        </Modal>
+        <ErrorBoundary fallback={null}>
+          <Suspense fallback={null}>
+            <NoteViewModal
+              t={t}
+              noteViewModal={noteViewModal}
+              onClose={() => setNoteViewModal(null)}
+            />
+          </Suspense>
+        </ErrorBoundary>
       )}
       {peerRankPickOpen && peer && (
-        <Modal
-          t={t}
-          headingId="peer-pick-heading"
-          title={t("选择对方榜单", "Pick their ranking")}
-          onClose={() => setPeerRankPickOpen(false)}
-        >
-          <p style={{ marginBottom: 16, fontSize: 13, color: "var(--muted)", lineHeight: 1.6 }}>
-            {t("选择一个榜单，用其中的作品进行排序。", "Pick a ranking to sort its works.")}
-          </p>
-          <div className="u-col">
-            {peer.rankings.map((entry, idx) => (
-              <button
-                key={rankingRowKey(entry, idx)}
-                className="button secondary"
-                style={{ justifyContent: "flex-start", gap: 12 }}
-                onClick={() => {
-                  setPeerRankPickOpen(false);
-                  const existingTitles =
-                    profile?.rankings
-                      .filter((r) => r.kind === entry.kind)
-                      .map((r) => r.collectionTitle) ?? [];
-                  let title = entry.collectionTitle;
-                  if (existingTitles.includes(title)) {
-                    let n = 2;
-                    while (existingTitles.includes(`${title} (${n})`)) n++;
-                    title = `${title} (${n})`;
-                  }
-                  openCollection({
-                    id: `peer-${entry.profileId}-${entry.kind}-${idx}`,
-                    kind: entry.kind,
-                    source: "custom",
-                    title,
-                    description: "",
-                    topN: entry.items.length,
-                    works: entry.items,
-                  });
-                }}
-              >
-                <span
-                  style={{
-                    color: "var(--accent)",
-                    fontSize: 11,
-                    fontWeight: 600,
-                    width: 28,
-                    flexShrink: 0,
-                  }}
-                >
-                  {label(entry.kind)}
-                </span>
-                <Poster work={entry.items[0]} kind={entry.kind} />
-                <span
-                  style={{
-                    flex: 1,
-                    textAlign: "left",
-                    overflow: "hidden",
-                    textOverflow: "ellipsis",
-                    whiteSpace: "nowrap",
-                  }}
-                >
-                  {entry.collectionTitle}
-                </span>
-                <small style={{ color: "var(--muted)", flexShrink: 0 }}>
-                  TOP {entry.items.length}
-                </small>
-              </button>
-            ))}
-          </div>
-        </Modal>
+        <ErrorBoundary fallback={null}>
+          <Suspense fallback={null}>
+            <PeerRankPickModal
+              t={t}
+              label={label}
+              peer={peer}
+              profile={profile}
+              openCollection={openCollection}
+              onClose={() => setPeerRankPickOpen(false)}
+            />
+          </Suspense>
+        </ErrorBoundary>
       )}
       {compareRankDetail && (
-        <Modal
-          t={t}
-          headingId="compare-rank-heading"
-          panelClassName="rank-detail-dialog"
-          onClose={() => setCompareRankDetail(null)}
-        >
-          {compareRankDetail.ranking ? (
-            <ErrorBoundary fallback={null}>
-              <Suspense fallback={<LazySpot />}>
-                <RankingDetail
-                  kind={compareRankDetail.ranking.kind}
-                  collectionTitle={compareRankDetail.collectionTitle}
-                  items={compareRankDetail.ranking.items}
-                  notes={compareRankDetail.side === "peer" ? peerNotes : notes}
-                  kindLabel={label}
-                  eyebrow={`${compareRankDetail.side === "own" ? t("我的索引", "MY INDEX") : t("对方索引", "THEIR INDEX")} / ${label(compareRankDetail.ranking.kind)}`}
-                  headerExtra={
-                    <IconButton
-                      title={t("关闭", "Close")}
-                      onClick={() => setCompareRankDetail(null)}
-                    >
-                      <X size={18} />
-                    </IconButton>
-                  }
-                  onNoteView={(title, text, posterUrls) => {
-                    openNoteView(title, text, posterUrls);
-                  }}
-                  onArtworkClick={(work, kind) => {
-                    void openArtworkDetail(work, kind);
-                  }}
-                  highlightId={compareRankDetail.highlightId}
-                />
-              </Suspense>
-            </ErrorBoundary>
-          ) : (
-            <div className="section-heading">
-              <h2 id="compare-rank-heading">{compareRankDetail.collectionTitle}</h2>
-              <IconButton title={t("关闭", "Close")} onClick={() => setCompareRankDetail(null)}>
-                <X size={18} />
-              </IconButton>
-            </div>
-          )}
-          {!compareRankDetail.ranking && (
-            <p className="empty-state">{t("无法找到该榜单数据", "Ranking data not found")}</p>
-          )}
-        </Modal>
+        <ErrorBoundary fallback={null}>
+          <Suspense fallback={null}>
+            <CompareRankDetailModal
+              t={t}
+              label={label}
+              compareRankDetail={compareRankDetail}
+              notes={notes}
+              peerNotes={peerNotes}
+              openNoteView={openNoteView}
+              openArtworkDetail={openArtworkDetail}
+              onClose={() => setCompareRankDetail(null)}
+            />
+          </Suspense>
+        </ErrorBoundary>
       )}
       {accountOpen && (
-        <Modal
-          t={t}
-          headingId="account-heading"
-          title={t("账号与同步", "Account & sync")}
-          onClose={() => setAccountOpen(false)}
-        >
-          {accountEmail && needNickname ? (
-            <>
-              <p className="u-mb">{t("请设置你的昵称", "Please set your nickname")}</p>
-              <input
-                type="text"
-                placeholder={t("昵称", "Nickname")}
-                value={authNickname}
-                onChange={(e) => setAuthNickname(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") void saveNickname();
-                }}
-                style={{ marginBottom: 12 }}
-                autoFocus
-              />
-              <button
-                className="button primary"
-                disabled={authBusy || !authNickname.trim()}
-                onClick={() => void saveNickname()}
-              >
-                {t("确认昵称", "Set nickname")}
-              </button>
-            </>
-          ) : accountEmail ? (
-            <>
-              <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 4 }}>
-                {editingNickname ? (
-                  <div style={{ display: "flex", gap: 4, alignItems: "center", flex: 1 }}>
-                    <input
-                      type="text"
-                      value={editNicknameValue}
-                      onChange={(e) => setEditNicknameValue(e.target.value)}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter") void saveNickname();
-                        if (e.key === "Escape") setEditingNickname(false);
-                      }}
-                      style={{ fontSize: 14, padding: "4px 8px", minHeight: "auto", flex: 1 }}
-                      autoFocus
-                    />
-                    <button
-                      className="text-button"
-                      onClick={() => void saveNickname()}
-                      aria-label={t("确认修改昵称", "Confirm nickname")}
-                      style={{ color: "var(--accent)", padding: "4px 8px" }}
-                    >
-                      <Check size={15} />
-                    </button>
-                  </div>
-                ) : (
-                  <>
-                    <p style={{ fontWeight: 600, margin: 0 }}>{accountNickname || accountEmail}</p>
-                    <button
-                      onClick={() => {
-                        setEditingNickname(true);
-                        setEditNicknameValue(accountNickname);
-                      }}
-                      style={{
-                        fontSize: 10,
-                        color: "var(--muted)",
-                        background: "none",
-                        border: "1px solid var(--line)",
-                        borderRadius: 4,
-                        padding: "1px 6px",
-                        cursor: "pointer",
-                      }}
-                    >
-                      {t("改名", "Edit")}
-                    </button>
-                  </>
-                )}
-              </div>
-              <p
-                style={{
-                  marginBottom: 16,
-                  fontSize: 12,
-                  color: "var(--muted)",
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 6,
-                }}
-              >
-                {accountEmail}
-                <span
-                  title={
-                    syncStatus === "saving"
-                      ? t("同步中", "Syncing")
-                      : syncStatus === "saved"
-                        ? t("已同步", "Synced")
-                        : syncStatus === "error"
-                          ? t("同步失败", "Sync failed")
-                          : t("待机", "Idle")
-                  }
-                  className="sync-dot"
-                  data-status={syncStatus}
-                  style={{
-                    display: "inline-block",
-                    width: 8,
-                    height: 8,
-                    borderRadius: "50%",
-                    flexShrink: 0,
-                  }}
-                />
-              </p>
-              <button
-                className="button primary"
-                disabled={authBusy || !profile}
-                onClick={accountSave}
-                style={{ marginBottom: 8 }}
-              >
-                <CloudUpload size={16} />
-                {t("同步到云端", "Sync to cloud")}
-              </button>
-              <button
-                className="button secondary"
-                disabled={authBusy}
-                onClick={() => void accountLoad(false)}
-                style={{ marginBottom: 8 }}
-              >
-                <CloudDownload size={16} />
-                {t("从云端恢复画像", "Restore from cloud")}
-              </button>
-              <button className="button quiet" onClick={accountLogout}>
-                {t("退出登录", "Sign out")}
-              </button>
-            </>
-          ) : (
-            <>
-              <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 16 }}>
-                <a
-                  className="button secondary"
-                  href="/api/account/oauth/google"
-                  style={{
-                    textAlign: "center",
-                    textDecoration: "none",
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    gap: 8,
-                  }}
-                >
-                  <svg width="16" height="16" viewBox="0 0 24 24">
-                    <path
-                      fill="#4285F4"
-                      d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z"
-                    />
-                    <path
-                      fill="#34A853"
-                      d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
-                    />
-                    <path
-                      fill="#FBBC05"
-                      d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"
-                    />
-                    <path
-                      fill="#EA4335"
-                      d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"
-                    />
-                  </svg>
-                  {t("使用 Google 登录", "Sign in with Google")}
-                </a>
-                <a
-                  className="button secondary"
-                  href="/api/account/oauth/github"
-                  style={{
-                    textAlign: "center",
-                    textDecoration: "none",
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    gap: 8,
-                  }}
-                >
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-                    <path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z" />
-                  </svg>
-                  {t("使用 GitHub 登录", "Sign in with GitHub")}
-                </a>
-              </div>
-              <div style={{ display: "flex", alignItems: "center", gap: 8, margin: "8px 0" }}>
-                <div className="u-divider" />
-                <span style={{ fontSize: 11, color: "var(--muted)" }}>
-                  {t("或使用邮箱", "or use email")}
-                </span>
-                <div className="u-divider" />
-              </div>
-              <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
-                <button
-                  className={`button ${authMode === "login" ? "primary" : "secondary"}`}
-                  onClick={() => {
-                    setAuthMode("login");
-                    setAuthError("");
-                  }}
-                  style={{ flex: 1 }}
-                >
-                  {t("登录", "Sign in")}
-                </button>
-                <button
-                  className={`button ${authMode === "register" ? "primary" : "secondary"}`}
-                  onClick={() => {
-                    setAuthMode("register");
-                    setAuthError("");
-                  }}
-                  style={{ flex: 1 }}
-                >
-                  {t("注册", "Register")}
-                </button>
-                <button
-                  className={`button ${authMode === "reset" ? "primary" : "secondary"}`}
-                  onClick={() => {
-                    setAuthMode("reset");
-                    setAuthError("");
-                  }}
-                  style={{ flex: 1 }}
-                >
-                  {t("修改密码", "Change password")}
-                </button>
-              </div>
-              {authError && (
-                <p style={{ color: "#f87171", fontSize: 13, marginBottom: 8 }}>{authError}</p>
-              )}
-              {authMode === "register" && (
-                <input
-                  type="text"
-                  placeholder={t("昵称（必填）", "Nickname (required)")}
-                  value={authNickname}
-                  onChange={(e) => setAuthNickname(e.target.value)}
-                  style={{ marginBottom: 8 }}
-                />
-              )}
-              <input
-                type="email"
-                placeholder={t("邮箱", "Email")}
-                value={authEmail}
-                onChange={(e) => setAuthEmail(e.target.value)}
-                style={{ marginBottom: 8 }}
-              />
-              {authMode !== "login" && (
-                <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
-                  <input
-                    type="text"
-                    placeholder={t("邮箱验证码", "Email code")}
-                    value={authCode}
-                    onChange={(e) => setAuthCode(e.target.value)}
-                    style={{ flex: 1 }}
-                  />
-                  <button
-                    className="button secondary"
-                    disabled={authBusy || codeCooldown > 0}
-                    onClick={() => void sendAuthCode()}
-                    style={{ whiteSpace: "nowrap" }}
-                  >
-                    {codeCooldown > 0 ? `${codeCooldown}s` : t("获取验证码", "Get code")}
-                  </button>
-                </div>
-              )}
-              <input
-                type="password"
-                placeholder={
-                  authMode === "reset"
-                    ? t("新密码（至少8位）", "New password (8+ chars)")
-                    : t("密码（至少8位）", "Password (8+ chars)")
-                }
-                value={authPassword}
-                onChange={(e) => setAuthPassword(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") void accountAuth(authMode);
-                }}
-                style={{ marginBottom: 12 }}
-              />
-              <button
-                className="button primary"
-                disabled={authBusy}
-                onClick={() => void accountAuth(authMode)}
-              >
-                {authMode === "login"
-                  ? t("登录", "Sign in")
-                  : authMode === "register"
-                    ? t("注册", "Register")
-                    : t("修改密码", "Change password")}
-              </button>
-            </>
-          )}
-          {!accountEmail && (
-            <button className="button quiet" onClick={() => setAccountOpen(false)}>
-              <UserRound size={16} />
-              {t("继续使用游客模式", "Continue as guest")}
-            </button>
-          )}
-        </Modal>
+        <ErrorBoundary fallback={null}>
+          <Suspense fallback={null}>
+            <AccountModal
+              t={t}
+              profile={profile}
+              accountEmail={accountEmail}
+              accountNickname={accountNickname}
+              needNickname={needNickname}
+              editingNickname={editingNickname}
+              setEditingNickname={setEditingNickname}
+              editNicknameValue={editNicknameValue}
+              setEditNicknameValue={setEditNicknameValue}
+              authMode={authMode}
+              setAuthMode={setAuthMode}
+              authEmail={authEmail}
+              setAuthEmail={setAuthEmail}
+              authPassword={authPassword}
+              setAuthPassword={setAuthPassword}
+              authNickname={authNickname}
+              setAuthNickname={setAuthNickname}
+              authCode={authCode}
+              setAuthCode={setAuthCode}
+              authError={authError}
+              setAuthError={setAuthError}
+              authBusy={authBusy}
+              codeCooldown={codeCooldown}
+              syncStatus={syncStatus}
+              saveNickname={saveNickname}
+              accountSave={accountSave}
+              accountLoad={accountLoad}
+              accountLogout={accountLogout}
+              sendAuthCode={sendAuthCode}
+              accountAuth={accountAuth}
+              onClose={() => setAccountOpen(false)}
+            />
+          </Suspense>
+        </ErrorBoundary>
       )}
       {showGuide && (
-        <Modal
-          t={t}
-          headingId="guide-heading"
-          panelClassName="guide-modal account-dialog"
-          onClose={() => setShowGuide(false)}
-        >
-          <span className="eyebrow">ART/RANK {t("使用说明", "GUIDE")}</span>
-          <h2 id="guide-heading">{t("欢迎来到 ART/RANK", "Welcome to ART/RANK")}</h2>
-          <p className="guide-subtitle">
-            {t(
-              "这里只讲怎么用：怎么选作品、怎么排、怎么导出与比较。想看算法怎么算，点底部「技术说明」。",
-              "This is the how-to: picking works, sorting, exporting, comparing. For how the algorithms work, open Technical details at the bottom.",
-            )}
-          </p>
-          <div className="guide-steps">
-            <div className="guide-step">
-              <span className="guide-step-num">1</span>
-              <div className="guide-step-body">
-                <strong>{t("选择媒介维度", "Choose a medium")}</strong>
-                <p>
-                  {t(
-                    "电影、书籍、音乐或其他——每个维度可以创建多个独立榜单。",
-                    "Film, Books, Music, or Other — each medium can have multiple independent lists.",
-                  )}
-                </p>
-              </div>
-            </div>
-            <div className="guide-step">
-              <span className="guide-step-num">2</span>
-              <div className="guide-step-body">
-                <strong>{t("选择作品来源", "Pick your works")}</strong>
-                <p>
-                  {t(
-                    "精选榜单、即搜即加（输入标题搜出候选再点选）、批量导入（TXT / JSON / 粘贴清单）、豆瓣 Top 250；音乐还能扫码或 Cookie 连接网易云，按用户浏览全部歌单（含收藏）点选；也可以打开别人的分享链接直接取内容。",
-                    "Curated lists, instant search (type a title, pick a candidate), batch import (TXT / JSON / paste), or Douban Top 250. For music you can also connect NetEase by QR code or cookie and browse all of a user's playlists. You can also open someone's share link and take the works from it.",
-                  )}
-                </p>
-              </div>
-            </div>
-            <div className="guide-step">
-              <span className="guide-step-num">3</span>
-              <div className="guide-step-body">
-                <strong>{t("选择排序模式", "Choose a sort mode")}</strong>
-                <p>
-                  {t(
-                    "简易最快：每件只跟榜尾比一次，上百件里挖 Top N 的首选。经典是默认：二分定位加回环复测。精确会在经典之上加倍复测，完成后汇报校准一致率。自适应按信息量挑「最该问」的一对、实时给 90% 名次区间，超过 20 件建议换经典或简易。选择会被记住。",
-                    "Quick is fastest: each work meets only the last place — best for digging a Top N out of hundreds. Classic is the default: binary placement plus loop rechecks. Precise doubles the rechecks on top of classic and reports a calibration rate. Adaptive picks the most informative pair and shows live 90% rank ranges — switch to classic or quick above 20 works. Your choice is remembered.",
-                  )}
-                </p>
-              </div>
-            </div>
-            <div className="guide-step">
-              <span className="guide-step-num">4</span>
-              <div className="guide-step-body">
-                <strong>{t("开始 1v1 取舍", "Sort, one pair at a time")}</strong>
-                <p>
-                  {t(
-                    "点击你更想留下的那一件；键盘 A/D 或 ←/→；手机上左右滑动。可随时撤销、略过某件或暂放到队尾。进度自动存草稿，刷新后可继续。",
-                    "Tap the one you'd keep — keyboard A/D or ←/→, or swipe left/right on phones. Undo any time, skip a work, or park it at the back of the queue. Progress is draft-saved automatically and can be resumed after a refresh.",
-                  )}
-                </p>
-              </div>
-            </div>
-            <div className="guide-step">
-              <span className="guide-step-num">5</span>
-              <div className="guide-step-body">
-                <strong>{t("查看与导出文化索引", "View and export your index")}</strong>
-                <p>
-                  {t(
-                    "排序完成会自动保存到「我的文化索引」，每件作品都可加批注。导出支持 JSON / TXT / Markdown / CSV / PNG（五套版式，另有年度年鉴卡），PNG 配色跟随当前主题。",
-                    "Results save to My Index automatically, and every work can carry a note. Export as JSON / TXT / Markdown / CSV / PNG (five layouts plus a yearly report card); PNG colours follow the active theme.",
-                  )}
-                </p>
-              </div>
-            </div>
-            <div className="guide-step">
-              <span className="guide-step-num">6</span>
-              <div className="guide-step-body">
-                <strong>{t("与他人比较", "Share and compare")}</strong>
-                <p>
-                  {t(
-                    "「比较链接」让对方直接进比较界面，「分享链接」让对方先看内容再决定；都走 12 位短码，可扫码。相遇页看综合共识分，深度页是只读的第二读法，含似然一致度等新指标。",
-                    "A compare link drops them straight into the comparison; a share link lets them read your list first. Both use a 12-character code and can be scanned as a QR code. The encounter page shows the consensus score; the depth page is a read-only second reading with extra metrics such as likelihood agreement.",
-                  )}
-                </p>
-              </div>
-            </div>
-            <div className="guide-step">
-              <span className="guide-step-num">7</span>
-              <div className="guide-step-body">
-                <strong>
-                  {t("（可选）AI 点评与 AI 快排", "(Optional) AI notes and quick rank")}
-                </strong>
-                <p>
-                  {t(
-                    "设置 → AI 服务：AI 点评默认走服务端内置模型，也可填自己的 Base URL / API Key / Model。Jev 快排不用配置也能用——未填 TypeSafe Key 时自动走站内免费通道；填入自己的 Key 则优先用你的（准备页出现「AI 快排」——一次预测直接成榜，跳过逐对比较，最多 255 件）。",
-                    "Settings → AI services. AI notes use a built-in model by default; you can plug in your own Base URL / API key / model instead. Quick rank works out of the box: with no TypeSafe key it uses the built-in free channel; your own key takes priority once added (a Quick rank button appears on the setup page: one prediction produces the whole list, skipping pairwise sorting, up to 255 works).",
-                  )}
-                </p>
-              </div>
-            </div>
-            <div className="guide-step">
-              <span className="guide-step-num">8</span>
-              <div className="guide-step-body">
-                <strong>{t("（可选）Jev 代判", "(Optional) Jev decides")}</strong>
-                <p>
-                  {t(
-                    "同样在「AI 服务」里打开「Jev 代判」并选置信阈值（默认 80%，50–90% 五档）：达到阈值的那一对自动落位，标注「上一对由 Jev 代判 · 置信 N%」，随时可撤销；没达标的仍交给你自己。调低更省事，调高更保守。代判同样支持站内免费通道，不配 Key 也能用。",
-                    "Still in AI services, switch on Jev decides and pick a confidence threshold (80% by default, five steps from 50% to 90%): a pair that clears it is settled automatically and labelled 'Last pair decided by Jev · N% confidence', undoable at any time. Anything below the bar stays yours. Lower means less work, higher means more caution. Assist also works on the built-in free channel, no key needed.",
-                  )}
-                </p>
-              </div>
-            </div>
-            <div className="guide-step">
-              <span className="guide-step-num">9</span>
-              <div className="guide-step-body">
-                <strong>{t("（可选）登录同步", "(Optional) Sign in to sync")}</strong>
-                <p>
-                  {t(
-                    "邮箱注册，或用 Google / GitHub 登录后，画像、批注与云端清单自动同步；游客数据在登录时可选择增量合并到云端，或改用云端数据。",
-                    "Sign up with email, or sign in with Google / GitHub, and profiles, notes and cloud lists sync automatically. Guest data can be merged into the cloud or replaced by it at sign-in.",
-                  )}
-                </p>
-              </div>
-            </div>
-          </div>
-          <div className="guide-modal-footer">
-            <button
-              className="button secondary"
-              onClick={() => {
-                setShowGuide(false);
-                setShowTech(true);
-              }}
-            >
-              {t("技术说明", "Technical details")}
-            </button>
-            <div className="u-spacer" />
-            <button
-              className="button quiet"
-              onClick={() => {
-                try {
-                  localStorage.setItem(GUIDE_DISMISSED_KEY, "1");
-                } catch {}
-                setShowGuide(false);
-              }}
-            >
-              {t("不再显示", "Don't show again")}
-            </button>
-            <button className="button primary" onClick={() => setShowGuide(false)}>
-              {t("知道了", "Got it")}
-            </button>
-          </div>
-        </Modal>
+        <ErrorBoundary fallback={null}>
+          <Suspense fallback={null}>
+            <GuideModal
+              t={t}
+              onClose={() => setShowGuide(false)}
+              onOpenTech={() => setShowTech(true)}
+            />
+          </Suspense>
+        </ErrorBoundary>
       )}
       {showTech && (
-        <Modal
-          t={t}
-          headingId="tech-heading"
-          panelClassName="tech-modal account-dialog"
-          onClose={() => setShowTech(false)}
-        >
-          <span className="eyebrow">ART/RANK TECHNICAL</span>
-          <h2 id="tech-heading">{t("技术说明", "Technical Details")}</h2>
-          <p className="guide-subtitle">
-            {t(
-              "算法怎么算、数据存在哪。想知道按钮在哪、功能怎么用，回到「使用说明」。",
-              "How the algorithms work and where data lives. For where the buttons are and how features work, go back to the guide.",
-            )}
-          </p>
-          <div className="tech-sections">
-            <details open>
-              <summary>{t("排序模式", "Sort Modes")}</summary>
-              <div className="tech-body">
-                <p>
-                  {t(
-                    "四种模式共用同一套取舍记录，区别在于「问哪些对」和「怎么定名次」。准备页四选一，选择会被记住。",
-                    "All four modes share one record of choices; they differ in which pairs get asked and how ranks are settled. Pick one on the setup page — the choice is remembered.",
-                  )}
-                </p>
-                <p>
-                  <strong>{t("简易（quick）", "Quick")}</strong>：
-                  {t(
-                    "每件新作品只与榜单末位比一次：赢了上榜、输了出局。线性步数，没有验证阶段；适合从上百件里快速挖 Top N，代价是名次精度较低。",
-                    "Each new work meets the last place once: win and it enters, lose and it is out. Linear steps with no verification phase — good for digging a Top N out of hundreds, at the cost of precision.",
-                  )}
-                </p>
-                <p>
-                  <strong>{t("经典（classic，默认）", "Classic (default)")}</strong>：
-                  {t(
-                    "主动式二分插入：取出候选，与已排序区间的中位数比较并缩小范围，直到定位精确插入位置。n 件取 Top N 时每个候选最多 ⌈log₂(N+1)⌉ 次比较，整体 O(n log n)。",
-                    "Active binary insertion: compare the candidate against the median of the sorted range and halve the range until the exact slot is found. For a Top N out of n works each candidate costs at most ⌈log₂(N+1)⌉ comparisons — O(n log n) overall.",
-                  )}
-                </p>
-                <p>
-                  <strong>{t("精确（precise）", "Precise")}</strong>：
-                  {t(
-                    "在经典之上加倍复测，并主动补验从未直接比较过的相邻对；结束时汇报「校准一致率」，说明复测与首次判断的吻合程度。",
-                    "Classic plus doubled rechecks, and it probes adjacent pairs that were never compared head-to-head. It ends with a calibration rate showing how often rechecks agreed with first answers.",
-                  )}
-                </p>
-                <p>
-                  <strong>{t("自适应（adaptive）", "Adaptive")}</strong>：
-                  {t(
-                    "用 Bradley-Terry 能力模型估计每件作品的强度与不确定度，按信息量 p(1−p)(σᵢ²+σⱼ²) 加覆盖率补偿来挑「最该问」的一对，实时显示双方 90% 名次区间，预算约 4× 作品数。排序中的复测结论会回流模型，最终榜单按完整模型重建（2026-10-24）。",
-                    "A Bradley-Terry strength model tracks each work's score and uncertainty. Pairs are chosen by information p(1−p)(σᵢ²+σⱼ²) plus a coverage bonus, live 90% rank ranges are shown, and the budget is roughly 4× the number of works. Rechecks feed back into the model and the final ranking is rebuilt from the full model (2026-10-24).",
-                  )}
-                </p>
-              </div>
-            </details>
-            <details>
-              <summary>{t("共识机制", "Shared Mechanics")}</summary>
-              <div className="tech-body">
-                <p>
-                  <strong>{t("冷却", "Cooldown")}</strong>：
-                  {t(
-                    "同一对作品至少间隔 3 次比较，同一作品至少间隔 4 次比较，防止顺序偏差和比较疲劳。",
-                    "Same pair at least 3 comparisons apart, same work at least 4 apart — prevents order bias and comparison fatigue.",
-                  )}
-                </p>
-                <p>
-                  <strong>{t("偏好回环检测", "Preference Loop Detection")}</strong>：
-                  {t(
-                    "检测到 A→B→C→A 的偏好循环时会安排复测。首次标记「观察中」，多次方向一致后标记「持久张力」——尊重真实的品味矛盾，而非强行纠正。",
-                    "When an A→B→C→A preference loop shows up, rechecks are scheduled. It starts as 'observed' and becomes 'persistent tension' if it keeps confirming — genuine taste contradictions are respected rather than overridden.",
-                  )}
-                </p>
-                <p>
-                  <strong>{t("验证阶段", "Verification Phase")}</strong>：
-                  {t(
-                    "经典与精确模式在主排序完成后复测少量相邻作品对和循环边，数量约为 Top N 的 1/3；简易模式没有这一阶段。",
-                    "In classic and precise, a few adjacent pairs and loop edges are rechecked after the main pass — about Top N / 3. Quick mode skips it.",
-                  )}
-                </p>
-                <p>
-                  <strong>{t("撤销", "Undo")}</strong>：
-                  {t(
-                    "重放决策日志（去掉最后一条）重建状态，保证撤销后的一致性。",
-                    "State is rebuilt by replaying the decision log minus the last entry, keeping undo consistent.",
-                  )}
-                </p>
-              </div>
-            </details>
-            <details>
-              <summary>{t("比较算法", "Comparison Algorithm")}</summary>
-              <div className="tech-body">
-                <p>
-                  <strong>{t("合并", "Merging")}</strong>：
-                  {t(
-                    "同维度的多个榜单先合并：同一作品出现在多个榜单中时取最高名次。匹配依据是标题 + 年份 + 创作者的规范化比较。",
-                    "Multiple lists of the same medium are merged first: a work appearing in several lists takes its best rank. Matching compares normalized title + year + creator.",
-                  )}
-                </p>
-                <p>
-                  <strong>{t("贪心匹配", "Greedy Matching")}</strong>：
-                  {t(
-                    "为所有候选对算匹配评分（70–90 分），按评分降序、名次差升序排列，再贪心挑选互不冲突的最优配对。",
-                    "Every candidate pair gets a match score (70–90); pairs are sorted by score descending then rank gap ascending, and non-conflicting matches are taken greedily.",
-                  )}
-                </p>
-                <p>
-                  <strong>{t("相遇页 13 项指标", "13 metrics on the encounter page")}</strong>：
-                  {t(
-                    "重合类——作品重合度（交集 / 并集）、前五重合、Top 3 共识、Top-5 Jaccard、冠军一致；顺序类——顺序一致率、Kendall τ-b、Spearman 近似、名次距离、加权偏好一致（1/rank 加权）；画像类——年代偏好、覆盖率、收缩共识分。",
-                    "Overlap: work overlap (intersection / union), top-5 overlap, top-3 consensus, Top-5 Jaccard, same champion. Order: order agreement, Kendall τ-b, Spearman approximation, rank distance, weighted agreement (weighted by 1/rank). Profile: era affinity, coverage, shrunk consensus.",
-                  )}
-                </p>
-                <p>
-                  <strong>{t("深度页的五格第二读法", "Second reading on the depth page")}</strong>：
-                  {t(
-                    "只读、不写入任何数据：头部加权 τ（1/i 权重）、位置折扣一致度（每往后一位乘 0.85）、τ 的 bootstrap 区间（200 轮 · 90% 水平）、序对账本（可用序对 / 全部序对，含被剔除的并列），以及品味似然一致度（Plackett-Luce 双向似然，完全一致恒为 100，且计入「错得有多远」，2026-10-24 新增）。",
-                    "Read-only, writes nothing: head-weighted τ (1/i weights), position-discounted agreement (×0.85 per place), a bootstrap interval for τ (200 rounds at 90%), a pair ledger (usable / total pairs, ties excluded), and likelihood agreement (two-way Plackett-Luce likelihood — exactly 100 when identical, and it accounts for how far a work is misplaced; added 2026-10-24).",
-                  )}
-                </p>
-              </div>
-            </details>
-            <details>
-              <summary>{t("AI 能力", "AI Capabilities")}</summary>
-              <div className="tech-body">
-                <p>
-                  {t(
-                    "三条独立通道，互不影响：AI 点评（文字解读）、AI 快排（一次成榜）、Jev 代判（逐对替你选择）。点评走「AI 服务」里配置的通用模型；快排与代判共用同一把 TypeSafe Key——没配 Key 时走站主提供的免费通道（Worker Secret 保管，浏览器看不到），配置了就用你自己的。",
-                    "Three independent channels: AI notes (text), quick rank (one-shot ranking), and Jev decides (pair by pair). Notes use the general model configured in AI services; quick rank and Jev share one TypeSafe key — with no key configured they ride the owner-provided free channel (held as a Worker secret, never visible to the browser), and your own key takes priority once set.",
-                  )}
-                </p>
-                <p>
-                  <strong>{t("AI 点评", "AI notes")}</strong>：
-                  {t(
-                    "三个场景——榜单（截取前 150 件）、画像（跨维度汇总）、单件作品。默认走服务端内置模型，无需配置；填入自己的 Base URL、API Key 与 Model 后改走你的服务，Key 只存在本浏览器。",
-                    "Three scenarios — a list (first 150 works), a profile (across media), and a single work. A built-in server-side model works out of the box; entering your own Base URL, API key and model routes it to your provider, with the key kept only in this browser.",
-                  )}
-                </p>
-                <p>
-                  <strong>{t("AI 快排", "Quick rank")}</strong>：
-                  {t(
-                    "把整份清单一次交给模型预测名次，直接成榜，跳过所有 1v1 取舍（单次最多 255 件）。结果仍可在画像页手动微调。",
-                    "The whole list goes to the model in one prediction and becomes a ranked list directly, skipping every 1v1 (up to 255 works per call). You can still fine-tune it on the profile page.",
-                  )}
-                </p>
-                <p>
-                  <strong>{t("Jev 代判", "Jev decides")}</strong>：
-                  {t(
-                    "在每次取舍前预测你更可能选哪一件：置信度达到阈值才落位，并标注「上一对由 Jev 代判 · 置信 N%」、可撤销；低于阈值则不插手，仍由你判断。阈值默认 80%，可在 50–90% 五档调整——调低代判更频繁，调高更保守。",
-                    "Before each choice Jev predicts which work you'd keep. If confidence clears the threshold the pair is settled and labelled 'Last pair decided by Jev · N% confidence', undoable at any time; below it Jev stays out and the pair is yours. The default is 80%, adjustable in five steps from 50% to 90% — lower takes over more often, higher is more cautious.",
-                  )}
-                </p>
-                <p>
-                  <strong>{t("工程约束", "Engineering guardrails")}</strong>：
-                  {t(
-                    "Key 只存 localStorage，不经 Worker 落盘；代判请求带键控与代际守卫——换了一对、或你已手动选择时，迟到的响应一律丢弃，绝不复写你的决定。失败按限流、地区受限、key 无效分别提示，不静默吞掉。",
-                    "Keys live only in localStorage and are never persisted by the Worker. Assist requests are keyed and generation-guarded: if the pair changed or you already chose, late responses are dropped rather than overwriting your decision. Failures are surfaced by kind — rate limit, regional restriction, invalid key — instead of being swallowed.",
-                  )}
-                </p>
-              </div>
-            </details>
-            <details>
-              <summary>{t("海报与详情 API", "Poster & Detail API")}</summary>
-              <div className="tech-body">
-                <p>
-                  <strong>
-                    {t("海报解析策略（按优先级）", "Poster resolution (by priority)")}
-                  </strong>
-                  ：
-                </p>
-                <ul>
-                  <li>
-                    <strong>{t("电影", "Film")}</strong>：
-                    {t(
-                      "豆瓣 suggest API → search.douban.com 搜索 → Top250 索引 → IMDb 备用",
-                      "Douban suggest API → search.douban.com → Top250 index → IMDb fallback",
-                    )}
-                  </li>
-                  <li>
-                    <strong>{t("书籍", "Book")}</strong>：
-                    {t(
-                      "豆瓣 suggest API（pic 字段）→ search.douban.com 搜索 → Top250 索引",
-                      "Douban suggest API (pic field) → search.douban.com → Top250 index",
-                    )}
-                  </li>
-                  <li>
-                    <strong>{t("音乐", "Music")}</strong>：
-                    {t(
-                      "网易云 CDN 封面直出优先 → search.douban.com 搜索 → Top250 索引（无 suggest API）",
-                      "NetEase CDN cover first → search.douban.com → Top250 index (no suggest API)",
-                    )}
-                  </li>
-                </ul>
-                <p>
-                  {t(
-                    "以上都没命中时，所有类别统一按「维基百科 → 网易云 / gd-proxy」逐级兜底。",
-                    "When none of the above hit, every medium falls back through Wikipedia → NetEase / gd-proxy.",
-                  )}
-                </p>
-                <p>
-                  <strong>{t("识别纠错", "Disambiguation")}</strong>：
-                  {t(
-                    "标题重名或结果不确定时，详情弹窗会列出候选让你选一次，并记住「这个名字指哪部作品」，之后不再重复问；实在找不到封面时给出占位与重试出路，而不是一直转圈。",
-                    "When a title is ambiguous or the match is uncertain, the detail dialog offers candidates and remembers which work that name refers to, so you are not asked again. If no poster can be found it shows a placeholder with a retry path instead of spinning forever.",
-                  )}
-                </p>
-                <p>
-                  {t(
-                    "豆瓣返回的 URL 会展开成多个 CDN 镜像变体（img1/2/3/9.doubanio.com）并做 https 升级，前端按顺序尝试加载。",
-                    "A Douban URL expands into several CDN mirror variants (img1/2/3/9.doubanio.com) with https upgrade; the frontend tries them in order.",
-                  )}
-                </p>
-                <p>
-                  <strong>{t("详情获取策略", "Detail fetching")}</strong>：
-                  {t(
-                    "优先从 Wikipedia（中英文）获取简介，辅以类型限定词减少歧义；然后尝试创作者组合搜索；最后用百度百科兜底。元数据（评分、导演、出版社等）从豆瓣搜索结果解析。",
-                    "Prioritizes Wikipedia (zh/en) for content intros with type disambiguation; then creator+title combo search; Baidu Baike as fallback. Metadata (ratings, director, publisher) parsed from Douban search results.",
-                  )}
-                </p>
-                <p>
-                  <strong>{t("防限流机制", "Rate Limit Protection")}</strong>：
-                  {t(
-                    "4 个 Edge UA 轮换；同域名请求按域名串行并保持最小间隔（默认 800ms，search.douban.com 放宽到 200ms）；图片请求不参与节流；403/418 重试 2 次并递增冷却 5s→10s→15s。",
-                    "4 Edge UAs rotated; per-domain serialized requests with a minimum gap (800ms default, 200ms for search.douban.com); image requests skip throttling; 2 retries on 403/418 with escalating cooldown 5s→10s→15s.",
-                  )}
-                </p>
-              </div>
-            </details>
-            <details>
-              <summary>{t("数据存储", "Data Storage")}</summary>
-              <div className="tech-body">
-                <p>
-                  <strong>{t("游客模式", "Guest mode")}</strong>：
-                  {t(
-                    "所有数据存储在浏览器 localStorage，不离开设备。",
-                    "All data in browser localStorage, never leaves the device.",
-                  )}
-                </p>
-                <p>
-                  <strong>{t("登录用户", "Signed-in users")}</strong>：
-                  {t(
-                    "画像和云端清单存储在 Cloudflare D1（SQLite），Token 有效期 30 天。画像变更自动防抖同步，切到后台或关闭页面时使用 keepalive 确保最后保存。",
-                    "Profiles and cloud lists stored in Cloudflare D1 (SQLite), 30-day token. Profile changes auto-debounced, with keepalive sync on page hide/close.",
-                  )}
-                </p>
-                <p>
-                  <strong>{t("分享链接", "Share links")}</strong>：
-                  {t(
-                    "统一走服务端 12 位短码（需要 D1）。旧版把画像压缩后内联在 URL 里的链接仍可打开，由前端 fflate 解压读取。",
-                    "Served as a 12-character server-side code (requires D1). Older links that inline a compressed profile in the URL still open, decoded client-side with fflate.",
-                  )}
-                </p>
-                <p>
-                  <strong>{t("离线与缓存", "Offline & cache")}</strong>：
-                  {t(
-                    "构建产物由 Service Worker 预缓存，装到桌面或主屏幕后断网也能打开访问过的页面；海报与简介另有一层服务端缓存，可在顶栏齿轮里按类型手动清除。",
-                    "Build assets are precached by a Service Worker, so an installed copy can open visited pages while offline. Posters and intros sit behind a separate server-side cache that can be cleared by type from the gear menu.",
-                  )}
-                </p>
-              </div>
-            </details>
-          </div>
-          <div className="guide-modal-footer">
-            <a
-              className="button secondary"
-              href="https://github.com/tripodxu/film-sort"
-              target="_blank"
-              rel="noopener noreferrer"
-              style={{ textDecoration: "none" }}
-            >
-              GitHub
-            </a>
-            <div className="u-spacer" />
-            <button className="button primary" onClick={() => setShowTech(false)}>
-              {t("关闭", "Close")}
-            </button>
-          </div>
-        </Modal>
+        <ErrorBoundary fallback={null}>
+          <Suspense fallback={null}>
+            <TechModal t={t} onClose={() => setShowTech(false)} />
+          </Suspense>
+        </ErrorBoundary>
       )}
     </div>
   );
