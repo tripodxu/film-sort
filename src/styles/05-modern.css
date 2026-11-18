@@ -1,7 +1,7 @@
 /* ===== Modern overhaul (default theme only) =====
    Quiet Archival Modernism：仅默认 modern 主题生效，其余 data-theme 基线不动。
-   去 AI 感减法：移除多层高饱和漂浮彩团、按钮/卡片斜切扫光、3D 卡片摇晃与大范围荧光外发光，
-   保留克制的环境漫反射、View Transitions 跨视图过渡、滚动进度条与 1px 边框微亮交互。 */
+   尺寸、间距与定位与基础主题（00-base.css）完全对齐，消除切换主题时的版面跳变；
+   仅提供克制的环境漫反射、View Transitions 跨视图过渡、滚动进度条与 1px 边框微亮交互。 */
 :root:not([data-theme]){
   --m-card-surface:var(--surface);
   --m-glow:0 0 0 1px var(--line),var(--ev-2);
@@ -21,20 +21,11 @@
 :root:not([data-theme]) .md-grain{position:absolute;inset:0;opacity:.025;
   background-image:repeating-linear-gradient(45deg,color-mix(in srgb,var(--text) 60%,transparent) 0 1px,transparent 1px 5px);mix-blend-mode:overlay}
 
-/* Hero 排版：左对齐文档流。 */
-:root:not([data-theme]) .orb-hero-inner{display:block;padding-top:58px;animation:md-fade-up .55s var(--ease-out) both}
-:root:not([data-theme]) .home-heading{display:block;max-width:640px;padding:0;animation:md-fade-up .65s var(--ease-out) .06s both}
-:root:not([data-theme]) .home-heading>div{display:block;width:100%;min-width:0}
-:root:not([data-theme]) .identity{position:static;flex:0 0 auto;width:auto;max-width:none;align-self:flex-start;margin:0 0 24px;padding:6px 10px;font-size:12px;border-radius:var(--r-sm)}
-:root:not([data-theme]) .home-actions{position:static;flex:0 0 auto;width:auto;max-width:none;align-self:flex-start;margin-top:32px;gap:8px;padding:4px;border-radius:var(--r-sm);animation:md-fade-up .65s var(--ease-out) .18s both}
-:root:not([data-theme]) .orb-index{position:absolute;right:0;bottom:40px;top:auto;transform:none;color:color-mix(in srgb,var(--text) 40%,transparent)}
-
-/* 标题：无衬线几何报头 + 人文衬线副标 */
-:root:not([data-theme]) .home-heading h1{display:block;font-size:clamp(58px,8.4vw,86px);line-height:.88;letter-spacing:-.025em;font-weight:600;color:var(--text)}
-:root:not([data-theme]) .home-heading h1>span{display:inline;margin:0;font:inherit;color:var(--accent-2);background:none;-webkit-text-fill-color:currentColor;font-style:normal}
-:root:not([data-theme]) .home-heading h1>small{color:var(--text-2);font-family:var(--font-serif);font-size:clamp(17px,2vw,21px);letter-spacing:.01em;margin-top:18px}
-:root:not([data-theme]) .home-heading p{margin-top:24px;font-size:14.5px;line-height:1.75;color:var(--text-2);max-width:400px}
-:root:not([data-theme]) .home-heading .eyebrow{display:inline-flex;align-items:center;font-family:var(--font-mono);font-size:11px;letter-spacing:var(--ls-wide);color:var(--text-3);text-transform:uppercase}
+/* Hero 入场动效与字体风格（不改尺寸、定位与留白，保持与其它主题一致） */
+:root:not([data-theme]) .orb-hero-inner{animation:md-fade-up .55s var(--ease-out) both}
+:root:not([data-theme]) .home-heading{animation:md-fade-up .65s var(--ease-out) .06s both}
+:root:not([data-theme]) .home-heading h1>small{color:var(--text-2);font-family:var(--font-serif)}
+:root:not([data-theme]) .home-heading .eyebrow{font-family:var(--font-mono);letter-spacing:var(--ls-wide);color:var(--text-3);text-transform:uppercase}
 :root:not([data-theme]) .home-heading h1,:root:not([data-theme]) .home-heading p,:root:not([data-theme]) .home-heading .eyebrow{animation-name:md-fade-up}
 @keyframes md-fade-up{from{opacity:0;translate:0 12px}to{opacity:1;translate:0 0}}
 
@@ -59,15 +50,13 @@
 /* ---------- 顶部栏：滚动响应 ---------- */
 :root:not([data-theme]) .topbar{background:color-mix(in srgb,var(--bg) 72%,transparent);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);border-color:color-mix(in srgb,var(--text) 10%,transparent);transition:height var(--dur-2) var(--ease-out),background var(--dur-2) var(--ease-out),border-color var(--dur-2) var(--ease-out)}
 :root:not([data-theme]) .topbar.scrolled{height:64px;background:color-mix(in srgb,var(--bg) 88%,transparent);border-color:color-mix(in srgb,var(--text) 14%,transparent)}
-:root:not([data-theme]) .topbar.scrolled .wordmark{font-size:17px}
-:root:not([data-theme]) .topbar nav button{font-size:13px;font-weight:500;transition:color var(--dur-1) var(--ease-out)}
+:root:not([data-theme]) .topbar nav button{font-weight:500;transition:color var(--dur-1) var(--ease-out)}
 :root:not([data-theme]) .topbar nav button:not(.active):hover{color:var(--text)}
 :root:not([data-theme]) .topbar nav button.active:after{animation:md-underline-in var(--dur-2) var(--ease-out)}
 @keyframes md-underline-in{from{transform:scaleX(0)}to{transform:scaleX(1)}}
-:root:not([data-theme]) .wordmark{font-size:19px;letter-spacing:.01em;transition:font-size var(--dur-2) var(--ease-out)}
 
-/* ---------- 按钮：克制亚光质感，移除斜切扫光与追光 ---------- */
-:root:not([data-theme]) .button{position:relative;border-radius:var(--r-sm);transition:transform var(--dur-1) var(--ease-out),border-color var(--dur-1) var(--ease-out),background var(--dur-2) var(--ease-out),color var(--dur-1) var(--ease-out)}
+/* ---------- 按钮：克制亚光质感 ---------- */
+:root:not([data-theme]) .button{transition:transform var(--dur-1) var(--ease-out),border-color var(--dur-1) var(--ease-out),background var(--dur-2) var(--ease-out),color var(--dur-1) var(--ease-out)}
 :root:not([data-theme]) .button:active:not(:disabled){transform:scale(.98)}
 :root:not([data-theme]) .button.primary{background:var(--accent);color:var(--accent-ink);box-shadow:none}
 :root:not([data-theme]) .button.primary:hover{background:color-mix(in srgb,var(--accent) 88%,white)}
@@ -75,42 +64,17 @@
 :root:not([data-theme]) .button.secondary:hover{border-color:color-mix(in srgb,var(--text) 36%,transparent);background:color-mix(in srgb,var(--text) 8%,transparent);color:var(--text)}
 :root:not([data-theme]) .button.quiet{color:var(--text-2)}
 
-/* ---------- 维度卡：静谧档案展柜，移除 3D 摇晃与荧光外发光 ---------- */
-:root:not([data-theme]) .medium-section .medium-grid{display:flex;flex-wrap:wrap;gap:14px}
-:root:not([data-theme]) .medium-section .medium-item{position:relative;flex:1 1 250px;min-height:146px;padding:22px 22px 20px;border:1px solid var(--line);border-radius:var(--r-md);overflow:hidden;
+/* ---------- 维度卡：保持与其它主题完全一致的尺寸与占位，仅叠加质感与微抬升 ---------- */
+:root:not([data-theme]) .medium-section .medium-item{
   background:var(--m-card-surface);
   transition:translate var(--dur-2) var(--ease-out),box-shadow var(--dur-2) var(--ease-out),border-color var(--dur-2) var(--ease-out),background var(--dur-2) var(--ease-out)}
 :root:not([data-theme]) .medium-section .medium-item:hover,:root:not([data-theme]) .medium-section .medium-item:focus-visible{translate:0 -2px;box-shadow:var(--m-glow-hover);border-color:color-mix(in srgb,var(--text) 26%,transparent);background:var(--surface-2)}
-:root:not([data-theme]) .medium-section .medium-item strong{font-size:19px;letter-spacing:.01em}
-:root:not([data-theme]) .medium-section .medium-item small{color:var(--text-3)}
-:root:not([data-theme]) .medium-section .medium-item>svg:last-child{position:absolute;right:18px;bottom:18px;color:var(--text-4);transition:transform var(--dur-2) var(--ease-out),color var(--dur-2)}
+:root:not([data-theme]) .medium-section .medium-item>svg:last-child{transition:transform var(--dur-2) var(--ease-out),color var(--dur-2)}
 :root:not([data-theme]) .medium-section .medium-item:hover>svg:last-child{transform:translateX(4px);color:var(--accent)}
-:root:not([data-theme]) .medium-section .medium-grid>.medium-item>.medium-number{font-family:var(--font-mono);font-size:28px;font-weight:600;color:color-mix(in srgb,var(--text) 18%,transparent);transition:color var(--dur-2)}
-:root:not([data-theme]) .medium-section .medium-item:hover .medium-number{color:color-mix(in srgb,var(--text) 38%,transparent)}
 
-/* 章节标题 */
-:root:not([data-theme]) .section-heading h2{font-size:var(--t-h2);letter-spacing:.01em}
-:root:not([data-theme]) .section-heading>span{font-family:var(--font-mono);font-size:11px;color:var(--text-4);letter-spacing:var(--ls-mid)}
-
-/* 入场编排：卡片 stagger + hero 三段上升 */
+/* 入场编排：卡片 stagger */
 @keyframes md-card-in{from{opacity:0;translate:0 10px;scale:.97}to{opacity:1;translate:0 0;scale:1}}
 :root:not([data-theme]) .medium-section .medium-item{animation:md-card-in .5s var(--ease-out) backwards}
 :root:not([data-theme]) .medium-section .medium-item:nth-child(2){animation-delay:var(--dur-stagger)}
 :root:not([data-theme]) .medium-section .medium-item:nth-child(3){animation-delay:calc(var(--dur-stagger) * 2)}
 :root:not([data-theme]) .medium-section .medium-item:nth-child(4){animation-delay:calc(var(--dur-stagger) * 3)}
-
-/* ---------- 响应式 ---------- */
-@media(max-width:800px){
-  :root:not([data-theme]) .orb-hero-inner{padding-top:52px}
-  :root:not([data-theme]) .home-heading h1{font-size:clamp(48px,13vw,64px)}
-  :root:not([data-theme]) .home-actions{margin-top:24px}
-  :root:not([data-theme]) .topbar.scrolled{height:56px}
-  :root:not([data-theme]) .medium-section .medium-item{flex:1 1 calc(50% - 5px);min-height:122px;padding:16px 16px 14px;border-radius:var(--r-md)}
-  :root:not([data-theme]) .medium-section .medium-item strong{font-size:16px}
-  :root:not([data-theme]) .medium-section .medium-grid>.medium-item>.medium-number{font-size:22px}
-  :root:not([data-theme]) .medium-section .medium-item:hover{translate:0 -2px}
-}
-@media(max-width:540px){
-  :root:not([data-theme]) .medium-section .medium-item{flex:none;min-height:64px;display:grid;grid-template-columns:auto 1fr auto;grid-template-rows:auto auto;align-items:center;gap:4px 10px;padding:10px 14px;border-radius:var(--r-sm)}
-  :root:not([data-theme]) .medium-section .medium-grid>.medium-item>.medium-number{display:none}
-}
