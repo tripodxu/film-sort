@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   ArrowRight,
   Bookmark,
@@ -200,12 +200,12 @@ export function SourceView({
     // eslint-disable-next-line react-hooks/exhaustive-deps -- 轮询器按 qr 状态重建；loadMyPlaylists 在 confirmed 分支内显式调用
   }, [qrOpen, qrUnikey, qrState, accountToken]);
 
+  const qrDeadlineRef = useRef(0);
   // 有效期倒计时：归零自动换码（上限 2 次，防风控加重）
   useEffect(() => {
-    if (!qrOpen || qrState !== "waiting" || !qrImage) return;
-    const deadline = Date.now() + qrLeft * 1000;
+    if (!qrOpen || qrState !== "waiting" || !qrImage || qrDeadlineRef.current <= 0) return;
     const timer = setInterval(() => {
-      const left = Math.max(0, Math.round((deadline - Date.now()) / 1000));
+      const left = Math.max(0, Math.round((qrDeadlineRef.current - Date.now()) / 1000));
       setQrLeft(left);
       if (left === 0) {
         clearInterval(timer);
@@ -213,8 +213,8 @@ export function SourceView({
       }
     }, 1000);
     return () => clearInterval(timer);
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- 倒计时按 qr 状态重建；autoRefreshQr 是渲染期函数身份，进依赖会反复重建定时器
-  }, [qrOpen, qrState, qrImage, qrLeft]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- 倒计时按 qr 打开/图片就绪重建，deadline 存 ref 不因每秒递减重建定时器
+  }, [qrOpen, qrState, qrImage]);
 
   async function issueQr(_refreshed: number) {
     setQrImage("");
@@ -222,6 +222,7 @@ export function SourceView({
     setQrState("waiting");
     setQrError("");
     setQrScanned(null);
+    qrDeadlineRef.current = 0;
     setQrLeft(0);
     try {
       const response = await fetch("/api/netease/qr/issue", { headers: AUTH(accountToken) });
@@ -230,7 +231,9 @@ export function SourceView({
       const QRCode = await import("qrcode");
       setQrImage(await QRCode.default.toDataURL(data.qr_value, { width: 300, margin: 1 }));
       setQrUnikey(data.unikey);
-      setQrLeft(data.ttl ?? 150);
+      const ttl = data.ttl ?? 150;
+      qrDeadlineRef.current = Date.now() + ttl * 1000;
+      setQrLeft(ttl);
     } catch {
       setQrState("expired");
     }
@@ -404,11 +407,11 @@ export function SourceView({
     // eslint-disable-next-line react-hooks/exhaustive-deps -- 轮询器按 dbQr 状态重建；checkDbStatus/setNotice 是渲染期身份
   }, [dbQrOpen, dbQrCode, dbQrState, accountToken]);
 
+  const dbQrDeadlineRef = useRef(0);
   useEffect(() => {
-    if (!dbQrOpen || dbQrState !== "waiting" || !dbQrImage) return;
-    const deadline = Date.now() + dbQrLeft * 1000;
+    if (!dbQrOpen || dbQrState !== "waiting" || !dbQrImage || dbQrDeadlineRef.current <= 0) return;
     const timer = setInterval(() => {
-      const left = Math.max(0, Math.round((deadline - Date.now()) / 1000));
+      const left = Math.max(0, Math.round((dbQrDeadlineRef.current - Date.now()) / 1000));
       setDbQrLeft(left);
       if (left === 0) {
         clearInterval(timer);
@@ -416,8 +419,8 @@ export function SourceView({
       }
     }, 1000);
     return () => clearInterval(timer);
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- 倒计时按 dbQr 状态重建；autoRefreshDbQr 是渲染期函数身份
-  }, [dbQrOpen, dbQrState, dbQrImage, dbQrLeft]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- 倒计时按 dbQr 打开/图片就绪重建，deadline 存 ref 不因每秒递减重建定时器
+  }, [dbQrOpen, dbQrState, dbQrImage]);
 
   async function checkDbStatus() {
     try {
@@ -438,6 +441,7 @@ export function SourceView({
     setDbQrCode("");
     setDbQrState("waiting");
     setDbQrError("");
+    dbQrDeadlineRef.current = 0;
     setDbQrLeft(0);
     try {
       const response = await fetch("/api/douban/qr/issue", { headers: AUTH(accountToken) });
@@ -445,7 +449,9 @@ export function SourceView({
       if (!data.code || !data.qr_image) throw new Error();
       setDbQrImage(data.qr_image);
       setDbQrCode(data.code);
-      setDbQrLeft(data.ttl ?? 120);
+      const ttl = data.ttl ?? 120;
+      dbQrDeadlineRef.current = Date.now() + ttl * 1000;
+      setDbQrLeft(ttl);
     } catch {
       setDbQrState("expired");
     }

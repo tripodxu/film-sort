@@ -44,7 +44,7 @@ export function ExpandableNote({
         ...style,
       }}
     >
-      📝 {isLong ? text.slice(0, maxLength) + "…" : text}
+      <span aria-hidden="true">📝</span> {isLong ? text.slice(0, maxLength) + "…" : text}
       {interactive && (
         <span style={{ fontSize: 11, marginLeft: 4, textDecoration: "underline" }}>查看全文</span>
       )}

@@ -1,5 +1,9 @@
 import { useEffect, useRef, type ReactNode } from "react";
 
+// 全局模态栈：多层模态同时打开时（如扫码弹窗内点开图文帮助），只有栈顶 trap 响应 Escape 与 Tab，
+// 防止按一次 Esc 同时关掉两层弹窗或底层弹窗把焦点抢走。
+const trapStack: HTMLDivElement[] = [];
+
 export function FocusTrap({ children, onEscape }: { children: ReactNode; onEscape?: () => void }) {
   const ref = useRef<HTMLDivElement>(null);
   // onEscape 走 ref 桥接：调用方（App）传的多是内联箭头，每次渲染换新身份。
@@ -18,6 +22,7 @@ export function FocusTrap({ children, onEscape }: { children: ReactNode; onEscap
     const previouslyFocused = document.activeElement as HTMLElement | null;
 
     function handleKeyDown(e: KeyboardEvent) {
+      if (trapStack[trapStack.length - 1] !== el) return;
       // 监听挂 document 而非 el：焦点落在 trap 外（如点击了非按钮区域后
       // activeElement=body）时，挂在 el 上的监听收不到 keydown，圈就漏了。
       if (e.key === "Escape" && onEscapeRef.current) {
@@ -27,9 +32,11 @@ export function FocusTrap({ children, onEscape }: { children: ReactNode; onEscap
       }
       if (e.key !== "Tab") return;
 
-      const focusable = el!.querySelectorAll<HTMLElement>(
-        'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
-      );
+      const focusable = Array.from(
+        el!.querySelectorAll<HTMLElement>(
+          'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+        ),
+      ).filter((node) => node.offsetParent !== null || node === document.activeElement);
       if (focusable.length === 0) return;
 
       const first = focusable[0];
@@ -71,15 +78,18 @@ export function FocusTrap({ children, onEscape }: { children: ReactNode; onEscap
       dialog.scrollTop = 0;
     } else {
       const firstFocusable = el.querySelector<HTMLElement>(
-        'button:not([disabled]), [href], input:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+        'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
       );
       firstFocusable?.focus();
     }
 
+    trapStack.push(el);
     document.addEventListener("keydown", handleKeyDown);
     return () => {
       document.removeEventListener("keydown", handleKeyDown);
       if (previouslyFocused && previouslyFocused.isConnected) previouslyFocused.focus();
+      const idx = trapStack.lastIndexOf(el);
+      if (idx >= 0) trapStack.splice(idx, 1);
     };
   }, []);
 

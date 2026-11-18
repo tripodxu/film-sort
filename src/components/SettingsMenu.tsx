@@ -40,13 +40,20 @@ export function SettingsMenu({
   const aiConfig = readAiConfig();
 
   useEffect(() => {
-    // 菜单打开期间才需要监听外部点击（此前写反成关闭期挂载=永不生效）
+    // 菜单打开期间才需要监听外部点击与 Escape（此前写反成关闭期挂载=永不生效）
     if (!open) return;
     const onDown = (e: MouseEvent) => {
       if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
     };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setOpen(false);
+    };
     document.addEventListener("mousedown", onDown);
-    return () => document.removeEventListener("mousedown", onDown);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onDown);
+      document.removeEventListener("keydown", onKey);
+    };
   }, [open]);
 
   const t = (zhText: string, en: string) => (zh ? zhText : en);

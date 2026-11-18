@@ -50,6 +50,7 @@ const TYPE_BY_KIND = (kind: MediaKind): string => mediaTypeForKind(kind) ?? "mov
 interface BatchEntry {
   work: Artwork;
   kind: MediaKind;
+  retry?: boolean;
   resolveBatch: (urls: string[], outcome: PosterOutcome | undefined) => void;
   /** 本键的服务端分类（found / absent / throttled）。空格子靠它分三态。 */
   outcome?: PosterOutcome;
@@ -59,8 +60,6 @@ let batchTimer: ReturnType<typeof setTimeout> | null = null;
 const batchQueue: BatchEntry[] = [];
 /** 本次页面加载是否已经发过第一批请求（决定是否带 retry）。 */
 let firstBatchDispatched = false;
-/** 用户点了「重试」：这一批必须带 retry=true，无论它是不是本次加载的第一批。 */
-let retryForced = false;
 
 /**
  * 服务端缓存键的本地等价物，仅在服务端未回显 keys 时作为兜底。
@@ -131,9 +130,8 @@ async function dispatchBatch(batch: BatchEntry[]): Promise<void> {
   // 不必碰运气等满 15 秒的短冷却窗口。
   // 用户在界面上点了「重试」时同样必须带 retry——否则按钮只是「再问一次」，
   // 而服务端会用 15 秒负缓存原样回上一轮的 throttled，点多少次都是一样的空。
-  const retry = retryForced || !firstBatchDispatched;
+  const retry = batch.some((entry) => entry.retry) || !firstBatchDispatched;
   firstBatchDispatched = true;
-  retryForced = false;
 
   let results: Record<string, string[]> = {};
   let keys: string[] | null = null;
@@ -244,14 +242,12 @@ function resolve(work: Artwork, kind: MediaKind, opts?: { retry?: boolean }): Pr
     batchQueue.push({
       work,
       kind,
+      retry: opts?.retry === true,
       resolveBatch: (urls, batchOutcome) => {
         outcome = batchOutcome;
         resolveBatch(urls);
       },
     });
-    // 用户点了「重试」：空结果本来不进 resolvedPosters，所以这里一定走不到
-    // 命中缓存的短路分支，标记会一路带到 dispatchBatch 的 retry 判定。
-    if (opts?.retry === true) retryForced = true;
     if (batchTimer === null) batchTimer = setTimeout(flushBatch, FLUSH_DELAY_MS);
   }).then((urls) => {
     // 失败不再被页面会话记住：空结果不写内存副本、也不写 sessionStorage，
@@ -453,7 +449,7 @@ export function Poster({
               {readRetryHint()}
             </p>
           )}
-          {retryable && (
+          {retryable && large && (
             <button
               type="button"
               className="cover-retry"

@@ -147,7 +147,8 @@ export function SetupView({
               value={topN}
               onChange={(event) => {
                 const v = Number(event.target.value);
-                if (v >= 1) setTopN(v);
+                const max = Math.max(1, selected.length);
+                if (Number.isFinite(v) && v >= 1) setTopN(Math.min(Math.floor(v), max));
               }}
               style={{ width: 64, minHeight: 36, textAlign: "center", padding: "4px 6px" }}
             />

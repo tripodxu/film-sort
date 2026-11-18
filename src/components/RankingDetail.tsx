@@ -53,11 +53,18 @@ export function RankingDetail({
   const rankingNote = notes[`ranking:${kind}:${collectionTitle}`]?.trim();
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
   const sentinelRef = useRef<HTMLDivElement | null>(null);
+  const hitRowRef = useRef<HTMLLIElement | null>(null);
 
   const hitIndex = useMemo(
     () => (highlightId ? items.findIndex((work) => work.id === highlightId) : -1),
     [highlightId, items],
   );
+
+  useEffect(() => {
+    if (hitIndex >= 0 && hitRowRef.current) {
+      hitRowRef.current.scrollIntoView({ block: "center", behavior: "auto" });
+    }
+  }, [hitIndex, highlightId, collectionTitle, kind]);
 
   // 切换榜单（比较界面会连续渲染多份榜单）时回到首屏，不沿用上一份的展开进度。
   // 依赖刻意不含 items：父组件每次渲染都可能给出新的数组引用，否则会不断复位。
@@ -118,7 +125,11 @@ export function RankingDetail({
           const isHit = highlightId === work.id;
           const workNote = notes[`work:${kind}:${work.id}`]?.trim();
           return (
-            <li key={work.id} className={isHit ? "ranking-hit" : undefined}>
+            <li
+              key={work.id}
+              ref={isHit ? hitRowRef : undefined}
+              className={isHit ? "ranking-hit" : undefined}
+            >
               <span className="row-number" style={isHit ? { color: "var(--accent)" } : undefined}>
                 {String(rank).padStart(2, "0")}
               </span>

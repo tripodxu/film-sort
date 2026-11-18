@@ -1548,7 +1548,7 @@ export default function App() {
           </button>
           {profile && (
             <button
-              className={view === "profile" ? "active" : ""}
+              className={view === "profile" ? "active nav-profile-only" : "nav-profile-only"}
               onClick={() => navigateTo("profile")}
             >
               {t("我的文化索引", "My Index")}

@@ -12,13 +12,7 @@ export function IconButton({
   disabled?: boolean;
 }) {
   return (
-    <button
-      className="icon-button"
-      aria-label={title}
-      title={title}
-      onClick={onClick}
-      disabled={disabled}
-    >
+    <button className="icon-button" aria-label={title} onClick={onClick} disabled={disabled}>
       {children}
       <span className="tooltip" role="tooltip">
         {title}

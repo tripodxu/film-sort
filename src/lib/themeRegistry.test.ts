@@ -1,5 +1,11 @@
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { parseThemePackage, THEME_PACKAGE_LIMIT, type ParseResult } from "./themeRegistry";
+import {
+  isKnownThemeVar,
+  parseThemePackage,
+  THEME_PACKAGE_LIMIT,
+  type ParseResult,
+} from "./themeRegistry";
 
 /** 窄化断言：result 必须失败且 error 等于期望值（可选校验 detail 包含）。 */
 function expectFail(result: ParseResult, error: string, detailContains?: string) {
@@ -117,5 +123,13 @@ describe("parseThemePackage 校验器", () => {
       `/*! art-rank-theme {"id":"dup","name":{"zh":"x","en":"x"},"dot":["#000","#fff"]} */\n[data-theme="dup"]{--bg:#000;--bg:#111;${good}}`,
     );
     expectFail(result, "value_invalid");
+  });
+
+  it("KNOWN_VARS 覆盖 styles.css 中 :root 声明的所有 CSS 变量（含 --shadow-tint / --ev-*）", () => {
+    const css = readFileSync(new URL("../styles.css", import.meta.url), "utf8");
+    const rootBlocks = [...css.matchAll(/:root\{([^}]*)\}/g)].map((m) => m[1]).join(";");
+    const rootVars = [...new Set([...rootBlocks.matchAll(/(--[a-z0-9-]+):/g)].map((m) => m[1]))];
+    const missing = rootVars.filter((v) => !isKnownThemeVar(v));
+    expect(missing).toEqual([]);
   });
 });

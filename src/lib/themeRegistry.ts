@@ -37,7 +37,7 @@ const REQUIRED_VARS = [
   "--toast-ink",
 ] as const;
 
-/** 变量名白名单 = :root 全集（77 个）。未知 --x 一律拒绝。 */
+/** 变量名白名单 = :root 全集。未知 --x 一律拒绝。 */
 const KNOWN_VARS = new Set<string>([
   "--accent",
   "--accent-2",
@@ -45,12 +45,19 @@ const KNOWN_VARS = new Set<string>([
   "--bg",
   "--book",
   "--border-2",
+  "--card-min",
   "--danger",
   "--danger-2",
   "--dur-1",
   "--dur-2",
   "--dur-3",
+  "--dur-pulse",
+  "--dur-stagger",
   "--ease-out",
+  "--ease-settle",
+  "--ev-1",
+  "--ev-2",
+  "--ev-3",
   "--film",
   "--font-body",
   "--font-display",
@@ -69,6 +76,8 @@ const KNOWN_VARS = new Set<string>([
   "--ok",
   "--other",
   "--pink",
+  "--qr-bg",
+  "--qr-size",
   "--r-lg",
   "--r-md",
   "--r-pill",
@@ -80,6 +89,7 @@ const KNOWN_VARS = new Set<string>([
   "--scrim",
   "--shade-deep",
   "--shade-soft",
+  "--shadow-tint",
   "--sp-1",
   "--sp-2",
   "--sp-3",
@@ -105,6 +115,8 @@ const KNOWN_VARS = new Set<string>([
   "--t-meta",
   "--t-micro",
   "--t-small",
+  "--tap-icon",
+  "--tap-min",
   "--text",
   "--text-2",
   "--text-3",
@@ -117,6 +129,10 @@ const KNOWN_VARS = new Set<string>([
   "--warn",
   "--yellow",
 ]);
+
+export function isKnownThemeVar(name: string): boolean {
+  return KNOWN_VARS.has(name);
+}
 
 /** 值的字符白名单：颜色/字体栈/圆角/时长的合法字符集。没有 ; { } @ < > \ 和 url。 */
 const VALUE_ALLOWED = /^[a-zA-Z0-9 ,.%()'"#/+-]*$/;

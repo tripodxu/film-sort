@@ -824,13 +824,12 @@ describe("空封面三态绊线（PLAN-EMPTY-COVER-STATE）", () => {
     expect(css).toMatch(/\.collection-row \.cover-retry\{display:none\}/);
   });
 
-  it("「重试」必须真的重试：forceRetry 要走到 dispatchBatch 的 retry 判定", () => {
-    // 这是本轮最容易做假的一处：dispatchBatch 只在**本次加载的第一批**带 retry，
-    // 所以按钮若只调 resolve()，服务端会用 15 秒负缓存原样回上一轮的结果，
-    // 用户点多少次看到的都是同一个空格子——按钮存在但没有作用。
-    expect(posterCode).toContain("const retry = retryForced || !firstBatchDispatched");
+  it("「重试」必须真的重试：逐条目 retry 标记要走到 dispatchBatch 的 retry 判定", () => {
+    expect(posterCode).toContain(
+      "const retry = batch.some((entry) => entry.retry) || !firstBatchDispatched",
+    );
     expect(posterCode).toContain("void resolve(work, kind, { retry: true })");
-    expect(posterCode).toContain("retryForced = true");
+    expect(posterCode).toContain("retry: opts?.retry === true");
   });
 
   it("空态判据喂的是过滤掉加载失败之后的候选（拿到地址但没画出来 ≠ 上游没有）", () => {
@@ -983,7 +982,7 @@ describe("懒加载失败与迟到响应守卫（回归审查 2026-10）", () =>
     // S5-2（T-20261024-04）起清理函数还负责焦点归还（previouslyFocused），
     // 绊线随之升级为锁定新形状：先摘监听、再归还焦点。
     expect(trap).toMatch(
-      /document\.addEventListener\("keydown", handleKeyDown\);[\s\S]{0,200}return \(\) =>\s*\{\s*document\.removeEventListener\("keydown", handleKeyDown\);\s*if \(previouslyFocused && previouslyFocused\.isConnected\) previouslyFocused\.focus\(\);\s*\};\s*\}, \[\]\);/,
+      /document\.addEventListener\("keydown", handleKeyDown\);[\s\S]{0,200}return \(\) =>\s*\{\s*document\.removeEventListener\("keydown", handleKeyDown\);\s*if \(previouslyFocused && previouslyFocused\.isConnected\) previouslyFocused\.focus\(\);[\s\S]{0,120}\};\s*\}, \[\]\);/,
     );
     // 焦点在 trap 外时 Tab 必须圈回来（el.contains 守卫不许被摘）
     expect(trap).toMatch(/!el!\.contains\(document\.activeElement\)/);
