@@ -654,9 +654,10 @@ describe("静态资源缓存策略绊线（PLAN-ASSET-CACHE）", () => {
 
   it("withSecurityHeaders 里绝不能出现 cache-control", () => {
     // 一旦把缓存头塞进安全头表，所有 json() 响应都会被钉成一年 —— API 数据会冻住。
-    const start = code.indexOf("function withSecurityHeaders");
+    const httpCode = readFileSync("worker/http.ts", "utf8");
+    const start = httpCode.indexOf("function withSecurityHeaders");
     expect(start).toBeGreaterThan(-1);
-    const body = code.slice(start, code.indexOf("}", code.indexOf("return result;", start)));
+    const body = httpCode.slice(start, httpCode.indexOf("\n}", start) + 2);
     expect(body).not.toContain("cache-control");
     expect(body).toContain("SECURITY_HEADERS");
   });
@@ -795,15 +796,15 @@ describe("消歧记忆绊线（PLAN-COVER-MEMORY）", () => {
  * 渲染成同一个静默图标。这三处一旦回退，用户就永远卡在空格子。
  */
 describe("空封面三态绊线（PLAN-EMPTY-COVER-STATE）", () => {
-  const workerIndex = readFileSync("worker/index.ts", "utf8");
+  const mediaRoutes = readFileSync("worker/routes/mediaRoutes.ts", "utf8");
   const poster = readFileSync("src/components/Poster.tsx", "utf8");
   const stripComments = (source: string) =>
     source.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^[^\S\n]*\/\/.*$/gm, "");
   // Poster 的三态断言一律扫**剥掉注释后**的源码：否则我写的解释性注释
   // 本身就会把断言喂绿（PITFALLS：断言被注释喂绿 = 假绿）。
   const posterCode = stripComments(poster);
-  const batchRoute = stripComments(workerIndex).slice(
-    stripComments(workerIndex).indexOf("/api/posters/batch"),
+  const batchRoute = stripComments(mediaRoutes).slice(
+    stripComments(mediaRoutes).indexOf("/api/posters/batch"),
   );
 
   it("批次响应必须带上服务端算好的 outcomes（不发出去就没有三态）", () => {

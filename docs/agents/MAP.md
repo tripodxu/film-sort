@@ -10,11 +10,11 @@
 
 | 我想找… | 去这里 |
 |---------|--------|
-| 某个 API 端点怎么实现的 | `worker/index.ts` 的 `route()` 路由链（`grep -n 'url.pathname ===' worker/index.ts`） |
-| 某路由的业务逻辑 | 按前缀找对应模块：`/api/plaza/*`→`worker/plaza.ts`、`/api/netease/*`→`worker/netease.ts`、`/api/douban/*`→`worker/douban.ts`+`doubanlist.ts`、`/api/import/*`→`worker/import.ts`、`/api/account/*`→`worker/account.ts` |
+| 某个 API 端点怎么实现的 | `worker/index.ts` 的 `route()` 路由链 + `worker/routes/*.ts`（`admin.ts`、`mediaRoutes.ts`、`aiRoutes.ts`、`qrRoutes.ts`、`shareRoutes.ts`） |
+| 某路由的业务逻辑 | 按域找路由与模块：`worker/routes/*.ts`、`worker/http.ts`（公共 HTTP/校验/限流工具）、`worker/plaza.ts`、`worker/netease.ts`、`worker/douban.ts`、`worker/import.ts`、`worker/account.ts` |
 | 前端页面 | `src/views/*.tsx`（路由在 `src/lib/useRouter.ts` + `src/App.tsx`） |
-| 全局状态 / 事件编排 | `src/App.tsx`（2730 行，改动前先确认是否被 `useAuth` / `useSorting` / `useRouter` 接管） |
-| 样式与主题 | `src/styles.css`（约 2238 行，全令牌化）+ `src/styles/atlas.css`（第 12 套内置主题的变量块） |
+| 全局状态 / 事件编排 | `src/App.tsx` + `src/contexts/AppEnvContext.tsx` + `src/components/modals/`（状态由 `useAuth` / `useSorting` / `useProfileStore` / `usePeerCompare` / `useRouter` 接管） |
+| 样式与主题 | `src/styles/`（`00-base.css` .. `05-modern.css` 按级联顺序在 `index.css` 汇入）+ `src/styles/atlas.css`（第 12 套内置主题的变量块）；`src/lib/readStyles.ts` 供测试与脚本读取合并 CSS |
 | 数据库表结构 | `migrations/0001..0029` + `docs/ARCHITECTURE.md` 的 Schema 节 |
 | 「什么能落库」 | `shared/storedItem.ts` —— **唯一出口** |
 | 排序 / 比较算法 | `src/lib/ranking.ts`（1309 行，四模式）+ `src/lib/adaptiveRanking.ts` / `preferenceModel.ts` / `adaptiveQueue.ts` / `compareMetrics.ts` |
@@ -29,8 +29,8 @@
 |---|----------|-------------|
 | §2.1 | 排序 / 比较算法 | `src/lib/ranking.ts`、`src/lib/useSorting.ts` |
 | §2.2 | 前端视图 / 交互 / 路由 | `src/App.tsx`、`src/views/` |
-| §2.3 | 视觉 / 主题 / 响应式 | `src/styles.css`、`src/lib/theme*.ts`、`scripts/ui-*.mjs` |
-| §2.4 | Worker 接口 / 新增 API | `worker/index.ts` + 业务模块 |
+| §2.3 | 视觉 / 主题 / 响应式 | `src/styles/`、`src/lib/theme*.ts`、`scripts/ui-*.mjs` |
+| §2.4 | Worker 接口 / 新增 API | `worker/index.ts` + `worker/http.ts` + `worker/routes/` + 业务模块 |
 | §2.5 | 数据库 / migration | `migrations/`、`shared/` |
 | §2.6 | 外部平台接入（豆瓣/网易云/维基/音乐） | `worker/media.ts` 等 |
 | §2.7 | AI（点评 / Jev / TypeSafe） | `worker/ai.ts`、`worker/typesafe.ts`、`src/lib/aiInsight.ts` |
@@ -85,7 +85,7 @@
 
 | 文件 | 行数 | 职责 |
 |------|------|------|
-| `src/styles.css` | 2238 | 全令牌化样式（677 行含 `var(--` / 226 行含 `color-mix(`，统计口径=按行计数）；圆角 5 档、间距 8px 阶梯、阴影 2 级 |
+| `src/styles/` | 模块化 | `00-base.css` .. `05-modern.css`（由 `src/styles/index.css` 等序汇入，保留严格级联顺序）；`src/styles/atlas.css` 为第 12 套主题 |
 | `src/lib/theme.ts` | 59 | `data-theme` 切换与持久化（THEMES 12 套） |
 | `src/lib/themeRegistry.ts` | 383 | 插拔主题包注册表（规范见 `docs/THEME-PACKS.md`） |
 | `src/lib/layout.ts` | — | `data-layout` 布局模式（与 theme 正交） |
@@ -100,9 +100,9 @@
 
 ### §2.4 Worker 接口 / 新增 API
 
-**路由总表在 `worker/index.ts` 的 `route()` 链里**（用 `grep -n 'url.pathname ===' worker/index.ts` 定位），是一条 `if (url.pathname === ...)` 链。新增端点时：
+**路由总表在 `worker/index.ts` 的 `route()` 链里**，按域分派至 `worker/routes/`（`admin.ts`、`mediaRoutes.ts`、`aiRoutes.ts`、`qrRoutes.ts`、`shareRoutes.ts`；注意 `mediaRoutes` 必须在 `qrRoutes` 前执行）。新增端点时：
 
-1. 在路由链里加分支；
+1. 在对应 `worker/routes/*.ts` 或 `route()` 链里加分支（公共 HTTP/校验/限流工具在 `worker/http.ts`）；
 2. 业务逻辑放独立模块（`worker/<domain>.ts`），保持 `index.ts` 只做路由与编排；
 3. 请求体校验在各业务模块内就近实现（如 `worker/plaza.ts` 的 `plazaRoute`）；**不存在独立的 `payloadGuard.ts` 模块**——`worker/payloadGuard.test.ts` 是「可落库字符串编码出口唯一性」的静态扫描护栏，形状契约另由 `plazaPayload.test.ts` 锁死；
 4. 限流走 `worker/rateWindow.ts`（各桶配额见 `docs/API.md`）；

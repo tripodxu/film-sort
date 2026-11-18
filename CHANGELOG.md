@@ -3,6 +3,18 @@
 > 2026-10-29 三批收口的完整复核记录（发现项、根因、验证、线上回归清单）见
 > [`docs/REVIEW-2026-10-29.md`](docs/REVIEW-2026-10-29.md)。
 
+## 2026-11-18 · 全栈深度重构与性能/可靠性治理（分阶段原子提交）
+
+**背景**：完成全仓深度审计后，按「真缺陷止血 → 构建与测试基座 → 前端解耦与组件化 → 样式与 Worker 模块化 → CI 与文档收口」分步落地重构：
+
+- **Phase 0（`deb84d7` / `bacbedf` / `3ca414c`）**：修复账号 `busy` 状态遮蔽、跨维度跳错榜单、批注云同步缺口、OAuth 双重水合、`useRouter` 首帧闪屏、`FocusTrap` 嵌套栈、`Poster` 嵌套按钮与跨批次重试、Modern 主题特效优先级与 `--surface-1`、删号/重置外键与 `qr_transactions` 清理、边缘缓存 `posters` 代次对齐、广场 `visibility` 校验与画像帖海报、D1 ISO 时间迁移、`sw.js` 缓存策略修正。
+- **Phase 1（`d8bd629`）**：Vite `manualChunks` 独立拆出 `framework` 块、新增 `preloadError` 部署换代自愈、Vitest 独立 `cacheDir`、修复 `dev-smoke`/`ui-contrast`/`ui-shadows`、补齐 `bundleGuard.test.ts` 入口闭包守卫。
+- **Phase 2（`f8dde4f` / `a173178`）**：抽离 `src/data/mediaKinds.ts` 摘除首屏静态榜单种子；统一 `storageKeys.ts`；解除 `theme`/`orbEffects` 循环依赖；`adaptiveRanking` 单步模型缓存；拆分 `AppEnvContext`、`useProfileStore`、`usePeerCompare`、三合一 `useSorting` 子 Hook 与 `src/components/modals/` 懒加载弹窗（主入口 gzip 降至 76.1 kB）。
+- **Phase 3（`b575db4` / `51aea77`）**：`SourceView` 抽 `usePlatformConnect`；`ProfileView`/`PlazaPostView` 共用 `<SortableWorkList>` 与 `PlazaCommentsTree`；打通 `/encounter` ↔ `/depth` 双向跳转；全站 `<Modal>` 收口；将 `styles.css` 等序拆分为 `src/styles/00-base.css` .. `05-modern.css`（打包 CSS 字节完全一致）。
+- **Phase 4（`c59cbec` / `4840253`）**：卸载 `@react-email/components` 替换为纯 HTML 模板；收敛 `wrangler.jsonc` `run_worker_first`（Worker 打包降至 117.3 KiB gzip）；将 `worker/index.ts` 拆分为 `worker/http.ts` 与 `worker/routes/` 五大领域路由模块。
+
+---
+
 ## 2026-11-05 · 全量代码审计 + 逐点优化（10 个独立提交）
 
 **背景**：对当前工作树做一次独立全量复核——机器全量扫描覆盖全部源码文件，

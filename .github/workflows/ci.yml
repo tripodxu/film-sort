@@ -5,6 +5,13 @@ on:
   pull_request:
     branches: [main]
 
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   check:
     runs-on: ubuntu-latest
@@ -21,6 +28,10 @@ jobs:
       # 文档事实门禁：防止已修正的文档漂移复发
       - run: npm run docs:facts
       - run: npm test -- --run
-      - run: npm run build
+      # 类型检查已由 npm run check 完成，这里直接打包前端与 precache
+      - run: npx vite build && node scripts/pwa-precache.mjs
       # 2026-10-30 验收 F1：五道门禁不含「本地 dev 能否启动」，单独冒烟
       - run: npm run dev:smoke
+      # 本地 D1 迁移幂等演练 + Worker 打包 dry-run（无需 CF 凭据）
+      - run: npx wrangler d1 migrations apply film-sort --local
+      - run: npx wrangler deploy --dry-run --outdir .tmp/wrangler-dry

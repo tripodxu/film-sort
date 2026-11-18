@@ -26,6 +26,12 @@
 
 ## 1. 活跃记录（最新在最上）
 
+### 2026-11-18 · 全栈重构与前后端模块化（Phase 0–4）
+
+- **前后端缺陷止血与构建基座**（Phase 0–1）：修复并发竞态、A11y 焦点栈、`posters` 边缘缓存代次、D1 ISO 时间迁移与 `sw.js` 缓存；Vite `manualChunks` 独立拆出 `framework` 并新增 `bundleGuard.test.ts` 入口闭包守卫。
+- **前端解耦与等序样式拆分**（Phase 2–3）：抽离 `mediaKinds.ts` 摘除首屏静态榜单、`storageKeys.ts`、`AppEnvContext`、`useProfileStore`、`usePeerCompare`、三大视图共享组件（`<SortableWorkList>`、`PlazaCommentsTree`、`usePlatformConnect`）与懒加载 `components/modals/`；`styles.css` 等序拆分为 `src/styles/00-base..05-modern.css`（CSS 产物字节零变化，主包 gzip 降至 76.1 kB）。
+- **Worker 减重与领域路由拆分**（Phase 4）：移除 `@react-email/components` 替换为安全 HTML 模板；收敛 `wrangler.jsonc` `run_worker_first`；`worker/index.ts` 拆出 `worker/http.ts` 与 `worker/routes/*` 五大领域路由模块（Worker 打包 117.3 KiB gzip）。
+
 ### 2026-11-03 · Jev 免费通道、现代主题二次打磨、文档审计
 
 - **Jev 站内免费通道**（2026-11-01）：`JEV_API_KEY` 以 Worker Secret 存放，未配置 Key 的用户可走 `jev.logicc.top` 反代；用户 Key 永远优先。四端点共用 `resolveJevConfig`，新增 `503 builtin_unavailable`。详见 CHANGELOG 2026-11-01。

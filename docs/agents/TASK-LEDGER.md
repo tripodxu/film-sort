@@ -10,6 +10,17 @@
 
 ## 进行中 / 最近
 
+### T-20261118-FULL-REFACTOR · 全栈深度重构与前端解耦（Phase 0–4） · 🔄 本地全门禁全绿，待部署线上验证
+
+- **改动**：
+  - **Phase 0**（`deb84d7` / `bacbedf` / `3ca414c`）：修复前后端与 D1/PWA 关键缺陷（状态竞态、A11y 嵌套、`posters` 缓存代次、ISO 时间、`/api/health` 503、`sw.js`）。
+  - **Phase 1**（`d8bd629`）：`manualChunks`、`preloadError`、Vitest `cacheDir`、构建产物守卫测试。
+  - **Phase 2**（`f8dde4f` / `a173178`）：`mediaKinds.ts`、`storageKeys.ts`、解除循环依赖、`AppEnvContext`、`useProfileStore`、`usePeerCompare`、`useSorting` 拆三 Hook、懒加载 `src/components/modals/`。
+  - **Phase 3**（`b575db4` / `51aea77`）：`usePlatformConnect`、`<SortableWorkList>`、`PlazaCommentsTree`、`/encounter` ↔ `/depth` 互跳、全站 `<Modal>` 收口、`src/styles/00-base..05-modern.css` 等序拆分。
+  - **Phase 4**（`c59cbec` / `4840253`）：移除 `@react-email/components`、收敛 `wrangler.jsonc`、`worker/http.ts` + `worker/routes/{admin,aiRoutes,mediaRoutes,qrRoutes,shareRoutes}.ts`。
+- **验证（本地）**：`npm run gates`（`check` / `lint` / `format:check` / 全量 `vitest` / `build` / `docs:facts` / `dev:smoke`）+ `wrangler d1 migrations apply film-sort --local` + `wrangler deploy --dry-run` 全绿。
+- **下一步（上线走查）**：推送部署至 `sort.logicc.top` 后，实机走查首页首屏加载、`/encounter` ↔ `/depth` 互跳、账号扫码绑定与广场评论/编辑链路。
+
 ### T-20261105-FULL-AUDIT · 全量代码审计 + 10 点逐项优化 · 🔄 本地门禁全绿，待线上验证
 
 - **来源**：2026-11-05 对当前工作树 `85d5e6b` 的独立全量复核。方法、10 处发现、

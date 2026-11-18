@@ -63,10 +63,14 @@ ART/RANK 采用前后端一体化架构，部署在 Cloudflare Workers 上：
 ```
 src/
 ├── main.tsx              # React 入口，StrictMode 挂载 + 挂载前应用主题 + 注册 SW
-├── App.tsx               # 应用外壳：视图编排/弹窗/分享与导出入口
+├── App.tsx               # 应用外壳：视图编排 + Suspense 懒加载边界
 ├── types.ts              # 内置电影目录类型（Movie / FilmList，由 data/catalog.ts 使用）
-├── styles.css            # 设计令牌 + 12 套主题变量块（atlas 在 styles/atlas.css）+ 组件样式（data-theme 切换）
+├── styles/               # 模块化设计令牌与组件样式（00-base..05-modern + atlas.css，经 index.css 等序汇入）
+├── contexts/
+│   └── AppEnvContext.tsx  # 语言/主题/通知/分享等跨视图环境上下文
 ├── components/
+│   ├── modals/            # 懒加载弹窗（AccountModal / GuideModal / TechModal / NoteModals / PeerCompareModals / CloudConflictModal / ShareExpiryModal）
+│   ├── SortableWorkList.tsx # 共享待排/已排作品清单编辑器（ProfileView 与 PlazaPostView 共用）
 │   ├── Poster.tsx         # 海报组件（解析/代理/失败上报）
 │   ├── RankingDetail.tsx  # 统一榜单详情（分享页/比较详情弹窗/广场帖共用）
 │   ├── ArtworkDetail.tsx  # 统一作品详情弹窗（含音乐试听）
@@ -79,9 +83,11 @@ src/
 │   └── OrbScene.tsx       # 3D 光球场景（reduced-motion 降级）
 ├── views/                 # 各视图组件（Home/Source/Setup/Sorting/Profile/Compare/Depth/Share/Plaza/PlazaPost + types/helpers/IconButton）
 ├── data/
-│   ├── media.ts           # 媒介定义 + 内置榜单
+│   ├── mediaKinds.ts      # 轻量媒介元信息（mediaLabels / englishKinds，避免首屏拉入全量榜单种子）
+│   ├── media.ts           # 媒介定义 + 内置榜单（按需加载）
 │   └── catalog.ts         # 电影目录数据
 └── lib/
+    ├── storageKeys.ts     # 统一 localStorage 键名常量与会话清理
     ├── ranking.ts         # 排序状态机（二分插入 + 回环检测 + 验证 + 快照撤销）
     ├── profile.ts         # 画像管理 + 比较算法（Kendall τ/年代偏好/共识评分）
     ├── collections.ts     # 清单导入解析
@@ -89,7 +95,10 @@ src/
     ├── notes.ts           # 三级批注存取
     ├── theme.ts           # 主题清单/持久化/data-theme 应用
     ├── gdMusic.ts         # 音乐试听/歌词的前端调用与错误分类
-    ├── useSorting.ts      # 排序域状态与动作（集合/草稿/导入/排序机）
+    ├── useSorting.ts      # 排序域聚合 facade（内部拆分 useCloudCollections / useCollectionImporter / useSortingSession）
+    ├── useProfileStore.ts # 本地画像/批注/自建榜单持久化状态
+    ├── usePeerCompare.ts  # 好友比较、AI 解读与 Jev 对比状态
+    ├── usePlatformConnect.ts # 网易云/豆瓣扫码与 Cookie 连接状态机（含无漂移倒计时）
     ├── useAuth.ts         # 账号与云同步状态、动作
     ├── useRouter.ts       # History API 路由（View ↔ 路径映射）
     ├── themeRegistry.ts   # 插拔主题包：解析/白名单校验（重建式注入）/存储/恢复

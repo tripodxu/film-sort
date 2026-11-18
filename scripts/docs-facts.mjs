@@ -62,9 +62,9 @@ for (const file of [
 }
 
 // 3. 内置主题：12 套
-const themeSource = read("src/lib/theme.ts");
+const themeSource = read("src/lib/themeConstants.ts");
 const themeCount = (themeSource.match(/\{ id: "/g) ?? []).length;
-check(themeCount === 12, `src/lib/theme.ts: THEMES 应为 12，实际 ${themeCount}`);
+check(themeCount === 12, `src/lib/themeConstants.ts: THEMES 应为 12，实际 ${themeCount}`);
 
 // 4. 已删除功能不得在文档里复活
 check(!walk("src").some((file) => /🥇|🥈|🥉/.test(read(file))), "src/: 不应再出现奖牌 emoji");
