@@ -23,6 +23,21 @@ try {
   /* Private browsing can disable storage. */
 }
 
+// 发版换代后旧标签页点击懒加载路由可能遇到已下线的旧 hash chunk；10 秒内最多自动刷新一次，避免静默白屏。
+window.addEventListener("vite:preloadError", (event) => {
+  try {
+    const key = "art-rank:preload-reload-at";
+    const last = Number(sessionStorage.getItem(key) || "0");
+    if (Date.now() - last > 10_000) {
+      sessionStorage.setItem(key, String(Date.now()));
+      event.preventDefault();
+      location.reload();
+    }
+  } catch {
+    /* 隐私模式忽略 */
+  }
+});
+
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
     <App />

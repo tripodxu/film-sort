@@ -73,7 +73,7 @@ function processDecls(text) {
 const src = readFileSync(FILE, "utf8");
 
 // 括号配平切分：主题块整块保护，块外做归一
-const THEME_OPEN = /\[data-theme=[a-z]+\]\s*\{/y;
+const THEME_OPEN = /\[data-theme=[a-z0-9-]+\]\s*\{/y;
 let out = "";
 let i = 0;
 while (i < src.length) {

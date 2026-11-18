@@ -35,6 +35,7 @@ const BOOT_TIMEOUT_MS = 90_000;
 const wranglerBin = join("node_modules", "wrangler", "bin", "wrangler.js");
 const child = spawn(process.execPath, [wranglerBin, "dev", "--port", String(PORT)], {
   stdio: ["ignore", "pipe", "pipe"],
+  detached: process.platform !== "win32",
 });
 
 let bootLog = "";

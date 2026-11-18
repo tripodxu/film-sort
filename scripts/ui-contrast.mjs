@@ -6,7 +6,10 @@ import { fileURLToPath } from "node:url";
 import { dirname, join, resolve } from "node:path";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-const css = readFileSync(join(ROOT, "src/styles.css"), "utf8");
+const css =
+  readFileSync(join(ROOT, "src/styles.css"), "utf8") +
+  "\n" +
+  readFileSync(join(ROOT, "src/styles/atlas.css"), "utf8");
 
 const THEMES = [
   "modern",
@@ -15,12 +18,14 @@ const THEMES = [
   "simple",
   "classic",
   "cyber",
+  "paper",
   "editorial",
   "editorial-dark",
   "aurora",
   "gallery",
+  "atlas",
 ];
-const LIGHT = ["retro", "minimal", "simple", "classic", "editorial", "gallery"];
+const LIGHT = ["retro", "minimal", "simple", "classic", "paper", "editorial", "gallery", "atlas"];
 
 function blockAfter(anchor) {
   const i = css.indexOf(anchor);
