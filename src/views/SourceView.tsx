@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useState } from "react";
 import {
   ArrowRight,
   Bookmark,
@@ -15,9 +15,9 @@ import {
   X,
 } from "lucide-react";
 import { Poster } from "../components/Poster";
-import { FocusTrap } from "../components/FocusTrap";
+import { Modal } from "../components/Modal";
 import { QrConnectModal } from "../components/QrConnectModal";
-import type { QrState } from "../components/QrConnectModal";
+import { usePlatformConnect } from "../lib/usePlatformConnect";
 import { IconButton } from "./IconButton";
 import { heading } from "./helpers";
 import { MAX_PROFILE_BYTES } from "../lib/profile";
@@ -81,187 +81,48 @@ export function SourceView({
   const [worksCollapsed, setWorksCollapsed] = useState(false);
   const [doulistUrl, setDoulistUrl] = useState("");
   const [neteaseUrl, setNeteaseUrl] = useState("");
-  const [neteaseConnected, setNeteaseConnected] = useState<boolean | null>(null);
   const [loadingMine, setLoadingMine] = useState(false);
   const [browseUid, setBrowseUid] = useState("");
   const [browsePlaylists, setBrowsePlaylists] = useState<NeteasePlaylistInfo[] | null>(null);
   const [browseBlocked, setBrowseBlocked] = useState(false);
   const [loadingBrowse, setLoadingBrowse] = useState(false);
-  const [qrOpen, setQrOpen] = useState(false);
-  const [qrImage, setQrImage] = useState("");
-  const [qrUnikey, setQrUnikey] = useState("");
-  const [qrState, setQrState] = useState<QrState>("waiting");
-  const [qrError, setQrError] = useState("");
-  const [qrLeft, setQrLeft] = useState(0);
-  const [qrRefreshed, setQrRefreshed] = useState(0);
-  const [qrScanned, setQrScanned] = useState<{ nickname?: string; avatarUrl?: string } | null>(
-    null,
-  );
-  const [riskBlocked, setRiskBlocked] = useState(false);
-  const [accountInfo, setAccountInfo] = useState<{
-    nickname: string | null;
-    avatarUrl: string | null;
-  } | null>(null);
   const [helpOpen, setHelpOpen] = useState(false);
-  const [cookieOpen, setCookieOpen] = useState(false);
-  const [cookieText, setCookieText] = useState("");
-  const [cookieBusy, setCookieBusy] = useState(false);
-  const [dbConnected, setDbConnected] = useState<boolean | null>(null);
-  const [dbAccount, setDbAccount] = useState<{
-    nickname: string | null;
-    avatarUrl: string | null;
-  } | null>(null);
-  const [dbQrOpen, setDbQrOpen] = useState(false);
-  const [dbQrImage, setDbQrImage] = useState("");
-  const [dbQrCode, setDbQrCode] = useState("");
-  const [dbQrState, setDbQrState] = useState<QrState>("waiting");
-  const [dbQrError, setDbQrError] = useState("");
-  const [dbQrLeft, setDbQrLeft] = useState(0);
-  const [dbQrRefreshed, setDbQrRefreshed] = useState(0);
-  const [dbRiskBlocked, setDbRiskBlocked] = useState(false);
-  const [dbCookieOpen, setDbCookieOpen] = useState(false);
-  const [dbCookieText, setDbCookieText] = useState("");
-  const [dbCookieBusy, setDbCookieBusy] = useState(false);
 
-  // 网易云连接状态（音乐媒介 + 登录用户时检查）
-  useEffect(() => {
-    if (source !== "custom" || kind !== "music" || !accountToken) return;
-    void (async () => {
-      try {
-        const response = await fetch("/api/netease/status", { headers: AUTH(accountToken) });
-        const data = (await response.json()) as {
-          connected?: boolean;
-          account?: { nickname: string | null; avatarUrl: string | null } | null;
-        };
-        const connected = !!data.connected;
-        setNeteaseConnected(connected);
-        setAccountInfo(data.account ?? null);
-        if (connected) void loadMyPlaylists();
-      } catch {
-        setNeteaseConnected(false);
-      }
-    })();
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- 载入连接状态只在来源/登录变化时；loadMyPlaylists 是渲染期函数身份
-  }, [source, kind, accountToken]);
+  const ne = usePlatformConnect({
+    platform: "netease",
+    active: source === "custom" && kind === "music",
+    accountToken,
+    t,
+    setNotice,
+    onConnected: () => void loadMyPlaylists(),
+    onDisconnected: () => setBrowsePlaylists(null),
+  });
+  const db = usePlatformConnect({
+    platform: "douban",
+    active: source === "custom" && kind !== "music" && kind !== "other",
+    accountToken,
+    t,
+    setNotice,
+  });
 
-  // 扫码轮询：每 3 秒一次；风控码（risk）需连续 3 次约 9 秒才判定失败，失败后展开 Cookie 降级卡
-  useEffect(() => {
-    if (!qrOpen || !qrUnikey || qrState === "confirmed" || qrState === "expired") return;
-    let riskHits = 0;
-    const timer = setInterval(async () => {
-      try {
-        const response = await fetch(
-          `/api/netease/qr/poll?unikey=${encodeURIComponent(qrUnikey)}`,
-          { headers: AUTH(accountToken) },
-        );
-        const data = (await response.json()) as {
-          state?: QrState;
-          error?: string;
-          nickname?: string;
-          avatarUrl?: string;
-        };
-        if (data.state === "risk") {
-          riskHits += 1;
-          if (riskHits >= 3) {
-            if (data.error) {
-              setQrError(data.error);
-              setNotice(data.error);
-            }
-            setRiskBlocked(true);
-            setCookieOpen(true);
-            setQrState("expired");
-          } else if (data.error) {
-            setQrError(`${data.error}（第 ${riskHits}/3 次，正在重试…）`);
-          }
-          return;
-        }
-        riskHits = 0;
-        if (data.error) {
-          setQrError(data.error);
-          setNotice(data.error);
-        }
-        if (data.nickname || data.avatarUrl)
-          setQrScanned({ nickname: data.nickname, avatarUrl: data.avatarUrl });
-        if (data.state) setQrState(data.state);
-        if (data.state === "confirmed") {
-          setNeteaseConnected(true);
-          if (data.nickname || data.avatarUrl)
-            setAccountInfo({ nickname: data.nickname ?? null, avatarUrl: data.avatarUrl ?? null });
-          setTimeout(() => {
-            setQrOpen(false);
-            void loadMyPlaylists();
-          }, 1200);
-        }
-      } catch {
-        /* 下次轮询重试 */
-      }
-    }, 3000);
-    return () => clearInterval(timer);
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- 轮询器按 qr 状态重建；loadMyPlaylists 在 confirmed 分支内显式调用
-  }, [qrOpen, qrUnikey, qrState, accountToken]);
-
-  const qrDeadlineRef = useRef(0);
-  // 有效期倒计时：归零自动换码（上限 2 次，防风控加重）
-  useEffect(() => {
-    if (!qrOpen || qrState !== "waiting" || !qrImage || qrDeadlineRef.current <= 0) return;
-    const timer = setInterval(() => {
-      const left = Math.max(0, Math.round((qrDeadlineRef.current - Date.now()) / 1000));
-      setQrLeft(left);
-      if (left === 0) {
-        clearInterval(timer);
-        void autoRefreshQr();
-      }
-    }, 1000);
-    return () => clearInterval(timer);
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- 倒计时按 qr 打开/图片就绪重建，deadline 存 ref 不因每秒递减重建定时器
-  }, [qrOpen, qrState, qrImage]);
-
-  async function issueQr(_refreshed: number) {
-    setQrImage("");
-    setQrUnikey("");
-    setQrState("waiting");
-    setQrError("");
-    setQrScanned(null);
-    qrDeadlineRef.current = 0;
-    setQrLeft(0);
-    try {
-      const response = await fetch("/api/netease/qr/issue", { headers: AUTH(accountToken) });
-      const data = (await response.json()) as { unikey?: string; qr_value?: string; ttl?: number };
-      if (!data.unikey || !data.qr_value) throw new Error();
-      const QRCode = await import("qrcode");
-      setQrImage(await QRCode.default.toDataURL(data.qr_value, { width: 300, margin: 1 }));
-      setQrUnikey(data.unikey);
-      const ttl = data.ttl ?? 150;
-      qrDeadlineRef.current = Date.now() + ttl * 1000;
-      setQrLeft(ttl);
-    } catch {
-      setQrState("expired");
-    }
-  }
-
-  async function openQr() {
-    setQrOpen(true);
-    setRiskBlocked(false);
-    setCookieOpen(false);
-    setQrRefreshed(0);
-    await issueQr(0);
-  }
-
-  // 倒计时归零/手动换码：最多自动刷新 2 次（重复扫码会加重账号级风控）
-  async function autoRefreshQr() {
-    if (qrRefreshed >= 2) {
-      setQrError(
-        t(
-          "二维码刷新次数已达上限，请关闭后稍候再试，或改用粘贴 Cookie 连接。",
-          "Refresh limit reached — close and retry later, or connect with a pasted cookie.",
-        ),
-      );
-      setQrState("expired");
-      return;
-    }
-    setQrRefreshed(qrRefreshed + 1);
-    await issueQr(qrRefreshed + 1);
-  }
+  const neteaseConnected = ne.connected;
+  const accountInfo = ne.accountInfo;
+  const { cookieOpen, setCookieOpen, cookieText, setCookieText, cookieBusy, connectWithCookie } =
+    ne;
+  const dbConnected = db.connected;
+  const dbAccount = db.accountInfo;
+  const {
+    cookieOpen: dbCookieOpen,
+    setCookieOpen: setDbCookieOpen,
+    cookieText: dbCookieText,
+    setCookieText: setDbCookieText,
+    cookieBusy: dbCookieBusy,
+    connectWithCookie: dbConnectWithCookie,
+  } = db;
+  const openQr = () => void ne.openQr();
+  const openDbQr = () => void db.openQr();
+  const disconnectNetease = () => void ne.disconnect();
+  const disconnectDouban = () => void db.disconnect();
 
   async function loadMyPlaylists() {
     setLoadingMine(true);
@@ -275,7 +136,7 @@ export function SourceView({
       };
       if (!response.ok) {
         setNotice(data.msg ?? t("加载歌单失败。", "Failed to load playlists."));
-        setNeteaseConnected(response.status !== 401 ? neteaseConnected : false);
+        ne.setConnected(response.status !== 401 ? neteaseConnected : false);
         return;
       }
       // 与「按 UID 浏览」共用同一列表：连接后直接展示我的全部歌单（含收藏）
@@ -329,236 +190,6 @@ export function SourceView({
       setBrowsePlaylists(null);
     } finally {
       setLoadingBrowse(false);
-    }
-  }
-
-  async function disconnectNetease() {
-    try {
-      await fetch("/api/netease/disconnect", { method: "POST", headers: AUTH(accountToken) });
-    } catch {}
-    setNeteaseConnected(false);
-    setBrowsePlaylists(null);
-    setNotice(
-      t(
-        "已断开网易云连接，加密 Cookie 已删除。",
-        "NetEase disconnected. The encrypted cookie has been deleted.",
-      ),
-    );
-  }
-
-  // ===== 豆瓣连接（扫码 / Cookie 粘贴） =====
-  useEffect(() => {
-    if (source !== "custom" || kind === "music" || kind === "other" || !accountToken) return;
-    void (async () => {
-      try {
-        const response = await fetch("/api/douban/status", { headers: AUTH(accountToken) });
-        const data = (await response.json()) as {
-          connected?: boolean;
-          account?: { nickname: string | null; avatarUrl: string | null } | null;
-        };
-        setDbConnected(!!data.connected);
-        setDbAccount(data.account ?? null);
-      } catch {
-        setDbConnected(false);
-      }
-    })();
-  }, [source, kind, accountToken]);
-
-  useEffect(() => {
-    if (!dbQrOpen || !dbQrCode || dbQrState === "confirmed" || dbQrState === "expired") return;
-    let riskHits = 0;
-    const timer = setInterval(async () => {
-      try {
-        const response = await fetch(`/api/douban/qr/poll?code=${encodeURIComponent(dbQrCode)}`, {
-          headers: AUTH(accountToken),
-        });
-        const data = (await response.json()) as { state?: QrState; error?: string };
-        if (data.state === "risk") {
-          riskHits += 1;
-          if (riskHits >= 3) {
-            if (data.error) {
-              setDbQrError(data.error);
-              setNotice(data.error);
-            }
-            setDbRiskBlocked(true);
-            setDbCookieOpen(true);
-            setDbQrState("expired");
-          } else if (data.error) setDbQrError(`${data.error}（第 ${riskHits}/3 次，正在重试…）`);
-          return;
-        }
-        riskHits = 0;
-        if (data.error) {
-          setDbQrError(data.error);
-          setNotice(data.error);
-        }
-        if (data.state) setDbQrState(data.state);
-        if (data.state === "confirmed") {
-          setDbConnected(true);
-          setTimeout(() => {
-            setDbQrOpen(false);
-            void checkDbStatus();
-          }, 1200);
-        }
-      } catch {
-        /* 下次轮询重试 */
-      }
-    }, 3000);
-    return () => clearInterval(timer);
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- 轮询器按 dbQr 状态重建；checkDbStatus/setNotice 是渲染期身份
-  }, [dbQrOpen, dbQrCode, dbQrState, accountToken]);
-
-  const dbQrDeadlineRef = useRef(0);
-  useEffect(() => {
-    if (!dbQrOpen || dbQrState !== "waiting" || !dbQrImage || dbQrDeadlineRef.current <= 0) return;
-    const timer = setInterval(() => {
-      const left = Math.max(0, Math.round((dbQrDeadlineRef.current - Date.now()) / 1000));
-      setDbQrLeft(left);
-      if (left === 0) {
-        clearInterval(timer);
-        void autoRefreshDbQr();
-      }
-    }, 1000);
-    return () => clearInterval(timer);
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- 倒计时按 dbQr 打开/图片就绪重建，deadline 存 ref 不因每秒递减重建定时器
-  }, [dbQrOpen, dbQrState, dbQrImage]);
-
-  async function checkDbStatus() {
-    try {
-      const response = await fetch("/api/douban/status", { headers: AUTH(accountToken) });
-      const data = (await response.json()) as {
-        connected?: boolean;
-        account?: { nickname: string | null; avatarUrl: string | null } | null;
-      };
-      setDbConnected(!!data.connected);
-      setDbAccount(data.account ?? null);
-    } catch {
-      /* ignore */
-    }
-  }
-
-  async function issueDbQr() {
-    setDbQrImage("");
-    setDbQrCode("");
-    setDbQrState("waiting");
-    setDbQrError("");
-    dbQrDeadlineRef.current = 0;
-    setDbQrLeft(0);
-    try {
-      const response = await fetch("/api/douban/qr/issue", { headers: AUTH(accountToken) });
-      const data = (await response.json()) as { code?: string; qr_image?: string; ttl?: number };
-      if (!data.code || !data.qr_image) throw new Error();
-      setDbQrImage(data.qr_image);
-      setDbQrCode(data.code);
-      const ttl = data.ttl ?? 120;
-      dbQrDeadlineRef.current = Date.now() + ttl * 1000;
-      setDbQrLeft(ttl);
-    } catch {
-      setDbQrState("expired");
-    }
-  }
-
-  async function openDbQr() {
-    setDbQrOpen(true);
-    setDbRiskBlocked(false);
-    setDbCookieOpen(false);
-    setDbQrRefreshed(0);
-    await issueDbQr();
-  }
-
-  async function autoRefreshDbQr() {
-    if (dbQrRefreshed >= 2) {
-      setDbQrError(
-        t(
-          "二维码刷新次数已达上限，请稍后再试，或改用粘贴 Cookie 连接。",
-          "Refresh limit reached — retry later or paste a cookie.",
-        ),
-      );
-      setDbQrState("expired");
-      return;
-    }
-    setDbQrRefreshed(dbQrRefreshed + 1);
-    await issueDbQr();
-  }
-
-  async function dbConnectWithCookie() {
-    const value = dbCookieText.trim();
-    if (!value || dbCookieBusy) return;
-    setDbCookieBusy(true);
-    try {
-      const response = await fetch("/api/douban/cookie", {
-        method: "POST",
-        headers: { ...AUTH(accountToken), "content-type": "application/json" },
-        body: JSON.stringify({ cookie: value }),
-      });
-      const data = (await response.json()) as { ok?: boolean; msg?: string };
-      if (response.ok && data.ok) {
-        setDbConnected(true);
-        setDbCookieOpen(false);
-        setDbCookieText("");
-        setNotice(
-          t(
-            "豆瓣连接成功，私有豆列现在可以导入了。",
-            "Douban connected — private doulists can now be imported.",
-          ),
-        );
-        void checkDbStatus();
-      } else
-        setNotice(
-          data.msg ??
-            t("连接失败，请检查粘贴的 Cookie。", "Connection failed — check the pasted cookie."),
-        );
-    } catch {
-      setNotice(t("连接失败，请稍后重试。", "Connection failed, please retry."));
-    } finally {
-      setDbCookieBusy(false);
-    }
-  }
-
-  async function disconnectDouban() {
-    try {
-      await fetch("/api/douban/disconnect", { method: "POST", headers: AUTH(accountToken) });
-    } catch {}
-    setDbConnected(false);
-    setDbAccount(null);
-    setNotice(
-      t(
-        "已断开豆瓣连接，加密 Cookie 已删除。",
-        "Douban disconnected. The encrypted cookie has been deleted.",
-      ),
-    );
-  }
-
-  async function connectWithCookie() {
-    const value = cookieText.trim();
-    if (!value || cookieBusy) return;
-    setCookieBusy(true);
-    try {
-      const response = await fetch("/api/netease/cookie", {
-        method: "POST",
-        headers: { ...AUTH(accountToken), "content-type": "application/json" },
-        body: JSON.stringify({ cookie: value }),
-      });
-      const data = (await response.json()) as { ok?: boolean; msg?: string };
-      if (response.ok && data.ok) {
-        setNeteaseConnected(true);
-        setCookieOpen(false);
-        setCookieText("");
-        setNotice(
-          t(
-            "Cookie 连接成功，可以浏览你的歌单了。",
-            "Connected via cookie — your playlists are now available.",
-          ),
-        );
-        void loadMyPlaylists();
-      } else
-        setNotice(
-          data.msg ??
-            t("连接失败，请检查粘贴的 Cookie。", "Connection failed — check the pasted cookie."),
-        );
-    } catch {
-      setNotice(t("连接失败，请稍后重试。", "Connection failed, please retry."));
-    } finally {
-      setCookieBusy(false);
     }
   }
 
@@ -1350,45 +981,42 @@ export function SourceView({
           </button>
         </section>
       )}
-      {dbQrOpen && (
+      {db.qrOpen && (
         <QrConnectModal
           t={t}
           eyebrow="DOUBAN"
           title={t("扫码连接豆瓣", "Connect Douban via QR")}
           headingId="douban-qr-heading"
           qrAlt={t("豆瓣登录二维码", "Douban login QR code")}
-          qrImage={dbQrImage}
-          state={dbQrState}
-          error={dbQrError}
-          left={dbQrLeft}
-          refreshed={dbQrRefreshed}
+          qrImage={db.qrImage}
+          state={db.qrState}
+          error={db.qrError}
+          left={db.qrLeft}
+          refreshed={db.qrRefreshed}
           hintWaiting={t(
             "打开豆瓣 App → 右上角扫一扫",
             "Open the Douban app → tap Scan (top-right)",
           )}
           hintConfirmed={t("连接成功！正在校验账号…", "Connected! Verifying your account…")}
-          onClose={() => {
-            setDbQrOpen(false);
-            setDbQrCode("");
-          }}
-          onRefresh={() => void autoRefreshDbQr()}
+          onClose={db.closeQr}
+          onRefresh={() => void db.autoRefreshQr()}
           fallback={{
-            blocked: dbRiskBlocked,
-            cookieOpen: dbCookieOpen,
-            cookieText: dbCookieText,
-            cookieBusy: dbCookieBusy,
+            blocked: db.riskBlocked,
+            cookieOpen: db.cookieOpen,
+            cookieText: db.cookieText,
+            cookieBusy: db.cookieBusy,
             title: t("扫码没成功？用 Cookie 直连", "QR didn't work? Connect with your cookie"),
             placeholder: t(
               "粘贴浏览器里 douban.com 的 Cookie（含 dbcl2=…）",
               "Paste the cookie of douban.com (with dbcl2=...)",
             ),
-            onTextChange: setDbCookieText,
-            onOpenCookie: () => setDbCookieOpen(true),
-            onConnectCookie: () => void dbConnectWithCookie(),
+            onTextChange: db.setCookieText,
+            onOpenCookie: () => db.setCookieOpen(true),
+            onConnectCookie: () => void db.connectWithCookie(),
             onRetryQr: () => {
-              setDbCookieOpen(false);
-              setDbRiskBlocked(false);
-              void openDbQr();
+              db.setCookieOpen(false);
+              db.setRiskBlocked(false);
+              void db.openQr();
             },
             onOpenHelp: () => setHelpOpen(true),
           }}
@@ -1398,34 +1026,31 @@ export function SourceView({
           )}
         />
       )}
-      {qrOpen && (
+      {ne.qrOpen && (
         <QrConnectModal
           t={t}
           eyebrow="NETEASE"
           title={t("扫码连接网易云音乐", "Connect NetEase via QR")}
           headingId="netease-qr-heading"
           qrAlt={t("网易云音乐登录二维码", "NetEase login QR code")}
-          qrImage={qrImage}
-          state={qrState}
-          error={qrError}
-          left={qrLeft}
-          refreshed={qrRefreshed}
-          scanned={qrScanned}
+          qrImage={ne.qrImage}
+          state={ne.qrState}
+          error={ne.qrError}
+          left={ne.qrLeft}
+          refreshed={ne.qrRefreshed}
+          scanned={ne.qrScanned}
           hintWaiting={t(
             "打开网易云音乐 App → 左上角扫一扫",
             "Open the NetEase app → tap Scan (top-left)",
           )}
           hintConfirmed={t("连接成功！正在加载你的歌单…", "Connected! Loading your playlists…")}
-          onClose={() => {
-            setQrOpen(false);
-            setQrUnikey("");
-          }}
-          onRefresh={() => void autoRefreshQr()}
+          onClose={ne.closeQr}
+          onRefresh={() => void ne.autoRefreshQr()}
           fallback={{
-            blocked: riskBlocked,
-            cookieOpen,
-            cookieText,
-            cookieBusy,
+            blocked: ne.riskBlocked,
+            cookieOpen: ne.cookieOpen,
+            cookieText: ne.cookieText,
+            cookieBusy: ne.cookieBusy,
             title: t(
               "被网易云风控拦住了？用 Cookie 直连（成功率 100%）",
               "Blocked by risk-control? Connect with your cookie (always works)",
@@ -1434,13 +1059,13 @@ export function SourceView({
               "粘贴浏览器里 music.163.com 的 Cookie（含 MUSIC_U=…），或只粘贴 MUSIC_U 值",
               "Paste the cookie of music.163.com from your browser (with MUSIC_U=...), or just the MUSIC_U value",
             ),
-            onTextChange: setCookieText,
-            onOpenCookie: () => setCookieOpen(true),
-            onConnectCookie: () => void connectWithCookie(),
+            onTextChange: ne.setCookieText,
+            onOpenCookie: () => ne.setCookieOpen(true),
+            onConnectCookie: () => void ne.connectWithCookie(),
             onRetryQr: () => {
-              setCookieOpen(false);
-              setRiskBlocked(false);
-              void openQr();
+              ne.setCookieOpen(false);
+              ne.setRiskBlocked(false);
+              void ne.openQr();
             },
             onOpenHelp: () => setHelpOpen(true),
           }}
@@ -1451,77 +1076,59 @@ export function SourceView({
         />
       )}
       {helpOpen && (
-        <FocusTrap onEscape={() => setHelpOpen(false)}>
-          <div className="modal-backdrop" onClick={() => setHelpOpen(false)}>
-            <section
-              className="account-dialog"
-              role="dialog"
-              aria-modal="true"
-              aria-labelledby="ext-help-heading"
-              style={{ width: "min(560px, 100%)" }}
-              onClick={(event) => event.stopPropagation()}
-              onKeyDown={(event) => {
-                if (event.key === "Escape") setHelpOpen(false);
-              }}
-            >
-              <div className="section-heading">
-                <div>
-                  <span className="eyebrow">HELP</span>
-                  <h2 id="ext-help-heading">
-                    {t("外部导入使用说明", "How external import works")}
-                  </h2>
-                </div>
-                <IconButton title={t("关闭", "Close")} onClick={() => setHelpOpen(false)}>
-                  <X size={18} />
-                </IconButton>
-              </div>
-              <ol className="help-steps">
-                <li>
-                  <strong>{t("网易云 · 按用户浏览", "NetEase · browse by user")}</strong>
-                  {t(
-                    "输入任意用户的网易云 ID（个人主页 URL 里的数字）或粘贴主页链接，即可列出 TA 的全部歌单（含收藏的），点「导入」抓取整单歌曲。也可直接粘贴歌单链接/ID。",
-                    "Enter any user's NetEase ID (the number in their profile URL) or paste the profile link to list all their playlists (including collected), then Import to fetch the songs. You can also paste a playlist link/ID directly.",
-                  )}
-                </li>
-                <li>
-                  <strong>{t("连接账号（可选）", "Connect account · optional")}</strong>
-                  {t(
-                    "展开「连接我的网易云账号」可扫码或粘贴 Cookie：连接后能浏览自己的全部歌单（含私有与收藏），并导入他人看不到的私有歌单。若服务器匿名访问被网易云限制，连接后即可恢复。",
-                    "Expand Connect my NetEase account (QR or cookie): once connected you can browse your own full playlist list (private & collected included) and import private playlists. If anonymous server access is blocked, connecting restores it.",
-                  )}
-                </li>
-                <li>
-                  <strong>{t("扫码被拒怎么办", "If QR is blocked")}</strong>
-                  {t(
-                    "提示「网易云拒绝了本次登录」是网易云对当前网络环境的风控，与你的账号无关。可稍后再试、更换网络（如手机热点），或改用「粘贴 Cookie 连接」。",
-                    "A rejected QR is NetEase risk-control on this network, not your account. Wait a while, switch networks, or use Connect with a pasted cookie instead.",
-                  )}
-                </li>
-                <li>
-                  <strong>{t("如何获取 Cookie", "Getting the cookie")}</strong>
-                  {t(
-                    "电脑浏览器登录对应网站（music.163.com 或 douban.com）→ F12 开发者工具 → Network 标签 → 刷新页面点任意请求 → 在 Request Headers 的 cookie 里找到 MUSIC_U=…（网易云）或 dbcl2=…（豆瓣）→ 复制整段 cookie 或该值，粘贴后点「连接」。",
-                    "Log in to the site (music.163.com or douban.com) in a desktop browser → F12 → Network tab → reload → open any request → copy MUSIC_U=... (NetEase) or dbcl2=... (Douban) from the cookie header → paste and Connect.",
-                  )}
-                </li>
-                <li>
-                  <strong>{t("豆瓣豆列", "Douban doulist")}</strong>
-                  {t(
-                    "电影/书籍/其他媒介均可：粘贴豆列(doulist/…)、豆瓣清单(m.douban.com/subject_collection/…) 链接直接导入；连接豆瓣后还能一键导入自己的「想看/已看」「想读/已读」，或粘贴 mine?status=… 链接。",
-                    "Paste a doulist or subject_collection link to import directly. Once connected to Douban, one-tap import your own wish/collect lists (movie & book).",
-                  )}
-                </li>
-                <li>
-                  <strong>{t("隐私", "Privacy")}</strong>
-                  {t(
-                    "Cookie 以 AES-GCM 加密存储，仅用于读取你的歌单；点「断开连接」立即删除。",
-                    "Cookies are AES-GCM encrypted, used only to read your playlists, and deleted the moment you disconnect.",
-                  )}
-                </li>
-              </ol>
-            </section>
-          </div>
-        </FocusTrap>
+        <Modal
+          t={t}
+          headingId="ext-help-heading"
+          eyebrow="HELP"
+          title={t("外部导入使用说明", "How external import works")}
+          panelStyle={{ width: "min(560px, 100%)" }}
+          onClose={() => setHelpOpen(false)}
+        >
+          <ol className="help-steps">
+            <li>
+              <strong>{t("网易云 · 按用户浏览", "NetEase · browse by user")}</strong>
+              {t(
+                "输入任意用户的网易云 ID（个人主页 URL 里的数字）或粘贴主页链接，即可列出 TA 的全部歌单（含收藏的），点「导入」抓取整单歌曲。也可直接粘贴歌单链接/ID。",
+                "Enter any user's NetEase ID (the number in their profile URL) or paste the profile link to list all their playlists (including collected), then Import to fetch the songs. You can also paste a playlist link/ID directly.",
+              )}
+            </li>
+            <li>
+              <strong>{t("连接账号（可选）", "Connect account · optional")}</strong>
+              {t(
+                "展开「连接我的网易云账号」可扫码或粘贴 Cookie：连接后能浏览自己的全部歌单（含私有与收藏），并导入他人看不到的私有歌单。若服务器匿名访问被网易云限制，连接后即可恢复。",
+                "Expand Connect my NetEase account (QR or cookie): once connected you can browse your own full playlist list (private & collected included) and import private playlists. If anonymous server access is blocked, connecting restores it.",
+              )}
+            </li>
+            <li>
+              <strong>{t("扫码被拒怎么办", "If QR is blocked")}</strong>
+              {t(
+                "提示「网易云拒绝了本次登录」是网易云对当前网络环境的风控，与你的账号无关。可稍后再试、更换网络（如手机热点），或改用「粘贴 Cookie 连接」。",
+                "A rejected QR is NetEase risk-control on this network, not your account. Wait a while, switch networks, or use Connect with a pasted cookie instead.",
+              )}
+            </li>
+            <li>
+              <strong>{t("如何获取 Cookie", "Getting the cookie")}</strong>
+              {t(
+                "电脑浏览器登录对应网站（music.163.com 或 douban.com）→ F12 开发者工具 → Network 标签 → 刷新页面点任意请求 → 在 Request Headers 的 cookie 里找到 MUSIC_U=…（网易云）或 dbcl2=…（豆瓣）→ 复制整段 cookie 或该值，粘贴后点「连接」。",
+                "Log in to the site (music.163.com or douban.com) in a desktop browser → F12 → Network tab → reload → open any request → copy MUSIC_U=... (NetEase) or dbcl2=... (Douban) from the cookie header → paste and Connect.",
+              )}
+            </li>
+            <li>
+              <strong>{t("豆瓣豆列", "Douban doulist")}</strong>
+              {t(
+                "电影/书籍/其他媒介均可：粘贴豆列(doulist/…)、豆瓣清单(m.douban.com/subject_collection/…) 链接直接导入；连接豆瓣后还能一键导入自己的「想看/已看」「想读/已读」，或粘贴 mine?status=… 链接。",
+                "Paste a doulist or subject_collection link to import directly. Once connected to Douban, one-tap import your own wish/collect lists (movie & book).",
+              )}
+            </li>
+            <li>
+              <strong>{t("隐私", "Privacy")}</strong>
+              {t(
+                "Cookie 以 AES-GCM 加密存储，仅用于读取你的歌单；点「断开连接」立即删除。",
+                "Cookies are AES-GCM encrypted, used only to read your playlists, and deleted the moment you disconnect.",
+              )}
+            </li>
+          </ol>
+        </Modal>
       )}
     </>
   );

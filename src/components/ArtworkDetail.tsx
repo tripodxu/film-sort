@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Music2, Play, X } from "lucide-react";
 import { Poster, rememberPickedCover } from "./Poster";
 import { CoverChoice } from "./CoverChoice";
@@ -58,6 +58,16 @@ export function ArtworkDetail({
   const [lyricBusy, setLyricBusy] = useState(false);
   const [lyricError, setLyricError] = useState("");
   const isMusic = detail.kind === "music";
+
+  useEffect(() => {
+    setPlayUrl("");
+    setPlayBusy(false);
+    setPlayError("");
+    setIsCover(false);
+    setLyrics(null);
+    setLyricBusy(false);
+    setLyricError("");
+  }, [detail.work.id]);
   /**
    * 把失败原因说清楚。旧实现把它一律当作"没找到"：用户连点几首撞上 12 次/10 分钟的
    * 限流后，界面仍显示"未找到可试听的版本"，于是看起来就像功能坏了。

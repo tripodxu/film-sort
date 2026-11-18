@@ -1,4 +1,5 @@
 import { useEffect, useRef } from "react";
+import { useTheme } from "../lib/useTheme";
 
 /** 光斑的静止位置（右肩），指针离开 hero 后回到这里。 */
 const REST_X = 0.72;
@@ -14,10 +15,11 @@ const EASE = 0.07;
  */
 export function HeroBackdrop() {
   const rootRef = useRef<HTMLDivElement>(null);
+  const isModern = useTheme() === "modern";
 
   useEffect(() => {
     const root = rootRef.current;
-    if (!root) return;
+    if (!root || !isModern) return;
     // `.md-backdrop` 是 `pointer-events:none` 的装饰层，也不是事件目标的祖先，
     // 指针事件不会落在它身上；必须监听包裹它的 hero 区域。
     const host = root.closest<HTMLElement>(".orb-hero") ?? root;
@@ -104,7 +106,9 @@ export function HeroBackdrop() {
       spot.style.transform = "";
       for (const layer of layers) layer.style.transform = "";
     };
-  }, []);
+  }, [isModern]);
+
+  if (!isModern) return null;
 
   return (
     <div className="md-backdrop" aria-hidden="true" ref={rootRef}>

@@ -1087,9 +1087,9 @@ describe("打磨批 T-20261024-06：内联圆角归 token + segmented.inline", (
   });
 
   it("广场回复按钮触控高度提到 36px（与 text-button 基线一致）", () => {
-    const post = readFileSync("src/views/PlazaPostView.tsx", "utf8");
-    expect(post).not.toContain("minHeight: 32, fontSize: 12, paddingInline: 12");
-    expect(post).toContain("minHeight: 36, fontSize: 12, paddingInline: 12");
+    const commentsTree = readFileSync("src/views/plaza/PlazaCommentsTree.tsx", "utf8");
+    expect(commentsTree).not.toContain("minHeight: 32, fontSize: 12, paddingInline: 12");
+    expect(commentsTree).toContain("minHeight: 36, fontSize: 12, paddingInline: 12");
   });
 
   it("小号海报兜底只留媒介图标（9px 标题在小格子里会被挤成孤立单字）", () => {
@@ -1109,13 +1109,19 @@ describe("打磨批 T-20261024-06：内联圆角归 token + segmented.inline", (
 });
 
 describe("打磨第二轮 T-20261025-01（ROADMAP §二 A/B/C/D）", () => {
-  it("28px 密集行按钮挂透明命中区 .hit-expand（ProfileView 5 处 + PlazaPostView 3 处）", () => {
+  it("28px 密集行按钮挂透明命中区 .hit-expand（ProfileView 3 处 + SortableWorkList 3 处）", () => {
     expect(css).toMatch(/\.hit-expand::after\{content:"";position:absolute;inset:-4px\}/);
-    for (const f of ["src/views/ProfileView.tsx", "src/views/PlazaPostView.tsx"]) {
-      const code = readFileSync(f, "utf8");
-      const n = (code.match(/icon-button hit-expand/g) ?? []).length;
-      expect(n, `${f} 应有 4/3 处`).toBe(f.endsWith("ProfileView.tsx") ? 5 : 3);
-    }
+    const profileN = (
+      readFileSync("src/views/ProfileView.tsx", "utf8").match(/icon-button hit-expand/g) ?? []
+    ).length;
+    const listN = (
+      readFileSync("src/components/SortableWorkList.tsx", "utf8").match(
+        /icon-button hit-expand/g,
+      ) ?? []
+    ).length;
+    expect(profileN).toBe(3);
+    expect(listN).toBe(3);
+    expect(readFileSync("src/views/PlazaPostView.tsx", "utf8")).toContain("<SortableWorkList");
   });
 
   it("11px 文本按钮（AI 点评取消/复制）挂 .hit-expand-sm，命中区补到 ≥32px", () => {
@@ -1126,9 +1132,9 @@ describe("打磨第二轮 T-20261025-01（ROADMAP §二 A/B/C/D）", () => {
   });
 
   it("广场回复输入 ≥36px（原 minHeight:auto 实高仅 ~33px）", () => {
-    const post = readFileSync("src/views/PlazaPostView.tsx", "utf8");
-    expect(post).toMatch(/padding: "6px 10px", minHeight: 36/);
-    expect(post).not.toContain('minHeight: "auto"');
+    const commentsTree = readFileSync("src/views/plaza/PlazaCommentsTree.tsx", "utf8");
+    expect(commentsTree).toMatch(/padding: "6px 10px", minHeight: 36/);
+    expect(commentsTree).not.toContain('minHeight: "auto"');
   });
 
   it("着色横幅抽 .notice-banner（warn 墨色 color-mix 可读性 + accent 态）", () => {
@@ -1184,8 +1190,8 @@ describe("打磨第二轮 T-20261025-01（ROADMAP §二 A/B/C/D）", () => {
   });
 
   it("嵌套回复缩进第 3 层起封顶", () => {
-    const post = readFileSync("src/views/PlazaPostView.tsx", "utf8");
-    expect(post).toMatch(/marginLeft: depth < 3 \? 24 : 0/);
+    const commentsTree = readFileSync("src/views/plaza/PlazaCommentsTree.tsx", "utf8");
+    expect(commentsTree).toMatch(/marginLeft: depth < 3 \? 24 : 0/);
   });
 
   it("比较页对端导入输入恢复 44px，busy 态显示「导入中…」", () => {
@@ -1198,8 +1204,11 @@ describe("打磨第二轮 T-20261025-01（ROADMAP §二 A/B/C/D）", () => {
   it("重排/编辑行海报统一包 .ranking-card-poster（与只读行同尺寸）", () => {
     const profile = readFileSync("src/views/ProfileView.tsx", "utf8");
     const post = readFileSync("src/views/PlazaPostView.tsx", "utf8");
-    expect((profile.match(/ranking-card-poster/g) ?? []).length).toBeGreaterThanOrEqual(2);
-    expect(post).toMatch(/ranking-card-poster/);
+    const sortable = readFileSync("src/components/SortableWorkList.tsx", "utf8");
+    expect(profile).toMatch(/ranking-card-poster/);
+    expect(sortable).toMatch(/ranking-card-poster/);
+    expect(profile).toContain("<SortableWorkList");
+    expect(post).toContain("<SortableWorkList");
     expect(css).toMatch(/\.reorder-item \.ranking-card-poster\{cursor:default\}/);
   });
 });

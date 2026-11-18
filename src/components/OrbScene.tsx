@@ -134,19 +134,52 @@ export function OrbScene() {
 
     const clock = new Clock();
     let frame = 0;
+    let inView = true;
+    let tabVisible = document.visibilityState !== "hidden";
+    const shouldAnimate = () => !mediaQuery.matches && inView && tabVisible;
+
     const render = () => {
       const elapsed = mediaQuery.matches ? 0.8 : clock.getElapsedTime();
       pointer.lerp(pointerTarget, 0.035);
       instance?.update(elapsed, { x: pointer.x, y: pointer.y });
       renderer.render(scene, camera);
-      if (!mediaQuery.matches) frame = requestAnimationFrame(render);
+      if (shouldAnimate()) frame = requestAnimationFrame(render);
+      else frame = 0;
+    };
+    const syncAnimation = () => {
+      if (shouldAnimate()) {
+        if (!frame) {
+          clock.start();
+          render();
+        }
+      } else if (frame) {
+        cancelAnimationFrame(frame);
+        frame = 0;
+      }
     };
     render();
     const onMotionChange = () => {
       cancelAnimationFrame(frame);
+      frame = 0;
       clock.start();
       render();
     };
+    const io =
+      typeof IntersectionObserver !== "undefined"
+        ? new IntersectionObserver(
+            (entries) => {
+              inView = entries.some((e) => e.isIntersecting);
+              syncAnimation();
+            },
+            { threshold: 0.01 },
+          )
+        : null;
+    io?.observe(host);
+    const onVisibility = () => {
+      tabVisible = document.visibilityState !== "hidden";
+      syncAnimation();
+    };
+    document.addEventListener("visibilitychange", onVisibility);
     mediaQuery.addEventListener("change", onMotionChange);
 
     return () => {
@@ -155,6 +188,8 @@ export function OrbScene() {
       mountToken += 1;
       cancelAnimationFrame(frame);
       observer.disconnect();
+      io?.disconnect();
+      document.removeEventListener("visibilitychange", onVisibility);
       mediaQuery.removeEventListener("change", onMotionChange);
       window.removeEventListener("art-rank:orb-effect-changed", onEffectChanged);
       window.removeEventListener("art-rank:theme-changed", onThemeChanged);

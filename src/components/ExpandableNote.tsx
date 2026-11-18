@@ -2,11 +2,13 @@ export function ExpandableNote({
   text,
   maxLength = 30,
   onView,
+  t,
   style,
 }: {
   text: string;
   maxLength?: number;
   onView?: (text: string) => void;
+  t?: (zh: string, en: string) => string;
   style?: React.CSSProperties;
 }) {
   const isLong = text.length > maxLength;
@@ -46,7 +48,9 @@ export function ExpandableNote({
     >
       <span aria-hidden="true">📝</span> {isLong ? text.slice(0, maxLength) + "…" : text}
       {interactive && (
-        <span style={{ fontSize: 11, marginLeft: 4, textDecoration: "underline" }}>查看全文</span>
+        <span style={{ fontSize: 11, marginLeft: 4, textDecoration: "underline" }}>
+          {t ? t("查看全文", "Read more") : "查看全文"}
+        </span>
       )}
     </p>
   );

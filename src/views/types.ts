@@ -224,6 +224,7 @@ export interface PlazaComment {
   parent_id: number | null;
   created_at: string;
   nickname: string;
+  is_author?: boolean;
 }
 
 export interface PlazaViewProps {
@@ -264,11 +265,9 @@ export interface CompareViewProps {
   setManualOwnSelections: (sel: Set<number>) => void;
   manualPeerSelections: Set<number>;
   setManualPeerSelections: (sel: Set<number>) => void;
-  compareRankings: typeof import("../lib/profile").compareRankings;
-  mergeDimensionRankings: typeof import("../lib/profile").mergeDimensionRankings;
-  compareDimensions: typeof import("../lib/profile").compareDimensions;
-  compareProfiles: typeof import("../lib/profile").compareProfiles;
-  navigateTo: (view: "home" | "source" | "setup" | "sorting" | "profile" | "compare") => void;
+  navigateTo: (
+    view: "home" | "source" | "setup" | "sorting" | "profile" | "compare" | "depth",
+  ) => void;
   setPeer: (peer: ArtisticProfile | null) => void;
   openAiConfig: () => void;
   label: (kind: MediaKind) => string;

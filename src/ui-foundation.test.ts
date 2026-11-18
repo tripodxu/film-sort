@@ -148,10 +148,12 @@ describe("内联 Layout 下沉：不再由 JSX 执政响应式", () => {
     expect(source).not.toContain("qr-box");
     expect(source).not.toContain("qr-mask");
     expect(source).not.toContain("qr-fallback");
-    // 组件侧：结构与状态机只此一份
-    expect(modal).toContain('role="dialog"');
-    expect(modal).toContain('aria-modal="true"');
-    expect(modal).toMatch(/<FocusTrap onEscape=\{onClose\}>/);
+    // 组件侧：结构与状态机只此一份（dialog 外壳收敛至 <Modal>）
+    const modalShell = read("./components/Modal.tsx");
+    expect(modal).toContain("<Modal");
+    expect(modalShell).toContain('role="dialog"');
+    expect(modalShell).toContain('aria-modal="true"');
+    expect(modalShell).toMatch(/<FocusTrap onEscape=\{onClose\}>/);
     // 状态色走 data-state 选择器，不许回到 JS 拼颜色字符串
     expect(modal).toContain("data-state={state}");
     expect(modal).not.toMatch(/color:\s*state === /);

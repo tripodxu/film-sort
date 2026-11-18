@@ -8,9 +8,8 @@
  * 状态机（`QrState`）与倒计时仍由调用方持有：轮询、风控重试、Cookie 降级都绑着
  * 各自的接口，搬进来只会让组件同时认识两个后端。
  */
-import { CheckCircle2, Clock, KeyRound, RotateCcw, X } from "lucide-react";
-import { FocusTrap } from "./FocusTrap";
-import { IconButton } from "../views/IconButton";
+import { CheckCircle2, Clock, KeyRound, RotateCcw } from "lucide-react";
+import { Modal } from "./Modal";
 
 export type QrState = "waiting" | "scanned" | "confirmed" | "expired" | "risk";
 
@@ -90,127 +89,111 @@ export function QrConnectModal({
           : error || t("二维码已过期", "QR code expired");
 
   return (
-    <FocusTrap onEscape={onClose}>
-      <div className="modal-backdrop" onClick={onClose}>
-        <section
-          className="account-dialog qr-connect-dialog"
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby={headingId}
-          onClick={(event) => event.stopPropagation()}
-          onKeyDown={(event) => {
-            if (event.key === "Escape") onClose();
-          }}
-        >
-          <div className="section-heading">
-            <div>
-              <span className="eyebrow">{eyebrow}</span>
-              <h2 id={headingId}>{title}</h2>
-            </div>
-            <IconButton title={t("关闭", "Close")} onClick={onClose}>
-              <X size={18} />
-            </IconButton>
-          </div>
-
-          <div className="qr-body">
-            <div className="qr-stage">
-              <div className="qr-box">
-                {qrImage ? (
-                  <img src={qrImage} alt={qrAlt} className="qr-image" />
-                ) : (
-                  <div className="loading qr-image">{t("正在生成二维码…", "Generating QR…")}</div>
-                )}
-                {state === "confirmed" && (
-                  <div className="qr-mask ok">
-                    <CheckCircle2 size={44} />
-                    <span>{t("连接成功", "Connected")}</span>
-                  </div>
-                )}
-                {state === "expired" && (
-                  <div className="qr-mask">
-                    <RotateCcw size={40} />
-                    <button className="button secondary" onClick={() => void onRefresh()}>
-                      {t("重新生成", "Regenerate")}
-                    </button>
-                  </div>
-                )}
+    <Modal
+      t={t}
+      headingId={headingId}
+      eyebrow={eyebrow}
+      title={title}
+      panelClassName="account-dialog qr-connect-dialog"
+      onClose={onClose}
+    >
+      <div className="qr-body">
+        <div className="qr-stage">
+          <div className="qr-box">
+            {qrImage ? (
+              <img src={qrImage} alt={qrAlt} className="qr-image" />
+            ) : (
+              <div className="loading qr-image">{t("正在生成二维码…", "Generating QR…")}</div>
+            )}
+            {state === "confirmed" && (
+              <div className="qr-mask ok">
+                <CheckCircle2 size={44} />
+                <span>{t("连接成功", "Connected")}</span>
               </div>
-              <div className="qr-side">
-                <div className="qr-timer" style={{ opacity: state === "waiting" ? 1 : 0.45 }}>
-                  <Clock size={13} />
-                  {state === "waiting"
-                    ? `${t("剩余", "left")} ${Math.floor(left / 60)}:${String(left % 60).padStart(2, "0")}`
-                    : t("已就绪", "ready")}
-                </div>
-                <div
-                  className="qr-refresh-dots"
-                  title={t(
-                    "二维码有效期倒计时，归零自动换码（最多 2 次）",
-                    "Countdown; auto-refresh up to 2 times",
-                  )}
-                >
-                  <span className={refreshed >= 1 ? "on" : ""}></span>
-                  <span className={refreshed >= 2 ? "on" : ""}></span>
-                </div>
-                {scanned?.nickname && (
-                  <div className="qr-scanned-as">
-                    <img
-                      src={`/api/image?url=${encodeURIComponent(scanned.avatarUrl ?? "")}`}
-                      alt=""
-                      referrerPolicy="no-referrer"
-                      onError={(event) => {
-                        (event.target as HTMLImageElement).style.display = "none";
-                      }}
-                    />
-                    {scanned.nickname}
-                  </div>
-                )}
-              </div>
-            </div>
-
-            <p className="qr-hint" data-state={state}>
-              {hint}
-            </p>
-
-            {fallback.blocked && (
-              <div className="qr-fallback">
-                <strong>{fallback.title}</strong>
-                {fallback.cookieOpen ? (
-                  <>
-                    <textarea
-                      value={fallback.cookieText}
-                      onChange={(event) => fallback.onTextChange(event.target.value)}
-                      placeholder={fallback.placeholder}
-                    />
-                    <div className="inline-input">
-                      <button
-                        className="button primary"
-                        disabled={fallback.cookieBusy || !fallback.cookieText.trim()}
-                        onClick={() => void fallback.onConnectCookie()}
-                      >
-                        {fallback.cookieBusy ? t("连接中…", "Connecting…") : t("连接", "Connect")}
-                      </button>
-                      <button className="text-button" onClick={fallback.onRetryQr}>
-                        {t("← 再试一次扫码", "← Try QR again")}
-                      </button>
-                    </div>
-                  </>
-                ) : (
-                  <button className="button secondary" onClick={fallback.onOpenCookie}>
-                    <KeyRound size={15} />
-                    {t("粘贴 Cookie 连接", "Paste cookie")}
-                  </button>
-                )}
-                <button className="text-button qr-help-link" onClick={fallback.onOpenHelp}>
-                  {t("如何获取 Cookie？看图文说明 →", "How to get the cookie? See guide →")}
+            )}
+            {state === "expired" && (
+              <div className="qr-mask">
+                <RotateCcw size={40} />
+                <button className="button secondary" onClick={() => void onRefresh()}>
+                  {t("重新生成", "Regenerate")}
                 </button>
               </div>
             )}
-
-            {!fallback.blocked && <p className="mini-note qr-note">{note}</p>}
           </div>
-        </section>
+          <div className="qr-side">
+            <div className="qr-timer" style={{ opacity: state === "waiting" ? 1 : 0.45 }}>
+              <Clock size={13} />
+              {state === "waiting"
+                ? `${t("剩余", "left")} ${Math.floor(left / 60)}:${String(left % 60).padStart(2, "0")}`
+                : t("已就绪", "ready")}
+            </div>
+            <div
+              className="qr-refresh-dots"
+              title={t(
+                "二维码有效期倒计时，归零自动换码（最多 2 次）",
+                "Countdown; auto-refresh up to 2 times",
+              )}
+            >
+              <span className={refreshed >= 1 ? "on" : ""}></span>
+              <span className={refreshed >= 2 ? "on" : ""}></span>
+            </div>
+            {scanned?.nickname && (
+              <div className="qr-scanned-as">
+                <img
+                  src={`/api/image?url=${encodeURIComponent(scanned.avatarUrl ?? "")}`}
+                  alt=""
+                  referrerPolicy="no-referrer"
+                  onError={(event) => {
+                    (event.target as HTMLImageElement).style.display = "none";
+                  }}
+                />
+                {scanned.nickname}
+              </div>
+            )}
+          </div>
+        </div>
+
+        <p className="qr-hint" data-state={state}>
+          {hint}
+        </p>
+
+        {fallback.blocked && (
+          <div className="qr-fallback">
+            <strong>{fallback.title}</strong>
+            {fallback.cookieOpen ? (
+              <>
+                <textarea
+                  value={fallback.cookieText}
+                  onChange={(event) => fallback.onTextChange(event.target.value)}
+                  placeholder={fallback.placeholder}
+                />
+                <div className="inline-input">
+                  <button
+                    className="button primary"
+                    disabled={fallback.cookieBusy || !fallback.cookieText.trim()}
+                    onClick={() => void fallback.onConnectCookie()}
+                  >
+                    {fallback.cookieBusy ? t("连接中…", "Connecting…") : t("连接", "Connect")}
+                  </button>
+                  <button className="text-button" onClick={fallback.onRetryQr}>
+                    {t("← 再试一次扫码", "← Try QR again")}
+                  </button>
+                </div>
+              </>
+            ) : (
+              <button className="button secondary" onClick={fallback.onOpenCookie}>
+                <KeyRound size={15} />
+                {t("粘贴 Cookie 连接", "Paste cookie")}
+              </button>
+            )}
+            <button className="text-button qr-help-link" onClick={fallback.onOpenHelp}>
+              {t("如何获取 Cookie？看图文说明 →", "How to get the cookie? See guide →")}
+            </button>
+          </div>
+        )}
+
+        {!fallback.blocked && <p className="mini-note qr-note">{note}</p>}
       </div>
-    </FocusTrap>
+    </Modal>
   );
 }

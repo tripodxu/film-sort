@@ -95,7 +95,20 @@ export function DepthCompareView({ profile, peer, t, navigateTo }: DepthCompareV
 
   const head = (
     <header className="depth-head">
-      <p className="eyebrow">{t("深度比较", "DEPTH COMPARE")}</p>
+      <div
+        style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}
+      >
+        <p className="eyebrow">{t("深度比较", "DEPTH COMPARE")}</p>
+        {profile && peer && comparison && (
+          <button
+            className="text-button"
+            onClick={() => navigateTo("compare")}
+            style={{ fontSize: 12 }}
+          >
+            {t("← 返回相遇页", "← Back to encounter")}
+          </button>
+        )}
+      </div>
       <h1>{t("同一份比较，第二种读法", "The same comparison, read twice")}</h1>
       <p className="depth-lede">
         {t(

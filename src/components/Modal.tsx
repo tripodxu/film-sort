@@ -11,7 +11,7 @@
  * 本组件只负责把「声明 + 背景点击 + 事件冒泡」这三件的接线锁成唯一正解。
  */
 import { X } from "lucide-react";
-import type { ReactNode } from "react";
+import type { CSSProperties, ReactNode } from "react";
 import { FocusTrap } from "./FocusTrap";
 import { IconButton } from "../views/IconButton";
 
@@ -24,6 +24,8 @@ export interface ModalProps {
   onClose: () => void;
   /** 面板 class。默认是标准对话外形。 */
   panelClassName?: string;
+  /** 面板内联样式（如限宽）。 */
+  panelStyle?: CSSProperties;
   /** 背景层 class（整串覆写，如 `"modal-backdrop note-backdrop"`）。 */
   backdropClassName?: string;
   /** 眉标。传了它，标题会被包进一层 `<div>` —— 两种标题栏 DOM 结构由 CSS 分别对待，
@@ -40,6 +42,7 @@ export function Modal({
   headingId,
   onClose,
   panelClassName = "account-dialog",
+  panelStyle,
   backdropClassName = "modal-backdrop",
   eyebrow,
   title,
@@ -50,6 +53,7 @@ export function Modal({
       <div className={backdropClassName} onClick={onClose}>
         <section
           className={panelClassName}
+          style={panelStyle}
           role="dialog"
           aria-modal="true"
           aria-labelledby={headingId}

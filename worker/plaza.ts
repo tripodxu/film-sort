@@ -229,7 +229,10 @@ export async function plazaRoute(request: Request, env: Env): Promise<Response> 
       },
       // 与 items 等长、按位置对齐；null 表示该条没有已持久化的海报地址。
       posterUrls,
-      comments: comments.results ?? [],
+      comments: (comments.results ?? []).map((c) => ({
+        ...c,
+        is_author: !!viewer && viewer.id === (c as { user_id?: number }).user_id,
+      })),
     });
   }
 

@@ -11,11 +11,7 @@ import {
   RINGS_LAYOUT_KEY,
 } from "./lib/storageKeys";
 import {
-  compareDimensions,
-  compareProfiles,
-  compareRankings,
   MAX_PROFILE_BYTES,
-  mergeDimensionRankings,
   mergeRanking,
   parseProfile,
   profileText,
@@ -1249,10 +1245,6 @@ function AppShell() {
         setManualOwnSelections={setManualOwnSelections}
         manualPeerSelections={manualPeerSelections}
         setManualPeerSelections={setManualPeerSelections}
-        compareRankings={compareRankings}
-        mergeDimensionRankings={mergeDimensionRankings}
-        compareDimensions={compareDimensions}
-        compareProfiles={compareProfiles}
         navigateTo={navigateTo}
         setPeer={setPeer}
         openAiConfig={() => setAiConfigOpen(true)}

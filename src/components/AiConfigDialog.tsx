@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState } from "react";
-import { Check, Plug, RefreshCw, Sparkles, X } from "lucide-react";
-import { IconButton } from "../views/IconButton";
-import { FocusTrap } from "./FocusTrap";
+import { Check, Plug, RefreshCw, Sparkles } from "lucide-react";
+import { Modal } from "./Modal";
 import {
   clearAiConfig,
   fetchAiModels,
@@ -184,400 +183,378 @@ export function AiConfigDialog({
   const label = { fontSize: 12, color: "var(--muted)", marginBottom: 4 };
 
   return (
-    <div className="modal-backdrop" onClick={onClose}>
-      <FocusTrap onEscape={onClose}>
-        <section
-          className="account-dialog"
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="ai-config-heading"
-          onClick={(event) => event.stopPropagation()}
-          style={{ width: "min(560px, 100%)" }}
-        >
-          <div className="section-heading">
-            <div>
-              <span className="eyebrow">AI</span>
-              <h2 id="ai-config-heading">{t("AI 解读服务", "AI service")}</h2>
-            </div>
-            <IconButton title={t("关闭", "Close")} onClick={onClose}>
-              <X size={18} />
-            </IconButton>
-          </div>
-          <p style={{ fontSize: 13, color: "var(--muted)", lineHeight: 1.7 }}>
-            {t(
-              "填入自己的 API 后，榜单/画像/比较的 AI 点评都会走你的服务；留空则使用服务端内置模型。Base URL 填到 /v1 这一级，例如 https://api.openai.com/v1 或 https://api.anthropic.com。",
-              "With your own API, all AI commentary goes to your service; leave empty to use the built-in one. Base URL goes up to /v1, e.g. https://api.openai.com/v1 or https://api.anthropic.com.",
-            )}
-          </p>
-          <div style={{ display: "grid", gap: 10, marginBottom: 10 }}>
-            <div>
-              <div style={label}>Base URL</div>
-              <input
-                value={baseUrl}
-                onChange={(event) => setBaseUrl(event.target.value)}
-                placeholder="https://api.openai.com/v1"
-                spellCheck={false}
-              />
-            </div>
-            <div>
-              <div style={label}>API Key</div>
-              <div style={{ display: "flex", gap: 6 }}>
-                <input
-                  type={showKey ? "text" : "password"}
-                  value={apiKey}
-                  onChange={(event) => setApiKey(event.target.value)}
-                  placeholder="sk-…"
-                  spellCheck={false}
-                  style={{ flex: 1 }}
-                />
-                <button
-                  className="button secondary"
-                  onClick={() => setShowKey(!showKey)}
-                  style={{ minHeight: 36, paddingInline: 10, fontSize: 12 }}
-                >
-                  {showKey ? t("隐藏", "Hide") : t("显示", "Show")}
-                </button>
-              </div>
-            </div>
-            <div>
-              <div style={label}>
-                Model{" "}
-                {models.length > 0 && (
-                  <span style={{ color: "var(--accent)" }}>
-                    · {t("点击下方列表即可选择，也可继续手输", "pick from the list or keep typing")}
-                  </span>
-                )}
-              </div>
-              <div style={{ position: "relative" }}>
-                <input
-                  value={model}
-                  onChange={(event) => {
-                    setModel(event.target.value);
-                    if (models.length > 0) setModelMenuOpen(true);
-                  }}
-                  onFocus={() => {
-                    if (models.length > 0) setModelMenuOpen(true);
-                  }}
-                  onBlur={() => {
-                    // 延迟关闭：给下拉项的 mousedown（先于 blur 触发）留出选择窗口
-                    if (modelMenuTimerRef.current !== null) {
-                      window.clearTimeout(modelMenuTimerRef.current);
-                    }
-                    modelMenuTimerRef.current = window.setTimeout(
-                      () => setModelMenuOpen(false),
-                      150,
-                    );
-                  }}
-                  placeholder={
-                    models.length > 0 ? t("点开下拉或手输", "pick below or type") : "gpt-4o-mini"
-                  }
-                  spellCheck={false}
-                  autoComplete="off"
-                  role="combobox"
-                  aria-expanded={modelMenuOpen && filteredModels.length > 0}
-                  aria-controls="ai-model-options"
-                />
-                {modelMenuOpen && filteredModels.length > 0 && (
-                  <div
-                    id="ai-model-options"
-                    role="listbox"
-                    style={{
-                      position: "absolute",
-                      top: "calc(100% + 4px)",
-                      left: 0,
-                      right: 0,
-                      zIndex: 40,
-                      maxHeight: 220,
-                      overflowY: "auto",
-                      background: "var(--surface-3)",
-                      border: "1px solid var(--border-2)",
-                      borderRadius: "var(--r-md, 8px)",
-                      boxShadow: "var(--ev-2)",
-                      overflowX: "hidden",
-                    }}
-                  >
-                    {filteredModels.map((name) => (
-                      <button
-                        key={name}
-                        type="button"
-                        role="option"
-                        aria-selected={name === model}
-                        onMouseDown={(event) => {
-                          // mousedown 抢在 input blur 之前完成选择
-                          event.preventDefault();
-                          setModel(name);
-                          setModelMenuOpen(false);
-                        }}
-                        style={{
-                          display: "block",
-                          width: "100%",
-                          textAlign: "left",
-                          padding: "8px 12px",
-                          fontSize: 12,
-                          border: 0,
-                          cursor: "pointer",
-                          color: "var(--text)",
-                          background:
-                            name === model
-                              ? "var(--surface-3, rgba(127,127,127,.16))"
-                              : "transparent",
-                        }}
-                        onMouseEnter={(event) => {
-                          event.currentTarget.style.background = "var(--surface-hover)";
-                        }}
-                        onMouseLeave={(event) => {
-                          event.currentTarget.style.background =
-                            name === model
-                              ? "var(--surface-3, rgba(127,127,127,.16))"
-                              : "transparent";
-                        }}
-                      >
-                        {name}
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
-            </div>
-            <div>
-              <div style={label}>{t("协议（默认自动探测）", "Protocol (auto by default)")}</div>
-              <select
-                value={protocol}
-                onChange={(event) => setProtocol(event.target.value as AiProtocol)}
-              >
-                {PROTOCOL_OPTIONS.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {t(option.zh, option.en)}
-                  </option>
-                ))}
-              </select>
-            </div>
-          </div>
-          {message && (
-            <p
-              style={{
-                fontSize: 12,
-                margin: "0 0 10px",
-                color: message.ok ? "var(--green)" : "var(--red)",
-                lineHeight: 1.6,
-                overflowWrap: "anywhere",
-              }}
-            >
-              {message.text}
-            </p>
-          )}
-          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 12 }}>
-            <button
-              className="button secondary"
-              disabled={!canList || listBusy}
-              onClick={() => void runList()}
-            >
-              <RefreshCw size={14} />
-              {listBusy ? t("获取中…", "Loading…") : t("获取模型列表", "List models")}
-            </button>
-            <button
-              className="button secondary"
-              disabled={!canSave || testBusy}
-              onClick={() => void runTest()}
-            >
-              <Plug size={14} />
-              {testBusy ? t("测试中…", "Testing…") : t("测试连接", "Test connection")}
-            </button>
-          </div>
-          <p className="mini-note" style={{ margin: 0, lineHeight: 1.7 }}>
-            {t(
-              "Key 仅保存在本浏览器（不清除就一直有效）；AI 点评会把榜单标题发送给你配置的服务。如遇 404，请检查 Base URL 与协议是否匹配。",
-              "The key stays in this browser only; AI commentary sends ranking titles to your configured service. On 404, check that the Base URL and protocol match.",
-            )}
-          </p>
-          <div className="rank-menu-sep" style={{ margin: "16px 0" }} />
-          <div className="section-heading" style={{ marginBottom: 10 }}>
-            <div>
-              <span className="eyebrow">Jev</span>
-              <h2 style={{ fontSize: 17 }}>
-                {t("Jev 快排（TypeSafe）", "Jev quick rank (TypeSafe)")}
-              </h2>
-            </div>
-          </div>
-          <p style={{ fontSize: 13, color: "var(--muted)", lineHeight: 1.7, marginBottom: 10 }}>
-            {t(
-              "用于准备页的「AI 快排」与排序中的「Jev 代判」。未配置 Key 时自动使用站内免费通道（限频共用）；也可填自己的 API Key（console.typesafe.ai 申请），Key 仅保存在本浏览器。",
-              'Powers "AI quick rank" on the prepare page and "Jev assist" while sorting. Without a key, the built-in free channel is used automatically (shared, rate-limited); or add your own key from console.typesafe.ai — stored in this browser only.',
-            )}
-          </p>
-          <div style={{ display: "flex", gap: 6, marginBottom: 8 }}>
+    <Modal
+      t={t}
+      headingId="ai-config-heading"
+      eyebrow="AI"
+      title={t("AI 解读服务", "AI service")}
+      panelStyle={{ width: "min(560px, 100%)" }}
+      onClose={onClose}
+    >
+      <p style={{ fontSize: 13, color: "var(--muted)", lineHeight: 1.7 }}>
+        {t(
+          "填入自己的 API 后，榜单/画像/比较的 AI 点评都会走你的服务；留空则使用服务端内置模型。Base URL 填到 /v1 这一级，例如 https://api.openai.com/v1 或 https://api.anthropic.com。",
+          "With your own API, all AI commentary goes to your service; leave empty to use the built-in one. Base URL goes up to /v1, e.g. https://api.openai.com/v1 or https://api.anthropic.com.",
+        )}
+      </p>
+      <div style={{ display: "grid", gap: 10, marginBottom: 10 }}>
+        <div>
+          <div style={label}>Base URL</div>
+          <input
+            value={baseUrl}
+            onChange={(event) => setBaseUrl(event.target.value)}
+            placeholder="https://api.openai.com/v1"
+            spellCheck={false}
+          />
+        </div>
+        <div>
+          <div style={label}>API Key</div>
+          <div style={{ display: "flex", gap: 6 }}>
             <input
               type={showKey ? "text" : "password"}
-              value={jevKey}
-              onChange={(event) => setJevKey(event.target.value)}
-              placeholder="apikey_…"
+              value={apiKey}
+              onChange={(event) => setApiKey(event.target.value)}
+              placeholder="sk-…"
               spellCheck={false}
               style={{ flex: 1 }}
-              aria-label={t("TypeSafe API Key", "TypeSafe API key")}
             />
             <button
               className="button secondary"
-              disabled={(jevKey.trim().length > 0 && !canSaveJev) || jevTestBusy}
-              onClick={() => void runJevTest()}
+              onClick={() => setShowKey(!showKey)}
               style={{ minHeight: 36, paddingInline: 10, fontSize: 12 }}
             >
-              <Sparkles size={14} />
-              {jevTestBusy
-                ? t("测试中…", "Testing…")
-                : jevKey.trim().length === 0
-                  ? t("测试免费通道", "Test free channel")
-                  : t("测试", "Test")}
-            </button>
-            <button
-              className="button secondary"
-              disabled={!canSaveJev}
-              onClick={saveJev}
-              style={{ minHeight: 36, paddingInline: 10, fontSize: 12 }}
-            >
-              <Check size={14} />
-              {t("保存 Key", "Save key")}
+              {showKey ? t("隐藏", "Hide") : t("显示", "Show")}
             </button>
           </div>
-          {jevMessage && (
-            <p
-              style={{
-                fontSize: 12,
-                margin: "0 0 4px",
-                color: jevMessage.ok ? "var(--green)" : "var(--red)",
-                lineHeight: 1.6,
-                overflowWrap: "anywhere",
-              }}
-            >
-              {jevMessage.text}
-            </p>
-          )}
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: 8,
-              marginBottom: 10,
-              flexWrap: "wrap",
-            }}
-          >
-            <button
-              className={`settings-chip${jevAssistOn ? " active" : ""}`}
-              aria-pressed={jevAssistOn}
-              onClick={() => {
-                const next = !jevAssistOn;
-                if (writeJevAssistEnabled(next)) setJevAssistOn(next);
-              }}
-            >
-              {t("排序时 AI 代判", "AI-assist while sorting")}
-            </button>
-            <span className="mini-note">
-              {t(
-                `置信 ≥${assistPct}% 的取舍自动落位,可撤销;复测阶段仍由你判断。`,
-                `Pairs with ≥${assistPct}% confidence are auto-picked (undoable); verification stays yours.`,
-              )}
-            </span>
-          </div>
-          {/* 阈值本身也是 opt-in 的一部分:开关关着时整组降透明,但仍可调,
-              先设好再开、不必来回切。 */}
-          <div style={{ marginBottom: 12, opacity: jevAssistOn ? 1 : 0.6 }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-              <span className="settings-group-label" style={{ padding: 0 }}>
-                {t("代判阈值", "Assist threshold")}
+        </div>
+        <div>
+          <div style={label}>
+            Model{" "}
+            {models.length > 0 && (
+              <span style={{ color: "var(--accent)" }}>
+                · {t("点击下方列表即可选择，也可继续手输", "pick from the list or keep typing")}
               </span>
-              {jevThreshold !== ASSIST_THRESHOLD_DEFAULT && (
-                <button
-                  className="text-button"
-                  style={{ minHeight: 0, fontSize: 11, marginLeft: "auto" }}
-                  onClick={() => {
-                    if (writeJevAssistThreshold(ASSIST_THRESHOLD_DEFAULT)) {
-                      setJevThreshold(ASSIST_THRESHOLD_DEFAULT);
-                    }
-                  }}
-                >
-                  {t("恢复默认", "Reset")}
-                </button>
-              )}
-            </div>
-            <div
-              className="settings-chip-grid"
-              role="radiogroup"
-              aria-label={t("代判置信阈值", "Assist confidence threshold")}
-              style={{
-                gridTemplateColumns: `repeat(${ASSIST_THRESHOLD_CHOICES.length}, minmax(0, 1fr))`,
-                padding: 0,
-                marginTop: 6,
+            )}
+          </div>
+          <div style={{ position: "relative" }}>
+            <input
+              value={model}
+              onChange={(event) => {
+                setModel(event.target.value);
+                if (models.length > 0) setModelMenuOpen(true);
               }}
-            >
-              {ASSIST_THRESHOLD_CHOICES.map((value) => {
-                const active = Math.abs(jevThreshold - value) < 1e-9;
-                return (
+              onFocus={() => {
+                if (models.length > 0) setModelMenuOpen(true);
+              }}
+              onBlur={() => {
+                // 延迟关闭：给下拉项的 mousedown（先于 blur 触发）留出选择窗口
+                if (modelMenuTimerRef.current !== null) {
+                  window.clearTimeout(modelMenuTimerRef.current);
+                }
+                modelMenuTimerRef.current = window.setTimeout(() => setModelMenuOpen(false), 150);
+              }}
+              placeholder={
+                models.length > 0 ? t("点开下拉或手输", "pick below or type") : "gpt-4o-mini"
+              }
+              spellCheck={false}
+              autoComplete="off"
+              role="combobox"
+              aria-expanded={modelMenuOpen && filteredModels.length > 0}
+              aria-controls="ai-model-options"
+            />
+            {modelMenuOpen && filteredModels.length > 0 && (
+              <div
+                id="ai-model-options"
+                role="listbox"
+                style={{
+                  position: "absolute",
+                  top: "calc(100% + 4px)",
+                  left: 0,
+                  right: 0,
+                  zIndex: 40,
+                  maxHeight: 220,
+                  overflowY: "auto",
+                  background: "var(--surface-3)",
+                  border: "1px solid var(--border-2)",
+                  borderRadius: "var(--r-md, 8px)",
+                  boxShadow: "var(--ev-2)",
+                  overflowX: "hidden",
+                }}
+              >
+                {filteredModels.map((name) => (
                   <button
-                    key={value}
-                    role="menuitemradio"
-                    aria-checked={active}
-                    className={`settings-chip${active ? " active" : ""}`}
-                    onClick={() => {
-                      if (writeJevAssistThreshold(value)) setJevThreshold(value);
+                    key={name}
+                    type="button"
+                    role="option"
+                    aria-selected={name === model}
+                    onMouseDown={(event) => {
+                      // mousedown 抢在 input blur 之前完成选择
+                      event.preventDefault();
+                      setModel(name);
+                      setModelMenuOpen(false);
+                    }}
+                    style={{
+                      display: "block",
+                      width: "100%",
+                      textAlign: "left",
+                      padding: "8px 12px",
+                      fontSize: 12,
+                      border: 0,
+                      cursor: "pointer",
+                      color: "var(--text)",
+                      background:
+                        name === model ? "var(--surface-3, rgba(127,127,127,.16))" : "transparent",
+                    }}
+                    onMouseEnter={(event) => {
+                      event.currentTarget.style.background = "var(--surface-hover)";
+                    }}
+                    onMouseLeave={(event) => {
+                      event.currentTarget.style.background =
+                        name === model ? "var(--surface-3, rgba(127,127,127,.16))" : "transparent";
                     }}
                   >
-                    {Math.round(value * 100)}%
+                    {name}
                   </button>
-                );
-              })}
-            </div>
-            <p className="mini-note" style={{ margin: "6px 0 0", lineHeight: 1.7 }}>
-              {t(
-                "调低更省事：接近平局的对也交给 AI；调高更保守：只接管你几乎板上钉钉的选择。",
-                "Lower means more help — near-ties get auto-picked; higher keeps them for you.",
-              )}
-            </p>
-          </div>
-          <div className="guide-modal-footer">
-            {existing && (
-              <button
-                className="button quiet"
-                onClick={() => {
-                  clearAiConfig();
-                  window.dispatchEvent(new CustomEvent("art-rank:ai-config-changed"));
-                  onSaved?.();
-                  onClose();
-                }}
-                title={t(
-                  "删除本浏览器保存的配置，AI 点评回到服务端内置通道",
-                  "Remove the saved config in this browser; commentary falls back to the built-in channel",
-                )}
-              >
-                {t("停用我的 API（回到内置）", "Use built-in instead")}
-              </button>
+                ))}
+              </div>
             )}
-            <div style={{ flex: 1 }} />
-            <button
-              className="button secondary"
-              onClick={() => {
-                setBaseUrl("");
-                setApiKey("");
-                setModel("");
-                setProtocol("auto");
-                setModels([]);
-                setMessage(null);
-              }}
-              title={t(
-                "仅清空下方输入框，不影响已保存的配置",
-                "Clears the form only — keeps the saved config",
-              )}
-            >
-              {t("清空表单", "Reset")}
-            </button>
-            <button className="button secondary" onClick={onClose}>
-              {t("取消", "Cancel")}
-            </button>
-            <button className="button primary" disabled={!canSave} onClick={save}>
-              <Check size={15} />
-              {t("保存", "Save")}
-            </button>
           </div>
-        </section>
-      </FocusTrap>
-    </div>
+        </div>
+        <div>
+          <div style={label}>{t("协议（默认自动探测）", "Protocol (auto by default)")}</div>
+          <select
+            value={protocol}
+            onChange={(event) => setProtocol(event.target.value as AiProtocol)}
+          >
+            {PROTOCOL_OPTIONS.map((option) => (
+              <option key={option.value} value={option.value}>
+                {t(option.zh, option.en)}
+              </option>
+            ))}
+          </select>
+        </div>
+      </div>
+      {message && (
+        <p
+          style={{
+            fontSize: 12,
+            margin: "0 0 10px",
+            color: message.ok ? "var(--green)" : "var(--red)",
+            lineHeight: 1.6,
+            overflowWrap: "anywhere",
+          }}
+        >
+          {message.text}
+        </p>
+      )}
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 12 }}>
+        <button
+          className="button secondary"
+          disabled={!canList || listBusy}
+          onClick={() => void runList()}
+        >
+          <RefreshCw size={14} />
+          {listBusy ? t("获取中…", "Loading…") : t("获取模型列表", "List models")}
+        </button>
+        <button
+          className="button secondary"
+          disabled={!canSave || testBusy}
+          onClick={() => void runTest()}
+        >
+          <Plug size={14} />
+          {testBusy ? t("测试中…", "Testing…") : t("测试连接", "Test connection")}
+        </button>
+      </div>
+      <p className="mini-note" style={{ margin: 0, lineHeight: 1.7 }}>
+        {t(
+          "Key 仅保存在本浏览器（不清除就一直有效）；AI 点评会把榜单标题发送给你配置的服务。如遇 404，请检查 Base URL 与协议是否匹配。",
+          "The key stays in this browser only; AI commentary sends ranking titles to your configured service. On 404, check that the Base URL and protocol match.",
+        )}
+      </p>
+      <div className="rank-menu-sep" style={{ margin: "16px 0" }} />
+      <div className="section-heading" style={{ marginBottom: 10 }}>
+        <div>
+          <span className="eyebrow">Jev</span>
+          <h2 style={{ fontSize: 17 }}>{t("Jev 快排（TypeSafe）", "Jev quick rank (TypeSafe)")}</h2>
+        </div>
+      </div>
+      <p style={{ fontSize: 13, color: "var(--muted)", lineHeight: 1.7, marginBottom: 10 }}>
+        {t(
+          "用于准备页的「AI 快排」与排序中的「Jev 代判」。未配置 Key 时自动使用站内免费通道（限频共用）；也可填自己的 API Key（console.typesafe.ai 申请），Key 仅保存在本浏览器。",
+          'Powers "AI quick rank" on the prepare page and "Jev assist" while sorting. Without a key, the built-in free channel is used automatically (shared, rate-limited); or add your own key from console.typesafe.ai — stored in this browser only.',
+        )}
+      </p>
+      <div style={{ display: "flex", gap: 6, marginBottom: 8 }}>
+        <input
+          type={showKey ? "text" : "password"}
+          value={jevKey}
+          onChange={(event) => setJevKey(event.target.value)}
+          placeholder="apikey_…"
+          spellCheck={false}
+          style={{ flex: 1 }}
+          aria-label={t("TypeSafe API Key", "TypeSafe API key")}
+        />
+        <button
+          className="button secondary"
+          disabled={(jevKey.trim().length > 0 && !canSaveJev) || jevTestBusy}
+          onClick={() => void runJevTest()}
+          style={{ minHeight: 36, paddingInline: 10, fontSize: 12 }}
+        >
+          <Sparkles size={14} />
+          {jevTestBusy
+            ? t("测试中…", "Testing…")
+            : jevKey.trim().length === 0
+              ? t("测试免费通道", "Test free channel")
+              : t("测试", "Test")}
+        </button>
+        <button
+          className="button secondary"
+          disabled={!canSaveJev}
+          onClick={saveJev}
+          style={{ minHeight: 36, paddingInline: 10, fontSize: 12 }}
+        >
+          <Check size={14} />
+          {t("保存 Key", "Save key")}
+        </button>
+      </div>
+      {jevMessage && (
+        <p
+          style={{
+            fontSize: 12,
+            margin: "0 0 4px",
+            color: jevMessage.ok ? "var(--green)" : "var(--red)",
+            lineHeight: 1.6,
+            overflowWrap: "anywhere",
+          }}
+        >
+          {jevMessage.text}
+        </p>
+      )}
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: 8,
+          marginBottom: 10,
+          flexWrap: "wrap",
+        }}
+      >
+        <button
+          className={`settings-chip${jevAssistOn ? " active" : ""}`}
+          aria-pressed={jevAssistOn}
+          onClick={() => {
+            const next = !jevAssistOn;
+            if (writeJevAssistEnabled(next)) setJevAssistOn(next);
+          }}
+        >
+          {t("排序时 AI 代判", "AI-assist while sorting")}
+        </button>
+        <span className="mini-note">
+          {t(
+            `置信 ≥${assistPct}% 的取舍自动落位,可撤销;复测阶段仍由你判断。`,
+            `Pairs with ≥${assistPct}% confidence are auto-picked (undoable); verification stays yours.`,
+          )}
+        </span>
+      </div>
+      {/* 阈值本身也是 opt-in 的一部分:开关关着时整组降透明,但仍可调,
+              先设好再开、不必来回切。 */}
+      <div style={{ marginBottom: 12, opacity: jevAssistOn ? 1 : 0.6 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <span className="settings-group-label" style={{ padding: 0 }}>
+            {t("代判阈值", "Assist threshold")}
+          </span>
+          {jevThreshold !== ASSIST_THRESHOLD_DEFAULT && (
+            <button
+              className="text-button"
+              style={{ minHeight: 0, fontSize: 11, marginLeft: "auto" }}
+              onClick={() => {
+                if (writeJevAssistThreshold(ASSIST_THRESHOLD_DEFAULT)) {
+                  setJevThreshold(ASSIST_THRESHOLD_DEFAULT);
+                }
+              }}
+            >
+              {t("恢复默认", "Reset")}
+            </button>
+          )}
+        </div>
+        <div
+          className="settings-chip-grid"
+          role="radiogroup"
+          aria-label={t("代判置信阈值", "Assist confidence threshold")}
+          style={{
+            gridTemplateColumns: `repeat(${ASSIST_THRESHOLD_CHOICES.length}, minmax(0, 1fr))`,
+            padding: 0,
+            marginTop: 6,
+          }}
+        >
+          {ASSIST_THRESHOLD_CHOICES.map((value) => {
+            const active = Math.abs(jevThreshold - value) < 1e-9;
+            return (
+              <button
+                key={value}
+                role="menuitemradio"
+                aria-checked={active}
+                className={`settings-chip${active ? " active" : ""}`}
+                onClick={() => {
+                  if (writeJevAssistThreshold(value)) setJevThreshold(value);
+                }}
+              >
+                {Math.round(value * 100)}%
+              </button>
+            );
+          })}
+        </div>
+        <p className="mini-note" style={{ margin: "6px 0 0", lineHeight: 1.7 }}>
+          {t(
+            "调低更省事：接近平局的对也交给 AI；调高更保守：只接管你几乎板上钉钉的选择。",
+            "Lower means more help — near-ties get auto-picked; higher keeps them for you.",
+          )}
+        </p>
+      </div>
+      <div className="guide-modal-footer">
+        {existing && (
+          <button
+            className="button quiet"
+            onClick={() => {
+              clearAiConfig();
+              window.dispatchEvent(new CustomEvent("art-rank:ai-config-changed"));
+              onSaved?.();
+              onClose();
+            }}
+            title={t(
+              "删除本浏览器保存的配置，AI 点评回到服务端内置通道",
+              "Remove the saved config in this browser; commentary falls back to the built-in channel",
+            )}
+          >
+            {t("停用我的 API（回到内置）", "Use built-in instead")}
+          </button>
+        )}
+        <div style={{ flex: 1 }} />
+        <button
+          className="button secondary"
+          onClick={() => {
+            setBaseUrl("");
+            setApiKey("");
+            setModel("");
+            setProtocol("auto");
+            setModels([]);
+            setMessage(null);
+          }}
+          title={t(
+            "仅清空下方输入框，不影响已保存的配置",
+            "Clears the form only — keeps the saved config",
+          )}
+        >
+          {t("清空表单", "Reset")}
+        </button>
+        <button className="button secondary" onClick={onClose}>
+          {t("取消", "Cancel")}
+        </button>
+        <button className="button primary" disabled={!canSave} onClick={save}>
+          <Check size={15} />
+          {t("保存", "Save")}
+        </button>
+      </div>
+    </Modal>
   );
 }

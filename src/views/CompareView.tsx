@@ -3,7 +3,13 @@ import { ArrowLeftRight, ArrowRight, Link, Play, Plus, Share2, X } from "lucide-
 import { Poster } from "../components/Poster";
 import { MetricHelp } from "../components/MetricHelp";
 import { RankingEntryRow } from "../components/RankingEntryRow";
-import type { RankingExport } from "../lib/profile";
+import {
+  compareDimensions,
+  compareProfiles,
+  compareRankings,
+  mergeDimensionRankings,
+  type RankingExport,
+} from "../lib/profile";
 import { rankingRowKey } from "../lib/rankingKey";
 import { AiInsightCard } from "../components/AiInsightCard";
 import { JevDivergenceCard } from "../components/JevDivergenceCard";
@@ -34,10 +40,6 @@ export function CompareView({
   setManualOwnSelections,
   manualPeerSelections,
   setManualPeerSelections,
-  compareRankings,
-  mergeDimensionRankings,
-  compareDimensions,
-  compareProfiles,
   navigateTo,
   setPeer,
   openAiConfig,
@@ -142,27 +144,17 @@ export function CompareView({
     const ownMerged = mergeDimensionRankings(ownRankings, strategy);
     const peerMerged = mergeDimensionRankings(peerRankings, strategy);
     return ownMerged && peerMerged ? compareDimensions(ownMerged, peerMerged) : null;
-  }, [
-    compareLevel,
-    compareMode,
-    selectedOwn,
-    selectedPeer,
-    ownRankings,
-    peerRankings,
-    compareRankings,
-    mergeDimensionRankings,
-    compareDimensions,
-  ]);
+  }, [compareLevel, compareMode, selectedOwn, selectedPeer, ownRankings, peerRankings]);
   const crossProfile = useMemo(
     () => (profile && peer ? compareProfiles(profile, peer) : null),
-    [profile, peer, compareProfiles],
+    [profile, peer],
   );
   // Jev 预测分歧（Phase 6）：对方合并榜单（与 result 同一合并口径）+ 我的品味档案概要。
   const mergeStrategy = compareLevel === "precise" ? ("median" as const) : ("best" as const);
   const peerMergedForJev = useMemo(
     () =>
       mergeDimensionRankings(compareMode === "manual" ? selectedPeer : peerRankings, mergeStrategy),
-    [compareMode, selectedPeer, peerRankings, mergeStrategy, mergeDimensionRankings],
+    [compareMode, selectedPeer, peerRankings, mergeStrategy],
   );
   const myTasteContext = useMemo(
     () => (profile ? buildTasteContext(profile.rankings) : ""),
@@ -196,7 +188,25 @@ export function CompareView({
             ),
       )}
       {peer && (
-        <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 12, gap: 8 }}>
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "flex-end",
+            marginBottom: 12,
+            gap: 12,
+            flexWrap: "wrap",
+          }}
+        >
+          {profile && (
+            <button
+              className="text-button"
+              onClick={() => navigateTo("depth")}
+              style={{ fontSize: 12 }}
+            >
+              {t("深度比较", "Depth compare")}
+              <ArrowRight size={14} />
+            </button>
+          )}
           <button
             className="text-button"
             onClick={() => {

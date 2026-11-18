@@ -23,6 +23,17 @@ export function themeFamily(id: string): ThemeFamily {
   return FAMILY_BY_ID[id] ?? "classic";
 }
 
+/** 当前主题 id，跟随「主题」菜单切换即时重渲染。 */
+export function useTheme(): string {
+  const [theme, setTheme] = useState<string>(() => readTheme());
+  useEffect(() => {
+    const onChange = () => setTheme(readTheme());
+    window.addEventListener("art-rank:theme-changed", onChange);
+    return () => window.removeEventListener("art-rank:theme-changed", onChange);
+  }, []);
+  return theme;
+}
+
 /** 当前主题家族，跟随「主题」菜单切换即时重渲染。 */
 export function useThemeFamily(): ThemeFamily {
   const [family, setFamily] = useState<ThemeFamily>(() => themeFamily(readTheme()));

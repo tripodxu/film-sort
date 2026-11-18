@@ -3,9 +3,6 @@ import {
   Check,
   Download,
   Globe,
-  GripVertical,
-  ArrowDown,
-  ArrowUp,
   Link,
   MoreHorizontal,
   Pencil,
@@ -22,12 +19,12 @@ import {
   X,
 } from "lucide-react";
 import { Poster } from "../components/Poster";
-import { FocusTrap } from "../components/FocusTrap";
+import { parseManualWorkLines, SortableWorkList } from "../components/SortableWorkList";
+import { Modal } from "../components/Modal";
 import { GalleryBento } from "../components/GalleryBento";
 import { GalleryWall } from "../components/GalleryWall";
 import { useThemeFamily } from "../lib/useTheme";
 import type { CssVars } from "../lib/cssVars";
-import { IconButton } from "./IconButton";
 import { heading } from "./helpers";
 import { undoLastAction } from "../lib/ranking";
 import { noteKey, hasNote } from "../lib/notes";
@@ -831,108 +828,87 @@ export function ProfileView({
 
       {/* Publish to Plaza Modal */}
       {showPublishModal && (
-        <FocusTrap onEscape={() => setShowPublishModal(false)}>
-          <div className="modal-backdrop" onClick={() => setShowPublishModal(false)}>
-            <section
-              className="account-dialog publish-modal"
-              role="dialog"
-              aria-modal="true"
-              aria-labelledby="publish-heading"
-              onClick={(event) => event.stopPropagation()}
-              onKeyDown={(event) => {
-                if (event.key === "Escape") setShowPublishModal(false);
+        <Modal
+          t={t}
+          headingId="publish-heading"
+          eyebrow="PLAZA"
+          title={t("发布到广场", "Publish to Plaza")}
+          panelClassName="account-dialog publish-modal"
+          onClose={() => setShowPublishModal(false)}
+        >
+          <p style={{ fontSize: 13, color: "var(--muted)", lineHeight: 1.7 }}>
+            {publishTarget === "profile"
+              ? t(
+                  `将画像「${profile.profileName}」（${profile.rankings.length} 个榜单）发布到文化广场，其他用户可以看到、点赞、留言和使用其中的榜单排序。`,
+                  `Publish profile "${profile.profileName}" (${profile.rankings.length} lists) to the Culture Plaza.`,
+                )
+              : t(
+                  `将「${activeRanking.collectionTitle}」发布到文化广场，其他用户可以看到、点赞、留言和使用你的榜单排序。`,
+                  `Publish "${activeRanking.collectionTitle}" to the Culture Plaza. Others can see, like, comment, and sort with your ranking.`,
+                )}
+          </p>
+          <div className="publish-desc-label">
+            <b>{t("榜单描述", "Description")}</b>
+            <span>{publishDesc.length} / 500</span>
+          </div>
+          <textarea
+            className="publish-desc"
+            maxLength={500}
+            value={publishDesc}
+            onChange={(e) => setPublishDesc(e.target.value)}
+            placeholder={t(
+              "介绍一下这份榜单，让别人更懂你的品味…（可选）",
+              "Introduce this list so others understand your taste… (optional)",
+            )}
+            rows={4}
+            autoFocus
+          />
+          <div className="publish-preview">
+            {t(
+              "将随帖子公开展示，可在广场详情页看到。",
+              "Shown publicly on your plaza post detail page.",
+            )}
+          </div>
+          <div className="guide-modal-footer">
+            <button
+              className="button secondary"
+              onClick={() => {
+                setShowPublishModal(false);
+                setPublishDesc("");
               }}
             >
-              <div className="section-heading">
-                <div>
-                  <span className="eyebrow">PLAZA</span>
-                  <h2 id="publish-heading">{t("发布到广场", "Publish to Plaza")}</h2>
-                </div>
-                <IconButton title={t("关闭", "Close")} onClick={() => setShowPublishModal(false)}>
-                  <X size={18} />
-                </IconButton>
-              </div>
-              <p style={{ fontSize: 13, color: "var(--muted)", lineHeight: 1.7 }}>
-                {publishTarget === "profile"
-                  ? t(
-                      `将画像「${profile.profileName}」（${profile.rankings.length} 个榜单）发布到文化广场，其他用户可以看到、点赞、留言和使用其中的榜单排序。`,
-                      `Publish profile "${profile.profileName}" (${profile.rankings.length} lists) to the Culture Plaza.`,
-                    )
-                  : t(
-                      `将「${activeRanking.collectionTitle}」发布到文化广场，其他用户可以看到、点赞、留言和使用你的榜单排序。`,
-                      `Publish "${activeRanking.collectionTitle}" to the Culture Plaza. Others can see, like, comment, and sort with your ranking.`,
-                    )}
-              </p>
-              <div className="publish-desc-label">
-                <b>{t("榜单描述", "Description")}</b>
-                <span>{publishDesc.length} / 500</span>
-              </div>
-              <textarea
-                className="publish-desc"
-                maxLength={500}
-                value={publishDesc}
-                onChange={(e) => setPublishDesc(e.target.value)}
-                placeholder={t(
-                  "介绍一下这份榜单，让别人更懂你的品味…（可选）",
-                  "Introduce this list so others understand your taste… (optional)",
-                )}
-                rows={4}
-                autoFocus
-              />
-              <div className="publish-preview">
-                {t(
-                  "将随帖子公开展示，可在广场详情页看到。",
-                  "Shown publicly on your plaza post detail page.",
-                )}
-              </div>
-              <div className="guide-modal-footer">
-                <button
-                  className="button secondary"
-                  onClick={() => {
-                    setShowPublishModal(false);
-                    setPublishDesc("");
-                  }}
-                >
-                  {t("取消", "Cancel")}
-                </button>
-                <button
-                  className="button primary"
-                  onClick={handlePublish}
-                  style={{ position: "relative" }}
-                >
-                  <Globe size={14} style={{ marginRight: 4 }} />
-                  {t("发布", "Publish")}
-                  {publishBurst && (
-                    <span className="publish-burst">
-                      {Array.from({ length: 12 }).map((_, i) => {
-                        const colors = [
-                          "var(--accent)",
-                          "#4ade80",
-                          "#818cf8",
-                          "#f472b6",
-                          "#facc15",
-                        ];
-                        return (
-                          <span
-                            key={i}
-                            className="publish-particle"
-                            style={
-                              {
-                                "--angle": i * 30 + "deg",
-                                "--delay": i * 0.03 + "s",
-                                "--color": colors[i % 5],
-                              } as CssVars
-                            }
-                          />
-                        );
-                      })}
-                    </span>
-                  )}
-                </button>
-              </div>
-            </section>
+              {t("取消", "Cancel")}
+            </button>
+            <button
+              className="button primary"
+              onClick={handlePublish}
+              style={{ position: "relative" }}
+            >
+              <Globe size={14} style={{ marginRight: 4 }} />
+              {t("发布", "Publish")}
+              {publishBurst && (
+                <span className="publish-burst">
+                  {Array.from({ length: 12 }).map((_, i) => {
+                    const colors = ["var(--accent)", "#4ade80", "#818cf8", "#f472b6", "#facc15"];
+                    return (
+                      <span
+                        key={i}
+                        className="publish-particle"
+                        style={
+                          {
+                            "--angle": i * 30 + "deg",
+                            "--delay": i * 0.03 + "s",
+                            "--color": colors[i % 5],
+                          } as CssVars
+                        }
+                      />
+                    );
+                  })}
+                </span>
+              )}
+            </button>
           </div>
-        </FocusTrap>
+        </Modal>
       )}
     </>
   );
@@ -962,105 +938,34 @@ function ReorderList({
     posterUrls?: readonly string[],
   ) => void;
 }) {
-  const dragIndex = useRef<number | null>(null);
-  const [dropIdx, setDropIdx] = useState<number | null>(null);
-
-  function handleDragStart(e: React.DragEvent, idx: number) {
-    dragIndex.current = idx;
-    e.dataTransfer.effectAllowed = "move";
-    e.dataTransfer.setData("text/plain", String(idx));
-    (e.currentTarget as HTMLElement).classList.add("dragging");
-  }
-  function handleDragEnd(e: React.DragEvent) {
-    (e.currentTarget as HTMLElement).classList.remove("dragging");
-    setDropIdx(null);
-    dragIndex.current = null;
-  }
-  function handleDragOver(e: React.DragEvent, idx: number) {
-    e.preventDefault();
-    e.dataTransfer.dropEffect = "move";
-    const target = idx <= (dragIndex.current ?? -1) ? idx : idx + 1;
-    setDropIdx(target);
-  }
-  function handleDrop(e: React.DragEvent, idx: number) {
-    e.preventDefault();
-    const from = dragIndex.current;
-    if (from === null) return;
-    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
-    const midY = rect.top + rect.height / 2;
-    const to = e.clientY < midY ? idx : idx + 1;
-    moveItem(from, to === from ? from : to > from ? to - 1 : to);
-    setDropIdx(null);
-    dragIndex.current = null;
-  }
-
   return (
     <div>
-      <ol className="ranking-list reorder-list">
-        {items.map((work, idx) => (
-          <li
-            key={work.id}
-            className={`reorder-item ${dropIdx === idx ? "drop-before" : ""} ${dropIdx === items.length && idx === items.length - 1 ? "drop-after" : ""}`}
-            draggable="true"
-            onDragStart={(e) => handleDragStart(e, idx)}
-            onDragEnd={handleDragEnd}
-            onDragOver={(e) => handleDragOver(e, idx)}
-            onDrop={(e) => handleDrop(e, idx)}
+      <SortableWorkList
+        items={items}
+        kind={kind}
+        t={t}
+        onMove={moveItem}
+        renderExtra={(work) => (
+          <button
+            className="icon-button hit-expand"
+            title={t("批注", "Note")}
+            onClick={(e) => {
+              e.stopPropagation();
+              openNoteModal(noteKey("work", kind, work.id), work.title, kind, work.posterUrls);
+            }}
+            style={{
+              width: 28,
+              height: 28,
+              color: hasNote(notes, noteKey("work", kind, work.id))
+                ? "var(--accent)"
+                : "var(--muted)",
+              opacity: hasNote(notes, noteKey("work", kind, work.id)) ? 1 : 0.4,
+            }}
           >
-            <span className="reorder-handle" title={t("拖拽排序", "Drag to reorder")}>
-              <GripVertical size={16} />
-            </span>
-            <span className="row-number">{String(idx + 1).padStart(2, "0")}</span>
-            <span className="ranking-card-poster">
-              <Poster work={work} kind={kind} />
-            </span>
-            <div>
-              <strong>{work.title}</strong>
-              <small>
-                {work.creator} {work.year}
-              </small>
-            </div>
-            <div style={{ display: "flex", gap: 2, marginLeft: "auto", flexShrink: 0 }}>
-              <button
-                className="icon-button hit-expand"
-                title={t("上移", "Move up")}
-                disabled={idx === 0}
-                onClick={() => moveItem(idx, idx - 1)}
-                style={{ width: 28, height: 28 }}
-              >
-                <ArrowUp size={14} />
-              </button>
-              <button
-                className="icon-button hit-expand"
-                title={t("下移", "Move down")}
-                disabled={idx === items.length - 1}
-                onClick={() => moveItem(idx, idx + 1)}
-                style={{ width: 28, height: 28 }}
-              >
-                <ArrowDown size={14} />
-              </button>
-              <button
-                className="icon-button hit-expand"
-                title={t("批注", "Note")}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  openNoteModal(noteKey("work", kind, work.id), work.title, kind, work.posterUrls);
-                }}
-                style={{
-                  width: 28,
-                  height: 28,
-                  color: hasNote(notes, noteKey("work", kind, work.id))
-                    ? "var(--accent)"
-                    : "var(--muted)",
-                  opacity: hasNote(notes, noteKey("work", kind, work.id)) ? 1 : 0.4,
-                }}
-              >
-                <StickyNote size={14} />
-              </button>
-            </div>
-          </li>
-        ))}
-      </ol>
+            <StickyNote size={14} />
+          </button>
+        )}
+      />
       <div style={{ display: "flex", gap: 8, marginTop: 16, justifyContent: "flex-end" }}>
         <button className="button secondary" onClick={onCancel}>
           {t("取消", "Cancel")}
@@ -1111,23 +1016,9 @@ function WorkEditor({
   }
 
   function parseManual() {
-    manual.split(/\n+/).forEach((line) => {
-      let s = line.trim();
-      if (!s) return;
-      let creator: string | undefined;
-      let year: number | undefined;
-      const yearMatch = s.match(/[（(](\d{4})[）)]\s*$/);
-      if (yearMatch && yearMatch.index !== undefined) {
-        year = Number(yearMatch[1]);
-        s = s.slice(0, yearMatch.index).trim();
-      }
-      const dashIdx = s.indexOf(" - ");
-      if (dashIdx > 0) {
-        creator = s.slice(dashIdx + 3).trim();
-        s = s.slice(0, dashIdx).trim();
-      }
-      addWork(s, creator, year);
-    });
+    parseManualWorkLines(manual).forEach(({ title, creator, year }) =>
+      addWork(title, creator, year),
+    );
     setManual("");
   }
 
