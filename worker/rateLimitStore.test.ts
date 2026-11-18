@@ -64,7 +64,14 @@ describe("跨 isolate 限流（D1 原子计数）", () => {
   });
 
   it("敏感桶接 D1，高频读桶不接（避免写放大）", () => {
-    const idx = readFileSync("worker/index.ts", "utf8");
+    const idx = [
+      readFileSync("worker/index.ts", "utf8"),
+      readFileSync("worker/http.ts", "utf8"),
+      readFileSync("worker/routes/admin.ts", "utf8"),
+      readFileSync("worker/routes/aiRoutes.ts", "utf8"),
+      readFileSync("worker/routes/mediaRoutes.ts", "utf8"),
+      readFileSync("worker/routes/shareRoutes.ts", "utf8"),
+    ].join("\n");
     expect(idx).toContain("consumeSharedWindow");
     for (const call of [
       'allowUpstreamRequest(request, "auth", 30, env.DB)',

@@ -51,7 +51,10 @@ describe("上游链总预算（worker/deadline.ts）", () => {
 });
 
 describe("接入范围绊线（漏一处就等于没修）", () => {
-  const indexSource = readFileSync(new URL("./index.ts", import.meta.url), "utf8");
+  const indexSource = [
+    readFileSync(new URL("./http.ts", import.meta.url), "utf8"),
+    readFileSync(new URL("./routes/mediaRoutes.ts", import.meta.url), "utf8"),
+  ].join("\n");
   const mediaSource = readFileSync(new URL("./media.ts", import.meta.url), "utf8");
 
   it("三个维基端点都挂了总预算，且超时返 504 no-store（不缓存瞬时故障）", () => {

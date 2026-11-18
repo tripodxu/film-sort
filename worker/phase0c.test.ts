@@ -36,10 +36,10 @@ describe("Phase 0c 后端与 PWA 止血回归", () => {
 
   it("删户与 RESET_SCOPES.accounts 清理 qr_transactions，且删评论前解除 parent_id", () => {
     const acc = readFileSync("worker/account.ts", "utf8");
-    const idx = readFileSync("worker/index.ts", "utf8");
+    const adm = readFileSync("worker/routes/admin.ts", "utf8");
     expect(acc).toContain("DELETE FROM qr_transactions WHERE user_id = ?");
     expect(acc).toContain("UPDATE plaza_comments SET parent_id = NULL");
-    expect(idx).toContain('"DELETE FROM qr_transactions"');
+    expect(adm).toContain('"DELETE FROM qr_transactions"');
   });
 
   it("边缘路由缓存对 /api/posters 与 /api/image 绑定 posters 代次而非 misc", () => {

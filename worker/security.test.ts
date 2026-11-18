@@ -36,23 +36,23 @@ describe("安全审计修复绊线（2026-10-25）", () => {
   });
 
   it("M2：admin 登录挂 auth 限流桶，管理新密码下限 10 位", () => {
-    const idx = read("worker/index.ts");
-    const loginRoute = idx.indexOf('"/api/admin/login"');
+    const adm = read("worker/routes/admin.ts");
+    const loginRoute = adm.indexOf('"/api/admin/login"');
     expect(loginRoute).toBeGreaterThan(-1);
     expect(
-      idx.indexOf('allowUpstreamRequest(request, "auth", 30, env.DB)', loginRoute),
+      adm.indexOf('allowUpstreamRequest(request, "auth", 30, env.DB)', loginRoute),
     ).toBeGreaterThan(loginRoute);
-    expect(idx).toContain("newPassword.length < 10");
+    expect(adm).toContain("newPassword.length < 10");
   });
 
   it("M4：/api/image 匿名代理有独立限流桶（300 次/10 分/IP）", () => {
-    const idx = read("worker/index.ts");
-    const img = idx.indexOf('"/api/image"');
+    const mr = read("worker/routes/mediaRoutes.ts");
+    const img = mr.indexOf('"/api/image"');
     expect(img).toBeGreaterThan(-1);
     // 额度 2026-10-28 由 120 → 300：正常「看画像 → 导出 PNG → 逛广场」连招会撞 120
     // （画像页约 90 次 + 导出再走一遍），撞线只表现为海报静默降级成占位，用户难以归因。
     // 这一条守护的是「有独立桶」而不是「额度必须最小」。
-    expect(idx.indexOf('allowUpstreamRequest(request, "image", 300)', img)).toBeGreaterThan(img);
+    expect(mr.indexOf('allowUpstreamRequest(request, "image", 300)', img)).toBeGreaterThan(img);
   });
 
   it("M3：media 出站全量逐跳复核——不再存在 redirect:follow，三处调用走 fetchValidated", () => {
@@ -73,12 +73,13 @@ describe("安全审计修复绊线（2026-10-25）", () => {
   });
 
   it("P2：CSV 公式注入防护与后台 CSP/入站 URL 校验在位", () => {
-    const idx = read("worker/index.ts");
-    expect(idx).toContain("function csvCell(");
-    expect(idx).toContain("[=+\\-@\\t\\r]");
-    expect(idx).toContain(".map(csvCell)");
-    expect(idx).toContain("ADMIN_SECURITY_HEADERS");
-    expect(idx).toMatch(/"cache-control": "no-store"/);
+    const http = read("worker/http.ts");
+    const adm = read("worker/routes/admin.ts");
+    expect(http).toMatch(/(?:export\s+)?function csvCell\(/);
+    expect(http).toContain("[=+\\-@\\t\\r]");
+    expect(adm).toContain(".map(csvCell)");
+    expect(http).toContain("ADMIN_SECURITY_HEADERS");
+    expect(http).toMatch(/"cache-control": "no-store"/);
     const m = read("worker/media.ts");
     expect(m).toContain("upstream_protocol_forbidden");
     expect(m).toContain("upstream_credentials_forbidden");

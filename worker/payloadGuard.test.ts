@@ -31,13 +31,20 @@ const WRITE_PATHS = [
   { file: "account.ts", why: "POST /api/account/collections" },
   { file: "plaza.ts", why: "POST /api/plaza/posts" },
   { file: "plaza.ts", why: "PUT /api/plaza/posts/:id" },
-  { file: "index.ts", why: "POST /api/share" },
+  { file: "routes/shareRoutes.ts", why: "POST /api/share" },
 ];
 
 function workerSources(): Array<{ file: string; source: string }> {
-  return readdirSync(WORKER_DIR)
+  const rootFiles = readdirSync(WORKER_DIR)
     .filter((name) => name.endsWith(".ts") && !name.endsWith(".test.ts"))
     .map((name) => ({ file: name, source: readFileSync(join(WORKER_DIR, name), "utf8") }));
+  const routeFiles = readdirSync(join(WORKER_DIR, "routes"))
+    .filter((name) => name.endsWith(".ts") && !name.endsWith(".test.ts"))
+    .map((name) => ({
+      file: `routes/${name}`,
+      source: readFileSync(join(WORKER_DIR, "routes", name), "utf8"),
+    }));
+  return [...rootFiles, ...routeFiles];
 }
 
 /** 返回 `文件:行号` 形式的命中列表。 */

@@ -53,7 +53,7 @@ describe("后台看板脚本外置与严格 CSP 前提", () => {
   });
 
   it("后台 CSP 禁止内联脚本与内联事件属性", () => {
-    const idx = readFileSync("worker/index.ts", "utf8");
+    const idx = readFileSync("worker/http.ts", "utf8");
     expect(idx).toContain("script-src 'self'; script-src-attr 'none'");
     expect(idx).not.toContain("script-src 'self' 'unsafe-inline'");
   });
