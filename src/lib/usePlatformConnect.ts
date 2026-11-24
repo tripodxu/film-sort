@@ -16,6 +16,30 @@ export interface PlatformConnectOptions {
 const authHeaders = (token: string): Record<string, string> =>
   token ? { authorization: `Bearer ${token}` } : {};
 
+/** 只有等待与已扫码状态需要轮询；confirmed/expired/risk 都是当前二维码的终态。 */
+export function shouldPollQrState(qrOpen: boolean, qrKey: string, qrState: QrState): boolean {
+  return qrOpen && !!qrKey && (qrState === "waiting" || qrState === "scanned");
+}
+
+/** 只有服务端明确返回 2xx 才允许前端宣称 Cookie 已删除。 */
+export async function requestPlatformDisconnect(
+  platform: PlatformKind,
+  accountToken: string,
+  fetchImpl: typeof fetch = fetch,
+): Promise<boolean> {
+  const prefix = platform === "netease" ? "/api/netease" : "/api/douban";
+  try {
+    const response = await fetchImpl(`${prefix}/disconnect`, {
+      method: "POST",
+      headers: authHeaders(accountToken),
+      signal: AbortSignal.timeout(15000),
+    });
+    return response.ok;
+  } catch {
+    return false;
+  }
+}
+
 /**
  * 网易云 / 豆瓣扫码与 Cookie 连接的共用状态机：
  * 统一处理状态查询、发码、无漂移倒计时、轮询、风控降级与断开连接。
@@ -53,6 +77,7 @@ export function usePlatformConnect({
   const [cookieText, setCookieText] = useState("");
   const [cookieBusy, setCookieBusy] = useState(false);
   const deadlineRef = useRef(0);
+  const issueGenRef = useRef(0);
 
   const onConnectedRef = useRef(onConnected);
   onConnectedRef.current = onConnected;
@@ -84,16 +109,21 @@ export function usePlatformConnect({
 
   // 轮询扫码状态（风控码连续 3 次再判定失败，避免瞬时风控误报）
   useEffect(() => {
-    if (!qrOpen || !qrKey || qrState === "confirmed" || qrState === "expired") return;
+    if (!shouldPollQrState(qrOpen, qrKey, qrState)) return;
     let stopped = false;
     let riskHits = 0;
+    let inFlight = false;
     const poll = async () => {
+      // setInterval 不等待异步任务：慢响应时跳过本轮，避免同一二维码并发确认。
+      if (inFlight) return;
+      inFlight = true;
       try {
         const param = isNe
           ? `unikey=${encodeURIComponent(qrKey)}`
           : `code=${encodeURIComponent(qrKey)}`;
         const response = await fetch(`${prefix}/qr/poll?${param}`, {
           headers: authHeaders(accountToken),
+          signal: AbortSignal.timeout(15000),
         });
         if (stopped) return;
         const data = (await response.json()) as {
@@ -103,6 +133,7 @@ export function usePlatformConnect({
           nickname?: string;
           avatarUrl?: string;
         };
+        if (stopped) return;
         if (data.state === "scanned") {
           setQrState("scanned");
           if (isNe) {
@@ -149,6 +180,8 @@ export function usePlatformConnect({
         }
       } catch {
         /* 瞬时网络抖动，下一轮继续 */
+      } finally {
+        inFlight = false;
       }
     };
     const timer = window.setInterval(() => void poll(), isNe ? 3000 : 2500);
@@ -173,6 +206,7 @@ export function usePlatformConnect({
   }, [qrOpen, qrState, qrImage]);
 
   async function issueQr() {
+    const generation = ++issueGenRef.current;
     setQrImage("");
     setQrKey("");
     setQrState("waiting");
@@ -181,7 +215,10 @@ export function usePlatformConnect({
     deadlineRef.current = 0;
     setQrLeft(0);
     try {
-      const response = await fetch(`${prefix}/qr/issue`, { headers: authHeaders(accountToken) });
+      const response = await fetch(`${prefix}/qr/issue`, {
+        headers: authHeaders(accountToken),
+        signal: AbortSignal.timeout(20000),
+      });
       const data = (await response.json()) as {
         unikey?: string;
         qr_value?: string;
@@ -189,10 +226,13 @@ export function usePlatformConnect({
         qr_image?: string;
         ttl?: number;
       };
+      if (generation !== issueGenRef.current) return;
       if (isNe) {
         if (!data.unikey || !data.qr_value) throw new Error();
         const QRCode = await import("qrcode");
-        setQrImage(await QRCode.default.toDataURL(data.qr_value, { width: 300, margin: 1 }));
+        const image = await QRCode.default.toDataURL(data.qr_value, { width: 300, margin: 1 });
+        if (generation !== issueGenRef.current) return;
+        setQrImage(image);
         setQrKey(data.unikey);
       } else {
         if (!data.code || !data.qr_image) throw new Error();
@@ -203,7 +243,7 @@ export function usePlatformConnect({
       deadlineRef.current = Date.now() + ttl * 1000;
       setQrLeft(ttl);
     } catch {
-      setQrState("expired");
+      if (generation === issueGenRef.current) setQrState("expired");
     }
   }
 
@@ -216,6 +256,8 @@ export function usePlatformConnect({
   }
 
   function closeQr() {
+    // 关闭后迟到的发码响应不能重新写入旧二维码。
+    issueGenRef.current += 1;
     setQrOpen(false);
     setQrKey("");
   }
@@ -234,6 +276,13 @@ export function usePlatformConnect({
     setQrRefreshed((c) => c + 1);
     await issueQr();
   }
+
+  // 倒计时进入 expired 后自动换码；risk 不在这里，避免风控时继续轰上游。
+  useEffect(() => {
+    if (!qrOpen || qrState !== "expired") return;
+    void autoRefreshQr();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- 只在过期标量与已刷新次数变化时触发；issueQr 自带代际守卫
+  }, [qrOpen, qrState, qrRefreshed]);
 
   async function connectWithCookie() {
     const value = cookieText.trim();
@@ -277,9 +326,16 @@ export function usePlatformConnect({
   }
 
   async function disconnect() {
-    try {
-      await fetch(`${prefix}/disconnect`, { method: "POST", headers: authHeaders(accountToken) });
-    } catch {}
+    const ok = await requestPlatformDisconnect(platform, accountToken);
+    if (!ok) {
+      setNotice(
+        t(
+          "断开失败，请稍后重试；当前连接尚未变更。",
+          "Could not disconnect. Please retry; your connection is unchanged.",
+        ),
+      );
+      return;
+    }
     setConnected(false);
     setAccountInfo(null);
     onDisconnectedRef.current?.();

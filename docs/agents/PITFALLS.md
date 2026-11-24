@@ -78,6 +78,7 @@
 | 3.11 | 到期时间「看起来」没生效：会话多一天、OAuth code 名义 5 分钟却能用到第二天 | SQLite 按**字符串**比日期：ISO 的 `2026-11-27T20:00:00.000Z` 与 `datetime('now')` 的 `2026-11-27 20:00:00` 相比，`'T'`(0x54) > 空格(0x20)，**到期当天恒判未过期** | 比较一律 `julianday(expires_at) > julianday('now')`；写侧可继续用 ISO。回归测试要同时覆盖 ISO 与 `datetime()` 两种落库格式（3.11 = `sessionExpiry.test.ts`） |
 | 3.12 | `/api/other/detail` 冷缓存挂 45–60s 不返回，同一名称 1.2s / 45s / 60s 交替 | 维基取图是**多条串行链**（zh/en × 三轮搜索 + 海报侧 5 档兜底），单跳 8–9s，上游抖动时没有总预算 | 整条链给**总预算**：接口层 25s/15s → `504 upstream_timeout` + `no-store`；海报层 25s → `throttled`（15s），**不许记 `absent`**（24h）。见 `worker/deadline.ts`、`T-20261029-DEADLINE` |
 | 3.13 | `npm run gates` 随机红，或「绿了但少跑 123 条用例」 | Vitest 并行时两个 worker 同时写同一个大模块的 SSR 缓存（实测恒为 `worker/other.test.ts`），Windows 第二次 `open` 报 `EPERM ... ssr/<hash>`，该文件整份被丢 | `scripts/gates.mjs` 命中该特征自动 `--no-file-parallelism` 串行重试一次；**发现测试条数突然变少先查这条**（并行 843 / 串行 966） |
+| 3.14 | 扫码风控后仍轮询、慢响应重复确认、断开失败却提示已删除、旧二维码覆盖新二维码 | 把 `risk` 漏出终态；`setInterval` 不等待异步任务；只 catch 网络错误却不看 `response.ok`；发码无代际 | 终态集中判定；轮询 `inFlight + finally + timeout`；断开只认 2xx 且失败提前返回；发码 / 关闭统一代际守卫。见 `usePlatformConnect.test.ts` |
 
 ---
 
