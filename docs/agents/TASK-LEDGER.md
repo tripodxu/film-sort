@@ -10,6 +10,14 @@
 
 ## 进行中 / 最近
 
+### T-20261124-FRONTEND-34 · 全站前端 34 项缺陷三批治理与线上验收
+
+- **状态**：🔄 本地验证通过，待全量 gates、推送部署与线上验收 ｜ **负责人**：MainAgent
+- **任务类型**：MAP §2.2 / §2.3
+- **最小上下文**：`src/views/{Home,Source,Sorting,Profile,Plaza}View.tsx`、`src/components/{AiConfigDialog,ThemeImportDialog,ThemeSwitcher,SettingsMenu}.tsx`、`src/components/modals/{AccountModal,GuideModal,NoteModals}.tsx`、`src/styles/{00-base,01-themes-classic}.css`、`src/lib/theme.ts`、`src/data/{media,mediaKinds}.ts`
+- **改了什么**：按 7 项 P0（`8e65a76`）、14 项 P1（`acd7d8b`）、13 项 P2（`275cbf2`）三批修复首页胶囊交互、搜索超时兜底、重排吸顶操作栏、领域去重计数、分享弹窗状态、`journey`/`bento` 布局、主题无闪烁切换、表单与 AI 配置校验、新手引导弹窗结构、全站 i18n、对决视口与轮次、广场空态与贴纸样式、Toast 避让等共 34 项前端缺陷。
+- **验证状态**：五道门禁中 `check` / `lint` / `format:check` / `build` 与定向 5 组 UI/A11y/Modern/Guide 单测（171 passed）✅；待运行全量 `npm run gates`、推送至 `main` 并 `npm run deploy` 线上实机验证。
+
 ### T-20261124-AUDIT · 当前项目缺陷复核与扫码连接状态机优化
 
 - **状态**：🔄 已部署，待真实账号扫码验收 ｜ **负责人**：MainAgent
