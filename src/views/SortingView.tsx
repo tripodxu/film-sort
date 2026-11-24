@@ -385,6 +385,7 @@ export function SortingView({
                   title={`${t("略过", "Skip")} ${work.title}`}
                   onClick={(event) => {
                     event.stopPropagation();
+                    (event.currentTarget as HTMLElement).blur();
                     act(side === "left" ? "skip-left" : "skip-right");
                   }}
                 >
@@ -399,6 +400,7 @@ export function SortingView({
                   }
                   onClick={(event) => {
                     event.stopPropagation();
+                    (event.currentTarget as HTMLElement).blur();
                     act(side === "left" ? "defer-left" : "defer-right");
                   }}
                 >

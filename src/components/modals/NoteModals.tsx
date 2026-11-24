@@ -49,10 +49,17 @@ export function NoteEditModal({
         className="note-reader-body"
         value={noteDraft}
         onChange={(e) => setNoteDraft(e.target.value)}
-        placeholder={t(
-          "写下你对这部作品的看法、感想、回忆…",
-          "Write your thoughts, feelings, memories about this work...",
-        )}
+        placeholder={
+          noteModal.key.startsWith("list:")
+            ? t(
+                "写下你对这份榜单的整体看法、排序标准或回忆…",
+                "Write your thoughts, criteria, or memories for this list...",
+              )
+            : t(
+                "写下你对这部作品的看法、感想、回忆…",
+                "Write your thoughts, feelings, memories about this work...",
+              )
+        }
         autoFocus
       />
       <div className="note-reader-footer">

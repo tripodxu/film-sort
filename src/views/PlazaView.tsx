@@ -245,7 +245,13 @@ export function PlazaView({
               <button
                 className="text-button"
                 onClick={applySearch}
-                style={{ minHeight: 32, fontSize: 11, padding: "0 4px" }}
+                style={{
+                  minHeight: 32,
+                  fontSize: 11,
+                  padding: "0 8px",
+                  whiteSpace: "nowrap",
+                  flexShrink: 0,
+                }}
               >
                 {t("搜索", "Search")}
               </button>

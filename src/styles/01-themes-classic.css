@@ -446,16 +446,13 @@ body{
   position:absolute;right:0;top:6px;writing-mode:vertical-rl;margin:0;
   font-family:var(--font-mono);font-size:13px;font-weight:500;letter-spacing:.5em;color:var(--text-3)
 }
+:root:lang(en) .home-heading h1>small{letter-spacing:.08em}
 .home-heading p{
   position:relative;margin-top:24px;padding-left:56px;max-width:27em;
   font-family:var(--font-serif);font-size:var(--t-body);line-height:2;color:var(--text-2)
 }
 .home-heading p::before{content:"";position:absolute;left:0;top:.85em;width:40px;height:1px;background:var(--text-3)}
-/* CJK 首字下沉：印刷正文的经典起手式 */
-.home-heading p::first-letter{
-  float:left;font-family:var(--font-serif);font-size:52px;line-height:.84;
-  padding:4px 12px 0 0;color:var(--text-hi)
-}
+/* 首字下沉：仅英文保留或移除不稳定的 ::first-letter 断层，保持版面整洁 */
 /* ---- 玻璃两级 v2：塑封档案卡（identity）+ 冲切标签条（home-actions）——几何从胶囊改直角 ---- */
 .identity.glass-capsule{
   position:relative;border-radius:var(--r-xs);

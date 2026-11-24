@@ -1026,12 +1026,17 @@ function WorkEditor({
     Array<{ title: string; creator?: string; year?: string; rating?: string; poster?: string }>
   >([]);
   const [searching, setSearching] = useState(false);
+  const [dupNotice, setDupNotice] = useState("");
   const kind = ranking.kind;
 
   function addWork(title: string, creator?: string, year?: number, poster?: string) {
     const clean = title.trim();
     if (!clean) return;
-    if (items.some((w) => w.title === clean)) return;
+    if (items.some((w) => w.title === clean)) {
+      setDupNotice(t(`「${clean}」已在当前榜单中`, `"${clean}" is already in this list`));
+      return;
+    }
+    setDupNotice("");
     setItems((cur) => [
       ...cur,
       {
@@ -1170,7 +1175,10 @@ function WorkEditor({
           <textarea
             id="work-editor-manual"
             value={manual}
-            onChange={(e) => setManual(e.target.value)}
+            onChange={(e) => {
+              setManual(e.target.value);
+              if (dupNotice) setDupNotice("");
+            }}
             rows={3}
             placeholder={t(
               "花样年华 - 王家卫（2000）",
@@ -1186,6 +1194,11 @@ function WorkEditor({
             <Plus size={14} />
             {t("加入榜单", "Add to list")}
           </button>
+          {dupNotice && (
+            <p role="status" style={{ margin: "6px 0 0", fontSize: 12, color: "var(--red)" }}>
+              {dupNotice}
+            </p>
+          )}
         </div>
         {
           <div>

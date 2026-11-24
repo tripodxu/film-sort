@@ -39,6 +39,10 @@ export function SettingsMenu({
   // setAiTick 触发本组件重渲染，让「我的：model」标签在弹窗保存/停用后反映最新配置。
   const [, setAiTick] = useState(0);
   const aiConfig = readAiConfig();
+  let hasAccountToken = false;
+  try {
+    hasAccountToken = Boolean(localStorage.getItem(ACCOUNT_TOKEN_KEY));
+  } catch {}
 
   useEffect(() => {
     // 菜单打开期间才需要监听外部点击与 Escape（此前写反成关闭期挂载=永不生效）
@@ -148,14 +152,23 @@ export function SettingsMenu({
             {aiConfig && <span className="settings-badge">{aiConfig.model}</span>}
           </button>
           <div className="rank-menu-sep" />
-          <div className="settings-group-label">{t("清除服务端缓存", "Clear server caches")}</div>
+          <div className="settings-group-label">
+            {hasAccountToken
+              ? t("清除服务端缓存", "Clear server caches")
+              : t("清除服务端缓存（需登录）", "Clear server caches (sign in required)")}
+          </div>
           <div className="settings-chip-grid">
             {CACHE_SCOPES.map(({ scope, label, en }) => (
               <button
                 key={scope}
                 role="menuitem"
                 className={`settings-chip${purging === scope ? " busy" : ""}`}
-                disabled={purging !== null}
+                disabled={purging !== null || !hasAccountToken}
+                title={
+                  hasAccountToken
+                    ? undefined
+                    : t("登录后才能清除服务端缓存", "Sign in to clear server cache")
+                }
                 onClick={() => void purge(scope)}
               >
                 {purging === scope ? (

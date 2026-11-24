@@ -199,7 +199,7 @@ export function HomeView({
                   <strong>{label(item)}</strong>
                   <small>
                     {saved.length > 0
-                      ? `${saved.length}${t("个榜单", "lists")} / ${saved.reduce((s, r) => s + r.items.length, 0)}${t("件", "")}`
+                      ? `${saved.length} ${t("个榜单", saved.length === 1 ? "list" : "lists")} / ${saved.reduce((s, r) => s + r.items.length, 0)} ${t("件", "works")}`
                       : t(mediaLabels[item].description, "New ranking")}
                   </small>
                   <ArrowRight size={16} />
