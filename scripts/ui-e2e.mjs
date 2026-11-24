@@ -37,11 +37,17 @@ async function shot(page, name) {
 
 /** 首次访问会弹引导层（挡住整页点击），每个新 context 都要先点掉。 */
 async function dismissGuide(page) {
-  const gotIt = page.locator("button", { hasText: /知道了|Got it/ }).first();
-  if (await gotIt.isVisible().catch(() => false)) {
-    await gotIt.click({ timeout: 3000 });
-    await gotIt.waitFor({ state: "hidden", timeout: 3000 }).catch(() => {});
-  }
+  // domcontentloaded 时 React 可能尚未挂载，立刻 count() 会得到 0 并漏关引导。
+  const guideDialog = page.locator('[role="dialog"][aria-labelledby="guide-heading"]');
+  await guideDialog.waitFor({ state: "attached", timeout: 2500 }).catch(() => {});
+  if ((await guideDialog.count()) === 0) return;
+  const gotIt = guideDialog.locator("button", { hasText: /知道了|Got it/ }).first();
+  // 长引导在 1280x720 内是滚动容器：底部按钮被裁剪时 isVisible() 为 false。
+  // 先滚进可视区再判断，否则会静默跳过关闭，让 backdrop 拦住后续所有点击。
+  await gotIt.scrollIntoViewIfNeeded({ timeout: 5000 }).catch(() => {});
+  if (!(await gotIt.isVisible().catch(() => false))) return;
+  await gotIt.click({ timeout: 3000 });
+  await gotIt.waitFor({ state: "hidden", timeout: 3000 }).catch(() => {});
 }
 
 // 下载失败的常见替代：Windows 自带的 Edge 就是 Chromium 内核（channel 名是
@@ -76,6 +82,9 @@ try {
   await settings.waitFor({ state: "visible", timeout: 25000 });
   record("T1a 首页加载，SettingsMenu 懒 chunk 就位（齿轮可见）", "pass");
 
+  // 关闭欢迎引导后焦点落在 main，浏览器会把页头滚出视口；Playwright 的可见
+  // 判定只要求非空盒，不会替我们保证命中点。点击前显式滚回按钮。
+  await settings.scrollIntoViewIfNeeded();
   await settings.click();
   const menu = page.locator('[role="menu"]').first();
   await menu.waitFor({ state: "visible", timeout: 8000 });
@@ -132,6 +141,7 @@ try {
   if (!(await sticker.isVisible().catch(() => false))) {
     record("T4 详情弹窗焦点不回跳", "skip", "广场无帖子（.plaza-sticker 不存在）");
   } else {
+    await sticker.scrollIntoViewIfNeeded();
     await sticker.click({ timeout: 5000 });
     await page.waitForURL(/\/plaza\/\d+/, { timeout: 10000 });
     await page.waitForTimeout(3000); // 等作品网格与海报图
@@ -139,6 +149,7 @@ try {
     if (!(await artwork.isVisible().catch(() => false))) {
       record("T4 详情弹窗焦点不回跳", "skip", "帖子里没有可点的作品图");
     } else {
+      await artwork.scrollIntoViewIfNeeded();
       await artwork.click({ force: true, timeout: 5000 });
       const dialog = page.locator('[role="dialog"][aria-modal="true"]').first();
       await dialog.waitFor({ state: "visible", timeout: 10000 });
