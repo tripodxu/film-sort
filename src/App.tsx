@@ -21,6 +21,7 @@ import {
 } from "./lib/profile";
 import { importCollection } from "./lib/collections";
 import type { ExportLayout } from "./lib/exportPng";
+import { Skeleton, SkeletonRows } from "./components/ui/Skeleton";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { buildTasteContext } from "./lib/typesafe";
 import { epochQuery } from "./lib/cacheBust";
@@ -1494,7 +1495,18 @@ function AppShell() {
           </button>
         )}
         <ErrorBoundary>
-          <Suspense fallback={<div className="route-loading" aria-label="Loading" />}>
+          <Suspense
+            fallback={
+              <div
+                className="route-loading"
+                aria-label="Loading"
+                style={{ display: "grid", gap: 16 }}
+              >
+                <Skeleton variant="line" width="32%" />
+                <SkeletonRows rows={4} />
+              </div>
+            }
+          >
             {content}
           </Suspense>
         </ErrorBoundary>

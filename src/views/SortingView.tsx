@@ -198,7 +198,7 @@ export function SortingView({
       <div className="duel-heading">
         <div>
           <span className="eyebrow">
-            {label(kind)} / {t("相遇", "ENCOUNTER")} TOP {ranking.topN}
+            {label(kind)} · {t("03 / 对决", "03 / DUEL")} · TOP {ranking.topN}
             {ranking.mode === "quick" && t(" · 简易", " · Quick")}
             {ranking.mode === "precise" && t(" · 精确", " · Precise")}
             {ranking.mode === "adaptive" && t(" · 自适应", " · Adaptive")}
@@ -341,8 +341,8 @@ export function SortingView({
       {isEditorial && (
         <div className="ed-round-mark" aria-hidden="true">
           {t(
-            `第 ${String(progress.processed + 1).padStart(2, "0")} 回合`,
-            `ROUND ${String(progress.processed + 1).padStart(2, "0")}`,
+            `第 ${String(progress.comparisonCount + 1).padStart(2, "0")} 回合`,
+            `ROUND ${String(progress.comparisonCount + 1).padStart(2, "0")}`,
           )}
         </div>
       )}

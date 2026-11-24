@@ -21,6 +21,7 @@ import { usePlatformConnect } from "../lib/usePlatformConnect";
 import { IconButton } from "./IconButton";
 import { heading } from "./helpers";
 import { MAX_PROFILE_BYTES } from "../lib/profile";
+import { IMPORT_CAP_KEY } from "../lib/storageKeys";
 import type { SourceViewProps } from "./types";
 
 import type { Artwork } from "../data/mediaKinds";
@@ -308,7 +309,7 @@ export function SourceView({
                 <span className="row-number">{String(index + 1).padStart(2, "0")}</span>
                 {item.works[0] && <Poster work={item.works[0]} kind={item.kind} />}
                 <div>
-                  <h3>{item.title}</h3>
+                  <h3>{t(item.title, item.titleEn ?? item.title)}</h3>
                   <small>
                     {item.works.length} {t("件作品", "works")}
                   </small>
@@ -932,10 +933,14 @@ export function SourceView({
                       openCollection(next);
                       void saveCollectionCloud(next);
                     } catch {
+                      let cap = 300;
+                      try {
+                        cap = Number(localStorage.getItem(IMPORT_CAP_KEY)) || 300;
+                      } catch {}
                       setNotice(
                         t(
-                          "请输入 2–300 件有效作品，或检查 JSON 格式。",
-                          "Enter 2–300 valid works, or check the JSON format.",
+                          `请输入 2–${cap} 件有效作品，或检查 JSON 格式。`,
+                          `Enter 2–${cap} valid works, or check the JSON format.`,
                         ),
                       );
                     }

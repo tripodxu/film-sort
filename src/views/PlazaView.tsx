@@ -298,18 +298,32 @@ export function PlazaView({
         </EmptyState>
       )}
 
-      {/* Empty state — only after initial load completes */}
+      {/* Empty state — distinguish filtered no-match vs truly empty plaza */}
       {!initialLoading && !loading && !error && posts.length === 0 && (
         <EmptyState
-          title={t(
-            "广场还没有内容，快来发布第一个吧！",
-            "The plaza is empty. Be the first to post!",
-          )}
+          title={
+            search.trim() || kindFilter !== ""
+              ? t("未找到相关榜单", "No matching lists found")
+              : t("广场还没有内容，快来发布第一个吧！", "The plaza is empty. Be the first to post!")
+          }
         >
-          {accountToken && (
-            <button className="button primary" onClick={() => navigateTo("profile")}>
-              {t("去发布", "Go post")}
+          {search.trim() || kindFilter !== "" ? (
+            <button
+              className="button secondary"
+              onClick={() => {
+                setSearch("");
+                setKindFilter("");
+                void loadPosts(1, "", sort, "");
+              }}
+            >
+              {t("清空筛选", "Clear filters")}
             </button>
+          ) : (
+            accountToken && (
+              <button className="button primary" onClick={() => navigateTo("profile")}>
+                {t("去发布", "Go post")}
+              </button>
+            )
           )}
         </EmptyState>
       )}

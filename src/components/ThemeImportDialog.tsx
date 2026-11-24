@@ -47,6 +47,14 @@ const ERROR_TEXT: Record<ThemeImportError, { zh: string; en: string }> = {
   },
 };
 
+const THEME_TEMPLATE = `/*! art-rank-theme {"id":"my-theme","name":{"zh":"我的主题","en":"My Theme"},"dot":"#d8f86a"} */
+[data-theme="my-theme"]{
+  --bg:#0b0d10;--text:#eef2f6;--accent:#d8f86a;--accent-2:#c9ff74;--accent-ink:#17200d;
+  --ok:#4ade80;--warn:#facc15;--danger:#f87171;--danger-2:#fca5a5;--indigo:#818cf8;--pink:#f472b6;
+  --film:#d8f86a;--book:#efaa97;--music:#97bfc5;--other:#c7c2ee;
+  --scrim:rgba(0,0,0,.63);--toast-bg:#e0f7a9;--toast-bg-2:#d7fb9d;--toast-ink:#233113;--toast-border:#769052;
+}`;
+
 /**
  * 自定义主题导入：粘贴 CSS 文本或选择 .css 文件 → 校验 → 落库注入。
  * 校验失败时展示具体原因（含缺失变量清单），不产生任何副作用。
@@ -63,6 +71,7 @@ export function ThemeImportDialog({
 }) {
   const [text, setText] = useState("");
   const [busy, setBusy] = useState(false);
+  const [copiedTpl, setCopiedTpl] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
@@ -154,6 +163,31 @@ export function ThemeImportDialog({
         <button className="button secondary" onClick={() => fileRef.current?.click()}>
           {t("选择 .css 文件", "Pick a .css file")}
         </button>
+        <button
+          className="button secondary"
+          type="button"
+          onClick={() => {
+            setText(THEME_TEMPLATE);
+            setError(null);
+          }}
+        >
+          {t("填入示例模板", "Fill template")}
+        </button>
+        <button
+          className="button quiet"
+          type="button"
+          onClick={() => {
+            navigator.clipboard
+              ?.writeText(THEME_TEMPLATE)
+              .then(() => {
+                setCopiedTpl(true);
+                window.setTimeout(() => setCopiedTpl(false), 1500);
+              })
+              .catch(() => {});
+          }}
+        >
+          {copiedTpl ? t("已复制模板", "Copied") : t("复制模板", "Copy template")}
+        </button>
         <input
           ref={fileRef}
           type="file"
@@ -165,6 +199,16 @@ export function ThemeImportDialog({
           }}
         />
       </div>
+      <details style={{ fontSize: 12, color: "var(--muted)", lineHeight: 1.7 }}>
+        <summary style={{ cursor: "pointer", color: "var(--text-2)" }}>
+          {t("查看支持覆写的 CSS 变量清单", "Supported CSS variables")}
+        </summary>
+        <p style={{ margin: "6px 0 0", fontFamily: "var(--font-mono)", fontSize: 11 }}>
+          --bg, --text, --accent, --accent-2, --accent-ink, --ok, --warn, --danger, --danger-2,
+          --indigo, --pink, --film, --book, --music, --other, --scrim, --toast-bg, --toast-bg-2,
+          --toast-ink, --toast-border, --font-body, --font-display, --font-serif, --font-mono
+        </p>
+      </details>
       <div className="guide-modal-footer">
         <div style={{ flex: 1 }} />
         <button className="button secondary" onClick={onClose}>

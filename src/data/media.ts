@@ -35,7 +35,9 @@ function fromFilms(): MediaCollection[] {
     kind: "film" as const,
     source: "builtin" as const,
     title: list.name.zh,
+    titleEn: list.name.en,
     description: list.tagline.zh,
+    descriptionEn: list.tagline.en,
     topN: Math.min(list.topK, list.movies.length),
     works: list.movies.map((movie) => ({
       id: movie.id,
@@ -53,7 +55,9 @@ const bookCollections: readonly MediaCollection[] = [
     kind: "book",
     source: "builtin",
     title: "现代文学入口",
+    titleEn: "Modern Literary Canon",
     description: "在记忆、时代与个人命运之间选择一本最想留下的书。",
+    descriptionEn: "Pick the book you would keep across memory, history, and personal fate.",
     topN: 8,
     works: makeWorks("book-classic", [
       ["百年孤独", "加西亚·马尔克斯", 1967],
@@ -73,7 +77,9 @@ const bookCollections: readonly MediaCollection[] = [
     kind: "book",
     source: "builtin",
     title: "思想与生活",
+    titleEn: "Ideas & Living",
     description: "给那些改变过你看世界方式的书排出自己的坐标。",
+    descriptionEn: "Rank the books that shifted how you look at the world.",
     topN: 6,
     works: makeWorks("book-ideas", [
       ["被讨厌的勇气", "岸见一郎 / 古贺史健", 2013],
@@ -94,7 +100,9 @@ const musicCollections: readonly MediaCollection[] = [
     kind: "music",
     source: "builtin",
     title: "华语专辑审美",
+    titleEn: "Mandopop & Indie Albums",
     description: "从旋律、歌词和青春记忆里，找出真正属于你的声音。",
+    descriptionEn: "Find the albums that defined your soundtrack through melody and memory.",
     topN: 8,
     works: makeWorks("music-album", [
       ["七里香", "周杰伦", 2004],
@@ -114,7 +122,9 @@ const musicCollections: readonly MediaCollection[] = [
     kind: "music",
     source: "builtin",
     title: "世界耳机清单",
+    titleEn: "Global Listening List",
     description: "从爵士、摇滚到电子，排出最想反复播放的声音。",
+    descriptionEn: "From jazz and rock to electronic — rank the records you replay most.",
     topN: 6,
     works: makeWorks("music-world", [
       ["Kind of Blue", "Miles Davis", 1959],
@@ -135,7 +145,9 @@ const otherCollections: readonly MediaCollection[] = [
     kind: "other",
     source: "builtin",
     title: "我的文化坐标",
+    titleEn: "Cultural Coordinates",
     description: "把展览、游戏、播客或任何想留下的作品放在同一张榜单里。",
+    descriptionEn: "Put games, exhibitions, podcasts, or any cultural work into one ranking.",
     topN: 8,
     works: makeWorks("other-cultural", [
       ["纪念碑谷", "游戏", 2014],

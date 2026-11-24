@@ -26,7 +26,9 @@ export function useProfileStore(deps: ProfileStoreDeps) {
       return null;
     }
   });
-  const [profileName, setProfileName] = useState(() => profile?.profileName ?? "我的艺术人格");
+  const [profileName, setProfileName] = useState(
+    () => profile?.profileName ?? deps.t("我的艺术人格", "My artistic profile"),
+  );
   const [activeKind, setActiveKind] = useState<string>("film");
   const [editingRankIdx, setEditingRankIdx] = useState<number | null>(null);
   const [editingRankTitle, setEditingRankTitle] = useState("");

@@ -1,3 +1,4 @@
+import { useRef } from "react";
 import { Check, CloudDownload, CloudUpload, UserRound } from "lucide-react";
 import type { ArtisticProfile } from "../../lib/profile";
 import { Modal } from "../Modal";
@@ -69,6 +70,40 @@ export function AccountModal({
   accountAuth,
   onClose,
 }: AccountModalProps) {
+  const nicknameRef = useRef<HTMLInputElement>(null);
+  const emailRef = useRef<HTMLInputElement>(null);
+  const codeRef = useRef<HTMLInputElement>(null);
+  const passwordRef = useRef<HTMLInputElement>(null);
+
+  function submitAuth() {
+    if (authMode === "register" && !authNickname.trim()) {
+      setAuthError(t("请填写昵称。", "Please enter a nickname."));
+      nicknameRef.current?.focus();
+      return;
+    }
+    if (!authEmail.trim()) {
+      setAuthError(t("请填写邮箱地址。", "Please enter your email address."));
+      emailRef.current?.focus();
+      return;
+    }
+    if (authMode !== "login" && !authCode.trim()) {
+      setAuthError(t("请填写邮箱验证码。", "Please enter the verification code."));
+      codeRef.current?.focus();
+      return;
+    }
+    if (!authPassword) {
+      setAuthError(t("请填写密码。", "Please enter your password."));
+      passwordRef.current?.focus();
+      return;
+    }
+    if (authMode !== "login" && authPassword.length < 8) {
+      setAuthError(t("密码至少需要 8 位。", "Password must be at least 8 characters."));
+      passwordRef.current?.focus();
+      return;
+    }
+    void accountAuth(authMode);
+  }
+
   return (
     <Modal
       t={t}
@@ -297,6 +332,7 @@ export function AccountModal({
           )}
           {authMode === "register" && (
             <input
+              ref={nicknameRef}
               type="text"
               placeholder={t("昵称（必填）", "Nickname (required)")}
               value={authNickname}
@@ -305,6 +341,7 @@ export function AccountModal({
             />
           )}
           <input
+            ref={emailRef}
             type="email"
             placeholder={t("邮箱", "Email")}
             value={authEmail}
@@ -314,6 +351,7 @@ export function AccountModal({
           {authMode !== "login" && (
             <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
               <input
+                ref={codeRef}
                 type="text"
                 placeholder={t("邮箱验证码", "Email code")}
                 value={authCode}
@@ -331,6 +369,7 @@ export function AccountModal({
             </div>
           )}
           <input
+            ref={passwordRef}
             type="password"
             placeholder={
               authMode === "reset"
@@ -340,15 +379,11 @@ export function AccountModal({
             value={authPassword}
             onChange={(e) => setAuthPassword(e.target.value)}
             onKeyDown={(e) => {
-              if (e.key === "Enter") void accountAuth(authMode);
+              if (e.key === "Enter") submitAuth();
             }}
             style={{ marginBottom: 12 }}
           />
-          <button
-            className="button primary"
-            disabled={authBusy}
-            onClick={() => void accountAuth(authMode)}
-          >
+          <button className="button primary" disabled={authBusy} onClick={submitAuth}>
             {authMode === "login"
               ? t("登录", "Sign in")
               : authMode === "register"

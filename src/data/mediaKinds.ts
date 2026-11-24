@@ -18,7 +18,9 @@ export interface MediaCollection {
   readonly kind: MediaKind;
   readonly source: MediaSource;
   readonly title: string;
+  readonly titleEn?: string;
   readonly description: string;
+  readonly descriptionEn?: string;
   readonly topN: number;
   readonly works: readonly Artwork[];
 }

@@ -133,8 +133,42 @@ export function AiConfigDialog({
     } else setMessage({ ok: false, text: failureText(result) });
   }
 
+  const [formError, setFormError] = useState<string | null>(null);
+
+  function validateAiForm(): string | null {
+    const rawUrl = baseUrl.trim();
+    if (!rawUrl) return t("请填写 Base URL。", "Please enter a Base URL.");
+    let parsed: URL;
+    try {
+      parsed = new URL(rawUrl);
+    } catch {
+      return t(
+        "Base URL 格式不合法，需以 https:// 开头。",
+        "Invalid Base URL — must start with https://.",
+      );
+    }
+    if (parsed.protocol !== "https:") {
+      return t("Base URL 必须使用 https:// 协议。", "Base URL must use https://.");
+    }
+    if (apiKey.trim().length < 8) {
+      return t(
+        "请填写有效的 API Key（至少 8 个字符）。",
+        "Please enter a valid API Key (8+ chars).",
+      );
+    }
+    if (!model.trim()) {
+      return t("请填写或选择 Model 名称。", "Please enter or pick a Model name.");
+    }
+    return null;
+  }
+
   function save() {
-    if (!canSave) return;
+    const err = validateAiForm();
+    if (err) {
+      setFormError(err);
+      return;
+    }
+    setFormError(null);
     const stored = writeAiConfig(config());
     window.dispatchEvent(new CustomEvent("art-rank:ai-config-changed"));
     onSaved?.();
@@ -534,6 +568,19 @@ export function AiConfigDialog({
           )}
         </p>
       </div>
+      {formError && (
+        <p
+          role="alert"
+          style={{
+            fontSize: 12,
+            margin: "0 0 8px",
+            color: "var(--red)",
+            lineHeight: 1.5,
+          }}
+        >
+          {formError}
+        </p>
+      )}
       <div className="guide-modal-footer">
         {existing && (
           <button
@@ -573,7 +620,7 @@ export function AiConfigDialog({
         <button className="button secondary" onClick={onClose}>
           {t("取消", "Cancel")}
         </button>
-        <button className="button primary" disabled={!canSave} onClick={save}>
+        <button className="button primary" onClick={save}>
           <Check size={15} />
           {t("保存", "Save")}
         </button>

@@ -607,9 +607,8 @@ describe("首屏依赖图绊线（PLAN-ROUTE-EAGER）", () => {
   });
 
   it("整棵路由树仍在同一个 Suspense 里（兜底不许被删）", () => {
-    expect(app).toContain(
-      '<Suspense fallback={<div className="route-loading" aria-label="Loading" />}>',
-    );
+    expect(app).toMatch(/className="route-loading"[\s\S]{0,60}aria-label="Loading"/);
+    expect(app).toContain("<SkeletonRows rows={4} />");
     // ErrorBoundary 必须还在 Suspense 外层兜住懒加载失败
     expect(app).toContain('import { ErrorBoundary } from "./components/ErrorBoundary";');
   });

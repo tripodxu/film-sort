@@ -12,11 +12,11 @@ export function GuideModal({ t, onClose, onOpenTech }: GuideModalProps) {
     <Modal
       t={t}
       headingId="guide-heading"
+      eyebrow={`ART/RANK ${t("使用说明", "GUIDE")}`}
+      title={t("欢迎来到 ART/RANK", "Welcome to ART/RANK")}
       panelClassName="guide-modal account-dialog"
       onClose={onClose}
     >
-      <span className="eyebrow">ART/RANK {t("使用说明", "GUIDE")}</span>
-      <h2 id="guide-heading">{t("欢迎来到 ART/RANK", "Welcome to ART/RANK")}</h2>
       <p className="guide-subtitle">
         {t(
           "这里只讲怎么用：怎么选作品、怎么排、怎么导出与比较。想看算法怎么算，点底部「技术说明」。",
