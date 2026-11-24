@@ -1024,7 +1024,10 @@ function AppShell() {
           ],
         }
       : namedProfile();
-    if (!profileData) return;
+    if (!profileData) {
+      setNotice(t("请先完成至少一份榜单再分享。", "Finish at least one ranking before sharing."));
+      return;
+    }
     try {
       parseProfile(profileData);
     } catch {
@@ -1047,6 +1050,7 @@ function AppShell() {
       };
       if (response.ok && data.url) {
         const days = data.expires_days ?? expiresDays;
+        setShareUrl(data.url);
         try {
           await navigator.clipboard.writeText(data.url);
           setNotice(

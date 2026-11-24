@@ -822,12 +822,12 @@ body[data-theme=classic]{
   mask-image:linear-gradient(90deg,transparent 0,black 36px,black calc(100% - 36px),transparent 100%)
 }
 [data-layout="journey"] .medium-grid{
-  display:flex;overflow-x:auto;scroll-snap-type:x mandatory;gap:0;
+  display:flex;overflow-x:auto;scroll-snap-type:x mandatory;gap:24px;padding-inline:44px;
   scrollbar-width:none;border-block:1px solid var(--line)
 }
 [data-layout="journey"] .medium-grid>.medium-item{
-  flex:0 0 60vw;max-width:520px;scroll-snap-align:start;
-  border:0;border-right:1px solid var(--line);border-radius:0
+  flex:0 0 60vw;max-width:520px;scroll-snap-align:start;padding-right:44px;
+  border:1px solid var(--line);border-radius:0
 }
 .journey-chevron{
   position:absolute;top:50%;transform:translateY(-50%);z-index:2;display:none;
@@ -837,16 +837,18 @@ body[data-theme=classic]{
   color:var(--text-2);font-family:var(--font-mono);cursor:pointer
 }
 [data-layout="journey"] .journey-chevron{display:inline-flex}
-.journey-prev{left:-10px}
-.journey-next{right:-10px}
+.journey-prev{left:0}
+.journey-next{right:0}
 @media(max-width:540px){
-  [data-layout="journey"] .medium-grid{scroll-snap-type:x proximity}
+  [data-layout="journey"] .medium-grid{scroll-snap-type:x proximity;padding-inline:36px;gap:16px}
 }
 [data-layout="bento"] .medium-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr))}
+[data-layout="bento"] .medium-grid{gap:12px;border:0}
 [data-layout="bento"] .medium-grid>.medium-item:first-child{grid-column:span 2}
 [data-layout="bento"] .plaza-grid{--plaza-cols:3}
 [data-layout="bento"] .plaza-grid>:first-child{grid-column:span 2}
-[data-layout="bento"] .medium-grid>.medium-item,[data-layout="bento"] .plaza-grid>*{box-shadow:none}
+[data-layout="bento"] .medium-grid>.medium-item,[data-layout="bento"] .plaza-grid>*{box-shadow:none;border:1px solid var(--line);padding-right:42px}
+[data-layout="bento"] .medium-grid>.medium-item>small{text-wrap:balance}
 [data-layout="bento"] .medium-grid>.medium-item:hover{box-shadow:none;border-color:color-mix(in srgb,var(--accent) 55%,transparent)}
 .layout-dot{
   width:14px;height:14px;flex-shrink:0;border:1px solid var(--border-2);border-radius:3px;

@@ -79,7 +79,7 @@ export function useCollectionImporter(deps: CollectionImporterDeps) {
     try {
       if (curKind === "other") {
         const response = await fetch(`/api/other/list?key=${encodeURIComponent(trimmed)}`, {
-          signal: AbortSignal.timeout(15000),
+          signal: AbortSignal.timeout(8000),
         });
         if (!response.ok) return [];
         const data = (await response.json()) as {
@@ -99,7 +99,7 @@ export function useCollectionImporter(deps: CollectionImporterDeps) {
       const apiType = curKind === "film" ? "movie" : curKind;
       const response = await fetch(
         `/api/${apiType}/list?key=${encodeURIComponent(trimmed)}&page=1`,
-        { signal: AbortSignal.timeout(15000) },
+        { signal: AbortSignal.timeout(8000) },
       );
       if (!response.ok) return [];
       const data = (await response.json()) as {

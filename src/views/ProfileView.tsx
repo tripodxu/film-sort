@@ -166,7 +166,7 @@ export function ProfileView({
       {heading(
         t("我的文化索引", "MY CULTURE INDEX"),
         profile.profileName,
-        `${profile.rankings.length} ${t("个领域", "media")} / ${profile.rankings.reduce((count, entry) => count + entry.items.length, 0)} ${t("件作品", "works")}`,
+        `${new Set(profile.rankings.map((entry) => entry.kind)).size} ${t("个领域", "media")} / ${profile.rankings.reduce((count, entry) => count + entry.items.length, 0)} ${t("件作品", "works")}`,
       )}
       <div
         style={{
@@ -940,6 +940,36 @@ function ReorderList({
 }) {
   return (
     <div>
+      <div
+        className="reorder-sticky-bar"
+        style={{
+          position: "sticky",
+          top: 72,
+          zIndex: 15,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          gap: 8,
+          padding: "10px 12px",
+          marginBottom: 12,
+          background: "color-mix(in srgb, var(--bg) 92%, transparent)",
+          backdropFilter: "blur(10px)",
+          border: "1px solid var(--line)",
+          borderRadius: "var(--r-sm)",
+        }}
+      >
+        <span style={{ fontSize: 12, color: "var(--muted)" }}>
+          {t("拖拽左侧手柄或使用右侧箭头调整顺序", "Drag handle or use arrows to reorder")}
+        </span>
+        <div style={{ display: "flex", gap: 8 }}>
+          <button className="button secondary" onClick={onCancel}>
+            {t("取消", "Cancel")}
+          </button>
+          <button className="button primary" onClick={onSave}>
+            {t("保存", "Save")}
+          </button>
+        </div>
+      </div>
       <SortableWorkList
         items={items}
         kind={kind}

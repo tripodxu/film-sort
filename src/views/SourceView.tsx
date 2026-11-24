@@ -78,6 +78,7 @@ export function SourceView({
 }: SourceViewProps) {
   const [suggestions, setSuggestions] = useState<Artwork[]>([]);
   const [searching, setSearching] = useState(false);
+  const [searchFallback, setSearchFallback] = useState<string | null>(null);
   const [worksCollapsed, setWorksCollapsed] = useState(false);
   const [doulistUrl, setDoulistUrl] = useState("");
   const [neteaseUrl, setNeteaseUrl] = useState("");
@@ -195,16 +196,26 @@ export function SourceView({
 
   async function handleCustomSearch() {
     const query = customItem.trim();
-    if (!query) return;
+    if (!query || searching) return;
     setSearching(true);
+    setSearchFallback(null);
+    let timer: number | undefined;
     try {
-      const results = await searchWorks(query);
-      if (results.length > 0) setSuggestions(results);
-      else {
-        addCustomWork({ id: `manual-${Date.now()}`, title: query });
-        setCustomItem("");
+      const results = await Promise.race([
+        searchWorks(query),
+        new Promise<Artwork[]>((_, reject) => {
+          timer = window.setTimeout(() => reject(new Error("search_timeout")), 8000);
+        }),
+      ]);
+      if (results.length > 0) {
+        setSuggestions(results);
+      } else {
+        setSearchFallback(query);
       }
+    } catch {
+      setSearchFallback(query);
     } finally {
+      if (timer !== undefined) window.clearTimeout(timer);
       setSearching(false);
     }
   }
@@ -718,6 +729,29 @@ export function SourceView({
               )}
             </button>
           </div>
+          {searchFallback && suggestions.length === 0 && (
+            <div className="u-row-between" style={{ marginTop: 8, gap: 8, flexWrap: "wrap" }}>
+              <span className="mini-note" style={{ margin: 0 }}>
+                {t(
+                  `未搜到「${searchFallback}」或搜索超时，可直接按名称加入。`,
+                  `No matches or search timed out for "${searchFallback}" — add by title directly.`,
+                )}
+              </span>
+              <button
+                type="button"
+                className="button secondary"
+                style={{ minHeight: 34, paddingInline: 12, fontSize: 12 }}
+                onClick={() => {
+                  addCustomWork({ id: `manual-${Date.now()}`, title: searchFallback });
+                  setSearchFallback(null);
+                  setCustomItem("");
+                }}
+              >
+                <Plus size={14} />
+                {t(`直接按名称添加「${searchFallback}」`, `Add "${searchFallback}"`)}
+              </button>
+            </div>
+          )}
           {suggestions.length > 0 && (
             <div className="custom-suggestions">
               <span className="eyebrow">{t("搜索候选 — 点选加入", "PICK A MATCH")}</span>

@@ -126,14 +126,18 @@ export function HomeView({
               })}
             </div>
           )}
-          <div className="identity glass-capsule">
+          <button
+            type="button"
+            className="identity glass-capsule"
+            onClick={() => setAccountOpen(true)}
+          >
             <UserRound size={15} />
             <span>{accountEmail || t("本地游客", "Local guest")}</span>
-            <button className="text-button" onClick={() => setAccountOpen(true)}>
+            <span className="text-button">
               {t("登录 / 同步", "Sign in / Sync")}
               <ArrowRight size={13} />
-            </button>
-          </div>
+            </span>
+          </button>
           <div className="home-actions glass-capsule">
             <button className="button primary" onClick={() => chooseKind(kind)}>
               <Play size={16} />

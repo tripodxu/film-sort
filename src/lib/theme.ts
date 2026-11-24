@@ -32,8 +32,19 @@ export function applyTheme(id: string) {
       localStorage.setItem(THEME_KEY, id);
     } catch {}
   }
-  if (id === "modern") document.documentElement.removeAttribute("data-theme");
-  else document.documentElement.setAttribute("data-theme", id);
+  const root = document.documentElement;
+  root.classList.add("theme-switching");
+  if (id === "modern") root.removeAttribute("data-theme");
+  else root.setAttribute("data-theme", id);
+  // 强制同步重排，确保同一帧内所有变量原子切换，不产生过渡闪烁
+  void root.offsetHeight;
+  if (typeof requestAnimationFrame === "function") {
+    requestAnimationFrame(() => {
+      root.classList.remove("theme-switching");
+    });
+  } else {
+    root.classList.remove("theme-switching");
+  }
   // theme-color meta 跟随 --bg 实际渲染色
   const probe = getComputedStyle(document.documentElement).getPropertyValue("--bg").trim();
   if (probe) document.querySelector('meta[name="theme-color"]')?.setAttribute("content", probe);
