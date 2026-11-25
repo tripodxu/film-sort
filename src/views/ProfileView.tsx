@@ -31,6 +31,7 @@ import { noteKey, hasNote } from "../lib/notes";
 import { AiInsightCard } from "../components/AiInsightCard";
 import { buildProfileData, buildRankingData } from "../lib/aiInsight";
 import { PLAZA_LINKS_KEY } from "../lib/storageKeys";
+import { shareOutputLabels } from "../lib/shareLink";
 import type { ProfileViewProps } from "./types";
 import type { RankedArtwork } from "../lib/profile";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -50,6 +51,7 @@ export function ProfileView({
   share,
   shareUrl,
   qrUrl,
+  shareLinkKind,
   profileName,
   setProfileName,
   namedProfile,
@@ -791,12 +793,12 @@ export function ProfileView({
           {shareUrl && (
             <div className="share-output">
               <input
-                aria-label={t("比较链接", "Comparison link")}
+                aria-label={shareOutputLabels(shareLinkKind, t).inputLabel}
                 readOnly
                 value={shareUrl}
                 onFocus={(event) => event.target.select()}
               />
-              {qrUrl && <img src={qrUrl} alt={t("比较二维码", "Comparison QR code")} />}
+              {qrUrl && <img src={qrUrl} alt={shareOutputLabels(shareLinkKind, t).qrAlt} />}
             </div>
           )}
           <button className="button quiet" onClick={() => navigateTo("home")}>

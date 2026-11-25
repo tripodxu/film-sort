@@ -10,6 +10,7 @@ import {
   PLAZA_LINKS_KEY,
   RINGS_LAYOUT_KEY,
 } from "./lib/storageKeys";
+import type { ShareLinkKind } from "./lib/shareLink";
 import {
   MAX_PROFILE_BYTES,
   mergeRanking,
@@ -150,12 +151,17 @@ function AppShell() {
   } = useAppEnv();
   const [shareUrl, setShareUrl] = useState("");
   const [qrUrl, setQrUrl] = useState("");
+  // 输出区当前是「比较链接」还是「分享链接」：标签与二维码必须跟着实际链接类型走。
+  const [shareLinkKind, setShareLinkKind] = useState<ShareLinkKind>("compare");
+  // 两类链接共用输出区：后发请求的代际更大，先发但迟到的响应一律丢弃，绝不覆盖用户最后一次选择。
+  const shareGenRef = useRef(0);
   const profileStore = useProfileStore({
     t,
     setNotice,
     onPersist: () => {
       setShareUrl("");
       setQrUrl("");
+      setShareLinkKind("compare");
     },
   });
   const {
@@ -966,6 +972,7 @@ function AppShell() {
     const hasAnyNotes = Object.keys(notes).length > 0;
     const shareData: Record<string, unknown> = { profile: next };
     if (hasAnyNotes) shareData.notes = notes;
+    const generation = ++shareGenRef.current;
     setBusy(true);
     try {
       const response = await fetch("/api/share", {
@@ -974,20 +981,11 @@ function AppShell() {
         body: JSON.stringify(shareData),
       });
       const data = (await response.json()) as { url?: string; compareUrl?: string; error?: string };
+      if (generation !== shareGenRef.current) return;
       if (response.ok && data.compareUrl) {
+        setShareLinkKind("compare");
         setShareUrl(data.compareUrl);
-        try {
-          const QRCode = await import("qrcode");
-          setQrUrl(
-            await QRCode.default.toDataURL(data.compareUrl, {
-              width: 240,
-              margin: 2,
-              errorCorrectionLevel: "L",
-            }),
-          );
-        } catch {
-          setQrUrl("");
-        }
+        setQrUrl(await makeQr(data.compareUrl));
         try {
           await navigator.clipboard.writeText(data.compareUrl);
           setNotice(t("比较链接已复制。", "Comparison link copied."));
@@ -1009,6 +1007,19 @@ function AppShell() {
   }
   function openShareModal(ranking?: RankingExport) {
     setShareModal({ ranking });
+  }
+  /** 二维码只是辅助，生成失败时留空（文本框仍可选中复制）。 */
+  async function makeQr(url: string): Promise<string> {
+    try {
+      const QRCode = await import("qrcode");
+      return await QRCode.default.toDataURL(url, {
+        width: 240,
+        margin: 2,
+        errorCorrectionLevel: "L",
+      });
+    } catch {
+      return "";
+    }
   }
   async function generateShareLink(ranking?: RankingExport, expiresDays: number = 30) {
     const profileData = ranking
@@ -1037,6 +1048,7 @@ function AppShell() {
     }
     const shareData: Record<string, unknown> = { profile: profileData, expires_days: expiresDays };
     if (Object.keys(notes).length > 0) shareData.notes = notes;
+    const generation = ++shareGenRef.current;
     setBusy(true);
     try {
       const response = await fetch("/api/share", {
@@ -1049,9 +1061,13 @@ function AppShell() {
         expires_days?: number;
         error?: string;
       };
+      if (generation !== shareGenRef.current) return;
       if (response.ok && data.url) {
         const days = data.expires_days ?? expiresDays;
+        // 分享链接不是比较链接：先换标签并换成它自己的二维码，避免文本与二维码指向不同页面。
+        setShareLinkKind("share");
         setShareUrl(data.url);
+        setQrUrl(await makeQr(data.url));
         try {
           await navigator.clipboard.writeText(data.url);
           setNotice(
@@ -1196,6 +1212,7 @@ function AppShell() {
         share={share}
         shareUrl={shareUrl}
         qrUrl={qrUrl}
+        shareLinkKind={shareLinkKind}
         profileName={profileName}
         setProfileName={setProfileName}
         namedProfile={namedProfile}

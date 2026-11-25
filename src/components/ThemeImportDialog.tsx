@@ -6,6 +6,7 @@ import {
   THEME_PACKAGE_LIMIT,
   type ThemeImportError,
 } from "../lib/themeRegistry";
+import { THEME_TEMPLATE } from "../lib/themeTemplate";
 
 const ERROR_TEXT: Record<ThemeImportError, { zh: string; en: string }> = {
   empty: { zh: "内容为空，请粘贴或选择主题包。", en: "Empty input — paste or pick a theme file." },
@@ -46,14 +47,6 @@ const ERROR_TEXT: Record<ThemeImportError, { zh: string; en: string }> = {
     en: "Storage quota full — remove a theme first.",
   },
 };
-
-const THEME_TEMPLATE = `/*! art-rank-theme {"id":"my-theme","name":{"zh":"我的主题","en":"My Theme"},"dot":"#d8f86a"} */
-[data-theme="my-theme"]{
-  --bg:#0b0d10;--text:#eef2f6;--accent:#d8f86a;--accent-2:#c9ff74;--accent-ink:#17200d;
-  --ok:#4ade80;--warn:#facc15;--danger:#f87171;--danger-2:#fca5a5;--indigo:#818cf8;--pink:#f472b6;
-  --film:#d8f86a;--book:#efaa97;--music:#97bfc5;--other:#c7c2ee;
-  --scrim:rgba(0,0,0,.63);--toast-bg:#e0f7a9;--toast-bg-2:#d7fb9d;--toast-ink:#233113;--toast-border:#769052;
-}`;
 
 /**
  * 自定义主题导入：粘贴 CSS 文本或选择 .css 文件 → 校验 → 落库注入。

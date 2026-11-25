@@ -2,6 +2,7 @@ import type { RankingMode, RankingState } from "../lib/ranking";
 import type { MediaCollection, MediaKind, Artwork } from "../data/mediaKinds";
 import type { ArtisticProfile, RankingExport, RankedArtwork } from "../lib/profile";
 import type { ExportLayout } from "../lib/exportPng";
+import type { ShareLinkKind } from "../lib/shareLink";
 
 export type Locale = "zh" | "en";
 
@@ -132,6 +133,8 @@ export interface ProfileViewProps {
   share: () => void;
   shareUrl: string;
   qrUrl: string;
+  /** shareUrl 是「比较链接」还是「分享链接」，决定输出区的标签与二维码语义 */
+  shareLinkKind: ShareLinkKind;
   profileName: string;
   setProfileName: (name: string) => void;
   namedProfile: () => ArtisticProfile | null;
