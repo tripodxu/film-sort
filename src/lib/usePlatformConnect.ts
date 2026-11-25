@@ -40,6 +40,45 @@ export async function requestPlatformDisconnect(
   }
 }
 
+export type PlatformAccountInfo = { nickname: string | null; avatarUrl: string | null };
+
+export type PlatformStatusResult =
+  { ok: true; connected: boolean; account: PlatformAccountInfo | null } | { ok: false };
+
+const asText = (value: unknown): string | null => (typeof value === "string" ? value : null);
+const normalizeAccount = (account: unknown): PlatformAccountInfo | null =>
+  account && typeof account === "object"
+    ? {
+        nickname: asText((account as { nickname?: unknown }).nickname),
+        avatarUrl: asText((account as { avatarUrl?: unknown }).avatarUrl),
+      }
+    : null;
+
+/**
+ * 查询平台连接状态。只有 2xx 且 connected 为布尔值才算「查到了」；
+ * 超时、网络错误、非 2xx、畸形响应一律返回 ok:false，由调用方保持原状态——
+ * 「无法确认」绝不能被当成「未连接」，否则一次网络抖动就会把已连接的平台显示成未连接。
+ */
+export async function requestPlatformStatus(
+  platform: PlatformKind,
+  accountToken: string,
+  fetchImpl: typeof fetch = fetch,
+): Promise<PlatformStatusResult> {
+  const prefix = platform === "netease" ? "/api/netease" : "/api/douban";
+  try {
+    const response = await fetchImpl(`${prefix}/status`, {
+      headers: authHeaders(accountToken),
+      signal: AbortSignal.timeout(10000),
+    });
+    if (!response.ok) return { ok: false };
+    const data = (await response.json()) as { connected?: unknown; account?: unknown };
+    if (typeof data.connected !== "boolean") return { ok: false };
+    return { ok: true, connected: data.connected, account: normalizeAccount(data.account) };
+  } catch {
+    return { ok: false };
+  }
+}
+
 /**
  * 网易云 / 豆瓣扫码与 Cookie 连接的共用状态机：
  * 统一处理状态查询、发码、无漂移倒计时、轮询、风控降级与断开连接。
@@ -57,10 +96,7 @@ export function usePlatformConnect({
   const prefix = isNe ? "/api/netease" : "/api/douban";
 
   const [connected, setConnected] = useState(false);
-  const [accountInfo, setAccountInfo] = useState<{
-    nickname: string | null;
-    avatarUrl: string | null;
-  } | null>(null);
+  const [accountInfo, setAccountInfo] = useState<PlatformAccountInfo | null>(null);
   const [qrOpen, setQrOpen] = useState(false);
   const [qrKey, setQrKey] = useState("");
   const [qrImage, setQrImage] = useState("");
@@ -78,6 +114,10 @@ export function usePlatformConnect({
   const [cookieBusy, setCookieBusy] = useState(false);
   const deadlineRef = useRef(0);
   const issueGenRef = useRef(0);
+  // 每次状态请求的代际：新请求、断开、登出都会让在途的旧响应失效。
+  const statusGenRef = useRef(0);
+  // 上一次查询所属的「平台 + 账号」范围；范围变化时先清空，避免把 A 平台 / A 账号的连接态与昵称头像留给 B。
+  const statusScopeRef = useRef<string | null>(null);
 
   const onConnectedRef = useRef(onConnected);
   onConnectedRef.current = onConnected;
@@ -86,23 +126,32 @@ export function usePlatformConnect({
 
   async function checkStatus() {
     if (!accountToken) return;
-    try {
-      const response = await fetch(`${prefix}/status`, { headers: authHeaders(accountToken) });
-      const data = (await response.json()) as {
-        connected?: boolean;
-        account?: { nickname: string | null; avatarUrl: string | null } | null;
-      };
-      const isConnected = !!data.connected;
-      setConnected(isConnected);
-      setAccountInfo(data.account ?? null);
-      if (isNe && isConnected) onConnectedRef.current?.();
-    } catch {
-      setConnected(false);
-    }
+    const generation = ++statusGenRef.current;
+    const result = await requestPlatformStatus(platform, accountToken);
+    // 期间已断开 / 登出 / 切换平台，或本次无法确认：一律不写状态。
+    if (generation !== statusGenRef.current || !result.ok) return;
+    setConnected(result.connected);
+    setAccountInfo(result.account);
+    if (isNe && result.connected) onConnectedRef.current?.();
   }
 
   useEffect(() => {
-    if (!active || !accountToken) return;
+    const scope = accountToken ? `${platform}|auth` : "";
+    if (!scope) {
+      // 登出：清掉上一个账号的连接态与昵称头像，并让在途的状态响应失效。
+      statusGenRef.current += 1;
+      statusScopeRef.current = null;
+      setConnected(false);
+      setAccountInfo(null);
+      return;
+    }
+    if (scope !== statusScopeRef.current) {
+      statusScopeRef.current = scope;
+      statusGenRef.current += 1;
+      setConnected(false);
+      setAccountInfo(null);
+    }
+    if (!active) return;
     void checkStatus();
     // eslint-disable-next-line react-hooks/exhaustive-deps -- active/accountToken/platform changes trigger status refresh
   }, [active, accountToken, platform]);
@@ -158,8 +207,11 @@ export function usePlatformConnect({
           );
           if (!isNe) void checkStatus();
           onConnectedRef.current?.();
+          const confirmedGen = issueGenRef.current;
+          // 进入 confirmed 会让上面的轮询副作用重跑（旧 cleanup 置 stopped），所以这里不能依赖 stopped，
+          // 改用发码代际：关闭弹窗或重新发码都会递增代际，迟到的自动关闭一律丢弃。
           window.setTimeout(() => {
-            if (!stopped) setQrOpen(false);
+            if (issueGenRef.current === confirmedGen) setQrOpen(false);
           }, 900);
         } else if (data.state === "expired") {
           setQrState("expired");
@@ -293,6 +345,8 @@ export function usePlatformConnect({
         method: "POST",
         headers: { ...authHeaders(accountToken), "content-type": "application/json" },
         body: JSON.stringify({ cookie: value }),
+        // 没有超时时，黑洞网络下 cookieBusy 会永久为 true，提交按钮被锁死且无法取消。
+        signal: AbortSignal.timeout(20000),
       });
       const data = (await response.json()) as { ok?: boolean; msg?: string };
       if (response.ok && data.ok) {
@@ -336,6 +390,8 @@ export function usePlatformConnect({
       );
       return;
     }
+    // 断开成功前就先让在途的状态响应失效，避免旧快照把 connected 写回 true。
+    statusGenRef.current += 1;
     setConnected(false);
     setAccountInfo(null);
     onDisconnectedRef.current?.();
