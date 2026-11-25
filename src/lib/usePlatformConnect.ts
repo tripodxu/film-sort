@@ -16,7 +16,7 @@ export interface PlatformConnectOptions {
 const authHeaders = (token: string): Record<string, string> =>
   token ? { authorization: `Bearer ${token}` } : {};
 
-/** 只有等待与已扫码状态需要轮询；confirmed/expired/risk 都是当前二维码的终态。 */
+/** 只有等待与已扫码状态需要轮询；confirmed/expired/risk/failed 都是当前二维码的终态。 */
 export function shouldPollQrState(qrOpen: boolean, qrKey: string, qrState: QrState): boolean {
   return qrOpen && !!qrKey && (qrState === "waiting" || qrState === "scanned");
 }
@@ -77,6 +77,37 @@ export async function requestPlatformStatus(
   } catch {
     return { ok: false };
   }
+}
+
+/**
+ * 发码接口非 2xx 的用户文案：登录失效 / 限流 / 服务端错误都不是「二维码过期」，
+ * 不能落进 expired 触发自动换码——那只会再打两次限流端点，最后把真实原因
+ * （登录失效或被限流）盖成「刷新次数已达上限」。401/403/429 给固定友好文案，
+ * 其余优先透传服务端 msg/error，缺失时兜底带状态码。
+ */
+export function qrIssueFailureMessage(
+  status: number,
+  body: { error?: unknown; msg?: unknown } | null,
+  t: (zh: string, en: string) => string,
+): string {
+  if (status === 401 || status === 403)
+    return t("登录已失效，请重新登录后再试。", "Session expired — sign in again and retry.");
+  if (status === 429)
+    return t(
+      "请求过于频繁，请稍后再试，或改用粘贴 Cookie 连接。",
+      "Too many requests — wait a moment, or connect with a pasted cookie.",
+    );
+  const serverText =
+    (typeof body?.msg === "string" && body.msg.trim()) ||
+    (typeof body?.error === "string" && body.error.trim()) ||
+    "";
+  return (
+    serverText ||
+    t(
+      `获取二维码失败（${status}），请稍后重试。`,
+      `Could not get a QR code (${status}). Retry later.`,
+    )
+  );
 }
 
 /**
@@ -271,6 +302,19 @@ export function usePlatformConnect({
         headers: authHeaders(accountToken),
         signal: AbortSignal.timeout(20000),
       });
+      if (generation !== issueGenRef.current) return;
+      // 非 2xx 是独立终态 failed：显示真实原因、只允许手动重试，绝不进 expired
+      // 的自动换码分支（登录失效/限流时自动重试只会再消耗限流配额并掩盖原因）。
+      if (!response.ok) {
+        const body = (await response.json().catch(() => null)) as {
+          error?: unknown;
+          msg?: unknown;
+        } | null;
+        if (generation !== issueGenRef.current) return;
+        setQrError(qrIssueFailureMessage(response.status, body, t));
+        setQrState("failed");
+        return;
+      }
       const data = (await response.json()) as {
         unikey?: string;
         qr_value?: string;

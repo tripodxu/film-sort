@@ -11,7 +11,7 @@
 import { CheckCircle2, Clock, KeyRound, RotateCcw } from "lucide-react";
 import { Modal } from "./Modal";
 
-export type QrState = "waiting" | "scanned" | "confirmed" | "expired" | "risk";
+export type QrState = "waiting" | "scanned" | "confirmed" | "expired" | "risk" | "failed";
 
 /** 风控降级（Cookie 直连）卡：两家文案与后端不同，结构完全一致。 */
 export interface QrFallbackProps {
@@ -111,11 +111,11 @@ export function QrConnectModal({
                 <span>{t("连接成功", "Connected")}</span>
               </div>
             )}
-            {state === "expired" && (
+            {(state === "expired" || state === "failed") && (
               <div className="qr-mask">
                 <RotateCcw size={40} />
                 <button className="button secondary" onClick={() => void onRefresh()}>
-                  {t("重新生成", "Regenerate")}
+                  {state === "failed" ? t("重试", "Retry") : t("重新生成", "Regenerate")}
                 </button>
               </div>
             )}

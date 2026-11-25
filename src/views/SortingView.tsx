@@ -43,6 +43,14 @@ export function SortingView({
     typeof window !== "undefined" &&
     window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
 
+  // 略过/暂放后的焦点锚点：blur() 只解决「焦点留在已换内容的按钮上」，但键盘用户
+  // 用 Enter 触发后焦点会掉回 body，下一次 Tab 得从头再来。对决区容器 tabIndex=-1
+  // 作为稳定锚点，操作后把焦点显式移过去，下一次 Tab 直达第一张卡片。
+  const duelGridRef = useRef<HTMLDivElement>(null);
+  const focusDuelAnchor = () => {
+    requestAnimationFrame(() => duelGridRef.current?.focus({ preventScroll: true }));
+  };
+
   // ===== Jev 辅助模式(AI 代判,默认关)=====
   // 每对作品先请求预测:置信 ≥ 用户设定阈值(默认 0.8)自动落位(进决策日志,可撤销),
   // 低于阈值或复测阶段交给用户——复测本来就是引擎挑出的接近 toss-up 的对。
@@ -348,6 +356,8 @@ export function SortingView({
       )}
       <div
         className="duel-grid"
+        ref={duelGridRef}
+        tabIndex={-1}
         role="group"
         aria-label={t("选择更偏好的作品", "Choose the work you prefer")}
         onPointerDown={onSwipeStart}
@@ -387,6 +397,7 @@ export function SortingView({
                     event.stopPropagation();
                     (event.currentTarget as HTMLElement).blur();
                     act(side === "left" ? "skip-left" : "skip-right");
+                    focusDuelAnchor();
                   }}
                 >
                   <SkipForward size={15} />
@@ -402,6 +413,7 @@ export function SortingView({
                     event.stopPropagation();
                     (event.currentTarget as HTMLElement).blur();
                     act(side === "left" ? "defer-left" : "defer-right");
+                    focusDuelAnchor();
                   }}
                 >
                   <Pause size={15} />

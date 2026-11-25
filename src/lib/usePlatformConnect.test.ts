@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it, vi } from "vitest";
 import {
+  qrIssueFailureMessage,
   requestPlatformDisconnect,
   requestPlatformStatus,
   shouldPollQrState,
@@ -160,5 +161,63 @@ describe("断开平台连接", () => {
     expect(failureNotice).toBeGreaterThan(-1);
     expect(failureReturn).toBeGreaterThan(failureNotice);
     expect(clearConnected).toBeGreaterThan(failureReturn);
+  });
+});
+
+describe("发码非 2xx 独立终态（AUDIT-2026-11-25-R3 · 上轮 R-01）", () => {
+  const zh = (a: string) => a;
+
+  it.each([401, 403])("HTTP %i → 登录失效文案，不透传服务端错误码", (status) => {
+    expect(qrIssueFailureMessage(status, { error: "unauthorized" }, zh)).toBe(
+      "登录已失效，请重新登录后再试。",
+    );
+  });
+
+  it("HTTP 429 → 限流文案并给 Cookie 降级指引", () => {
+    expect(qrIssueFailureMessage(429, { error: "rate_limited" }, zh)).toContain("请求过于频繁");
+    expect(qrIssueFailureMessage(429, null, zh)).toContain("Cookie");
+  });
+
+  it("其余状态优先透传服务端 msg / error", () => {
+    expect(qrIssueFailureMessage(500, { msg: "上游维护中" }, zh)).toBe("上游维护中");
+    expect(qrIssueFailureMessage(503, { error: "builtin_unavailable" }, zh)).toBe(
+      "builtin_unavailable",
+    );
+  });
+
+  it("服务端文本缺失 / 非字符串 / 空白时兜底带状态码", () => {
+    expect(qrIssueFailureMessage(502, null, zh)).toContain("502");
+    expect(qrIssueFailureMessage(500, { msg: 42 }, zh)).toContain("500");
+    expect(qrIssueFailureMessage(500, { msg: "   " }, zh)).toContain("500");
+  });
+
+  it("failed 是终态：不轮询，也不进自动换码分支", () => {
+    expect(shouldPollQrState(true, "key", "failed")).toBe(false);
+    const source = readFileSync("src/lib/usePlatformConnect.ts", "utf8");
+    expect(source).toMatch(
+      /if \(!qrOpen \|\| qrState !== "expired"\) return;\s*void autoRefreshQr\(\);/,
+    );
+  });
+
+  it("issueQr 非 2xx 在解析二维码字段之前分流 failed，带代际守卫", () => {
+    const source = readFileSync("src/lib/usePlatformConnect.ts", "utf8");
+    const issue = source.slice(
+      source.indexOf("async function issueQr"),
+      source.indexOf("async function openQr"),
+    );
+    const stripped = issue.replace(/\/\*[\s\S]*?\*\//g, "").replace(/(^|[^:])\/\/.*$/gm, "$1");
+    const nonOk = stripped.indexOf("if (!response.ok)");
+    const parse = stripped.indexOf("const data = (await response.json())");
+    expect(nonOk).toBeGreaterThan(-1);
+    expect(parse).toBeGreaterThan(nonOk);
+    expect(stripped).toMatch(
+      /if \(!response\.ok\) \{[\s\S]*?setQrError\(qrIssueFailureMessage\(response\.status, body, t\)\);\s*setQrState\("failed"\);\s*return;/,
+    );
+  });
+
+  it("failed 在弹窗里渲染手动重试按钮，复用过期遮罩而非自动换码", () => {
+    const modal = readFileSync("src/components/QrConnectModal.tsx", "utf8");
+    expect(modal).toMatch(/\(state === "expired" \|\| state === "failed"\) &&/);
+    expect(modal).toMatch(/state === "failed" \? t\("重试", "Retry"\)/);
   });
 });

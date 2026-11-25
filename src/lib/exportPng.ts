@@ -3,6 +3,10 @@ import type { MediaKind } from "../data/mediaKinds";
 import { buildWrappedStats, type WrappedDraftInsight } from "./wrapped";
 import { mapPool } from "./utils";
 
+// 年鉴草稿工具随导出链路按需加载：App 只动态导入本模块，wrapped 不再需要
+// 第二个动态入口（静态依赖已把它并进本 chunk，双入口只会触发构建警告）。
+export { readDraftLike, draftInsight } from "./wrapped";
+
 // ===== 画像 PNG 导出：纯 Canvas 手绘，主题感知（采样当前 data-theme 的 CSS 变量），五套版式 =====
 
 /** 画布面积上限：Safari 单画布约 16.7M 像素，超出会静默出空白。

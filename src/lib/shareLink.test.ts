@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { shareOutputLabels } from "./shareLink";
+import { compareLinkOf, shareOutputLabels } from "./shareLink";
 
 const zh = (a: string) => a;
 
@@ -45,7 +45,42 @@ describe("分享输出区标签", () => {
         ),
       );
     }
-    // 「复制比较链接」没有 disabled，两类请求可能并发，因此代际守卫必须存在两处。
+    // R3 起两个按钮都有 disabled={busy} + 入口 busy 守卫；代际守卫仍须存在两处，
+    // 兜住程序化调用与同刻双击等绕过 UI 门控的路径（断言本身未变）。
     expect(app.match(/const generation = \+\+shareGenRef\.current/g)?.length).toBe(2);
+  });
+});
+
+describe("比较链接兜底改写（AUDIT-2026-11-25-R3）", () => {
+  it("compareUrl 优先", () => {
+    expect(
+      compareLinkOf({
+        compareUrl: "https://x/encounter?payload=abc12345",
+        url: "https://x/share/abc12345",
+      }),
+    ).toBe("https://x/encounter?payload=abc12345");
+  });
+
+  it("compareUrl 缺失时把 /share/<code> 改写成比较地址", () => {
+    expect(compareLinkOf({ url: "https://x/share/abc12345" })).toBe(
+      "https://x/encounter?payload=abc12345",
+    );
+  });
+
+  it("形状不匹配必须返回 undefined，绝不把分享页 URL 当比较链接复制", () => {
+    expect(compareLinkOf({ url: "https://x/share/xyz" })).toBeUndefined();
+    expect(compareLinkOf({ url: "https://x/other/abc12345" })).toBeUndefined();
+    expect(compareLinkOf({ url: "https://x/share/abc12345?from=plaza" })).toBeUndefined();
+    expect(compareLinkOf({})).toBeUndefined();
+  });
+
+  it("单榜分享接线：App 用 compareLinkOf 取代内联改写", () => {
+    const app = readFileSync("src/App.tsx", "utf8");
+    const block = app.slice(
+      app.indexOf("async function shareSingleRanking"),
+      app.indexOf("async function publishToPlaza"),
+    );
+    expect(block).toContain("const link = compareLinkOf(data);");
+    expect(block).not.toMatch(/data\.url\.replace\(/);
   });
 });

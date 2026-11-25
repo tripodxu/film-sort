@@ -782,7 +782,7 @@ export function ProfileView({
             <CalendarDays size={16} />
             {t("年度年鉴 PNG", "Annual report PNG")}
           </button>
-          <button className="button secondary" onClick={share}>
+          <button className="button secondary" disabled={busy} onClick={share}>
             <Share2 size={16} />
             {t("复制比较链接", "Copy comparison link")}
           </button>

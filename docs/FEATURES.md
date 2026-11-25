@@ -118,8 +118,8 @@
 | 网易云按 UID 浏览全部歌单（含收藏，主流程）：输入用户 ID/主页链接 → 列全部歌单 → 点选导入；开放接口→weapi 分层降级，被风控时 blocked 引导连接 | 「浏览歌单」输入框 | `/api/netease/user-playlists?uid=` |
 | 网易云歌单导入（公开链接即可；私有需连接；v6+v3 分层链，开放接口→weapi 降级+退避+节流+分批，旧 detail 已要求登录） | Source 粘贴 | `/api/import/netease` |
 | 网易云「我的歌单」浏览（含收藏，special=我喜欢的音乐） | 折叠区「连接我的网易云账号（扫码 / 粘贴 Cookie）」→「浏览我的全部歌单（含收藏）」（填充主列表） | `/api/import/netease/mine` |
-| 网易云扫码连接（开放接口优先 + weapi 兜底 + Cookie 罐 + 倒计时自动换码≤2 次 + 风控连续 3 次降级并停止轮询 + 慢请求不重叠） | 「扫码连接网易云」 | `/api/netease/qr/*` |
-| 豆瓣扫码连接（qrlogin_code/status，dbcl2 入库，服务端代理二维码图，过期自动换码与迟到响应代际守卫） | 「扫码连接豆瓣」 | `/api/douban/qr/*` |
+| 网易云扫码连接（开放接口优先 + weapi 兜底 + Cookie 罐 + 倒计时自动换码≤2 次 + 风控连续 3 次降级并停止轮询 + 慢请求不重叠 + 发码非 2xx 独立失败终态：显示原因、仅手动重试） | 「扫码连接网易云」 | `/api/netease/qr/*` |
+| 豆瓣扫码连接（qrlogin_code/status，dbcl2 入库，服务端代理二维码图，过期自动换码与迟到响应代际守卫，发码非 2xx 独立失败终态） | 「扫码连接豆瓣」 | `/api/douban/qr/*` |
 | 粘贴 Cookie 连接（校验凭证真实可用才入库；扫码风控的兜底） | 弹窗内/「粘贴 Cookie 连接」 | `POST /api/netease/cookie`、`/api/douban/cookie` |
 | Cookie 保险库（AES-GCM 加密，密钥存 admin_config；断开 2xx 才删本地连接态，失败明确提示） | 「断开连接」 | `user_cookie_vault` 表 |
 | 其他类别数据：维基搜索/详情/图片（gsrsearch 评分择优 + pageprops.page_image 封面 + disambiguation 剔除消歧页 + 年份消歧） | other 媒介搜索框/详情 | `/api/other/list`、`/api/other/detail`、`/api/artwork/detail?kind=other` |

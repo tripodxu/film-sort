@@ -23,3 +23,15 @@ export function shareOutputLabels(kind: ShareLinkKind, t: Translate): ShareOutpu
         qrAlt: t("比较二维码", "Comparison QR code"),
       };
 }
+
+/**
+ * 从 /api/share 响应里取「比较链接」。compareUrl 优先；缺失时只允许把
+ * /share/<code> 形状改写成 /encounter?payload=<code>——改写不生效（正则不匹配）
+ * 时必须返回 undefined 走失败分支，绝不能把分享页 URL 原样当比较链接复制出去。
+ */
+export function compareLinkOf(data: { url?: string; compareUrl?: string }): string | undefined {
+  if (data.compareUrl) return data.compareUrl;
+  if (!data.url) return undefined;
+  const rewritten = data.url.replace(/\/share\/([0-9a-f]{8,12})$/, "/encounter?payload=$1");
+  return rewritten === data.url ? undefined : rewritten;
+}

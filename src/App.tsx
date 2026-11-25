@@ -10,7 +10,7 @@ import {
   PLAZA_LINKS_KEY,
   RINGS_LAYOUT_KEY,
 } from "./lib/storageKeys";
-import type { ShareLinkKind } from "./lib/shareLink";
+import { compareLinkOf, type ShareLinkKind } from "./lib/shareLink";
 import {
   MAX_PROFILE_BYTES,
   mergeRanking,
@@ -619,7 +619,7 @@ function AppShell() {
   ]);
 
   async function syncPlazaPost(postId: number, rankingIdx: number) {
-    if (!accountToken || !profile) return;
+    if (!accountToken || !profile || busy) return;
     const ranking = profile.rankings[rankingIdx];
     if (!ranking) return;
     setBusy(true);
@@ -634,6 +634,8 @@ function AppShell() {
             { action: "sync", detail: t("从文化索引同步榜单内容", "Synced from My Culture Index") },
           ],
         }),
+        // 写请求必须带超时：黑洞网络下 busy 会永久为 true，全站 busy 门控按钮一起锁死。
+        signal: AbortSignal.timeout(20000),
       });
       if (response.ok) setNotice(t("广场帖子已同步更新。", "Plaza post synced."));
       else setNotice(t("同步失败，请稍后重试。", "Sync failed. Please retry."));
@@ -715,8 +717,11 @@ function AppShell() {
     setBusy(true);
     try {
       // PNG 导出模块按需加载，不进首屏关键路径。
-      const [{ renderWrappedPng, wrappedFileName }, { readDraftLike, draftInsight }] =
-        await Promise.all([import("./lib/exportPng"), import("./lib/wrapped")]);
+      // wrapped 被 exportPng 静态依赖，再单独动态导入并不会把它拆成独立 chunk
+      // （构建警告「dynamic import will not move module」）；统一走 exportPng 的
+      // re-export，年鉴链路只保留一个动态入口。
+      const { renderWrappedPng, wrappedFileName, readDraftLike, draftInsight } =
+        await import("./lib/exportPng");
       // 取舍次数与最纠结一对只在进行中草稿里：id→标题映射用草稿自带的 collection
       let insight: ReturnType<typeof draftInsight> = null;
       const draftLike = readDraftLike(localStorage);
@@ -809,6 +814,7 @@ function AppShell() {
       );
   }
   async function shareSingleRanking(ranking: RankingExport) {
+    if (busy) return;
     const name = profileName.trim() || t("我的艺术人格", "My artistic profile");
     const singleProfile: ArtisticProfile = {
       version: 2,
@@ -843,14 +849,12 @@ function AppShell() {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify(shareData),
+        signal: AbortSignal.timeout(20000),
       });
       const data = (await response.json()) as { url?: string; compareUrl?: string; error?: string };
-      // 「比较链接」必须复制 /encounter?payload=<code>；compareUrl 缺失时用 code 兜底拼接
-      const link =
-        data.compareUrl ??
-        (data.url
-          ? data.url.replace(/\/share\/([0-9a-f]{8,12})$/, "/encounter?payload=$1")
-          : undefined);
+      // 「比较链接」必须复制 /encounter?payload=<code>；compareUrl 缺失时只接受
+      // 形状匹配的兜底改写——改写不生效时走失败分支，绝不把分享页 URL 当比较链接复制。
+      const link = compareLinkOf(data);
       if (response.ok && link) {
         try {
           await navigator.clipboard.writeText(link);
@@ -876,6 +880,7 @@ function AppShell() {
       setNotice(t("请先登录。", "Please sign in first."));
       return;
     }
+    if (busy) return;
     // 只保留该榜单相关的批注
     const workIds = new Set(ranking.items.map((item) => item.id));
     const rankingNotes: Record<string, string> = {};
@@ -902,6 +907,7 @@ function AppShell() {
           notes: hasNotes ? rankingNotes : null,
           item_count: ranking.items.length,
         }),
+        signal: AbortSignal.timeout(20000),
       });
       const data = (await response.json()) as { id?: number; error?: string };
       if (response.ok && data.id) {
@@ -925,6 +931,7 @@ function AppShell() {
       setNotice(t("请先登录。", "Please sign in first."));
       return;
     }
+    if (busy) return;
     const next = namedProfile();
     if (!next) return;
     setBusy(true);
@@ -941,6 +948,7 @@ function AppShell() {
           notes: Object.keys(notes).length > 0 ? notes : null,
           item_count: next.rankings.reduce((sum, r) => sum + r.items.length, 0),
         }),
+        signal: AbortSignal.timeout(20000),
       });
       const data = (await response.json()) as { id?: number; error?: string };
       if (response.ok && data.id) {
@@ -960,6 +968,7 @@ function AppShell() {
     }
   }
   async function share() {
+    if (busy) return;
     const next = namedProfile();
     if (!next) return;
     try {
@@ -979,6 +988,7 @@ function AppShell() {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify(shareData),
+        signal: AbortSignal.timeout(20000),
       });
       const data = (await response.json()) as { url?: string; compareUrl?: string; error?: string };
       if (generation !== shareGenRef.current) return;
@@ -1002,7 +1012,8 @@ function AppShell() {
         t("生成链接失败，请导出 JSON 分享。", "Failed to create link. Export the JSON instead."),
       );
     } finally {
-      setBusy(false);
+      // 代际守卫也要盖住资源释放：迟到的旧请求不得把新请求刚置上的 busy 解开。
+      if (generation === shareGenRef.current) setBusy(false);
     }
   }
   function openShareModal(ranking?: RankingExport) {
@@ -1022,6 +1033,7 @@ function AppShell() {
     }
   }
   async function generateShareLink(ranking?: RankingExport, expiresDays: number = 30) {
+    if (busy) return;
     const profileData = ranking
       ? {
           version: 2 as const,
@@ -1055,6 +1067,7 @@ function AppShell() {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify(shareData),
+        signal: AbortSignal.timeout(20000),
       });
       const data = (await response.json()) as {
         url?: string;
@@ -1082,7 +1095,8 @@ function AppShell() {
     } catch {
       setNotice(t("生成链接失败。", "Failed to create link."));
     } finally {
-      setBusy(false);
+      // 同 share()：只有最新一代请求才允许释放 busy。
+      if (generation === shareGenRef.current) setBusy(false);
     }
   }
 

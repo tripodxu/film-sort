@@ -1298,3 +1298,83 @@ describe("2026-10-27 视觉审查批（续）", () => {
     expect(css).toMatch(/\.depth-view \.empty-state \.action-row\{justify-content:center\}/);
   });
 });
+
+describe("2026-11-25 R3 审计批（写请求超时 / busy 守卫 / 焦点锚点 / 遗留绊线）", () => {
+  const strip = (source: string) =>
+    source.replace(/\/\*[\s\S]*?\*\//g, "").replace(/(^|[^:])\/\/.*$/gm, "$1");
+  const app = strip(readFileSync("src/App.tsx", "utf8"));
+  const block = (start: string, end: string) => app.slice(app.indexOf(start), app.indexOf(end));
+  const writeBlocks: Array<[string, string]> = [
+    ["async function syncPlazaPost", "function clearAllData"],
+    ["async function shareSingleRanking", "async function publishToPlaza"],
+    ["async function publishToPlaza", "async function publishProfileToPlaza"],
+    ["async function publishProfileToPlaza", "async function share()"],
+    ["async function share()", "function openShareModal"],
+    ["async function generateShareLink", "let content: ReactNode"],
+  ];
+
+  it("六个写请求全部带 20 秒超时（黑洞网络不得把全局 busy 永久锁死）", () => {
+    for (const [start, end] of writeBlocks) {
+      expect(block(start, end), start).toContain("AbortSignal.timeout(20000)");
+    }
+  });
+
+  it("分享 / 发布入口都有 busy 防重入守卫，「复制比较链接」按钮已 disabled", () => {
+    for (const [start, end] of writeBlocks) {
+      expect(block(start, end), start).toMatch(/busy\) return;/);
+    }
+    const profile = readFileSync("src/views/ProfileView.tsx", "utf8");
+    expect(profile).toMatch(
+      /<button className="button secondary" disabled=\{busy\} onClick=\{share\}>/,
+    );
+  });
+
+  it("busy 释放也受代际守卫：迟到的旧请求不得解开新请求的 busy", () => {
+    for (const [start, end] of [
+      ["async function share()", "function openShareModal"],
+      ["async function generateShareLink", "let content: ReactNode"],
+    ] as const) {
+      expect(block(start, end), start).toMatch(
+        /finally \{\s*if \(generation === shareGenRef\.current\) setBusy\(false\);\s*\}/,
+      );
+    }
+  });
+
+  it("对决页略过/暂放后焦点移到对决区锚点，键盘用户不掉回 body", () => {
+    const sv = strip(readFileSync("src/views/SortingView.tsx", "utf8"));
+    expect(sv).toMatch(/className="duel-grid"\s*ref=\{duelGridRef\}\s*tabIndex=\{-1\}/);
+    expect(sv.match(/focusDuelAnchor\(\);/g)?.length).toBe(2);
+    expect(sv).toMatch(
+      /requestAnimationFrame\(\(\) => duelGridRef\.current\?\.focus\(\{ preventScroll: true \}\)\)/,
+    );
+    // 两处 blur 必须都跟着锚点接管；裸 blur 会让 Enter 操作后焦点掉回 body。
+    expect(sv.match(/\.blur\(\);/g)?.length).toBe(2);
+  });
+
+  it("搜索无结果 / 异常时旧候选必须清空（N-06 遗留绊线）", () => {
+    const source = strip(readFileSync("src/views/SourceView.tsx", "utf8"));
+    const b = source.slice(
+      source.indexOf("async function handleCustomSearch"),
+      source.indexOf("function pickSuggestion"),
+    );
+    expect(b.match(/setSuggestions\(\[\]\);/g)?.length).toBe(2);
+    expect(b).toMatch(/\} else \{\s*setSuggestions\(\[\]\);\s*setSearchFallback\(query\);/);
+    expect(b).toMatch(/catch \{\s*setSuggestions\(\[\]\);\s*setSearchFallback\(query\);/);
+  });
+
+  it("AI 配置三个输入变更即清除表单报错（N-07 遗留绊线）", () => {
+    const code = strip(readFileSync("src/components/AiConfigDialog.tsx", "utf8"));
+    expect(code).toMatch(/setBaseUrl\(event\.target\.value\);\s*setFormError\(null\);/);
+    expect(code).toMatch(/setApiKey\(event\.target\.value\);\s*setFormError\(null\);/);
+    expect(code).toMatch(/setModel\(event\.target\.value\);\s*setFormError\(null\);/);
+  });
+
+  it("年鉴链路只有一个动态入口：wrapped 走 exportPng re-export，App 不再直导", () => {
+    expect(app).not.toContain('import("./lib/wrapped")');
+    expect(app).toMatch(
+      /const \{ renderWrappedPng, wrappedFileName, readDraftLike, draftInsight \} =\s*await import\("\.\/lib\/exportPng"\);/,
+    );
+    const exportPng = readFileSync("src/lib/exportPng.ts", "utf8");
+    expect(exportPng).toContain('export { readDraftLike, draftInsight } from "./wrapped";');
+  });
+});
