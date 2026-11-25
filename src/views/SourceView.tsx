@@ -211,9 +211,12 @@ export function SourceView({
       if (results.length > 0) {
         setSuggestions(results);
       } else {
+        // 新查询无结果：旧候选必须清掉，否则「直接按名称添加」的兜底永远不出现，而列表里显示的是上一个词的结果。
+        setSuggestions([]);
         setSearchFallback(query);
       }
     } catch {
+      setSuggestions([]);
       setSearchFallback(query);
     } finally {
       if (timer !== undefined) window.clearTimeout(timer);

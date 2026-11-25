@@ -247,7 +247,10 @@ export function AiConfigDialog({
           <div style={label}>Base URL</div>
           <input
             value={baseUrl}
-            onChange={(event) => setBaseUrl(event.target.value)}
+            onChange={(event) => {
+              setBaseUrl(event.target.value);
+              setFormError(null);
+            }}
             placeholder="https://api.openai.com/v1"
             spellCheck={false}
           />
@@ -258,7 +261,10 @@ export function AiConfigDialog({
             <input
               type={showKey ? "text" : "password"}
               value={apiKey}
-              onChange={(event) => setApiKey(event.target.value)}
+              onChange={(event) => {
+                setApiKey(event.target.value);
+                setFormError(null);
+              }}
               placeholder="sk-…"
               spellCheck={false}
               style={{ flex: 1 }}
@@ -286,6 +292,7 @@ export function AiConfigDialog({
               value={model}
               onChange={(event) => {
                 setModel(event.target.value);
+                setFormError(null);
                 if (models.length > 0) setModelMenuOpen(true);
               }}
               onFocus={() => {
